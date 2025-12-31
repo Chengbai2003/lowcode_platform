@@ -1,0 +1,39 @@
+{
+  "name": "@lowcode-platform/editor",
+  "version": "1.0.0",
+  "description": "JSON editor with live preview for low-code platform",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@monaco-editor/react": "^4.6.0",
+    "antd": "^5.12.0",
+    "@lowcode-platform/renderer": "workspace:*",
+    "@lowcode-platform/components": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "antd": "^5.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8",
+    "vite-plugin-dts": "^3.7.0"
+  }
+}

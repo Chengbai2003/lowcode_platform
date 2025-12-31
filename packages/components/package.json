@@ -1,0 +1,45 @@
+{
+  "name": "@lowcode-platform/components",
+  "version": "1.0.0",
+  "description": "Component library for low-code platform (Ant Design + Custom)",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.ts"
+    },
+    "./antd": {
+      "import": "./dist/antd.mjs",
+      "types": "./dist/antd.d.ts"
+    },
+    "./custom": {
+      "import": "./dist/custom.mjs",
+      "types": "./dist/custom.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "antd": "^5.12.0",
+    "@ant-design/icons": "^5.2.6"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "antd": "^5.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.8",
+    "vite-plugin-dts": "^3.7.0"
+  }
+}
