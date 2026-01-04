@@ -6,7 +6,7 @@ export interface ComponentSchema {
   props?: Record<string, any>;         // 组件属性
   children?: ComponentSchema | ComponentSchema[] | string | string[];  // 子组件
   id?: string;                         // 可选的唯一标识
-  events?: Record<string, string>;     // 事件定义，key 为事件名，value 为执行的代码
+  events?: Record<string, string | string[]>;     // 事件定义，key 为事件名，value 为执行的代码（支持单条或多条代码链）
 }
 
 /**

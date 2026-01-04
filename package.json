@@ -11,7 +11,12 @@
     "type-check": "pnpm -r type-check",
     "lint": "pnpm -r lint"
   },
-  "keywords": ["lowcode", "low-code", "react", "typescript"],
+  "keywords": [
+    "lowcode",
+    "low-code",
+    "react",
+    "typescript"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {
@@ -24,5 +29,9 @@
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
+  },
+  "dependencies": {
+    "@reduxjs/toolkit": "^2.11.2",
+    "react-redux": "^9.2.0"
   }
 }

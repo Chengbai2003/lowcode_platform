@@ -11,7 +11,7 @@ export default defineConfig({
   ],
   build: {
     lib: {
-      entry: './src/index.ts',
+      entry: './src/index.tsx',
       name: 'LowcodeRenderer',
       fileName: 'index',
       formats: ['es'],
