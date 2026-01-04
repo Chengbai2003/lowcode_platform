@@ -53,4 +53,9 @@ export interface LowcodeEditorProps {
    * @default true
    */
   wordWrap?: boolean;
+
+  /**
+   * 事件执行上下文（可在事件代码中使用的变量）
+   */
+  eventContext?: Record<string, any>;
 }

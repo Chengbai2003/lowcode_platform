@@ -21,6 +21,7 @@ export function LowcodeEditor({
   onError,
   showLineNumbers = true,
   wordWrap = true,
+  eventContext = {},
 }: LowcodeEditorProps) {
   // 将 initialSchema 转换为 JSON 字符串
   const initialJson = useMemo(() => {
@@ -169,7 +170,7 @@ export function LowcodeEditor({
             }}
           >
             {schema ? (
-              <Renderer schema={schema} components={allComponents} />
+              <Renderer schema={schema} components={allComponents} eventContext={eventContext} />
             ) : (
               <div
                 style={{
