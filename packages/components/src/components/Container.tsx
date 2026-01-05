@@ -25,7 +25,7 @@ const widthMap: Record<string, string> = {
 
 export const Container: React.FC<ContainerProps> = ({
   children,
-  width = 'lg',
+  width = 'full',
   padding = '16px',
   center = true,
   style,

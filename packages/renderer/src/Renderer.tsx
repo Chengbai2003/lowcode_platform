@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from './store/hooks';
 import { setComponentData, setComponentConfig, setMultipleComponentData } from './store/componentSlice';
 import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
+import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
 
 /**
@@ -183,8 +184,13 @@ const FormSyncWrapper = ({
   // 监听 Redux Store 值变化，同步到 Form 实例
   useEffect(() => {
     if (componentValue) {
-      // 使用 setFieldsValue 更新表单，这不会触发 onValuesChange，避免循环更新
-      form.setFieldsValue(componentValue);
+      // 检查当前表单值是否已经与 componentValue 一致
+      // 如果一致，说明是 Form -> Redux -> Form 的回环，不需要再次 setFieldsValue
+      // 这打破了死循环，并防止光标跳动
+      const currentFormValues = form.getFieldsValue();
+      if (!deepEqual(currentFormValues, componentValue)) {
+        form.setFieldsValue(componentValue);
+      }
     }
   }, [componentValue, form]);
 
