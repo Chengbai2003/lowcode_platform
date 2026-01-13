@@ -1,8 +1,9 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Layout, ConfigProvider, theme } from 'antd';
+import { Layout, ConfigProvider, theme, message } from 'antd';
 import type { LowcodeEditorProps } from './types';
 import type { ComponentSchema } from '@lowcode-platform/renderer';
 import { componentRegistry } from '@lowcode-platform/components';
+import { compileToCode } from '@lowcode-platform/compiler';
 import {
   EditorHeader,
   ActivityBar,
@@ -46,7 +47,9 @@ export function LowcodeEditor({
   const [json, setJson] = useState(initialJson);
   const [schema, setSchema] = useState<ComponentSchema | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'json' | 'visual'>('json');
+  const [activeTab, setActiveTab] = useState<'json' | 'visual' | 'code'>('json');
+  const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light');
+  const [compiledCode, setCompiledCode] = useState<string>('');
 
   // 解析 JSON 并更新 schema
   useEffect(() => {
@@ -68,6 +71,23 @@ export function LowcodeEditor({
       setJson(value);
     }
   }, []);
+
+  // 编译处理函数
+  const handleCompile = useCallback(() => {
+    if (schema) {
+      try {
+        const code = compileToCode(schema);
+        setCompiledCode(code);
+        setActiveTab('code');
+        message.success('编译成功！');
+      } catch (e: any) {
+        console.error(e);
+        message.error('编译失败: ' + e.message);
+      }
+    } else {
+      message.warning('Schema 为空，无法编译');
+    }
+  }, [schema]);
 
   // 合并自定义组件与默认注册表
   const allComponents = useMemo(() => {
@@ -93,7 +113,11 @@ export function LowcodeEditor({
     >
       <Layout style={{ height: typeof height === 'number' ? `${height}px` : height, overflow: 'hidden' }}>
         {/* 1. Top Header */}
-        <EditorHeader />
+        <EditorHeader
+          previewTheme={previewTheme}
+          onThemeChange={setPreviewTheme}
+          onCompile={handleCompile}
+        />
 
         <Layout style={{ height: '100%' }}>
           {/* 2. Left Activity Bar */}
@@ -104,6 +128,7 @@ export function LowcodeEditor({
             activeTab={activeTab}
             width={numericEditorWidth}
             json={json}
+            compiledCode={compiledCode}
             editorTheme={editorTheme}
             showLineNumbers={showLineNumbers}
             wordWrap={wordWrap}
@@ -116,6 +141,7 @@ export function LowcodeEditor({
             schema={schema}
             allComponents={allComponents}
             eventContext={eventContext}
+            previewTheme={previewTheme}
           />
         </Layout>
       </Layout>

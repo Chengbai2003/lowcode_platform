@@ -5,9 +5,10 @@ import Editor from '@monaco-editor/react';
 const { Sider } = Layout;
 
 interface EditorPaneProps {
-  activeTab: 'json' | 'visual';
+  activeTab: 'json' | 'visual' | 'code';
   width: number | string;
   json: string;
+  compiledCode?: string;
   editorTheme: string;
   showLineNumbers: boolean;
   wordWrap: boolean;
@@ -18,6 +19,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   activeTab,
   width,
   json,
+  compiledCode,
   editorTheme,
   showLineNumbers,
   wordWrap,
@@ -52,12 +54,19 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             justifyContent: 'space-between',
           }}
         >
-          <span>{activeTab === 'json' ? 'JSON SCHEMA' : 'VISUAL EDITOR'}</span>
+          <span>
+            {activeTab === 'json'
+              ? 'JSON SCHEMA'
+              : activeTab === 'code'
+                ? 'REACT CODE'
+                : 'VISUAL EDITOR'}
+          </span>
         </div>
 
         <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
           {activeTab === 'json' ? (
             <Editor
+              key="json"
               height="100%"
               defaultLanguage="json"
               theme={editorTheme}
@@ -73,6 +82,24 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 tabSize: 2,
                 formatOnPaste: true,
                 formatOnType: true,
+              }}
+            />
+          ) : activeTab === 'code' ? (
+            <Editor
+              key="code"
+              height="100%"
+              defaultLanguage="typescript"
+              theme={editorTheme}
+              value={compiledCode || '// 点击上方“编译运行”按钮生成代码'}
+              options={{
+                readOnly: true,
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: showLineNumbers ? 'on' : 'off',
+                wordWrap: wordWrap ? 'on' : 'off',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
               }}
             />
           ) : (

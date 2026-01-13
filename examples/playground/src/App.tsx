@@ -65,7 +65,8 @@ const loginPageSchema = {
                   props: {
                     placeholder: '请输入用户名',
                     size: 'large',
-                    initialValue: 'Admin'
+                    initialValue: 'Admin',
+                    field: 'username'
                   },
                   events: {
                     onChange: 'console.log("用户名变更:", event.target.value);'
@@ -89,7 +90,8 @@ const loginPageSchema = {
                   props: {
                     type: 'password',
                     placeholder: '请输入密码',
-                    size: 'large'
+                    size: 'large',
+                    field: 'password'
                   },
                   events: {
                     onChange: 'console.log("密码变更:", event.target.value);'

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout } from 'antd';
+import { Layout, ConfigProvider, theme } from 'antd';
 import { Renderer } from '@lowcode-platform/renderer';
 import type { ComponentSchema } from '@lowcode-platform/renderer';
 
@@ -10,6 +10,7 @@ interface PreviewPaneProps {
   schema: ComponentSchema | null;
   allComponents: any;
   eventContext: any;
+  previewTheme: 'light' | 'dark';
 }
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
@@ -17,11 +18,12 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   schema,
   allComponents,
   eventContext,
+  previewTheme,
 }) => {
   return (
     <Content
       style={{
-        background: '#ffffff',
+        background: previewTheme === 'dark' ? '#000000' : '#ffffff',
         height: '100%',
         overflow: 'hidden', // Disable scrolling on Content directly, let inner div handle it
         display: 'flex',
@@ -50,12 +52,18 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
           padding: error ? '48px 0 0 0' : '0',
           flex: 1, // Fill available space
           overflow: 'auto', // Scroll here
-          background: '#f0f2f5',
+          background: previewTheme === 'dark' ? '#141414' : '#f0f2f5',
           position: 'relative',
         }}
       >
         {schema ? (
-          <Renderer schema={schema} components={allComponents} eventContext={eventContext} />
+          <ConfigProvider
+            theme={{
+              algorithm: previewTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
+            }}
+          >
+            <Renderer schema={schema} components={allComponents} eventContext={eventContext} />
+          </ConfigProvider>
         ) : (
           <div
             style={{

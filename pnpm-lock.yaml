@@ -68,6 +68,22 @@ importers:
         specifier: ^5.0.8
         version: 5.4.21(@types/node@20.19.27)
 
+  packages/compiler:
+    dependencies:
+      '@lowcode-platform/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+    devDependencies:
+      typescript:
+        specifier: ^5.2.2
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.0
+        version: 5.4.21(@types/node@20.19.27)
+      vite-plugin-dts:
+        specifier: ^3.0.0
+        version: 3.9.1(@types/node@20.19.27)(typescript@5.9.3)(vite@5.4.21)
+
   packages/components:
     dependencies:
       '@ant-design/icons':
@@ -95,6 +111,12 @@ importers:
 
   packages/editor:
     dependencies:
+      '@ant-design/icons':
+        specifier: ^5.2.6
+        version: 5.6.1(react-dom@18.3.1)(react@18.3.1)
+      '@lowcode-platform/compiler':
+        specifier: workspace:*
+        version: link:../compiler
       '@lowcode-platform/components':
         specifier: workspace:*
         version: link:../components

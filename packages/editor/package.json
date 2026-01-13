@@ -11,7 +11,9 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -19,17 +21,19 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "@ant-design/icons": "^5.2.6",
+    "@lowcode-platform/components": "workspace:*",
+    "@lowcode-platform/compiler": "workspace:*",
+    "@lowcode-platform/renderer": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "antd": "^5.12.0",
-    "@lowcode-platform/renderer": "workspace:*",
-    "@lowcode-platform/components": "workspace:*"
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "peerDependencies": {
+    "antd": "^5.0.0",
     "react": "^18.0.0",
-    "react-dom": "^18.0.0",
-    "antd": "^5.0.0"
+    "react-dom": "^18.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
