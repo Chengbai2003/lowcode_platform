@@ -1,4 +1,5 @@
 import type { ComponentSchema } from "@lowcode-platform/renderer";
+import { compileStyle } from "./styleCompiler";
 
 interface CompileOptions {
   prettier?: boolean;
@@ -176,15 +177,46 @@ function generateJSX(
   });
 
   // 生成 Props 字符串
-  const propStrings = Object.entries(props).map(([key, value]) => {
-    if (typeof value === "string") {
-      if (value.startsWith("__EXPRESSION__")) {
-        return `${key}={${value.replace("__EXPRESSION__", "")}}`;
+  const propStrings = Object.entries(props)
+    .map(([key, value]) => {
+      // 特殊处理 style
+      if (key === "style") {
+        // 已经在上面处理过，这里跳过，放在下面统一合并
+        return null;
       }
-      return `${key}="${value}"`;
+      if (typeof value === "string") {
+        if (value.startsWith("__EXPRESSION__")) {
+          return `${key}={${value.replace("__EXPRESSION__", "")}}`;
+        }
+        return `${key}="${value}"`;
+      }
+      return `${key}={${JSON.stringify(value)}}`;
+    })
+    .filter(Boolean) as string[];
+
+  // 处理 Style 转换
+  if (props.style) {
+    const { className, styleObj } = compileStyle(props.style);
+
+    // 如果生成了 className，添加到 props
+    if (className) {
+      if (props.className) {
+        // 如果原本就有 className，合并
+        propStrings.push(`className="${props.className} ${className}"`);
+      } else {
+        propStrings.push(`className="${className}"`);
+      }
+    } else if (props.className) {
+      propStrings.push(`className="${props.className}"`);
     }
-    return `${key}={${JSON.stringify(value)}}`;
-  });
+
+    // 如果还有剩余的 style，保留
+    if (Object.keys(styleObj).length > 0) {
+      propStrings.push(`style={${JSON.stringify(styleObj)}}`);
+    }
+  } else if (props.className) {
+    propStrings.push(`className="${props.className}"`);
+  }
 
   // 合并事件 Pros
   const allProps = [...propStrings, ...extraProps].join(" ");
