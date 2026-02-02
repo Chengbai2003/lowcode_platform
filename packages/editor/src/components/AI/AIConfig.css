@@ -1,0 +1,79 @@
+/* AI Configuration Modal Styles */
+.ai-config .config-section {
+  margin-bottom: 24px;
+}
+
+.ai-config .model-info {
+  background: #f5f5f5;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.ai-config .model-info div {
+  margin-bottom: 8px;
+}
+
+.ai-config .model-info div:last-child {
+  margin-bottom: 0;
+}
+
+.ai-config .ant-form-item-label > label {
+  font-weight: 500;
+}
+
+.ai-config .ant-select-selection-item {
+  display: flex;
+  align-items: center;
+}
+
+.ai-config .ant-alert {
+  border-radius: 6px;
+}
+
+.ai-config .ant-divider-horizontal {
+  margin: 16px 0;
+}
+
+/* Dark theme support for modal body */
+.ant-modal-content .ai-config {
+  color: inherit;
+}
+
+.ant-modal-content .ai-config .model-info {
+  background: #1f1f1f;
+  border: 1px solid #303030;
+}
+
+/* Success and error indicators */
+.model-status-success {
+  color: #52c41a;
+  font-weight: 500;
+}
+
+.model-status-error {
+  color: #ff4d4f;
+  font-weight: 500;
+}
+
+.model-status-default {
+  color: #1890ff;
+  font-weight: 500;
+}
+
+/* Loading state */
+.testing-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.testing-loading .anticon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
