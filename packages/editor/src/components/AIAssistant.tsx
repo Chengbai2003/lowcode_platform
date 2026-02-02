@@ -20,36 +20,18 @@ interface AIAssistantProps {
   onError?: (error: string) => void;
 }
 
-export const AIAssistant: React.FC<AIAssistantProps> = ({
-  currentSchema,
-  onSchemaUpdate,
-  onError
-}) => {
-  const [messages, setMessages] = useState<AIMessage[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [loading, setLoading] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+// 模拟AI服务
+class MockAIService {
+  private static instance: MockAIService;
+  
+  static getInstance(): MockAIService {
+    if (!MockAIService.instance) {
+      MockAIService.instance = new MockAIService();
+    }
+    return MockAIService.instance;
+  }
 
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
-
-  useEffect(() => {
-    setMessages([
-      {
-        id: 'welcome',
-        type: 'system',
-        content: '🤖 AI助手已就绪！我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量',
-        timestamp: new Date()
-      }
-    ]);
-  }, []);
-
-  const generateMockResponse = async (prompt: string): Promise<{ schema?: A2UISchema, explanation: string, suggestions?: string[] }> => {
+  async generateSchema(prompt: string): Promise<{ schema: A2UISchema, explanation: string }> {
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     const lowerPrompt = prompt.toLowerCase();
@@ -70,7 +52,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
             loginForm: {
               id: 'loginForm',
               type: 'Card',
-              props: { title: '用户登录', style: { width: '400px' } },
+              props: {
+                title: '用户登录',
+                style: { width: '400px' }
+              },
               childrenIds: ['form']
             },
             form: {
@@ -146,28 +131,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       };
     }
     
-    if (lowerPrompt.includes('分析') || lowerPrompt.includes('analyze') || lowerPrompt.includes('检查')) {
-      return {
-        explanation: '当前页面结构清晰，使用了基础的布局组件。整体设计简洁，符合现代UI规范。',
-        suggestions: [
-          '添加页面标题提升用户导航',
-          '考虑添加面包屑导航',
-          '为长页面添加返回顶部按钮'
-        ]
-      };
-    }
-    
-    if (lowerPrompt.includes('优化') || lowerPrompt.includes('optimize') || lowerPrompt.includes('改进')) {
-      return {
-        explanation: '我已经分析了你的页面结构，并提供以下优化建议。',
-        suggestions: [
-          '建议添加响应式断点优化移动端体验',
-          '考虑为表单字段添加验证规则',
-          '可以为按钮添加加载状态'
-        ]
-      };
-    }
-    
+    // 默认返回一个简单的容器
     return {
       schema: {
         rootId: 'root',
@@ -182,15 +146,80 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
             id: 'content',
             type: 'Div',
             props: { 
-              style: { textAlign: 'center', padding: '48px' },
-              children: 'AI为你生成的内容'
-            }
+              style: { textAlign: 'center', padding: '48px' }
+            },
+            childrenIds: ['text']
+          },
+          text: {
+            id: 'text',
+            type: 'Text',
+            props: { children: 'AI为你生成的内容' }
           }
-        },
-        explanation: '我为你创建了一个基础容器结构。你可以继续告诉我需要添加什么具体内容。'
-      }
+        }
+      },
+      explanation: '我为你创建了一个基础容器结构。你可以继续告诉我需要添加什么具体内容。'
     };
-  };
+  }
+  
+  async optimizeSchema(schema: A2UISchema): Promise<{ optimizedSchema: A2UISchema, suggestions: string[] }> {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    
+    return {
+      optimizedSchema: schema,
+      suggestions: [
+        '建议添加响应式断点优化移动端体验',
+        '考虑为表单字段添加验证规则',
+        '可以为按钮添加加载状态'
+      ]
+    };
+  }
+  
+  async analyzeSchema(schema: A2UISchema): Promise<{ analysis: string, issues: string[], suggestions: string[] }> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    return {
+      analysis: '当前页面结构清晰，使用了基础的布局组件。整体设计简洁，符合现代UI规范。',
+      issues: [],
+      suggestions: [
+        '添加页面标题提升用户导航',
+        '考虑添加面包屑导航',
+        '为长页面添加返回顶部按钮'
+      ]
+    };
+  }
+}
+
+export const AIAssistant: React.FC<AIAssistantProps> = ({
+  currentSchema,
+  onSchemaUpdate,
+  onError
+}) => {
+  const [messages, setMessages] = useState<AIMessage[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const aiService = MockAIService.getInstance();
+
+  // 滚动到最新消息
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
+
+  // 初始化欢迎消息
+  useEffect(() => {
+    setMessages([
+      {
+        id: 'welcome',
+        type: 'system',
+        content: '🤖 AI助手已就绪！我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量',
+        timestamp: new Date()
+      }
+    ]);
+  }, []);
 
   const handleSendMessage = useCallback(async () => {
     if (!inputValue.trim() || loading) return;
@@ -206,6 +235,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     setInputValue('');
     setLoading(true);
 
+    // 添加AI思考中的消息
     const thinkingMessage: AIMessage = {
       id: `thinking-${Date.now()}`,
       type: 'ai',
@@ -217,28 +247,47 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     setMessages(prev => [...prev, thinkingMessage]);
 
     try {
-      const response = await generateMockResponse(inputValue);
+      let response;
+      
+      // 根据用户输入判断意图
+      const lowerInput = inputValue.toLowerCase();
+      
+      if (lowerInput.includes('分析') || lowerInput.includes('analyze') || lowerInput.includes('检查')) {
+        const schema = currentSchema || { rootId: 'root', components: {} };
+        response = await aiService.analyzeSchema(schema);
+      } else if (lowerInput.includes('优化') || lowerInput.includes('optimize') || lowerInput.includes('改进')) {
+        const schema = currentSchema || { rootId: 'root', components: {} };
+        response = await aiService.optimizeSchema(schema);
+      } else {
+        response = await aiService.generateSchema(inputValue);
+      }
 
+      // 移除思考中的消息
       setMessages(prev => prev.filter(msg => msg.id !== thinkingMessage.id));
 
+      // 添加AI回复
+      const hasSchema = 'schema' in response;
+      const hasAnalysis = 'analysis' in response;
+      
       const aiMessage: AIMessage = {
         id: `ai-${Date.now()}`,
         type: 'ai',
-        content: response.explanation,
+        content: hasSchema ? (response as any).explanation : (response as any).analysis,
         timestamp: new Date(),
-        schema: response.schema,
-        suggestions: response.suggestions,
+        schema: hasSchema ? (response as any).schema : undefined,
+        suggestions: (response as any).suggestions,
         status: 'success'
       };
 
       setMessages(prev => [...prev, aiMessage]);
 
-      if (response.schema) {
-        onSchemaUpdate(response.schema);
+      if (hasSchema) {
+        onSchemaUpdate((response as any).schema);
         message.success('Schema已更新！');
       }
 
     } catch (error) {
+      // 移除思考中的消息
       setMessages(prev => prev.filter(msg => msg.id !== thinkingMessage.id));
 
       const errorMessage: AIMessage = {
@@ -254,7 +303,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [inputValue, loading, onSchemaUpdate, onError]);
+  }, [inputValue, loading, currentSchema, onSchemaUpdate, onError]);
 
   const handleQuickAction = useCallback(async (action: string) => {
     setInputValue(action);

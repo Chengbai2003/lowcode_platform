@@ -133,7 +133,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             </div>
           ) : activeTab === 'ai' ? (
             <AIAssistant
-              currentSchema={schema}
+              currentSchema={schema || null}
               onSchemaUpdate={onSchemaUpdate || (() => {})}
               onError={onError}
             />

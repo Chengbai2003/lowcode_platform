@@ -11,3 +11,4 @@
 
 export { LowcodeEditor } from "./LowcodeEditor";
 export type { LowcodeEditorProps } from "./types";
+export { AIAssistant } from "./components/AIAssistant";
