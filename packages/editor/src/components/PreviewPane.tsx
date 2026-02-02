@@ -32,10 +32,9 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     >
       <div
         style={{
-          maxWidth: '1200px',
-          margin: '0 auto',
+          width: '100%',
+          minHeight: '100%',
           background: previewTheme === 'dark' ? '#141414' : '#fff',
-          minHeight: 'calc(100vh - 48px - 48px)',
           borderRadius: '8px',
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
           padding: '24px'
