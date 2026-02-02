@@ -53,7 +53,7 @@ export function LowcodeEditor({
   const [json, setJson] = useState(initialJson);
   const [schema, setSchema] = useState<A2UISchema | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'json' | 'visual' | 'code'>('json');
+  const [activeTab, setActiveTab] = useState<'json' | 'visual' | 'code' | 'ai'>('json');
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light');
   const [compiledCode, setCompiledCode] = useState<string>('');
 
@@ -101,6 +101,16 @@ export function LowcodeEditor({
     }
   }, [schema]);
 
+  // 处理AI生成的Schema更新
+  const handleAISchemaUpdate = useCallback((newSchema: A2UISchema) => {
+    setSchema(newSchema);
+    setJson(JSON.stringify(newSchema, null, 2));
+    onChange?.(newSchema);
+    // 切换到JSON编辑器查看结果
+    setActiveTab('json');
+    message.success('AI助手已更新Schema！');
+  }, [onChange]);
+
   // 合并自定义组件与默认注册表
   const allComponents = useMemo(() => {
     return { ...componentRegistry, ...customComponents };
@@ -126,6 +136,9 @@ export function LowcodeEditor({
             showLineNumbers={showLineNumbers}
             wordWrap={wordWrap}
             handleEditorChange={handleEditorChange}
+            schema={schema}
+            onSchemaUpdate={handleAISchemaUpdate}
+            onError={onError}
           />
           <PreviewPane
             error={error}

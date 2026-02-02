@@ -1,11 +1,13 @@
 import React from 'react';
 import { Layout } from 'antd';
 import Editor from '@monaco-editor/react';
+import { AIAssistant } from './AIAssistant';
+import type { A2UISchema } from '@lowcode-platform/renderer';
 
 const { Sider } = Layout;
 
 interface EditorPaneProps {
-  activeTab: 'json' | 'visual' | 'code';
+  activeTab: 'json' | 'visual' | 'code' | 'ai';
   width: number | string;
   json: string;
   compiledCode?: string;
@@ -13,6 +15,9 @@ interface EditorPaneProps {
   showLineNumbers: boolean;
   wordWrap: boolean;
   handleEditorChange: (value: string | undefined) => void;
+  schema?: A2UISchema | null;
+  onSchemaUpdate?: (schema: A2UISchema) => void;
+  onError?: (error: string) => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -24,6 +29,9 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   showLineNumbers,
   wordWrap,
   handleEditorChange,
+  schema,
+  onSchemaUpdate,
+  onError,
 }) => {
   return (
     <Sider
@@ -59,7 +67,9 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               ? 'JSON SCHEMA'
               : activeTab === 'code'
                 ? 'REACT CODE'
-                : 'VISUAL EDITOR'}
+                : activeTab === 'ai'
+                  ? 'AI ASSISTANT'
+                  : 'VISUAL EDITOR'}
           </span>
         </div>
 
@@ -102,7 +112,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 tabSize: 2,
               }}
             />
-          ) : (
+          ) : activeTab === 'visual' ? (
             <div
               style={{
                 height: '100%',
@@ -121,7 +131,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               </div>
               <div style={{ fontSize: '13px' }}>即将支持拖拽布局与属性配置</div>
             </div>
-          )}
+          ) : activeTab === 'ai' ? (
+            <AIAssistant
+              currentSchema={schema}
+              onSchemaUpdate={onSchemaUpdate || (() => {})}
+              onError={onError}
+            />
+          ) : null}
         </div>
       </div>
     </Sider>

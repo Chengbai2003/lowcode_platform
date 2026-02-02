@@ -4,8 +4,8 @@ import { Layout } from 'antd';
 const { Sider } = Layout;
 
 interface ActivityBarProps {
-  activeTab: 'json' | 'visual' | 'code';
-  setActiveTab: (tab: 'json' | 'visual' | 'code') => void;
+  activeTab: 'json' | 'visual' | 'code' | 'ai';
+  setActiveTab: (tab: 'json' | 'visual' | 'code' | 'ai') => void;
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({ activeTab, setActiveTab }) => {
@@ -81,6 +81,28 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({ activeTab, setActiveTa
         {/* Code Icon (React/Tag) */}
         <svg viewBox="0 0 1024 1024" width="24" height="24" fill="currentColor">
           <path d="M516 673c0 4.4-3.6 8-8 8h-48c-4.4 0-8-3.6-8-8V351c0-4.4 3.6-8 8-8h48c4.4 0 8 3.6 8 8v322zM324 742c-2.8 0-5.4-1.1-7.4-3.1l-142-142c-4.1-4.1-4.1-10.7 0-14.8l142-142c1.9-1.9 4.6-3.1 7.4-3.1h48c4.4 0 8 3.6 8 8v34.4c0 2.2-0.9 4.2-2.3 5.7L258.1 600l119.6 112.9c1.4 1.5 2.3 3.5 2.3 5.7V734c0 4.4-3.6 8-8 8h-48zM700 742H652c-4.4 0-8-3.6-8-8v-34.4c0-2.2 0.9-4.2 2.3-5.7l119.6-113.3-119.6-112.9c-1.4-1.5-2.3-3.5-2.3-5.7V359c0-4.4 3.6-8 8-8h48c2.8 0 5.4 1.1 7.4 3.1l142 142c4.1 4.1 4.1 10.7 0 14.8l-142 142c-2.2 2-4.8 3.1-7.4 3.1z" />
+        </svg>
+      </div>
+
+      <div
+        style={{
+          width: '48px',
+          height: '48px',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          cursor: 'pointer',
+          color: activeTab === 'ai' ? '#fff' : '#858585',
+          borderLeft: activeTab === 'ai' ? '2px solid #007fd4' : '2px solid transparent',
+          background: activeTab === 'ai' ? '#37373d' : 'transparent',
+        }}
+        onClick={() => setActiveTab('ai')}
+        title="AI 助手"
+      >
+        {/* AI Icon */}
+        <svg viewBox="0 0 1024 1024" width="24" height="24" fill="currentColor">
+          <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"/>
+          <path d="M464 336c0-26.5 21.5-48 48-48s48 21.5 48 48-21.5 48-48 48-48-21.5-48-48zm-24 192h48v160h-48zm96 0h48v160h-48zm-192 0h48v160h-48zm288 0h48v160h-48z"/>
         </svg>
       </div>
     </Sider>
