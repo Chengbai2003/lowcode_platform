@@ -267,7 +267,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
       // 添加AI回复
       const hasSchema = 'schema' in response;
-      const hasAnalysis = 'analysis' in response;
       
       const aiMessage: AIMessage = {
         id: `ai-${Date.now()}`,
