@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+// import type { CSSProperties } from "react"; // 暂时注释掉未使用的导入
 
 // Step 1: 建立映射字典
 
