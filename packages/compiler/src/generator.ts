@@ -1,4 +1,4 @@
-import type { ComponentSchema } from "@lowcode-platform/renderer";
+import type { A2UISchema, A2UIComponent } from "@lowcode-platform/renderer";
 import { compileStyle } from "./styleCompiler";
 
 interface CompileOptions {
@@ -12,23 +12,41 @@ interface FieldInfo {
 }
 
 /**
- * 将 JSON Schema 编译为 React 组件代码字符串
+ * 将 A2UI Flat Schema 编译为 React 组件代码字符串
  */
 export function compileToCode(
-  schema: ComponentSchema,
+  schema: A2UISchema,
   options?: CompileOptions
 ): string {
   const imports = new Set<string>(["message"]);
   const fields: FieldInfo[] = [];
+  const { components, rootId } = schema;
 
-  // 1. 扫描字段和收集组件
-  scanSchema(schema, imports, fields);
+  // Step A: 全局状态收集 (Global State Collection)
+  // 利用扁平结构的特性，直接遍历组件池来收集 useState，无需递归
+  const allNodes = Object.values(components) as A2UIComponent[];
+
+  allNodes.forEach((node) => {
+    // 收集组件 import
+    if (node.type && /^[A-Z]/.test(node.type)) {
+      imports.add(node.type);
+    }
+
+    // 收集 Field
+    if (node.props?.field) {
+      const fieldName = toCamelCase(node.props.field);
+      fields.push({
+        name: fieldName,
+        setterName: `set${
+          fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
+        }`,
+        initialValue: node.props.defaultValue || node.props.value || "",
+      });
+    }
+  });
 
   // 整理 imports
-  // 必须引入 React hooks
   const reactImports = ["useState"];
-
-  // 过滤出 Antd 组件 (首字母大写)
   const antdImports = Array.from(imports)
     .filter((name) => /^[A-Z]/.test(name) || name === "message")
     .sort();
@@ -54,199 +72,136 @@ export function compileToCode(
   };`
       : "";
 
-  // 4. 生成 JSX
-  const jsx = generateJSX(schema, fields);
+  // Step B: JSX 生成器 (Lookup Generator)
+  function generateJSX(nodeId: string, level: number = 2): string {
+    const node = components[nodeId];
+    if (!node) {
+      return `${"  ".repeat(
+        level
+      )}<div style={{color: 'red'}}>Node ${nodeId} Not Found</div>`;
+    }
 
-  // 5. 组装最终代码
-  return `import React, { ${reactImports.join(", ")} } from 'react';
-import { ${antdImports.join(", ")} } from 'antd';
+    const indent = "  ".repeat(level);
+    const props = { ...node.props };
+    const events = node.events || {};
 
-export default function GeneratedComponent() {
-  // 1. 独立 State
-  ${stateHooks.join("\n  ")}
+    // 特殊处理：Field 双向绑定
+    if (props.field) {
+      const fieldName = toCamelCase(props.field);
+      const fieldInfo = fields.find((f) => f.name === fieldName);
 
-  // 2. 聚合提交逻辑${submitFunction}
+      if (fieldInfo) {
+        props.value = `__EXPRESSION__${fieldName}`;
+        props.onChange = `__EXPRESSION__(e) => ${fieldInfo.setterName}(e.target ? e.target.value : e)`;
+      }
+      delete props.field;
+    }
 
-  return (
-${jsx}
-  );
-}
-`;
-}
+    // 特殊处理：Label Wrapper (Input)
+    let wrapperStart = "";
+    let wrapperEnd = "";
+    let labelElement = "";
 
-/**
- * 扫描 Schema：收集 Imports 和 Fields
- */
-function scanSchema(
-  node: ComponentSchema | string,
-  imports: Set<string>,
-  fields: FieldInfo[]
-) {
-  if (typeof node === "string") return;
+    if (props.label && node.type === "Input") {
+      wrapperStart = `${indent}<div style={{ marginBottom: 16 }}>\n${indent}  `;
+      wrapperEnd = `\n${indent}</div>`;
+      labelElement = `<label style={{ display: 'block', marginBottom: 8 }}>${props.label}</label>\n${indent}  `;
+      delete props.label;
+    }
 
-  // 收集组件 import
-  if (node.componentName && /^[A-Z]/.test(node.componentName)) {
-    imports.add(node.componentName);
-  }
-
-  // 收集 Field
-  // 假设 props.field 存在即为表单字段
-  if (node.props?.field) {
-    const fieldName = toCamelCase(node.props.field);
-    fields.push({
-      name: fieldName,
-      setterName: `set${
-        fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
-      }`,
-      initialValue: node.props.defaultValue || node.props.value || "",
+    // 特殊处理：Event Binding
+    const extraProps: string[] = [];
+    Object.entries(events).forEach(([evtName, evtAction]) => {
+      if (evtAction === "submit") {
+        extraProps.push(`${evtName}={handleSubmit}`);
+      }
     });
-  }
 
-  // 递归处理子节点
-  if (node.children) {
-    const children = Array.isArray(node.children)
-      ? node.children
-      : [node.children];
-    children.forEach((child) => scanSchema(child, imports, fields));
-  }
-}
-
-/**
- * 递归生成 JSX
- */
-function generateJSX(
-  node: ComponentSchema | string,
-  fields: FieldInfo[],
-  level: number = 2 // 初始缩进层级
-): string {
-  if (typeof node === "string") {
-    return `${"  ".repeat(level)}${node}`;
-  }
-
-  const indent = "  ".repeat(level);
-  const props = { ...node.props };
-  const events = node.events || {};
-
-  // 特殊处理：Field 双向绑定
-  if (props.field) {
-    const fieldName = toCamelCase(props.field);
-    const fieldInfo = fields.find((f) => f.name === fieldName);
-
-    if (fieldInfo) {
-      // 绑定 value
-      props.value = `__EXPRESSION__${fieldName}`;
-      // 绑定 onChange
-      // 这里简单假设是 Input 类型的 onChange (e.target.value)
-      // 如果是 Select/DatePicker 等可能不同，这里按 Input 处理演示核心逻辑
-      props.onChange = `__EXPRESSION__(e) => ${fieldInfo.setterName}(e.target ? e.target.value : e)`;
-    }
-    // 移除 field 属性，因为 React 组件通常不接受这个非标准属性
-    delete props.field;
-  }
-
-  // 特殊处理：Label (如果 Input 外面需要包一层 Label，或者 Antd Input 自身没有 Label 属性)
-  // 用户的例子里 Input 有 label 属性，但 standard Antd Input 没有 label 属性。
-  // 通常 Form.Item 才有 label。
-  // 为了符合用户的 "预期输出" (Example 中的 div + label + Input)，我们需要在父级处理?
-  // 用户例子： { "type": "Input", "props": { "label": "账号", "field": "username" } }
-  // 输出： <div className="mb-4"><label>账号</label><Input ... /></div>
-  // 这意味着我们需要这一层转换。简单起见，如果检测到 label 且不是 FormItem，我们可能需要 wrapper。
-  // 但为了保持通用性，先把 label 留在 props 里，除非是特定组件。
-  // 如果是 Antd Input，它不接受 label。
-  // 让我们遵循用户的 "Human-readable" 结构。如果存在 label，生成 wrapper。
-
-  let wrapperStart = "";
-  let wrapperEnd = "";
-  let labelElement = "";
-
-  if (props.label && node.componentName === "Input") {
-    wrapperStart = `${indent}<div style={{ marginBottom: 16 }}>\n${indent}  `;
-    wrapperEnd = `\n${indent}</div>`;
-    labelElement = `<label style={{ display: 'block', marginBottom: 8 }}>${props.label}</label>\n${indent}  `;
-    delete props.label; // 移除已消费的 label
-  }
-
-  // 特殊处理：Event Binding
-  const extraProps: string[] = [];
-  Object.entries(events).forEach(([evtName, evtAction]) => {
-    if (evtAction === "submit") {
-      extraProps.push(`${evtName}={handleSubmit}`);
-    } else {
-      // 其他事件暂不处理或保留原样
-    }
-  });
-
-  // 生成 Props 字符串
-  const propStrings = Object.entries(props)
-    .map(([key, value]) => {
-      // 特殊处理 style
-      if (key === "style") {
-        // 已经在上面处理过，这里跳过，放在下面统一合并
-        return null;
-      }
-      if (typeof value === "string") {
-        if (value.startsWith("__EXPRESSION__")) {
-          return `${key}={${value.replace("__EXPRESSION__", "")}}`;
+    // 生成 Props 字符串
+    const propStrings = Object.entries(props)
+      .map(([key, value]) => {
+        if (key === "style") return null; // 稍后处理
+        if (typeof value === "string") {
+          if (value.startsWith("__EXPRESSION__")) {
+            return `${key}={${value.replace("__EXPRESSION__", "")}}`;
+          }
+          return `${key}="${value}"`;
         }
-        return `${key}="${value}"`;
+        return `${key}={${JSON.stringify(value)}}`;
+      })
+      .filter(Boolean) as string[];
+
+    // 处理 Style
+    if (props.style) {
+      const { className, styleObj } = compileStyle(props.style);
+      if (className) {
+        if (props.className) {
+          propStrings.push(`className="${props.className} ${className}"`);
+        } else {
+          propStrings.push(`className="${className}"`);
+        }
+      } else if (props.className) {
+        propStrings.push(`className="${props.className}"`);
       }
-      return `${key}={${JSON.stringify(value)}}`;
-    })
-    .filter(Boolean) as string[];
 
-  // 处理 Style 转换
-  if (props.style) {
-    const { className, styleObj } = compileStyle(props.style);
-
-    // 如果生成了 className，添加到 props
-    if (className) {
-      if (props.className) {
-        // 如果原本就有 className，合并
-        propStrings.push(`className="${props.className} ${className}"`);
-      } else {
-        propStrings.push(`className="${className}"`);
+      if (Object.keys(styleObj).length > 0) {
+        propStrings.push(`style={${JSON.stringify(styleObj)}}`);
       }
     } else if (props.className) {
       propStrings.push(`className="${props.className}"`);
     }
 
-    // 如果还有剩余的 style，保留
-    if (Object.keys(styleObj).length > 0) {
-      propStrings.push(`style={${JSON.stringify(styleObj)}}`);
+    const allProps = [...propStrings, ...extraProps].join(" ");
+
+    // 递归子节点
+    let childrenJSX = "";
+    if (node.childrenIds && node.childrenIds.length > 0) {
+      childrenJSX = node.childrenIds
+        .map((childId: string) =>
+          generateJSX(childId, wrapperStart ? level + 2 : level + 1)
+        )
+        .join("\n");
+    } else if (props.children && typeof props.children === "string") {
+      // Handle text children defined in props (simplified case)
+      childrenJSX = `${"  ".repeat(level + 1)}${props.children}`;
     }
-  } else if (props.className) {
-    propStrings.push(`className="${props.className}"`);
+
+    const openTag = `<${node.type}${allProps ? " " + allProps : ""}`;
+    let componentCode = "";
+
+    if (!childrenJSX) {
+      componentCode = `${indent}${openTag} />`;
+    } else {
+      componentCode = `${indent}${openTag}>\n${childrenJSX}\n${indent}</${node.type}>`;
+    }
+
+    if (wrapperStart) {
+      return `${wrapperStart}${labelElement}${componentCode.trim()}${wrapperEnd}`;
+    }
+
+    return componentCode;
   }
 
-  // 合并事件 Pros
-  const allProps = [...propStrings, ...extraProps].join(" ");
+  // 4. 生成 JSX (从 Root 开始)
+  // Ensure we have a rootId before generating
+  const jsx = rootId ? generateJSX(rootId) : "";
 
-  // 处理子节点
-  let childrenJSX = "";
-  if (node.children) {
-    const children = Array.isArray(node.children)
-      ? node.children
-      : [node.children];
-    childrenJSX = children
-      .map((c) => generateJSX(c, fields, wrapperStart ? level + 1 : level + 1))
-      .join("\n");
-  }
+  // Step C: 代码组装 (Assembly)
+  return `import React, { ${reactImports.join(", ")} } from 'react';
+import { ${antdImports.join(", ")} } from 'antd';
 
-  const openTag = `<${node.componentName}${allProps ? " " + allProps : ""}`;
-  let componentCode = "";
+export default function GeneratedPage() {
+  // 1. State 定义
+  ${stateHooks.join("\n  ")}
 
-  if (!childrenJSX) {
-    componentCode = `${indent}${openTag} />`;
-  } else {
-    componentCode = `${indent}${openTag}>\n${childrenJSX}\n${indent}</${node.componentName}>`;
-  }
+  // 2. 聚合提交逻辑${submitFunction}
 
-  // 应用 Wrapper (如果有 label)
-  if (wrapperStart) {
-    return `${wrapperStart}${labelElement}${componentCode.trim()}${wrapperEnd}`;
-  }
-
-  return componentCode;
+  // 3. 渲染逻辑
+  return (
+${jsx}
+  );
+}
+`;
 }
 
 // 辅助函数：转驼峰

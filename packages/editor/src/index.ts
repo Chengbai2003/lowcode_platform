@@ -9,10 +9,5 @@
  * - 错误处理
  */
 
-export { LowcodeEditor } from './LowcodeEditor';
-export type { LowcodeEditorProps } from './types';
-
-/**
- * 默认导出
- */
-export { default } from './LowcodeEditor';
+export { LowcodeEditor } from "./LowcodeEditor";
+export type { LowcodeEditorProps } from "./types";

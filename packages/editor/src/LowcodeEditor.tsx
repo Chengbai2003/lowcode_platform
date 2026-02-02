@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { Layout, ConfigProvider, theme, message } from 'antd';
+import { ConfigProvider, theme, message } from 'antd';
 import type { LowcodeEditorProps } from './types';
-import type { ComponentSchema } from '@lowcode-platform/renderer';
+import type { A2UISchema } from '@lowcode-platform/renderer';
 import { componentRegistry } from '@lowcode-platform/components';
 import { compileToCode } from '@lowcode-platform/compiler';
 import {
@@ -35,9 +35,15 @@ export function LowcodeEditor({
       ? JSON.stringify(initialSchema, null, 2)
       : JSON.stringify(
         {
-          componentName: 'Page',
-          props: {},
-          children: [],
+          rootId: 'root',
+          components: {
+            root: {
+              id: 'root',
+              type: 'Page',
+              props: {},
+              childrenIds: []
+            }
+          }
         },
         null,
         2
@@ -45,7 +51,7 @@ export function LowcodeEditor({
   }, [initialSchema]);
 
   const [json, setJson] = useState(initialJson);
-  const [schema, setSchema] = useState<ComponentSchema | null>(null);
+  const [schema, setSchema] = useState<A2UISchema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'json' | 'visual' | 'code'>('json');
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light');
@@ -54,7 +60,13 @@ export function LowcodeEditor({
   // 解析 JSON 并更新 schema
   useEffect(() => {
     try {
-      const parsed = JSON.parse(json) as ComponentSchema;
+      const parsed = JSON.parse(json) as A2UISchema;
+
+      // 简单校验 A2UI 结构
+      if (!parsed.rootId || !parsed.components) {
+        throw new Error('Invalid A2UI Schema: Missing rootId or components');
+      }
+
       setSchema(parsed);
       setError(null);
       onChange?.(parsed);
@@ -94,39 +106,20 @@ export function LowcodeEditor({
     return { ...componentRegistry, ...customComponents };
   }, [customComponents]);
 
-  // 计算编辑器宽度 - 将其作为数字处理以便计算
-  const numericEditorWidth = useMemo(() => {
-    if (typeof editorWidth === 'string' && editorWidth.endsWith('%')) {
-      return editorWidth;
-    }
-    if (typeof editorWidth === 'string' && editorWidth.endsWith('px')) {
-      return parseInt(editorWidth, 10);
-    }
-    return editorWidth;
-  }, [editorWidth]);
-
+  // 简化的布局逻辑：使用 flexbox
   return (
-    <ConfigProvider
-      theme={{
-        algorithm: theme.darkAlgorithm,
-      }}
-    >
-      <Layout style={{ height: typeof height === 'number' ? `${height}px` : height, overflow: 'hidden' }}>
-        {/* 1. Top Header */}
+    <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
+      <div style={{ height, display: 'flex', flexDirection: 'column' }}>
         <EditorHeader
-          previewTheme={previewTheme}
-          onThemeChange={setPreviewTheme}
           onCompile={handleCompile}
+          previewTheme={previewTheme}
+          onThemeChange={(t) => setPreviewTheme(t)}
         />
-
-        <Layout style={{ height: '100%' }}>
-          {/* 2. Left Activity Bar */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <ActivityBar activeTab={activeTab} setActiveTab={setActiveTab} />
-
-          {/* 3. Middle Editor Pane */}
           <EditorPane
             activeTab={activeTab}
-            width={numericEditorWidth}
+            width={editorWidth}
             json={json}
             compiledCode={compiledCode}
             editorTheme={editorTheme}
@@ -134,8 +127,6 @@ export function LowcodeEditor({
             wordWrap={wordWrap}
             handleEditorChange={handleEditorChange}
           />
-
-          {/* 4. Right Preview Pane */}
           <PreviewPane
             error={error}
             schema={schema}
@@ -143,9 +134,8 @@ export function LowcodeEditor({
             eventContext={eventContext}
             previewTheme={previewTheme}
           />
-        </Layout>
-      </Layout>
+        </div>
+      </div>
     </ConfigProvider>
   );
 }
-export default LowcodeEditor;

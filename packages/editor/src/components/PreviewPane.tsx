@@ -1,83 +1,70 @@
 import React from 'react';
 import { Layout, ConfigProvider, theme } from 'antd';
 import { Renderer } from '@lowcode-platform/renderer';
-import type { ComponentSchema } from '@lowcode-platform/renderer';
+import type { ComponentRegistry, A2UISchema } from '@lowcode-platform/renderer';
 
 const { Content } = Layout;
 
 interface PreviewPaneProps {
-  error: string | null;
-  schema: ComponentSchema | null;
-  allComponents: any;
-  eventContext: any;
+  schema: A2UISchema | null;
+  allComponents: ComponentRegistry;
+  eventContext: Record<string, any>;
   previewTheme: 'light' | 'dark';
+  error: string | null;
 }
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
-  error,
   schema,
   allComponents,
   eventContext,
   previewTheme,
+  error
 }) => {
   return (
     <Content
       style={{
-        background: previewTheme === 'dark' ? '#000000' : '#ffffff',
-        height: '100%',
-        overflow: 'hidden', // Disable scrolling on Content directly, let inner div handle it
-        display: 'flex',
-        flexDirection: 'column',
+        flex: 1,
+        overflow: 'auto',
+        padding: '24px',
+        background: previewTheme === 'dark' ? '#1e1e1e' : '#f0f2f5',
+        position: 'relative'
       }}
     >
-      {error && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            padding: '12px 16px',
-            background: '#fff2f0',
-            borderBottom: '1px solid #ffccc7',
-            color: '#ff4d4f',
-            zIndex: 10,
-          }}
-        >
-          <strong>JSON 错误：</strong> {error}
-        </div>
-      )}
       <div
         style={{
-          padding: error ? '48px 0 0 0' : '0',
-          flex: 1, // Fill available space
-          overflow: 'auto', // Scroll here
-          background: previewTheme === 'dark' ? '#141414' : '#f0f2f5',
-          position: 'relative',
+          maxWidth: '1200px',
+          margin: '0 auto',
+          background: previewTheme === 'dark' ? '#141414' : '#fff',
+          minHeight: 'calc(100vh - 48px - 48px)',
+          borderRadius: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          padding: '24px'
         }}
       >
-        {schema ? (
-          <ConfigProvider
-            theme={{
-              algorithm: previewTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
-            }}
-          >
-            <Renderer schema={schema} components={allComponents} eventContext={eventContext} />
-          </ConfigProvider>
-        ) : (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: '#999',
-              fontSize: '16px',
-            }}
-          >
-            加载预览中...
-          </div>
-        )}
+        <ConfigProvider
+          theme={{
+            algorithm: previewTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm
+          }}
+        >
+          {error ? (
+            <div style={{ color: 'red', padding: '20px' }}>
+              <h3>渲染错误</h3>
+              <pre>{error}</pre>
+            </div>
+          ) : (
+            schema ? (
+              <Renderer
+                schema={schema}
+                components={allComponents}
+                eventContext={eventContext}
+              />
+            ) : (
+              <div style={{ padding: 20, textAlign: 'center', color: '#888' }}>
+                暂无内容，请在左侧编辑器输入 Schema
+              </div>
+            )
+          )}
+        </ConfigProvider>
       </div>
     </Content>
   );

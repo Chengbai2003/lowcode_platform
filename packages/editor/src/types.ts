@@ -1,44 +1,41 @@
-import type { ComponentSchema } from '@lowcode-platform/renderer';
+import type { A2UISchema, ComponentRegistry } from "@lowcode-platform/renderer";
 
-/**
- * 编辑器属性
- */
 export interface LowcodeEditorProps {
   /**
-   * 初始 Schema JSON
+   * 初始 JSON Schema (A2UI Format)
    */
-  initialSchema?: ComponentSchema | string;
+  initialSchema?: A2UISchema | string;
 
   /**
-   * 编辑器面板宽度（百分比或像素）
+   * 编辑器宽度
    * @default '50%'
    */
-  editorWidth?: string | number;
+  editorWidth?: number | string;
 
   /**
-   * Monaco 编辑器主题
+   * 编辑器主题
    * @default 'vs-dark'
    */
-  theme?: 'vs' | 'vs-dark' | 'hc-black';
+  theme?: "vs" | "vs-dark" | "hc-black";
 
   /**
-   * 编辑器容器高度
+   * 容器高度
    * @default '100vh'
    */
-  height?: string | number;
+  height?: number | string;
 
   /**
-   * 自定义组件注册表
+   * 自定义组件映射
    */
-  components?: Record<string, React.ComponentType<any>>;
+  components?: ComponentRegistry;
 
   /**
-   * Schema 变化时的回调
+   * Schema 变更回调
    */
-  onChange?: (schema: ComponentSchema) => void;
+  onChange?: (schema: A2UISchema) => void;
 
   /**
-   * JSON 无效时的回调
+   * 错误回调
    */
   onError?: (error: string) => void;
 
@@ -49,13 +46,13 @@ export interface LowcodeEditorProps {
   showLineNumbers?: boolean;
 
   /**
-   * 是否启用自动换行
+   * 是否自动换行
    * @default true
    */
   wordWrap?: boolean;
 
   /**
-   * 事件执行上下文（可在事件代码中使用的变量）
+   * 事件上下文
    */
   eventContext?: Record<string, any>;
 }

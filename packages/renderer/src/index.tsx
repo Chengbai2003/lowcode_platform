@@ -12,7 +12,7 @@ import { store } from './store';
 
 export { Renderer } from './Renderer';
 export { EventDispatcher } from './Renderer';
-export type { ComponentSchema, RendererProps, ComponentRegistry } from './types';
+export type { RendererProps, ComponentRegistry, A2UIComponent, A2UISchema } from './types';
 export { builtInComponents } from './Renderer';
 
 // 导出 Redux 相关
