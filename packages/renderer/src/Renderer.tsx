@@ -6,6 +6,7 @@ import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
 import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
+import { QuickJSContext, getQuickJS } from 'quickjs-emscripten';
 
 /**
  * 事件派发中心
