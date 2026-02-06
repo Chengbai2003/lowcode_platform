@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, memo } from 'react';
+import React, { useState, useMemo, useEffect, memo } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import { setComponentData, setComponentConfig, setMultipleComponentData } from './store/componentSlice';
@@ -6,101 +6,11 @@ import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
 import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
-import { QuickJSContext, getQuickJS } from 'quickjs-emscripten';
+// 导入安全的 EventDispatcher
+import { SafeEventDispatcher } from './EventDispatcher';
 
-/**
- * 事件派发中心
- * 负责解析和执行 JSON Schema 中定义的事件代码
- */
-export class EventDispatcher {
-  private context: Record<string, any>;
-  private dispatch: any;
-  private getState: any;
-
-  constructor(
-    context: Record<string, any> = {},
-    dispatch: any,
-    getState: any
-  ) {
-    this.context = context;
-    this.dispatch = dispatch;
-    this.getState = getState;
-  }
-
-  /**
-   * 更新执行上下文
-   */
-  setContext(key: string, value: any) {
-    this.context[key] = value;
-  }
-
-  /**
-   * 获取完整上下文
-   */
-  getContext(): Record<string, any> {
-    return {
-      ...this.context,
-      dispatch: this.dispatch,
-      getState: this.getState,
-      setComponentData: (id: string, value: any) => {
-        this.dispatch(setComponentData({ id, value }));
-      },
-      setComponentConfig: (id: string, config: any) => {
-        this.dispatch(setComponentConfig({ id, config }));
-      }
-    };
-  }
-
-  /**
-   * 执行单个函数体的辅助方法
-   */
-  private executeSingle(code: string, event: any, args: any[], contextValues: any[]): any {
-    try {
-      // 自动包裹函数体，确保是合法的函数执行
-      const fn = new Function(...args, code);
-      return fn(...contextValues, event);
-    } catch (error) {
-      console.warn('Event Logic Error:', error);
-      throw error; // 向上抛出，中断链
-    }
-  }
-
-  /**
-   * 执行事件代码
-   */
-  execute(code: string | string[], event?: Event | any, ...extraArgs: any[]): any {
-    try {
-      const ctx = this.getContext();
-      const contextKeys = Object.keys(ctx);
-      const contextValues = Object.values(ctx);
-      const args = [...contextKeys, 'event', ...extraArgs.map((_, i) => `arg${i}`)];
-
-      if (Array.isArray(code)) {
-        let result: any;
-        for (const snippet of code) {
-          try {
-            result = this.executeSingle(snippet, event, args, contextValues);
-          } catch (e) {
-            console.error('Chain Execution Interrupted due to error in snippet:', snippet);
-            break;
-          }
-        }
-        return result;
-      }
-
-      return this.executeSingle(code, event, args, contextValues);
-
-    } catch (error) {
-      console.error('Event Execution System Error:', error);
-    }
-  }
-
-  createHandler(code: string | string[]) {
-    return (event: any, ...extraArgs: any[]) => {
-      return this.execute(code, event, ...extraArgs);
-    };
-  }
-}
+// 导出安全的 EventDispatcher
+export { SafeEventDispatcher as EventDispatcher } from './EventDispatcher';
 
 /**
  * 默认内置组件
@@ -374,6 +284,7 @@ export function Renderer({
   eventContext = {}
 }: RendererProps): React.ReactElement {
   const dispatch = useAppDispatch();
+  const [dispatcherReady, setDispatcherReady] = useState(false);
 
   useEffect(() => {
     if (schema && schema.components) {
@@ -385,18 +296,47 @@ export function Renderer({
   }, [schema, dispatch]);
 
   const eventDispatcher = useMemo(() => {
-    return new EventDispatcher(eventContext, dispatch, store.getState);
+    return new EventDispatcher(dispatch, store.getState);
   }, [dispatch]);
 
-  useMemo(() => {
-    if (eventContext) {
-      Object.entries(eventContext).forEach(([key, value]) => {
-        eventDispatcher.setContext(key, value);
-      });
-    }
-  }, [eventContext, eventDispatcher]);
+  // 异步初始化事件分发器
+  useEffect(() => {
+    let mounted = true;
+
+    const initDispatcher = async () => {
+      try {
+        await eventDispatcher.initialize();
+        if (mounted) {
+          // 注入自定义上下文
+          if (eventContext) {
+            Object.entries(eventContext).forEach(([key, value]) => {
+              eventDispatcher.setContext(key, value);
+            });
+          }
+          setDispatcherReady(true);
+        }
+      } catch (error) {
+        console.error('Failed to initialize event dispatcher:', error);
+      }
+    };
+
+    initDispatcher();
+
+    return () => {
+      mounted = false;
+    };
+  }, [eventDispatcher, eventContext]);
 
   const allComponents = { ...builtInComponents, ...components };
+
+  // 在沙箱准备好之前显示加载状态
+  if (!dispatcherReady) {
+    return (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        正在初始化安全沙箱...
+      </div>
+    );
+  }
 
   if (schema && schema.rootId && schema.components) {
     return (
