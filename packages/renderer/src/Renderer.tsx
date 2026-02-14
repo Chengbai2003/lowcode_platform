@@ -6,15 +6,19 @@ import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
 import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
+import { DSLExecutor } from './executor';
+import type { ActionList, ExecutionContext } from './types/dsl';
 
 /**
  * 事件派发中心
- * 负责解析和执行 JSON Schema 中定义的事件代码
+ * 负责解析和执行 DSL Action 序列
  */
 export class EventDispatcher {
   private context: Record<string, any>;
   private dispatch: any;
   private getState: any;
+  private dslExecutor: DSLExecutor;
+  private executionContext: ExecutionContext;
 
   constructor(
     context: Record<string, any> = {},
@@ -24,6 +28,32 @@ export class EventDispatcher {
     this.context = context;
     this.dispatch = dispatch;
     this.getState = getState;
+
+    // 创建DSL执行引擎
+    this.dslExecutor = new DSLExecutor({
+      debug: process.env.NODE_ENV !== 'production',
+      onError: (error, action, ctx) => {
+        console.error('[DSL Error]', error.message, { action });
+      },
+      onLog: (level, message, data) => {
+        console[level as keyof Console](`[DSL ${level}]`, message, data);
+      },
+    });
+
+    // 创建执行上下文
+    this.executionContext = DSLExecutor.createContext({
+      dispatch: this.dispatch,
+      getState: this.getState,
+      data: {},  // 组件数据
+      formData: {},  // 表单数据
+      setComponentData: (id: string, value: any) => {
+        this.dispatch(setComponentData({ id, value }));
+      },
+      setComponentConfig: (id: string, config: any) => {
+        this.dispatch(setComponentConfig({ id, config }));
+      },
+      ...this.context,
+    });
   }
 
   /**
@@ -31,73 +61,60 @@ export class EventDispatcher {
    */
   setContext(key: string, value: any) {
     this.context[key] = value;
+    (this.executionContext as any)[key] = value;
   }
 
   /**
-   * 获取完整上下文
+   * 更新组件数据到执行上下文
    */
-  getContext(): Record<string, any> {
-    return {
-      ...this.context,
-      dispatch: this.dispatch,
-      getState: this.getState,
-      setComponentData: (id: string, value: any) => {
-        this.dispatch(setComponentData({ id, value }));
-      },
-      setComponentConfig: (id: string, config: any) => {
-        this.dispatch(setComponentConfig({ id, config }));
-      }
-    };
+  updateComponentData(componentId: string, value: any) {
+    (this.executionContext as any).data[componentId] = value;
   }
 
   /**
-   * 执行单个函数体的辅助方法
+   * 执行 DSL Action 序列
    */
-  private executeSingle(code: string, event: any, args: any[], contextValues: any[]): any {
+  async execute(actions: ActionList, event?: Event | any): Promise<any> {
     try {
-      // 自动包裹函数体，确保是合法的函数执行
-      const fn = new Function(...args, code);
-      return fn(...contextValues, event);
+      // 将事件对象添加到上下文
+      const contextWithEvent: ExecutionContext = {
+        ...this.executionContext,
+        event,
+      };
+
+      // 执行DSL
+      const result = await this.dslExecutor.execute(actions, contextWithEvent);
+      return result;
     } catch (error) {
-      console.warn('Event Logic Error:', error);
-      throw error; // 向上抛出，中断链
+      console.error('[EventDispatcher] DSL execution failed:', error);
+      throw error;
     }
   }
 
   /**
-   * 执行事件代码
+   * 创建事件处理器（同步版本，用于React事件绑定）
    */
-  execute(code: string | string[], event?: Event | any, ...extraArgs: any[]): any {
-    try {
-      const ctx = this.getContext();
-      const contextKeys = Object.keys(ctx);
-      const contextValues = Object.values(ctx);
-      const args = [...contextKeys, 'event', ...extraArgs.map((_, i) => `arg${i}`)];
-
-      if (Array.isArray(code)) {
-        let result: any;
-        for (const snippet of code) {
-          try {
-            result = this.executeSingle(snippet, event, args, contextValues);
-          } catch (e) {
-            console.error('Chain Execution Interrupted due to error in snippet:', snippet);
-            break;
-          }
-        }
-        return result;
-      }
-
-      return this.executeSingle(code, event, args, contextValues);
-
-    } catch (error) {
-      console.error('Event Execution System Error:', error);
-    }
-  }
-
-  createHandler(code: string | string[]) {
+  createHandler(actions: ActionList) {
     return (event: any, ...extraArgs: any[]) => {
-      return this.execute(code, event, ...extraArgs);
+      // 异步执行，不等待结果
+      this.execute(actions, event, ...extraArgs).catch(error => {
+        console.error('[EventDispatcher] Handler execution failed:', error);
+      });
     };
+  }
+
+  /**
+   * 获取DSL执行引擎实例
+   */
+  getExecutor(): DSLExecutor {
+    return this.dslExecutor;
+  }
+
+  /**
+   * 获取当前执行上下文
+   */
+  getExecutionContext(): ExecutionContext {
+    return this.executionContext;
   }
 }
 
@@ -247,6 +264,11 @@ const ComponentRenderer = memo(({
           const newValue = { ...(componentValue || {}), ...allValues };
           dispatch(setComponentData({ id, value: newValue }));
 
+          // 更新到EventDispatcher的执行上下文
+          if (eventDispatcher) {
+            eventDispatcher.updateComponentData(id, newValue);
+          }
+
           if (originalOnValuesChange) {
             originalOnValuesChange(changedValues, allValues, ...args);
           }
@@ -269,6 +291,11 @@ const ComponentRenderer = memo(({
 
           dispatch(setComponentData({ id, value }));
 
+          // 更新到EventDispatcher的执行上下文
+          if (eventDispatcher) {
+            eventDispatcher.updateComponentData(id, value);
+          }
+
           if (restProps.onChange) {
             restProps.onChange(e, ...args);
           }
@@ -285,7 +312,7 @@ const ComponentRenderer = memo(({
     }
 
     return p;
-  }, [props, restProps, eventHandlers, componentValue, id, dispatch, componentName]);
+  }, [props, restProps, eventHandlers, componentValue, id, dispatch, componentName, eventDispatcher]);
 
   const content = (componentName === 'Form' && (Component as any).useForm) ? (
     <FormSyncWrapper
@@ -350,7 +377,7 @@ function renderChildren(
 }
 
 function buildEventHandlers(
-  events: Record<string, string | string[]>,
+  events: Record<string, ActionList>,
   eventDispatcher?: EventDispatcher
 ): Record<string, (...args: any[]) => any> {
   if (!eventDispatcher || Object.keys(events).length === 0) {
@@ -359,8 +386,8 @@ function buildEventHandlers(
 
   const handlers: Record<string, (...args: any[]) => any> = {};
 
-  for (const [eventName, code] of Object.entries(events)) {
-    handlers[eventName] = eventDispatcher.createHandler(code);
+  for (const [eventName, actions] of Object.entries(events)) {
+    handlers[eventName] = eventDispatcher.createHandler(actions);
   }
 
   return handlers;
@@ -385,10 +412,10 @@ export function Renderer({
 
   const eventDispatcher = useMemo(() => {
     return new EventDispatcher(eventContext, dispatch, store.getState);
-  }, [dispatch]);
+  }, [dispatch]); // eventContext变化会在下面的useEffect中处理
 
-  useMemo(() => {
-    if (eventContext) {
+  useEffect(() => {
+    if (eventContext && eventDispatcher) {
       Object.entries(eventContext).forEach(([key, value]) => {
         eventDispatcher.setContext(key, value);
       });

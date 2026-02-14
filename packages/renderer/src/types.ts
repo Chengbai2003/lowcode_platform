@@ -1,4 +1,5 @@
 import React from "react";
+import type { ActionList } from "./types/dsl";
 
 /**
  * 扁平化组件节点 (A2UI Protocol)
@@ -8,7 +9,7 @@ export interface A2UIComponent {
   type: string; // 组件类型，如 "Button", "Container"
   props?: Record<string, any>; // 静态属性
   childrenIds?: string[]; // 子节点 ID 列表
-  events?: Record<string, string>; // 事件定义
+  events?: Record<string, ActionList>; // 事件定义（DSL格式）
 }
 
 /**
