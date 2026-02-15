@@ -3,59 +3,8 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  width: 100%;
   background: #1e1e1e;
-  color: #cccccc;
-}
-
-.ai-header {
-  display: flex;
-  align-items: center;
-  padding: 12px 16px;
-  background: #252526;
-  border-bottom: 1px solid #303030;
-  flex-shrink: 0;
-}
-
-.ai-icon {
-  font-size: 16px;
-  color: #007fd4;
-  margin-right: 8px;
-}
-
-.ai-title {
-  font-size: 13px;
-  font-weight: 500;
-  text-transform: uppercase;
-  flex: 1;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.header-actions .ant-btn {
-  color: #858585;
-  border: none;
-  background: transparent;
-  padding: 4px 8px;
-  height: 24px;
-  font-size: 11px;
-}
-
-.header-actions .ant-btn:hover {
-  color: #cccccc;
-  background: #37373d;
-}
-
-.help-icon {
-  color: #858585;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-
-.help-icon:hover {
   color: #cccccc;
 }
 
@@ -217,29 +166,33 @@
   border-color: #303030;
 }
 
-.quick-actions {
-  margin-bottom: 16px;
-}
-
-.quick-actions .ant-btn {
-  background: #37373d;
-  border-color: #424242;
-  color: #cccccc;
-  height: 24px;
-  font-size: 11px;
-  padding: 0 8px;
-}
-
-.quick-actions .ant-btn:hover {
-  background: #424242;
-  border-color: #4f4f4f;
-  color: #ffffff;
-}
-
 .input-area {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
+}
+
+.input-area-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-area-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.help-icon {
+  color: #858585;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.help-icon:hover {
+  color: #cccccc;
 }
 
 .input-area .ant-input {
@@ -265,26 +218,25 @@
   height: 32px;
 }
 
+.send-button {
+  color: white !important;
+}
+
+.send-button:hover {
+  color: white !important;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .message.user .message-content {
     margin-left: 20px;
   }
-  
+
   .message.ai .message-content {
     margin-right: 20px;
   }
-  
+
   .message.system .message-content {
     margin-right: 0;
-  }
-  
-  .header-actions {
-    gap: 2px;
-  }
-  
-  .header-actions .ant-btn {
-    padding: 4px 6px;
-    font-size: 10px;
   }
 }

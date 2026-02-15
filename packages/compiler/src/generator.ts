@@ -112,7 +112,7 @@ export function compileToCode(
     // 特殊处理：Event Binding
     const extraProps: string[] = [];
     Object.entries(events).forEach(([evtName, evtAction]) => {
-      if (evtAction === "submit") {
+      if (evtAction as any === "submit") {
         extraProps.push(`${evtName}={handleSubmit}`);
       }
     });

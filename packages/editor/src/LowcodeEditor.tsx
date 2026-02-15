@@ -11,6 +11,11 @@ import {
   PreviewPane,
 } from './components';
 
+// 导入样式
+import './components/AI/AIAssistant.css';
+import './components/AI/AIConfig.css';
+import './components/AIAssistant.css';
+
 /**
  * JSON Schema 编辑器，支持实时预览
  */

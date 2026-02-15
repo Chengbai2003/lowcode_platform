@@ -49,23 +49,6 @@ const DANGEROUS_PATTERNS = [
   // /\bXMLHttpRequest\b/,
 ];
 
-/**
- * 允许的顶级语句类型（简化版）
- */
-const ALLOWED_TOP_STATEMENTS = new Set([
-  'ExpressionStatement',
-  'ReturnStatement',
-  'VariableDeclaration',
-  'IfStatement',
-  'BlockStatement',
-  'ForStatement',
-  'ForInStatement',
-  'ForOfStatement',
-  'WhileStatement',
-  'DoWhileStatement',
-  'TryStatement',
-  'ThrowStatement',
-]);
 
 /**
  * 简化的AST验证（基于正则）

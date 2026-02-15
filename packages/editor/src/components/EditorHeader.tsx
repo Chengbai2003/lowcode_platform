@@ -45,7 +45,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({ previewTheme, onThem
           <span style={{ fontSize: '14px', marginRight: '8px', color: '#ccc' }}>预览主题:</span>
           <Segmented
             value={previewTheme}
-            onChange={(value) => onThemeChange(value as 'light' | 'dark')}
+            onChange={(value: string) => onThemeChange(value as 'light' | 'dark')}
             options={[
               {
                 label: '浅色',

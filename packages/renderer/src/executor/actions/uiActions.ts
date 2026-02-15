@@ -3,19 +3,19 @@
  * message, modal, confirm, notification
  */
 
-import type { ActionHandler, ExecutionContext } from '../../types/dsl';
-import { resolveValue, resolveValues } from '../parser';
+import type { ActionHandler } from '../../types/dsl';
+import { resolveValue } from '../parser';
 
 /**
  * 显示消息提示
  * Action: { type: 'message'; content: Value; messageType?: 'success' | 'error' | 'warning' | 'info'; duration?: number; }
  */
 export const message: ActionHandler = async (action, context) => {
-  const { content, messageType = 'info', duration } = action;
+  const { content, messageType = 'info' } = action;
   const resolvedContent = resolveValue(content, context);
 
   if (context.ui?.message) {
-    const messageFn = context.ui.message[messageType];
+    const messageFn = context.ui.message[messageType as keyof typeof context.ui.message];
     if (typeof messageFn === 'function') {
       messageFn(String(resolvedContent));
     }
@@ -91,7 +91,7 @@ export const notification: ActionHandler = async (action, context) => {
   const resolvedDescription = description ? resolveValue(description, context) : undefined;
 
   if (context.ui?.notification) {
-    const notifyFn = context.ui.notification[messageType];
+    const notifyFn = context.ui.notification[messageType as keyof typeof context.ui.notification];
     if (typeof notifyFn === 'function') {
       notifyFn({
         message: String(resolvedTitle),

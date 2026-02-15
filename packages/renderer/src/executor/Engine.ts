@@ -82,7 +82,7 @@ export class DSLExecutor {
       customHandlers: options.customHandlers ?? {},
       onError: options.onError ?? (() => {}),
       onLog: options.onLog ?? ((level, message, data) => {
-        console[level as keyof Console](`[DSL ${level.toUpperCase()}]`, message, data ?? '');
+        (console as any)[level](`[DSL ${level.toUpperCase()}]`, message, data ?? '');
       }),
     };
 
@@ -129,7 +129,7 @@ export class DSLExecutor {
         successCount++;
 
         if (this.options.debug) {
-          this.log('debug', `Action ${i + 1}/${actions.length} executed in ${duration}ms`, action);
+          this.log('info', `Action ${i + 1}/${actions.length} executed in ${duration}ms`, action);
         }
       } catch (error) {
         const duration = Date.now() - actionStart;
@@ -174,8 +174,6 @@ export class DSLExecutor {
    * 执行单个Action
    */
   async executeSingle(action: Action, context: ExecutionContext): Promise<any> {
-    const actionType = action.type;
-
     // 检查执行超时
     if (this.options.maxExecutionTime > 0) {
       const timeoutPromise = new Promise((_, reject) => {
@@ -313,11 +311,11 @@ export class DSLExecutor {
         },
       },
       api: {
-        get: () => Promise.resolve({}),
-        post: () => Promise.resolve({}),
-        put: () => Promise.resolve({}),
-        delete: () => Promise.resolve({}),
-        request: () => Promise.resolve({}),
+        get: <T = any>() => Promise.resolve({} as T),
+        post: <T = any>() => Promise.resolve({} as T),
+        put: <T = any>() => Promise.resolve({} as T),
+        delete: <T = any>() => Promise.resolve({} as T),
+        request: <T = any>() => Promise.resolve({} as T),
       },
       navigate: () => {},
       back: () => {},

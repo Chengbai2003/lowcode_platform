@@ -3,7 +3,7 @@
  * dispatch, setState, resetForm
  */
 
-import type { ActionHandler, ExecutionContext } from '../../types/dsl';
+import type { ActionHandler } from '../../types/dsl';
 import { resolveValue, resolveValues } from '../parser';
 
 /**

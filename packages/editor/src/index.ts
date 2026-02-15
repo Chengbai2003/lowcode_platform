@@ -9,6 +9,11 @@
  * - 错误处理
  */
 
+// 导出样式
+import "./components/AI/AIAssistant.css";
+import "./components/AI/AIConfig.css";
+import "./components/AIAssistant.css";
+
 export { LowcodeEditor } from "./LowcodeEditor";
 export type { LowcodeEditorProps } from "./types";
 export { AIAssistant } from "./components/AIAssistant";

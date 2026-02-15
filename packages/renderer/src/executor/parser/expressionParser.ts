@@ -3,7 +3,7 @@
  * 支持解析和执行 {{ }} 语法表达式
  */
 
-import type { ParsedExpression, ExpressionType } from '../../types/dsl';
+import type { ParsedExpression } from '../../types/dsl';
 
 /**
  * 表达式正则表达式

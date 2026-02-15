@@ -36,7 +36,7 @@ export class EventDispatcher {
         console.error('[DSL Error]', error.message, { action });
       },
       onLog: (level, message, data) => {
-        console[level as keyof Console](`[DSL ${level}]`, message, data);
+        (console as any)[level](`[DSL ${level}]`, message, data);
       },
     });
 
@@ -95,9 +95,9 @@ export class EventDispatcher {
    * 创建事件处理器（同步版本，用于React事件绑定）
    */
   createHandler(actions: ActionList) {
-    return (event: any, ...extraArgs: any[]) => {
+    return (event: any) => {
       // 异步执行，不等待结果
-      this.execute(actions, event, ...extraArgs).catch(error => {
+      this.execute(actions, event).catch(error => {
         console.error('[EventDispatcher] Handler execution failed:', error);
       });
     };

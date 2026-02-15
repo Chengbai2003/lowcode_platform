@@ -3,7 +3,7 @@
  * setField, mergeField, clearField
  */
 
-import type { ActionHandler, ExecutionContext } from '../../types/dsl';
+import type { ActionHandler } from '../../types/dsl';
 import { resolveValue, safeSet } from '../parser';
 
 /**

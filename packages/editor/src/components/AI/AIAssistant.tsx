@@ -1,17 +1,17 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button, Input, Space, Divider, Tag, Tooltip, message, Dropdown } from 'antd';
-import { 
-  SendOutlined, 
-  BulbOutlined, 
-  RobotOutlined, 
-  LoadingOutlined, 
+import { Button, Input, Divider, Tag, Tooltip, message, Popover } from 'antd';
+import {
+  SendOutlined,
+  BulbOutlined,
+  LoadingOutlined,
   CheckCircleOutlined,
   SettingOutlined,
-  DownOutlined
+  DatabaseOutlined
 } from '@ant-design/icons';
 import type { A2UISchema } from '@lowcode-platform/renderer';
 import { aiModelManager } from './manager';
 import { AIConfig } from './AIConfig';
+import type { AIModelConfig } from './types';
 import './AIAssistant.css';
 
 interface AIMessage {
@@ -41,7 +41,20 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   const [loading, setLoading] = useState(false);
   const [configVisible, setConfigVisible] = useState(false);
   const [currentModel, setCurrentModel] = useState<string>('mock');
+  const [models, setModels] = useState<AIModelConfig[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 加载模型列表
+  const loadModels = useCallback(() => {
+    const allModels = aiModelManager.getAllModels();
+    setModels(allModels);
+
+    // 设置当前选中模型
+    const defaultModel = allModels.find(m => m.isDefault && m.isAvailable) || allModels.find(m => m.isAvailable);
+    if (defaultModel) {
+      setCurrentModel(defaultModel.id);
+    }
+  }, []);
 
   // 滚动到最新消息
   const scrollToBottom = useCallback(() => {
@@ -52,24 +65,18 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // 初始化消息和模型
+  // 初始化
   useEffect(() => {
+    loadModels();
     setMessages([
       {
         id: 'welcome',
         type: 'system',
-        content: '🤖 AI助手已就绪！\n\n我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量\n\n💡 点击右上角设置按钮配置AI模型',
+        content: '🤖 AI助手已就绪！\n\n我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量',
         timestamp: new Date()
       }
     ]);
-    
-    // 获取当前模型
-    const models = aiModelManager.getAllModels();
-    const defaultModel = models.find(m => m.isDefault);
-    if (defaultModel) {
-      setCurrentModel(defaultModel.id);
-    }
-  }, []);
+  }, [loadModels]);
 
   const handleSendMessage = useCallback(async () => {
     if (!inputValue.trim() || loading) return;
@@ -104,7 +111,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
       // 根据用户输入判断意图
       const lowerInput = inputValue.toLowerCase();
-      
+
       if (lowerInput.includes('分析') || lowerInput.includes('analyze') || lowerInput.includes('检查')) {
         if (currentSchema && aiService.analyzeSchema) {
           response = await aiService.analyzeSchema(currentSchema);
@@ -185,66 +192,65 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     }
   }, [inputValue, loading, currentSchema, onSchemaUpdate, onError, currentModel]);
 
-  const handleQuickAction = useCallback(async (action: string) => {
-    setInputValue(action);
-    setTimeout(() => handleSendMessage(), 100);
-  }, [handleSendMessage]);
-
   const applySchema = useCallback((schema: A2UISchema) => {
     onSchemaUpdate(schema);
     message.success('Schema已应用到编辑器！');
   }, [onSchemaUpdate]);
 
-  // 模型下拉菜单
-  const modelMenu = {
-    items: aiModelManager.getAllModels().map(model => ({
-      key: model.id,
-      label: (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{model.name}</span>
-          <Space>
-            {model.isAvailable && <span style={{ color: '#52c41a', fontSize: '12px' }}>✓</span>}
-            {model.isDefault && <span style={{ color: '#1890ff', fontSize: '12px' }}>默认</span>}
-          </Space>
-        </div>
-      ),
-      onClick: () => {
-        setCurrentModel(model.id);
-        aiModelManager.setDefaultModel(model.id);
-      }
-    }))
-  };
-
   const getCurrentModelName = () => {
-    const model = aiModelManager.getAllModels().find(m => m.id === currentModel);
+    const model = models.find(m => m.id === currentModel);
     return model?.name || 'Unknown';
   };
 
+  // 模型选择下拉框内容
+  const modelSelectContent = (
+    <div style={{ padding: '8px 0', minWidth: '200px' }}>
+      <div style={{ padding: '0 12px 8px 12px', fontSize: '12px', color: '#858585' }}>选择AI模型</div>
+      {models.map(model => (
+        <div
+          key={model.id}
+          style={{
+            padding: '8px 12px',
+            cursor: 'pointer',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: currentModel === model.id ? '#37373d' : 'transparent'
+          }}
+          onClick={() => {
+            setCurrentModel(model.id);
+            if (model.isAvailable) {
+              aiModelManager.setDefaultModel(model.id);
+              aiModelManager.saveConfigs();
+            }
+          }}
+        >
+          <span style={{ color: '#cccccc' }}>{model.name}</span>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            {model.isAvailable && <span style={{ color: '#52c41a', fontSize: '12px' }}>✓</span>}
+            {model.isDefault && <span style={{ color: '#1890ff', fontSize: '12px' }}>默认</span>}
+          </div>
+        </div>
+      ))}
+      <Divider style={{ margin: '8px 0' }} />
+      <div style={{ padding: '0 12px' }}>
+        <Button
+          type="text"
+          size="small"
+          icon={<SettingOutlined />}
+          onClick={() => {
+            setConfigVisible(true);
+          }}
+          style={{ width: '100%', justifyContent: 'flex-start', color: '#cccccc' }}
+        >
+          管理模型
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <div className="ai-assistant">
-      <div className="ai-header">
-        <RobotOutlined className="ai-icon" />
-        <span className="ai-title">AI 助手</span>
-        <div className="header-actions">
-          <Dropdown menu={modelMenu} placement="bottomRight">
-            <Button type="text" size="small" icon={<DownOutlined />}>
-              {getCurrentModelName()}
-            </Button>
-          </Dropdown>
-          <Tooltip title="AI模型配置">
-            <Button
-              type="text"
-              size="small"
-              icon={<SettingOutlined />}
-              onClick={() => setConfigVisible(true)}
-            />
-          </Tooltip>
-          <Tooltip title="AI功能说明">
-            <BulbOutlined className="help-icon" />
-          </Tooltip>
-        </div>
-      </div>
-
       <div className="ai-content">
         <div className="messages-container">
           {messages.map(message => (
@@ -256,13 +262,13 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
               ) : (
                 <div className="message-content">
                   <div className="message-text">{message.content}</div>
-                  
+
                   {message.modelUsed && (
                     <div className="model-indicator">
                       <span className="model-label">模型: {message.modelUsed}</span>
                     </div>
                   )}
-                  
+
                   {message.suggestions && message.suggestions.length > 0 && (
                     <div className="suggestions">
                       <div className="suggestions-title">💡 建议：</div>
@@ -273,11 +279,11 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                       ))}
                     </div>
                   )}
-                  
+
                   {message.schema && (
                     <div className="schema-actions">
-                      <Button 
-                        type="primary" 
+                      <Button
+                        type="primary"
                         size="small"
                         icon={<CheckCircleOutlined />}
                         onClick={() => applySchema(message.schema!)}
@@ -298,69 +304,75 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
         <Divider className="divider" />
 
-        <div className="quick-actions">
-          <Space wrap>
-            <Button 
-              size="small" 
-              onClick={() => handleQuickAction('生成一个登录页面')}
-            >
-              登录页面
-            </Button>
-            <Button 
-              size="small" 
-              onClick={() => handleQuickAction('生成一个数据表格')}
-            >
-              数据表格
-            </Button>
-            <Button 
-              size="small" 
-              onClick={() => handleQuickAction('生成一个导航栏')}
-            >
-              导航栏
-            </Button>
-            <Button 
-              size="small" 
-              onClick={() => handleQuickAction('优化当前页面布局')}
-            >
-              优化布局
-            </Button>
-            <Button 
-              size="small" 
-              onClick={() => handleQuickAction('分析当前页面设计')}
-            >
-              分析设计
-            </Button>
-          </Space>
-        </div>
-
         <div className="input-area">
           <Input.TextArea
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
             placeholder={`使用 ${getCurrentModelName()} 生成UI... 描述你想要的页面或让AI优化现有设计`}
             autoSize={{ minRows: 2, maxRows: 4 }}
-            onPressEnter={(e) => {
+            onPressEnter={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
               if (!e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage();
               }
             }}
           />
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleSendMessage}
-            loading={loading}
-            disabled={!inputValue.trim()}
-          >
-            发送
-          </Button>
+          <div className="input-area-footer">
+            <div className="input-area-header">
+              <Popover
+                content={modelSelectContent}
+                trigger="click"
+                placement="topLeft"
+                arrow={false}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<DatabaseOutlined />}
+                  style={{ color: '#cccccc' }}
+                >
+                  {getCurrentModelName()}
+                </Button>
+              </Popover>
+
+              <Tooltip title="管理AI模型">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<SettingOutlined />}
+                  onClick={() => {
+                    loadModels();
+                    setConfigVisible(true);
+                  }}
+                  style={{ color: '#858585' }}
+                />
+              </Tooltip>
+
+              <Tooltip title="AI功能说明">
+                <BulbOutlined className="help-icon" />
+              </Tooltip>
+            </div>
+
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={handleSendMessage}
+              loading={loading}
+              disabled={!inputValue.trim()}
+              className="send-button"
+            >
+              发送
+            </Button>
+          </div>
         </div>
       </div>
 
       <AIConfig
         visible={configVisible}
-        onClose={() => setConfigVisible(false)}
+        onClose={() => {
+          setConfigVisible(false);
+          loadModels();
+        }}
         onConfigChange={(modelId) => setCurrentModel(modelId)}
       />
     </div>

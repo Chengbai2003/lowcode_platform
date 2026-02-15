@@ -1,79 +1,99 @@
 /* AI Configuration Modal Styles */
-.ai-config .config-section {
-  margin-bottom: 24px;
+.ai-config {
+  max-height: 600px;
+  overflow-y: auto;
 }
 
-.ai-config .model-info {
-  background: #f5f5f5;
-  padding: 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  line-height: 1.8;
+.model-list-container {
+  padding: 8px 0;
 }
 
-.ai-config .model-info div {
+.model-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.model-list-header .ant-typography {
+  margin: 0;
+}
+
+.model-card {
+  width: 100%;
   margin-bottom: 8px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  transition: all 0.2s;
 }
 
-.ai-config .model-info div:last-child {
-  margin-bottom: 0;
+.model-card:hover {
+  background: #f5f5f5;
+  border-color: #d9d9d9;
 }
 
-.ai-config .ant-form-item-label > label {
-  font-weight: 500;
+.model-card .ant-card-actions {
+  border-top: 1px solid #e8e8e8;
+  background: #fafafa;
 }
 
-.ai-config .ant-select-selection-item {
+.model-card .ant-card-actions > li {
+  margin: 0;
+}
+
+.model-card .ant-card-actions > li:not(:last-child) {
+  border-inline-end: 1px solid #e8e8e8;
+}
+
+.model-form-container {
+  padding: 8px 0;
+}
+
+.model-form-header {
   display: flex;
   align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
-.ai-config .ant-alert {
-  border-radius: 6px;
+.model-form-header .ant-typography {
+  margin: 0;
 }
 
-.ai-config .ant-divider-horizontal {
-  margin: 16px 0;
+.ai-config-modal .ant-modal-body {
+  padding: 24px;
 }
 
-/* Dark theme support for modal body */
-.ant-modal-content .ai-config {
-  color: inherit;
+.ai-config-modal .ant-list-item {
+  padding: 8px 0;
 }
 
-.ant-modal-content .ai-config .model-info {
-  background: #1f1f1f;
-  border: 1px solid #303030;
+.ai-config-modal .ant-list-item-meta {
+  align-items: flex-start;
 }
 
-/* Success and error indicators */
-.model-status-success {
-  color: #52c41a;
-  font-weight: 500;
+.ai-config-modal .ant-card-meta-description {
+  margin-top: 4px;
 }
 
-.model-status-error {
-  color: #ff4d4f;
-  font-weight: 500;
-}
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .model-card {
+    background: #1e1e1e;
+    border-color: #303030;
+  }
 
-.model-status-default {
-  color: #1890ff;
-  font-weight: 500;
-}
+  .model-card:hover {
+    background: #2a2d2e;
+    border-color: #424242;
+  }
 
-/* Loading state */
-.testing-loading {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
+  .model-card .ant-card-actions {
+    border-top-color: #303030;
+    background: #1e1e1e;
+  }
 
-.testing-loading .anticon {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  .model-card .ant-card-actions > li:not(:last-child) {
+    border-inline-end-color: #303030;
+  }
 }

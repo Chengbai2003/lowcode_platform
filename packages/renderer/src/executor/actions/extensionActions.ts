@@ -133,11 +133,11 @@ function executeWithTimeout(
 
       // 执行
       asyncFn(...values)
-        .then(result => {
+        .then((result: any) => {
           clearTimeout(timeoutId);
           resolve(result);
         })
-        .catch(error => {
+        .catch((error: any) => {
           clearTimeout(timeoutId);
           reject(error);
         });

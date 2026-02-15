@@ -44,17 +44,7 @@ const loginPageSchema: A2UISchema = {
         }
       },
       events: {
-        onFinish: `
-          console.log("表单提交事件: onFinish", event);
-          // 1. 获取 Redux Store 状态
-          const state = getState();
-          // 2. 通过组件 ID ('username_input') 获取值
-          const FromStore = state.components.data['loginForm'];
-          console.log("从 Store 获取的用户名:", FromStore);
-          
-          // 3. 对比表单直接返回的值 (Form 管理的)
-          console.log("Ant Design Form 返回的数据:", event.values);
-        `
+        onFinish: [] as any
       },
       childrenIds: ['item_user', 'item_pass', 'item_remember', 'item_submit', 'div_footer']
     },
@@ -77,7 +67,7 @@ const loginPageSchema: A2UISchema = {
         field: 'username'
       },
       events: {
-        onChange: 'console.log("用户名变更:", event.target.value);'
+        onChange: [] as any
       }
     },
     'item_pass': {
@@ -100,7 +90,7 @@ const loginPageSchema: A2UISchema = {
         field: 'password'
       },
       events: {
-        onChange: 'console.log("密码变更:", event.target.value);'
+        onChange: [] as any
       }
     },
     'item_remember': {
@@ -119,7 +109,7 @@ const loginPageSchema: A2UISchema = {
         children: '记住我'
       },
       events: {
-        onChange: 'console.log("记住我变更:", event.target.checked);'
+        onChange: [] as any
       }
     },
     'item_submit': {
@@ -162,7 +152,7 @@ const loginPageSchema: A2UISchema = {
         children: '立即注册'
       },
       events: {
-        onClick: 'console.log("注册按钮点击事件: onClick"); console.log("跳转到注册页面");'
+        onClick: [] as any
       }
     }
   }

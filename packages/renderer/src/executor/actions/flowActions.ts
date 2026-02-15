@@ -3,7 +3,7 @@
  * if, switch, loop, parallel, sequence, tryCatch
  */
 
-import type { ActionHandler, ExecutionContext, Action, ActionList } from '../../types/dsl';
+import type { ActionHandler, ExecutionContext } from '../../types/dsl';
 import { resolveValue } from '../parser';
 
 /**
@@ -124,7 +124,7 @@ export const parallelAction: ActionHandler = async (action, context, executor) =
   const contexts = actions.map(() => ({ ...context }));
 
   // 并行执行所有Actions
-  const promises = actions.map((actionItem, index) =>
+  const promises = actions.map((actionItem: any, index: number) =>
     executor.executeSingle(actionItem, contexts[index])
   );
 

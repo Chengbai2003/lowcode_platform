@@ -132,11 +132,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               <div style={{ fontSize: '13px' }}>即将支持拖拽布局与属性配置</div>
             </div>
           ) : activeTab === 'ai' ? (
-            <AIAssistant
-              currentSchema={schema || null}
-              onSchemaUpdate={onSchemaUpdate || (() => {})}
-              onError={onError}
-            />
+            <div style={{ height: '100%', width: '100%' }}>
+              <AIAssistant
+                currentSchema={schema || null}
+                onSchemaUpdate={onSchemaUpdate || (() => {})}
+                onError={onError}
+              />
+            </div>
           ) : null}
         </div>
       </div>

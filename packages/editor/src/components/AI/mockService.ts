@@ -73,7 +73,7 @@ export class MockAIService implements AIService {
                 field: 'username'
               },
               events: {
-                onChange: 'console.log("用户名变更:", event.target.value);'
+                onChange: [] as any
               }
             },
             passwordField: {
@@ -96,7 +96,7 @@ export class MockAIService implements AIService {
                 field: 'password'
               },
               events: {
-                onChange: 'console.log("密码变更:", event.target.value);'
+                onChange: [] as any
               }
             },
             rememberField: {
@@ -110,7 +110,7 @@ export class MockAIService implements AIService {
               type: 'Checkbox',
               props: { children: '记住我' },
               events: {
-                onChange: 'console.log("记住我变更:", event.target.checked);'
+                onChange: [] as any
               }
             },
             submitField: {

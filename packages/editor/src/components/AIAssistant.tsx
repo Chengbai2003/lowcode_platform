@@ -403,10 +403,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         <div className="input-area">
           <Input.TextArea
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
             placeholder="描述你想要创建的页面，或者让AI优化现有设计..."
             autoSize={{ minRows: 2, maxRows: 4 }}
-            onPressEnter={(e) => {
+            onPressEnter={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {
               if (!e.shiftKey) {
                 e.preventDefault();
                 handleSendMessage();

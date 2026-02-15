@@ -4,7 +4,7 @@ import type { A2UISchema } from '@lowcode-platform/renderer';
 export interface AIModelConfig {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'local' | 'mock';
+  provider: 'openai' | 'anthropic' | 'ollama' | 'mock';
   apiKey?: string;
   baseURL?: string;
   model: string;

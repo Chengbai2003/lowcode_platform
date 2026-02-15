@@ -1,5 +1,5 @@
 import type { AIModelConfig, AIService } from './types';
-import { OpenAIService, AnthropicService } from './services';
+import { OpenAIService, AnthropicService, OllamaService } from './services';
 import { MockAIService } from './mockService';
 
 // AI模型管理器
@@ -12,7 +12,7 @@ export class AIModelManager {
     // 初始化兜底服务
     this.fallbackService = new MockAIService();
     this.services.set('mock', this.fallbackService);
-    
+
     // 初始化默认配置
     this.initializeDefaultConfigs();
   }
@@ -25,14 +25,15 @@ export class AIModelManager {
         name: 'GPT-4',
         provider: 'openai',
         model: 'gpt-4',
-        isDefault: true,
-        isAvailable: false, // 需要API key
+        baseURL: 'https://api.openai.com/v1',
+        isAvailable: false,
       },
       {
         id: 'gpt-3.5-turbo',
         name: 'GPT-3.5 Turbo',
         provider: 'openai',
         model: 'gpt-3.5-turbo',
+        baseURL: 'https://api.openai.com/v1',
         isAvailable: false,
       },
       {
@@ -40,12 +41,37 @@ export class AIModelManager {
         name: 'Claude 3 Opus',
         provider: 'anthropic',
         model: 'claude-3-opus-20240229',
+        baseURL: 'https://api.anthropic.com',
+        isAvailable: false,
+      },
+      {
+        id: 'claude-3-sonnet',
+        name: 'Claude 3 Sonnet',
+        provider: 'anthropic',
+        model: 'claude-3-sonnet-20240229',
+        baseURL: 'https://api.anthropic.com',
+        isAvailable: false,
+      },
+      {
+        id: 'ollama-llama2',
+        name: 'Ollama - Llama 2',
+        provider: 'ollama',
+        model: 'llama2',
+        baseURL: 'http://localhost:11434',
+        isAvailable: false,
+      },
+      {
+        id: 'ollama-mistral',
+        name: 'Ollama - Mistral',
+        provider: 'ollama',
+        model: 'mistral',
+        baseURL: 'http://localhost:11434',
         isAvailable: false,
       },
       {
         id: 'mock',
         name: 'Mock AI (本地兜底)',
-        provider: 'local',
+        provider: 'mock',
         model: 'mock',
         isDefault: true,
         isAvailable: true,
@@ -55,6 +81,32 @@ export class AIModelManager {
     defaultConfigs.forEach(config => {
       this.configs.set(config.id, config);
     });
+  }
+
+  // 新增：添加新模型
+  addModel(config: Omit<AIModelConfig, 'isAvailable'>): AIModelConfig {
+    const id = config.id || `${config.provider}-${Date.now()}`;
+    const newConfig: AIModelConfig = {
+      ...config,
+      id,
+      isAvailable: false
+    };
+
+    this.configs.set(id, newConfig);
+    this.registerService(id, newConfig);
+    this.saveConfigs();
+
+    return newConfig;
+  }
+
+  // 新增：删除模型
+  deleteModel(modelId: string): boolean {
+    if (modelId === 'mock') return false; // 不能删除兜底模型
+
+    this.configs.delete(modelId);
+    this.services.delete(modelId);
+    this.saveConfigs();
+    return true;
   }
 
   // 注册AI服务
@@ -68,27 +120,30 @@ export class AIModelManager {
       case 'anthropic':
         service = new AnthropicService(config);
         break;
+      case 'ollama':
+        service = new OllamaService(config);
+        break;
       default:
         service = this.fallbackService;
     }
 
     this.services.set(modelId, service);
     this.configs.set(modelId, { ...config, isAvailable: service.isAvailable() });
-    
+
     return service;
   }
 
   // 获取当前激活的服务
   getActiveService(modelId?: string): AIService {
     const config = this.getPreferredModel(modelId);
-    
+
     if (!config) {
       console.warn('No AI model available, using fallback service');
       return this.fallbackService;
     }
 
     let service = this.services.get(config.id);
-    
+
     if (!service) {
       try {
         service = this.registerService(config.id, config);
@@ -142,7 +197,7 @@ export class AIModelManager {
     if (existing) {
       const updated = { ...existing, ...updates };
       this.configs.set(modelId, updated);
-      
+
       // 重新注册服务
       if (this.services.has(modelId)) {
         this.registerService(modelId, updated);
@@ -156,7 +211,7 @@ export class AIModelManager {
     for (const config of this.configs.values()) {
       config.isDefault = false;
     }
-    
+
     // 设置新的默认模型
     const config = this.configs.get(modelId);
     if (config) {
@@ -188,8 +243,13 @@ export class AIModelManager {
               this.updateModelConfig(config.modelId, {
                 apiKey: config.apiKey,
                 baseURL: config.baseURL,
-                isDefault: config.isDefault
+                isDefault: config.isDefault,
+                model: config.model,
+                name: config.name
               });
+            } else {
+              // 新增模型
+              this.configs.set(config.modelId, config);
             }
           }
         });

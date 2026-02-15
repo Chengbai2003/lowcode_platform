@@ -165,12 +165,16 @@ A2UI Schema格式：
 export class AnthropicService implements AIService {
   name = 'Anthropic Claude';
   private apiKey: string;
+  private baseURL: string;
+  private model: string;
 
   constructor(config: AIModelConfig) {
     if (!config.apiKey) {
       throw new AIServiceError('Anthropic API key is required', 'API_KEY_MISSING');
     }
     this.apiKey = config.apiKey;
+    this.baseURL = config.baseURL || 'https://api.anthropic.com';
+    this.model = config.model;
   }
 
   isAvailable(): boolean {
@@ -178,7 +182,197 @@ export class AnthropicService implements AIService {
   }
 
   async generateResponse(request: AIRequest): Promise<AIResponse> {
-    // 类似OpenAI的实现，但使用Anthropic的API
-    throw new AIServiceError('Anthropic service not implemented yet', 'MODEL_NOT_AVAILABLE');
+    try {
+      const systemPrompt = `你是一个专业的低代码平台AI助手，专门帮助用户生成、分析和优化UI界面。
+
+你的能力包括：
+1. 根据自然语言描述生成A2UI Schema格式的JSON结构
+2. 分析现有Schema并提供优化建议
+3. 理解UI设计原则和最佳实践
+
+A2UI Schema格式：
+{
+  "rootId": "root",
+  "components": {
+    "componentId": {
+      "id": "componentId",
+      "type": "ComponentType",
+      "props": { /* 组件属性 */ },
+      "childrenIds": ["child1", "child2"],
+      "events": { "onClick": "处理代码" }
+    }
+  }
+}
+
+请始终以以下格式回复：
+**说明**：[对生成内容的详细说明]
+**Schema**：[JSON格式的A2UI Schema]
+**建议**：[可选的优化建议列表]`;
+
+      const response = await fetch(`${this.baseURL}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': this.apiKey,
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [{ role: 'user', content: request.prompt }],
+          system: systemPrompt,
+          max_tokens: request.options?.maxTokens || 2000,
+          temperature: request.options?.temperature || 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new AIServiceError(`Anthropic API error: ${response.statusText}`, 'NETWORK_ERROR');
+      }
+
+      const data = await response.json();
+      const content = data.content?.[0]?.text;
+
+      if (!content) {
+        throw new AIServiceError('Invalid response from Anthropic', 'INVALID_RESPONSE');
+      }
+
+      return this.parseAIResponse(content, request);
+    } catch (error: any) {
+      if (error instanceof AIServiceError) throw error;
+      throw new AIServiceError(`Anthropic service error: ${error.message || 'Unknown error'}`, 'NETWORK_ERROR', error);
+    }
+  }
+
+  private parseAIResponse(content: string, request: AIRequest): AIResponse {
+    const explanationMatch = content.match(/\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const schemaMatch = content.match(/\*\*Schema\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const suggestionsMatch = content.match(/\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/);
+
+    let schema: any;
+    try {
+      if (schemaMatch) {
+        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, '');
+        schema = JSON.parse(jsonStr);
+      }
+    } catch (error) {
+      console.warn('Failed to parse AI generated schema:', error);
+    }
+
+    const suggestions = suggestionsMatch
+      ? suggestionsMatch[1].split('\n').filter(s => s.trim()).map(s => s.replace(/^[-*]\s*/, ''))
+      : [];
+
+    return {
+      content: explanationMatch?.[1]?.trim() || content,
+      schema,
+      suggestions,
+    };
+  }
+}
+
+// Ollama本地模型服务实现
+export class OllamaService implements AIService {
+  name = 'Ollama';
+  private baseURL: string;
+  private model: string;
+
+  constructor(config: AIModelConfig) {
+    this.baseURL = config.baseURL || 'http://localhost:11434';
+    this.model = config.model;
+  }
+
+  isAvailable(): boolean {
+    // Ollama 不需要 API key，只检查 baseURL
+    return true;
+  }
+
+  async generateResponse(request: AIRequest): Promise<AIResponse> {
+    try {
+      const systemPrompt = `你是一个专业的低代码平台AI助手，专门帮助用户生成、分析和优化UI界面。
+
+你的能力包括：
+1. 根据自然语言描述生成A2UI Schema格式的JSON结构
+2. 分析现有Schema并提供优化建议
+3. 理解UI设计原则和最佳实践
+
+A2UI Schema格式：
+{
+  "rootId": "root",
+  "components": {
+    "componentId": {
+      "id": "componentId",
+      "type": "ComponentType",
+      "props": { /* 组件属性 */ },
+      "childrenIds": ["child1", "child2"]
+    }
+  }
+}
+
+请始终以以下格式回复：
+**说明**：[对生成内容的详细说明]
+**Schema**：[JSON格式的A2UI Schema]
+**建议**：[可选的优化建议列表]`;
+
+      const response = await fetch(`${this.baseURL}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: request.prompt }
+          ],
+          stream: false,
+          options: {
+            temperature: request.options?.temperature || 0.7,
+            num_predict: request.options?.maxTokens || 2000,
+          }
+        }),
+      });
+
+      if (!response.ok) {
+        throw new AIServiceError(`Ollama API error: ${response.statusText}`, 'NETWORK_ERROR');
+      }
+
+      const data = await response.json();
+      const content = data.message?.content;
+
+      if (!content) {
+        throw new AIServiceError('Invalid response from Ollama', 'INVALID_RESPONSE');
+      }
+
+      return this.parseAIResponse(content, request);
+    } catch (error: any) {
+      if (error instanceof AIServiceError) throw error;
+      throw new AIServiceError(`Ollama service error: ${error.message || 'Unknown error'}`, 'NETWORK_ERROR', error);
+    }
+  }
+
+  private parseAIResponse(content: string, request: AIRequest): AIResponse {
+    const explanationMatch = content.match(/\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const schemaMatch = content.match(/\*\*Schema\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const suggestionsMatch = content.match(/\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/);
+
+    let schema: any;
+    try {
+      if (schemaMatch) {
+        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, '');
+        schema = JSON.parse(jsonStr);
+      }
+    } catch (error) {
+      console.warn('Failed to parse AI generated schema:', error);
+    }
+
+    const suggestions = suggestionsMatch
+      ? suggestionsMatch[1].split('\n').filter(s => s.trim()).map(s => s.replace(/^[-*]\s*/, ''))
+      : [];
+
+    return {
+      content: explanationMatch?.[1]?.trim() || content,
+      schema,
+      suggestions,
+    };
   }
 }

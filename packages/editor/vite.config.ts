@@ -17,15 +17,17 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['react', 'react-dom', 'antd', '@monaco-editor/react', '@lowcode-platform/renderer', '@lowcode-platform/components'],
+      external: ['react', 'react-dom', 'antd', '@ant-design/icons', '@monaco-editor/react', '@lowcode-platform/renderer', '@lowcode-platform/components', '@lowcode-platform/compiler'],
       output: {
         globals: {
           react: 'React',
           'react-dom': 'ReactDOM',
           antd: 'antd',
+          '@ant-design/icons': 'AntDesignIcons',
           '@monaco-editor/react': 'MonacoEditor',
           '@lowcode-platform/renderer': 'LowcodeRenderer',
           '@lowcode-platform/components': 'LowcodeComponents',
+          '@lowcode-platform/compiler': 'LowcodeCompiler',
         },
       },
     },

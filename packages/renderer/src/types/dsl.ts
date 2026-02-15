@@ -82,6 +82,7 @@ export interface ExecutionContext {
       warning: (options: any) => void;
       info: (options: any) => void;
     };
+    openTab?: (options: { id: string; title: any; path: any; closeOthers?: boolean }) => void;
   };
 
   // API客户端
@@ -358,7 +359,6 @@ export type TryCatchAction = {
   catch: Action[];
   /** finally块执行的Actions */
   finally?: Action[];
-  [];
 };
 
 /**
