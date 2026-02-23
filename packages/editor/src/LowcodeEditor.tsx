@@ -111,9 +111,8 @@ export function LowcodeEditor({
     setSchema(newSchema);
     setJson(JSON.stringify(newSchema, null, 2));
     onChange?.(newSchema);
-    // 切换到JSON编辑器查看结果
-    setActiveTab('json');
-    message.success('AI助手已更新Schema！');
+    // 不切换到JSON编辑器，保持当前（AI）视图，用户可以在右侧预览
+    // message.success('AI助手已更新Schema！'); // 移除重复提示，AIAssistant 已有提示
   }, [onChange]);
 
   // 合并自定义组件与默认注册表

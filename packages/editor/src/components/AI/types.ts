@@ -29,6 +29,7 @@ export interface AIResponse {
 // AI请求接口
 export interface AIRequest {
   prompt: string;
+  modelId?: string; // 指定使用的模型 ID
   context?: {
     currentSchema?: A2UISchema;
     conversationHistory?: Array<{ role: string; content: string }>;
@@ -44,8 +45,8 @@ export interface AIService {
   name: string;
   isAvailable(): boolean;
   generateResponse(request: AIRequest): Promise<AIResponse>;
-  analyzeSchema?(schema: A2UISchema): Promise<{ analysis: string; issues: string[]; suggestions: string[] }>;
-  optimizeSchema?(schema: A2UISchema): Promise<{ optimizedSchema: A2UISchema; suggestions: string[] }>;
+  streamResponse?(request: AIRequest, onMessage: (chunk: string) => void, onError?: (error: any) => void): Promise<void>;
+
 }
 
 // 错误类型

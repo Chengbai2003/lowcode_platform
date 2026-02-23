@@ -24,7 +24,8 @@ import {
   CheckCircleOutlined,
   DatabaseOutlined
 } from '@ant-design/icons';
-import { aiModelManager } from './manager';
+import { aiApi } from './api';
+import { serverAIService } from './ServerAIService';
 import type { AIModelConfig } from './types';
 import './AIConfig.css';
 
@@ -53,13 +54,14 @@ export const AIConfig: React.FC<AIConfigProps> = ({
   useEffect(() => {
     if (visible) {
       loadModels();
-      setViewMode('list');
-      setEditingModel(null);
     }
+
+    setViewMode('list');
+    setEditingModel(null);
   }, [visible]);
 
-  const loadModels = () => {
-    const allModels = aiModelManager.getAllModels();
+  const loadModels = async () => {
+    const allModels = await aiApi.getModels();
     setModels(allModels);
   };
 
@@ -69,7 +71,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
     form.resetFields();
     form.setFieldsValue({
       provider: 'openai',
-      baseURL: 'https://api.openai.com/v1'
+      baseURL: ''
     });
   };
 
@@ -100,7 +102,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
       if (viewMode === 'add') {
         // 新增模型
         const id = `${values.provider}-${Date.now()}`;
-        aiModelManager.addModel({
+        await aiApi.saveModel({
           id,
           name: values.name,
           provider: values.provider,
@@ -108,37 +110,41 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           apiKey: values.apiKey,
           baseURL: values.baseURL,
           maxTokens: values.maxTokens,
-          temperature: values.temperature
+          temperature: values.temperature,
+          isAvailable: true
         });
         message.success('模型添加成功！');
       } else if (viewMode === 'edit' && editingModel) {
         // 更新模型
-        aiModelManager.updateModelConfig(editingModel, {
+        // Update needs full object or we fetch existing first. 
+        // Ideally saveModel handles upsert.
+        // We need to pass the ID.
+        await aiApi.saveModel({
+          id: editingModel,
           name: values.name,
+          provider: values.provider,
           model: values.model,
           apiKey: values.apiKey,
           baseURL: values.baseURL,
           maxTokens: values.maxTokens,
-          temperature: values.temperature
-        });
+          temperature: values.temperature,
+          isAvailable: true
+        } as any);
         message.success('模型更新成功！');
       }
-
-      // 保存配置
-      aiModelManager.saveConfigs();
 
       // 重新加载模型列表
       loadModels();
       setViewMode('list');
       setEditingModel(null);
 
-    } catch (error) {
-      message.error('保存失败');
+    } catch (error: any) {
+      message.error(`保存失败: ${error.message || '未知错误'}`);
     }
   };
 
-  const handleDelete = (modelId: string) => {
-    if (aiModelManager.deleteModel(modelId)) {
+  const handleDelete = async (modelId: string) => {
+    if (await aiApi.deleteModel(modelId)) {
       message.success('模型已删除');
       loadModels();
     } else {
@@ -146,9 +152,17 @@ export const AIConfig: React.FC<AIConfigProps> = ({
     }
   };
 
-  const handleSetDefault = (modelId: string) => {
-    aiModelManager.setDefaultModel(modelId);
-    aiModelManager.saveConfigs();
+  const handleSetDefault = async (modelId: string) => {
+    // Currently API doesn't support setting default per user in a simple way 
+    // without updating the whole model config.
+    // For simplicity, we just trigger the callback to let UI know.
+    // Ideally we update the model isDefault flag on server.
+    const model = models.find(m => m.id === modelId);
+    if (model) {
+      await aiApi.saveModel({ ...model, isDefault: true });
+      // We should also unset others, but server side 'saveModel' logic 
+      // in 'ModelConfigService.ts' I wrote earlier handles unsetting others!
+    }
     loadModels();
     message.success('已设为默认模型');
     onConfigChange?.(modelId);
@@ -158,20 +172,31 @@ export const AIConfig: React.FC<AIConfigProps> = ({
     setTesting(model.id);
 
     try {
-      // 临时更新配置进行测试
+      // 临时更新配置进行测试 (注意：现在 server 端模式下，test 可能需要保存后才能测试，或者专门的 test 接口)
+      // 由于我们现在是 ServerAIService，它依赖于 saved config or passing config in request
+      // 简单起见，我们只能测试已保存的模型，或者我们构造一个临时的测试请求
+
+      // 如果是在编辑模式，我们可能还没保存，这时候测试会用旧配置。
+      // 为了支持编辑时测试，我们需要 Server 端支持 "validate config" 接口，或者我们前端构造一个临时 ServerAIService (但这稍微复杂)
+      // 
+      // 策略：提示用户先保存再测试，或者只在 List 模式下允许测试。
+      // 目前 UI 上 Edit 模式也有 Test 按钮吗？看代码 card actions 里有，但 form 里好像没有 Test 按钮。
+      // 
+      // 修正：handleTest 是在 Card 上触发的，那时候不在编辑模式，所以可以直接用 model.id
+
+      /*
       const currentValues = form.getFieldsValue();
       if (viewMode !== 'list') {
-        aiModelManager.updateModelConfig(model.id, {
-          apiKey: currentValues.apiKey,
-          baseURL: currentValues.baseURL
-        });
+         // ...
       }
+      */
 
-      const service = aiModelManager.getActiveService(model.id);
+      const service = serverAIService;
 
       // 测试简单的请求
       await service.generateResponse({
         prompt: '你好',
+        modelId: model.id,
         options: { maxTokens: 50 }
       });
 
@@ -185,9 +210,9 @@ export const AIConfig: React.FC<AIConfigProps> = ({
 
   const getProviderLabel = (provider: string) => {
     const labels: Record<string, string> = {
-      openai: 'OpenAI',
+      openai: 'OpenAI Compatible (GLM/GPT)',
       anthropic: 'Anthropic',
-      ollama: 'Ollama (本地)',
+      ollama: 'Ollama (Local)',
       mock: 'Mock AI'
     };
     return labels[provider] || provider;
@@ -195,7 +220,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
 
   const getProviderDefaultBaseURL = (provider: string) => {
     const defaults: Record<string, string> = {
-      openai: 'https://api.openai.com/v1',
+      openai: '', // Default to empty for custom compatible models
       anthropic: 'https://api.anthropic.com',
       ollama: 'http://localhost:11434'
     };
@@ -335,24 +360,24 @@ export const AIConfig: React.FC<AIConfigProps> = ({
             label="提供商"
             rules={[{ required: true, message: '请选择提供商' }]}
           >
-            <Select placeholder="选择AI提供商" onChange={handleProviderChange}>
-              <Option value="openai">OpenAI (GPT 系列)</Option>
-              <Option value="anthropic">Anthropic (Claude 系列)</Option>
-              <Option value="ollama">Ollama (本地模型)</Option>
+            <Select placeholder="Select Provider" onChange={handleProviderChange}>
+              <Option value="openai">OpenAI Compatible (GLM, DeepSeek, etc.)</Option>
+              <Option value="anthropic">Anthropic</Option>
+              <Option value="ollama">Ollama</Option>
             </Select>
           </Form.Item>
 
           <Form.Item
             name="model"
-            label="模型 ID"
-            rules={[{ required: true, message: '请输入模型 ID' }]}
+            label="Model ID"
+            rules={[{ required: true, message: 'Please input Model ID' }]}
             extra={
               <Text type="secondary" style={{ fontSize: '12px' }}>
-                OpenAI: gpt-4, gpt-3.5-turbo | Anthropic: claude-3-opus-20240229, claude-3-sonnet-20240229 | Ollama: llama2, mistral, codellama
+                Example: glm-4, gpt-4o, llama3
               </Text>
             }
           >
-            <Input placeholder="例如: gpt-4, claude-3-opus-20240229, llama2" />
+            <Input placeholder="e.g. glm-4" />
           </Form.Item>
 
           <Form.Item
@@ -375,8 +400,8 @@ export const AIConfig: React.FC<AIConfigProps> = ({
               if (provider === 'openai') {
                 return (
                   <Alert
-                    message="OpenAI 配置"
-                    description="需要有效的 OpenAI API Key，可在 https://platform.openai.com/api-keys 获取"
+                    message="OpenAI Compatible Configuration"
+                    description="Enter your API Key and Base URL (if using a proxy or custom provider like GLM)."
                     type="info"
                     showIcon
                     style={{ marginBottom: 16 }}
@@ -426,7 +451,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
             label="Base URL (可选)"
             extra="如使用代理或自定义端点"
           >
-            <Input placeholder="例如: https://api.openai.com/v1" />
+            <Input placeholder="e.g. https://open.bigmodel.cn/api/paas/v4/" />
           </Form.Item>
 
           <Divider />

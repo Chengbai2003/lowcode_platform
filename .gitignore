@@ -8,4 +8,8 @@ coverage
 .vscode
 .idea
 *.local
-.claude/
+
+# Environment variables
+.env
+.env.*
+!.env.example

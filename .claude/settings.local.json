@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm build:*)",
+      "Bash(pnpm --filter @lowcode-platform/renderer build)",
+      "Bash(pnpm --filter @lowcode-platform/playground dev)",
+      "Bash(curl:*)",
+      "WebFetch(domain:localhost)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm dev)",
+      "Bash(pkill:*)",
+      "Bash(taskkill:*)",
+      "Bash(pnpm exec vite:*)",
+      "Bash(pnpm --filter @lowcode-platform/playground exec vite --config vite.config.simple.ts)",
+      "Bash(./dev.bat:*)",
+      "Bash(git checkout:*)",
+      "Bash(git clean:*)",
+      "Bash(git revert:*)",
+      "Bash(git reset:*)",
+      "Bash(git push:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(pnpm vitest run:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(node:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm prisma:generate:*)",
+      "Bash(pnpm start:dev)"
+    ]
+  }
+}

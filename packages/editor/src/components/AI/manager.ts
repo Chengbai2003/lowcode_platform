@@ -1,261 +1,191 @@
 import type { AIModelConfig, AIService } from './types';
-import { OpenAIService, AnthropicService, OllamaService } from './services';
+import { ServerAIService } from './ServerAIService';
 import { MockAIService } from './mockService';
 
 // AI模型管理器
 export class AIModelManager {
-  private services: Map<string, AIService> = new Map();
   private configs: Map<string, AIModelConfig> = new Map();
-  private fallbackService: AIService;
+  private serverService = new ServerAIService();
+  private fallbackService = new MockAIService();
+  private readonly baseUrl = '/api/v1/ai'; // 假设后端 API 前缀
 
   constructor() {
-    // 初始化兜底服务
-    this.fallbackService = new MockAIService();
-    this.services.set('mock', this.fallbackService);
-
-    // 初始化默认配置
-    this.initializeDefaultConfigs();
-  }
-
-  private initializeDefaultConfigs() {
-    // 预定义的模型配置
-    const defaultConfigs: AIModelConfig[] = [
-      {
-        id: 'gpt-4',
-        name: 'GPT-4',
-        provider: 'openai',
-        model: 'gpt-4',
-        baseURL: 'https://api.openai.com/v1',
-        isAvailable: false,
-      },
-      {
-        id: 'gpt-3.5-turbo',
-        name: 'GPT-3.5 Turbo',
-        provider: 'openai',
-        model: 'gpt-3.5-turbo',
-        baseURL: 'https://api.openai.com/v1',
-        isAvailable: false,
-      },
-      {
-        id: 'claude-3-opus',
-        name: 'Claude 3 Opus',
-        provider: 'anthropic',
-        model: 'claude-3-opus-20240229',
-        baseURL: 'https://api.anthropic.com',
-        isAvailable: false,
-      },
-      {
-        id: 'claude-3-sonnet',
-        name: 'Claude 3 Sonnet',
-        provider: 'anthropic',
-        model: 'claude-3-sonnet-20240229',
-        baseURL: 'https://api.anthropic.com',
-        isAvailable: false,
-      },
-      {
-        id: 'ollama-llama2',
-        name: 'Ollama - Llama 2',
-        provider: 'ollama',
-        model: 'llama2',
-        baseURL: 'http://localhost:11434',
-        isAvailable: false,
-      },
-      {
-        id: 'ollama-mistral',
-        name: 'Ollama - Mistral',
-        provider: 'ollama',
-        model: 'mistral',
-        baseURL: 'http://localhost:11434',
-        isAvailable: false,
-      },
-      {
-        id: 'mock',
-        name: 'Mock AI (本地兜底)',
-        provider: 'mock',
-        model: 'mock',
-        isDefault: true,
-        isAvailable: true,
-      }
-    ];
-
-    defaultConfigs.forEach(config => {
-      this.configs.set(config.id, config);
-    });
-  }
-
-  // 新增：添加新模型
-  addModel(config: Omit<AIModelConfig, 'isAvailable'>): AIModelConfig {
-    const id = config.id || `${config.provider}-${Date.now()}`;
-    const newConfig: AIModelConfig = {
-      ...config,
-      id,
-      isAvailable: false
-    };
-
-    this.configs.set(id, newConfig);
-    this.registerService(id, newConfig);
-    this.saveConfigs();
-
-    return newConfig;
-  }
-
-  // 新增：删除模型
-  deleteModel(modelId: string): boolean {
-    if (modelId === 'mock') return false; // 不能删除兜底模型
-
-    this.configs.delete(modelId);
-    this.services.delete(modelId);
-    this.saveConfigs();
-    return true;
-  }
-
-  // 注册AI服务
-  registerService(modelId: string, config: AIModelConfig): AIService {
-    let service: AIService;
-
-    switch (config.provider) {
-      case 'openai':
-        service = new OpenAIService(config);
-        break;
-      case 'anthropic':
-        service = new AnthropicService(config);
-        break;
-      case 'ollama':
-        service = new OllamaService(config);
-        break;
-      default:
-        service = this.fallbackService;
-    }
-
-    this.services.set(modelId, service);
-    this.configs.set(modelId, { ...config, isAvailable: service.isAvailable() });
-
-    return service;
+    // 初始加载配置
+    this.loadConfigs();
   }
 
   // 获取当前激活的服务
   getActiveService(modelId?: string): AIService {
-    const config = this.getPreferredModel(modelId);
-
-    if (!config) {
-      console.warn('No AI model available, using fallback service');
+    if (!modelId || modelId === 'mock') {
       return this.fallbackService;
     }
-
-    let service = this.services.get(config.id);
-
-    if (!service) {
-      try {
-        service = this.registerService(config.id, config);
-      } catch (error) {
-        console.error(`Failed to initialize ${config.name}:`, error);
-        return this.fallbackService;
-      }
-    }
-
-    // 如果服务不可用，回退到兜底服务
-    if (!service.isAvailable()) {
-      console.warn(`${config.name} is not available, using fallback service`);
-      return this.fallbackService;
-    }
-
-    return service;
+    // 对于任何非 mock 模型，都使用通用的 ServerAIService
+    // 由调用方负责在 request 中传递 modelId
+    return this.serverService;
   }
 
-  // 获取首选模型
-  private getPreferredModel(modelId?: string): AIModelConfig | null {
-    if (modelId) {
-      const config = this.configs.get(modelId);
-      if (config) return config;
-    }
 
-    // 查找默认模型
-    for (const config of this.configs.values()) {
-      if (config.isAvailable && config.isDefault) {
-        return config;
-      }
-    }
-
-    // 查找第一个可用的模型
-    for (const config of this.configs.values()) {
-      if (config.isAvailable) {
-        return config;
-      }
-    }
-
-    return null;
-  }
 
   // 获取所有模型配置
   getAllModels(): AIModelConfig[] {
     return Array.from(this.configs.values());
   }
 
+  // 新增：添加新模型
+  async addModel(config: Omit<AIModelConfig, 'isAvailable'>): Promise<AIModelConfig> {
+    const id = config.id || `${config.provider}-${Date.now()}`;
+    const newConfig: AIModelConfig = {
+      ...config,
+      id,
+      isAvailable: true // 服务端服务默认可用
+    };
+
+    try {
+      // 保存到后端
+      const response = await fetch(`${this.baseUrl}/models`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save model to server');
+      }
+
+      this.configs.set(id, newConfig);
+      // Removed registerService call
+
+      return newConfig;
+    } catch (e) {
+      console.error('Add model failed', e);
+      throw e;
+    }
+  }
+
   // 更新模型配置
-  updateModelConfig(modelId: string, updates: Partial<AIModelConfig>): void {
+  async updateModelConfig(modelId: string, updates: Partial<AIModelConfig>): Promise<void> {
     const existing = this.configs.get(modelId);
     if (existing) {
       const updated = { ...existing, ...updates };
-      this.configs.set(modelId, updated);
 
-      // 重新注册服务
-      if (this.services.has(modelId)) {
-        this.registerService(modelId, updated);
+      try {
+        // 保存到后端
+        const response = await fetch(`${this.baseUrl}/models`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated)
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to update model on server');
+        }
+
+        this.configs.set(modelId, updated);
+      } catch (e) {
+        console.error('Update model failed', e);
+        throw e;
       }
+    }
+  }
+
+  // 删除模型
+  async deleteModel(modelId: string): Promise<boolean> {
+    if (modelId === 'mock') return false;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/models/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: modelId })
+      });
+
+      if (!response.ok) { // 即使后端删除失败，前端也尝试清理? 暂时严格处理
+        console.error('Failed to delete model on server');
+        return false;
+      }
+
+      this.configs.delete(modelId);
+      return true;
+    } catch (e) {
+      console.error('Delete model failed', e);
+      return false;
     }
   }
 
   // 设置默认模型
   setDefaultModel(modelId: string): void {
-    // 清除所有默认标记
+    // 1. 本地更新状态
     for (const config of this.configs.values()) {
-      config.isDefault = false;
+      config.isDefault = (config.id === modelId);
     }
 
-    // 设置新的默认模型
+    // 2. 异步同步到服务端 (可选，取决于是否需要持久化默认选择到服务端)
+    // 这里我们假设默认选择是用户偏好，可以只保存在本地或者也同步到服务端
+    // 为了简单起见，我们这里只更新内存，实际上如果服务端有 isDefault 字段，应该保存
     const config = this.configs.get(modelId);
     if (config) {
-      config.isDefault = true;
+      this.updateModelConfig(modelId, { isDefault: true });
     }
   }
 
-  // 保存配置到localStorage
-  saveConfigs(): void {
+  // 从服务端加载配置
+  async loadConfigs(): Promise<void> {
     try {
-      const configs = Array.from(this.configs.entries()).map(([id, config]) => ({ modelId: id, ...config }));
-      localStorage.setItem('ai-model-configs', JSON.stringify(configs));
-    } catch (error) {
-      console.error('Failed to save AI model configs:', error);
-    }
-  }
+      const response = await fetch(`${this.baseUrl}/models`);
+      if (response.ok) {
+        const models = await response.json();
+        if (Array.isArray(models)) {
+          // 清除除了 mock 之外的现有配置
+          this.configs.clear();
 
-  // 从localStorage加载配置
-  loadConfigs(): void {
-    try {
-      const saved = localStorage.getItem('ai-model-configs');
-      if (saved) {
-        const configs = JSON.parse(saved);
-        configs.forEach((config: any) => {
-          if (config.modelId) {
-            // 保留内部状态，只更新用户配置
-            const existing = this.configs.get(config.modelId);
-            if (existing) {
-              this.updateModelConfig(config.modelId, {
-                apiKey: config.apiKey,
-                baseURL: config.baseURL,
-                isDefault: config.isDefault,
-                model: config.model,
-                name: config.name
-              });
-            } else {
-              // 新增模型
-              this.configs.set(config.modelId, config);
-            }
+          // 重新添加 mock
+          // 实际上服务端可能不返回 mock，我们需要手动保留
+          // 或者统一由服务端管理 mock（如果服务端有 mock provider）
+
+          // 暂时策略：保留 mock，合并服务端数据
+
+          // 预定义的本地 Mock
+          const mockConfig: AIModelConfig = {
+            id: 'mock',
+            name: 'Mock AI (本地兜底)',
+            provider: 'mock',
+            model: 'mock',
+            isDefault: models.length === 0, // 如果没有其他模型，Mock 为默认
+            isAvailable: true,
           }
-        });
+          this.configs.set('mock', mockConfig);
+
+          models.forEach((model: any) => {
+            // 转换服务端字段到前端字段 (如果字段名一致则直接使用)
+            const config: AIModelConfig = {
+              id: model.id,
+              name: model.name,
+              provider: model.provider,
+              model: model.model, // 对应后端的 model 字段
+              baseURL: model.baseURL,
+              apiKey: model.apiKey, // 注意：通常不应该返回 apiKey 给前端，但这里是用户配置的，可能需要回显? 
+              // 安全起见，服务端可能脱敏，前端只需要知道有 key
+              isDefault: model.isDefault,
+              isAvailable: true, // 假设服务端返回的都可用
+            };
+            this.configs.set(config.id, config);
+          });
+        }
       }
     } catch (error) {
-      console.error('Failed to load AI model configs:', error);
+      console.error('Failed to load AI model configs from server:', error);
+      // 加载失败时，至少保证 mock 可用
+      if (!this.configs.has('mock')) {
+        const mockConfig: AIModelConfig = {
+          id: 'mock',
+          name: 'Mock AI (本地兜底)',
+          provider: 'mock',
+          model: 'mock',
+          isDefault: true,
+          isAvailable: true,
+        }
+        this.configs.set('mock', mockConfig);
+      }
     }
   }
 }
@@ -263,5 +193,3 @@ export class AIModelManager {
 // 单例实例
 export const aiModelManager = new AIModelManager();
 
-// 启动时加载配置
-aiModelManager.loadConfigs();

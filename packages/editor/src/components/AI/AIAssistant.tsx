@@ -9,7 +9,8 @@ import {
   DatabaseOutlined
 } from '@ant-design/icons';
 import type { A2UISchema } from '@lowcode-platform/renderer';
-import { aiModelManager } from './manager';
+import { aiApi } from './api';
+import { serverAIService } from './ServerAIService';
 import { AIConfig } from './AIConfig';
 import type { AIModelConfig } from './types';
 import './AIAssistant.css';
@@ -45,16 +46,23 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 加载模型列表
-  const loadModels = useCallback(() => {
-    const allModels = aiModelManager.getAllModels();
-    setModels(allModels);
+  const loadModels = useCallback(async () => {
+    try {
+      const allModels = await aiApi.getModels();
+      setModels(allModels);
 
-    // 设置当前选中模型
-    const defaultModel = allModels.find(m => m.isDefault && m.isAvailable) || allModels.find(m => m.isAvailable);
-    if (defaultModel) {
-      setCurrentModel(defaultModel.id);
+      // 设置当前选中模型
+      if (currentModel === 'mock') { // 仅当当前未选择有效模型时才自动选择
+        const defaultModel = allModels.find(m => m.isDefault && m.isAvailable) || allModels.find(m => m.isAvailable);
+        if (defaultModel) {
+          setCurrentModel(defaultModel.id);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load models:', error);
+      message.error('加载模型列表失败');
     }
-  }, []);
+  }, [currentModel]);
 
   // 滚动到最新消息
   const scrollToBottom = useCallback(() => {
@@ -92,100 +100,117 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     setInputValue('');
     setLoading(true);
 
-    // 添加思考中的消息
-    const thinkingMessage: AIMessage = {
-      id: `thinking-${Date.now()}`,
+    // 添加 AI 消息占位符
+    const aiMessageId = `ai-${Date.now()}`;
+    const aiMessage: AIMessage = {
+      id: aiMessageId,
       type: 'ai',
-      content: '正在分析你的需求...',
+      content: '',
       timestamp: new Date(),
       status: 'loading',
       modelUsed: currentModel
     };
 
-    setMessages(prev => [...prev, thinkingMessage]);
+    setMessages(prev => [...prev, aiMessage]);
 
     try {
-      // 获取当前AI服务
-      const aiService = aiModelManager.getActiveService(currentModel);
-      let response;
+      const aiService = serverAIService;
+      let fullContent = '';
 
-      // 根据用户输入判断意图
+      // 准备 Prompt
+      let prompt = inputValue;
+      let modelId = currentModel;
       const lowerInput = inputValue.toLowerCase();
 
       if (lowerInput.includes('分析') || lowerInput.includes('analyze') || lowerInput.includes('检查')) {
-        if (currentSchema && aiService.analyzeSchema) {
-          response = await aiService.analyzeSchema(currentSchema);
+        if (currentSchema) {
+          prompt = `请分析以下页面结构并提供改进建议：\n\`\`\`json\n${JSON.stringify(currentSchema, null, 2)}\n\`\`\`\n\n用户关注点：${inputValue}`;
         } else {
-          response = { analysis: '当前没有可分析的页面结构。请先创建一些内容。', issues: [], suggestions: [] };
+          // 没有 schema 时直接回答
         }
       } else if (lowerInput.includes('优化') || lowerInput.includes('optimize') || lowerInput.includes('改进')) {
-        if (currentSchema && aiService.optimizeSchema) {
-          response = await aiService.optimizeSchema(currentSchema);
-        } else {
-          response = { optimizedSchema: currentSchema || {}, suggestions: ['请先创建页面内容以进行优化'] };
+        if (currentSchema) {
+          prompt = `请优化以下页面结构，并返回优化后的 Schema（JSON格式）。\n\`\`\`json\n${JSON.stringify(currentSchema, null, 2)}\n\`\`\`\n\n优化需求：${inputValue}`;
         }
+      }
+
+      // 使用流式响应
+      if (aiService.streamResponse) {
+        await aiService.streamResponse(
+          {
+            prompt,
+            modelId,
+            context: { currentSchema: currentSchema || undefined }
+          },
+          (chunk) => {
+            fullContent += chunk;
+            setMessages(prev => prev.map(msg => {
+              if (msg.id === aiMessageId) {
+                return {
+                  ...msg,
+                  content: fullContent,
+                  status: 'success' // 收到数据就开始标记为成功/进行中
+                };
+              }
+              return msg;
+            }));
+          },
+          (error) => {
+            throw error;
+          }
+        );
       } else {
-        // 生成Schema
-        response = await aiService.generateResponse({
-          prompt: inputValue,
+        // Fallback if streamResponse is not available (though it is in ServerAIService)
+        const response = await aiService.generateResponse({
+          prompt,
+          modelId,
           context: { currentSchema: currentSchema || undefined }
         });
+        fullContent = response.content;
+        setMessages(prev => prev.map(msg =>
+          msg.id === aiMessageId ? { ...msg, content: fullContent, status: 'success' } : msg
+        ));
       }
 
-      // 移除思考中的消息
-      setMessages(prev => prev.filter(msg => msg.id !== thinkingMessage.id));
-
-      // 构建AI回复
-      let aiContent = '';
+      // 流结束后处理 Schema 解析
       let aiSchema: A2UISchema | undefined;
-      let aiSuggestions: string[] = [];
-
-      if ('content' in response) {
-        aiContent = response.content;
-        if ('schema' in response) aiSchema = response.schema;
-        if ('suggestions' in response) aiSuggestions = response.suggestions || [];
-      } else if ('analysis' in response) {
-        aiContent = response.analysis;
-        if ('suggestions' in response) aiSuggestions = response.suggestions || [];
-      } else if ('optimizedSchema' in response) {
-        aiContent = '我已经优化了你的页面结构，主要改进包括性能提升和用户体验优化。';
-        aiSchema = response.optimizedSchema as A2UISchema;
-        if ('suggestions' in response) aiSuggestions = response.suggestions || [];
+      try {
+        const jsonMatch = fullContent.match(/```json\n([\s\S]*?)\n```/) || fullContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const jsonStr = jsonMatch[1] || jsonMatch[0];
+          aiSchema = JSON.parse(jsonStr);
+        }
+      } catch (e) {
+        // Ignore parse error
       }
 
-      const aiMessage: AIMessage = {
-        id: `ai-${Date.now()}`,
-        type: 'ai',
-        content: aiContent,
-        timestamp: new Date(),
-        schema: aiSchema,
-        suggestions: aiSuggestions,
-        status: 'success',
-        modelUsed: currentModel
-      };
+      // 更新最终消息状态（主要是添加 Schema）
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === aiMessageId) {
+          return {
+            ...msg,
+            schema: aiSchema,
+            status: 'success'
+          };
+        }
+        return msg;
+      }));
 
-      setMessages(prev => [...prev, aiMessage]);
-
-      // 如果有Schema，自动应用
       if (aiSchema) {
-        onSchemaUpdate(aiSchema);
-        message.success('Schema已更新！');
+        message.success('Schema 生成完毕！');
       }
 
     } catch (error: any) {
-      // 移除思考中的消息
-      setMessages(prev => prev.filter(msg => msg.id !== thinkingMessage.id));
-
-      const errorMessage: AIMessage = {
-        id: `error-${Date.now()}`,
-        type: 'ai',
-        content: `处理失败：${error.message || '未知错误'}。请检查模型配置或重试。`,
-        timestamp: new Date(),
-        status: 'error',
-        modelUsed: currentModel
-      };
-
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages(prev => prev.map(msg => {
+        if (msg.id === aiMessageId) {
+          return {
+            ...msg,
+            content: msg.content + `\n\n[ERROR: ${error.message || '请求失败'}]`,
+            status: 'error'
+          };
+        }
+        return msg;
+      }));
       onError?.(error.message || 'AI服务暂时不可用');
     } finally {
       setLoading(false);
@@ -219,10 +244,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           }}
           onClick={() => {
             setCurrentModel(model.id);
-            if (model.isAvailable) {
-              aiModelManager.setDefaultModel(model.id);
-              aiModelManager.saveConfigs();
-            }
+            // Removed setDefaultModel call as it was local specific
           }}
         >
           <span style={{ color: '#cccccc' }}>{model.name}</span>

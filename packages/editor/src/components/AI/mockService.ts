@@ -4,7 +4,7 @@ import type { A2UISchema } from '@lowcode-platform/renderer';
 // Mock AI服务 - 作为兜底方案
 export class MockAIService implements AIService {
   name = 'Mock AI';
-  
+
   isAvailable(): boolean {
     return true; // 始终可用
   }
@@ -12,9 +12,9 @@ export class MockAIService implements AIService {
   async generateResponse(request: AIRequest): Promise<AIResponse> {
     // 模拟API延迟
     await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
-    
+
     const prompt = request.prompt.toLowerCase();
-    
+
     // 基于关键词的规则引擎
     if (prompt.includes('登录') || prompt.includes('login')) {
       return {
@@ -26,10 +26,10 @@ export class MockAIService implements AIService {
               id: 'root',
               type: 'Container',
               props: {
-                style: { 
-                  display: 'flex', 
-                  justifyContent: 'center', 
-                  alignItems: 'center', 
+                style: {
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
                   minHeight: '100vh',
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
                 }
@@ -48,7 +48,7 @@ export class MockAIService implements AIService {
             loginForm: {
               id: 'loginForm',
               type: 'Form',
-              props: { 
+              props: {
                 layout: 'vertical',
                 initialValues: { username: '', password: '', remember: false }
               },
@@ -57,8 +57,8 @@ export class MockAIService implements AIService {
             usernameField: {
               id: 'usernameField',
               type: 'FormItem',
-              props: { 
-                label: '用户名', 
+              props: {
+                label: '用户名',
                 name: 'username',
                 rules: [{ required: true, message: '请输入用户名!' }]
               },
@@ -67,7 +67,7 @@ export class MockAIService implements AIService {
             usernameInput: {
               id: 'usernameInput',
               type: 'Input',
-              props: { 
+              props: {
                 placeholder: '请输入用户名',
                 size: 'large',
                 field: 'username'
@@ -79,8 +79,8 @@ export class MockAIService implements AIService {
             passwordField: {
               id: 'passwordField',
               type: 'FormItem',
-              props: { 
-                label: '密码', 
+              props: {
+                label: '密码',
                 name: 'password',
                 rules: [{ required: true, message: '请输入密码!' }]
               },
@@ -89,8 +89,8 @@ export class MockAIService implements AIService {
             passwordInput: {
               id: 'passwordInput',
               type: 'Input',
-              props: { 
-                type: 'password', 
+              props: {
+                type: 'password',
                 placeholder: '请输入密码',
                 size: 'large',
                 field: 'password'
@@ -121,9 +121,9 @@ export class MockAIService implements AIService {
             submitButton: {
               id: 'submitButton',
               type: 'Button',
-              props: { 
-                type: 'primary', 
-                block: true, 
+              props: {
+                type: 'primary',
+                block: true,
                 size: 'large',
                 children: '登录',
                 htmlType: 'submit'
@@ -262,7 +262,7 @@ export class MockAIService implements AIService {
           root: {
             id: 'root',
             type: 'Container',
-            props: { 
+            props: {
               padding: '24px',
               style: { textAlign: 'center' }
             },
@@ -271,7 +271,7 @@ export class MockAIService implements AIService {
           content: {
             id: 'content',
             type: 'Div',
-            props: { 
+            props: {
               style: { padding: '48px', background: '#f5f5f5', borderRadius: '8px' },
               children: '请描述你想要的UI界面，我会帮你生成相应的结构。'
             }
@@ -289,11 +289,11 @@ export class MockAIService implements AIService {
 
   async analyzeSchema(schema: A2UISchema): Promise<{ analysis: string; issues: string[]; suggestions: string[] }> {
     await new Promise(resolve => setTimeout(resolve, 800));
-    
+
     const componentCount = Object.keys(schema.components).length;
     const hasForm = Object.values(schema.components).some(comp => comp.type === 'Form');
     const hasTable = Object.values(schema.components).some(comp => comp.type === 'Table');
-    
+
     return {
       analysis: `当前页面包含${componentCount}个组件${hasForm ? '，包含表单元素' : ''}${hasTable ? '，包含数据表格' : ''}。整体结构清晰，使用了基础的布局组件。设计风格简洁，符合现代UI规范。`,
       issues: [],
@@ -309,7 +309,7 @@ export class MockAIService implements AIService {
 
   async optimizeSchema(schema: A2UISchema): Promise<{ optimizedSchema: A2UISchema; suggestions: string[] }> {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     return {
       optimizedSchema: schema,
       suggestions: [
