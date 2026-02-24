@@ -10,7 +10,7 @@ export default defineConfig({
       fileName: "index",
     },
     rollupOptions: {
-      external: ["react", "react-dom", "antd"],
+      external: ["react", "react-dom", "antd", "@babel/types", "@babel/generator"],
     },
   },
   plugins: [dts()],

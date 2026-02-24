@@ -17,11 +17,12 @@ lowcode-platform/
 
 ## 核心特性
 
-- **JSON Schema 驱动**: 通过 JSON Schema 定义页面结构
-- **运行时渲染**: 实时将 JSON Schema 渲染为 React 组件
-- **组件化架构**: 每个组件独立文件，便于扩展和自定义
-- **容错处理**: 未知组件自动降级为 div
-- **实时预览**: 左侧编辑 JSON，右侧实时预览
+- **JSON Schema 驱动**: 通过 **扁平化 (Flat)** 的 JSON Schema 定义页面结构，O(1) 查找效率高
+- **AST 代码生成**: `compiler` 基于 Babel AST (抽象语法树) 构建安全的 React 代码，从根源消除 XSS 注入风险
+- **样式引擎**: 内置 Tailwind 样式编译器，可将内联样式动态编译为 Tailwind CSS 原子类名组合
+- **运行时渲染**: `renderer` 内置强大的 DSL 执行引擎，支持多达 20+ 种复杂的流控制和异步逻辑
+- **组件化架构**: 深度集成 Ant Design 5，每个组件独立文件，便于扩展和自定义
+- **实时预览**: 编辑器支持配置联动，左侧编辑 JSON，右侧实时预览
 
 ## 快速开始
 
@@ -46,31 +47,38 @@ pnpm clean
 
 | 包名 | 说明 |
 |------|------|
-| `@lowcode-platform/renderer` | 运行时渲染器，将 JSON Schema 转换为 React 组件 |
-| `@lowcode-platform/components` | 组件库，包含 Ant Design 组件封装和自定义组件 |
-| `@lowcode-platform/editor` | 编辑器组件，Monaco Editor + 实时预览 |
+| `@lowcode-platform/renderer` | 运行时渲染引擎，内置完整的 DSL 解析器和安全沙箱 |
+| `@lowcode-platform/components` | 组件库，包含 Ant Design 5 组件封装和自定义组件 |
+| `@lowcode-platform/compiler` | 代码生成器，将扁平 Schema 编译为安全的 React 源代码 (AST 驱动) |
+| `@lowcode-platform/editor` | 平台前端，包含 Monaco Editor、实时预览与 AI 助手调用 |
+| `@lowcode-platform/server` | 平台后端，基于 NestJS 构建的统一大模型接入网关 |
 
-## JSON Schema 格式
+## JSON Schema 格式 (A2UI Flat Schema)
+
+项目采用了**扁平化组件树 (Flat Schema)**，摒弃了传统的深度嵌套结构，以便于跨组件引用的状态管理和 O(1) 的检索修改效率：
 
 ```json
 {
-  "componentName": "Page",
-  "props": {
-    "style": { "padding": "20px" }
-  },
-  "children": [
-    {
-      "componentName": "Container",
+  "rootId": "page_root",
+  "components": {
+    "page_root": {
+      "id": "page_root",
+      "type": "Page",
+      "props": { "style": { "padding": "20px" } },
+      "childrenIds": ["container_1"]
+    },
+    "container_1": {
+      "id": "container_1",
+      "type": "Container",
       "props": { "width": "md" },
-      "children": [
-        {
-          "componentName": "Button",
-          "props": { "type": "primary" },
-          "children": "点击我"
-        }
-      ]
+      "childrenIds": ["btn_1"]
+    },
+    "btn_1": {
+      "id": "btn_1",
+      "type": "Button",
+      "props": { "type": "primary", "children": "点击我" }
     }
-  ]
+  }
 }
 ```
 

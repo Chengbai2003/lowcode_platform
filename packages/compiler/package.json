@@ -11,9 +11,12 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@babel/generator": "^7.29.1",
+    "@babel/types": "^7.29.0",
     "@lowcode-platform/renderer": "workspace:*"
   },
   "devDependencies": {
+    "@types/babel__generator": "^7.27.0",
     "@vitest/coverage-v8": "^4.0.18",
     "typescript": "^5.2.2",
     "vite": "^5.0.0",
