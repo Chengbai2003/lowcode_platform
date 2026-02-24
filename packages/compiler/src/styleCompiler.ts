@@ -1,5 +1,3 @@
-// import type { CSSProperties } from "react"; // 暂时注释掉未使用的导入
-
 // Step 1: 建立映射字典
 
 // 静态值映射：直接映射到 Tailwind 类名

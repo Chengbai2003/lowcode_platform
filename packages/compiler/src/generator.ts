@@ -1,14 +1,36 @@
 import type { A2UISchema, A2UIComponent } from "@lowcode-platform/renderer";
 import { compileStyle } from "./styleCompiler";
 
-interface CompileOptions {
-  prettier?: boolean;
+export interface CompileOptions {
+  componentSources?: Record<string, string>;
+  defaultLibrary?: string;
 }
 
 interface FieldInfo {
   name: string;
   setterName: string;
   initialValue: any;
+}
+
+export interface ExpressionNode {
+  __expr: true;
+  code: string;
+}
+
+export function isExpression(value: unknown): value is ExpressionNode {
+  return typeof value === "object" && value !== null && "__expr" in value;
+}
+
+export function escapeJSX(str: unknown): string {
+  if (typeof str !== "string") return String(str);
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+    .replace(/\{/g, "&#123;")
+    .replace(/\}/g, "&#125;");
 }
 
 /**
@@ -18,18 +40,35 @@ export function compileToCode(
   schema: A2UISchema,
   options?: CompileOptions
 ): string {
-  const imports = new Set<string>(["message"]);
+  const optionsConfig = {
+    componentSources: options?.componentSources || {},
+    defaultLibrary: options?.defaultLibrary || "antd",
+  };
+
+  const importsBySource: Record<string, Set<string>> = {
+    react: new Set(["useState"]),
+    [optionsConfig.defaultLibrary]: new Set(["message"]),
+  };
+
+  function addImport(component: string) {
+    const source =
+      optionsConfig.componentSources[component] || optionsConfig.defaultLibrary;
+    if (!importsBySource[source]) {
+      importsBySource[source] = new Set();
+    }
+    importsBySource[source].add(component);
+  }
+
   const fields: FieldInfo[] = [];
   const { components, rootId } = schema;
 
   // Step A: 全局状态收集 (Global State Collection)
-  // 利用扁平结构的特性，直接遍历组件池来收集 useState，无需递归
   const allNodes = Object.values(components) as A2UIComponent[];
 
   allNodes.forEach((node) => {
     // 收集组件 import
     if (node.type && /^[A-Z]/.test(node.type)) {
-      imports.add(node.type);
+      addImport(node.type);
     }
 
     // 收集 Field
@@ -37,51 +76,48 @@ export function compileToCode(
       const fieldName = toCamelCase(node.props.field);
       fields.push({
         name: fieldName,
-        setterName: `set${
-          fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
-        }`,
+        setterName: `set${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)
+          }`,
         initialValue: node.props.defaultValue || node.props.value || "",
       });
     }
   });
 
-  // 整理 imports
-  const reactImports = ["useState"];
-  const antdImports = Array.from(imports)
-    .filter((name) => /^[A-Z]/.test(name) || name === "message")
-    .sort();
+  // 1. 生成 imports
+  const importStatements = Object.entries(importsBySource)
+    .filter(([_, set]) => set.size > 0)
+    .map(([source, set]) => {
+      const names = Array.from(set).sort();
+      if (source === "react") {
+        return `import React, { ${names.join(", ")} } from 'react';`;
+      }
+      return `import { ${names.join(", ")} } from '${source}';`;
+    })
+    .join("\n");
 
   // 2. 生成 State Hooks 代码
   const stateHooks = fields.map(
     (field) =>
-      `const [${field.name}, ${field.setterName}] = useState('${
-        field.initialValue || ""
+      `const [${field.name}, ${field.setterName}] = useState('${field.initialValue || ""
       }');`
   );
 
-  // 3. 生成 Submit 函数代码
-  const submitFunction =
-    fields.length > 0
-      ? `
-  const handleSubmit = () => {
-    const values = {
-      ${fields.map((f) => f.name).join(",\n      ")}
-    };
-    console.log('提交数据:', values);
-    message.success('提交成功');
-  };`
-      : "";
+  const visited = new Set<string>();
 
   // Step B: JSX 生成器 (Lookup Generator)
   function generateJSX(nodeId: string, level: number = 2): string {
+    const indent = "  ".repeat(level);
+
+    if (visited.has(nodeId)) {
+      return `${indent}{/* Circular ref: ${nodeId} */}`;
+    }
+    visited.add(nodeId);
+
     const node = components[nodeId];
     if (!node) {
-      return `${"  ".repeat(
-        level
-      )}<div style={{color: 'red'}}>Node ${nodeId} Not Found</div>`;
+      return `${indent}<div style={{color: 'red'}}>Node ${nodeId} Not Found</div>`;
     }
 
-    const indent = "  ".repeat(level);
     const props = { ...node.props };
     const events = node.events || {};
 
@@ -91,8 +127,11 @@ export function compileToCode(
       const fieldInfo = fields.find((f) => f.name === fieldName);
 
       if (fieldInfo) {
-        props.value = `__EXPRESSION__${fieldName}`;
-        props.onChange = `__EXPRESSION__(e) => ${fieldInfo.setterName}(e.target ? e.target.value : e)`;
+        props.value = { __expr: true, code: fieldName } as ExpressionNode;
+        props.onChange = {
+          __expr: true,
+          code: `(e) => ${fieldInfo.setterName}(e.target ? e.target.value : e)`,
+        } as ExpressionNode;
       }
       delete props.field;
     }
@@ -105,15 +144,18 @@ export function compileToCode(
     if (props.label && node.type === "Input") {
       wrapperStart = `${indent}<div style={{ marginBottom: 16 }}>\n${indent}  `;
       wrapperEnd = `\n${indent}</div>`;
-      labelElement = `<label style={{ display: 'block', marginBottom: 8 }}>${props.label}</label>\n${indent}  `;
+      labelElement = `<label style={{ display: 'block', marginBottom: 8 }}>${escapeJSX(
+        props.label
+      )}</label>\n${indent}  `;
       delete props.label;
     }
 
-    // 特殊处理：Event Binding
+    // 处理 Events (转化为内联 JS 代码)
     const extraProps: string[] = [];
     Object.entries(events).forEach(([evtName, evtAction]) => {
-      if (evtAction as any === "submit") {
-        extraProps.push(`${evtName}={handleSubmit}`);
+      if (Array.isArray(evtAction)) {
+        const jsCode = compileActionList(evtAction, fields);
+        extraProps.push(`${evtName}={${jsCode}}`);
       }
     });
 
@@ -121,11 +163,11 @@ export function compileToCode(
     const propStrings = Object.entries(props)
       .map(([key, value]) => {
         if (key === "style") return null; // 稍后处理
+        if (isExpression(value)) {
+          return `${key}={${value.code}}`;
+        }
         if (typeof value === "string") {
-          if (value.startsWith("__EXPRESSION__")) {
-            return `${key}={${value.replace("__EXPRESSION__", "")}}`;
-          }
-          return `${key}="${value}"`;
+          return `${key}="${escapeJSX(value)}"`;
         }
         return `${key}={${JSON.stringify(value)}}`;
       })
@@ -162,8 +204,7 @@ export function compileToCode(
         )
         .join("\n");
     } else if (props.children && typeof props.children === "string") {
-      // Handle text children defined in props (simplified case)
-      childrenJSX = `${"  ".repeat(level + 1)}${props.children}`;
+      childrenJSX = `${indent}  ${escapeJSX(props.children)}`;
     }
 
     const openTag = `<${node.type}${allProps ? " " + allProps : ""}`;
@@ -187,16 +228,13 @@ export function compileToCode(
   const jsx = rootId ? generateJSX(rootId) : "";
 
   // Step C: 代码组装 (Assembly)
-  return `import React, { ${reactImports.join(", ")} } from 'react';
-import { ${antdImports.join(", ")} } from 'antd';
+  return `${importStatements}
 
 export default function GeneratedPage() {
   // 1. State 定义
   ${stateHooks.join("\n  ")}
 
-  // 2. 聚合提交逻辑${submitFunction}
-
-  // 3. 渲染逻辑
+  // 2. 渲染逻辑
   return (
 ${jsx}
   );
@@ -204,9 +242,58 @@ ${jsx}
 `;
 }
 
+// 将 ActionList 编译为 JS 闭包字符串
+function compileActionList(actions: any[], fields: FieldInfo[]): string {
+  if (!actions || actions.length === 0) return "() => {}";
+
+  const statements = actions.map((action) => {
+    switch (action.type) {
+      case "setField": {
+        const fieldName = toCamelCase(action.field);
+        const field = fields.find((f) => f.name === fieldName);
+        if (field) {
+          const valStr = typeof action.value === "string" ? `"${escapeJSX(action.value)}"` : JSON.stringify(action.value);
+          return `${field.setterName}(${valStr});`;
+        }
+        return `// Field ${action.field} not found`;
+      }
+      case "message": {
+        const msgType = action.messageType || "info";
+        const content = typeof action.content === "string" ? `"${escapeJSX(action.content)}"` : JSON.stringify(action.content);
+        return `message.${msgType}(${content});`;
+      }
+      case "navigate": {
+        const to = typeof action.to === "string" ? `"${escapeJSX(action.to)}"` : JSON.stringify(action.to);
+        return `window.location.href = ${to};`;
+      }
+      case "apiCall": {
+        const url = typeof action.url === "string" ? `"${escapeJSX(action.url)}"` : JSON.stringify(action.url);
+        const method = action.method || "GET";
+        return `fetch(${url}, { method: "${method}" }).then(res => res.json()).then(data => console.log(data));`;
+      }
+      case "log": {
+        const level = action.level || "log";
+        const val = typeof action.value === "string" ? `"${escapeJSX(action.value)}"` : JSON.stringify(action.value);
+        return `console.${level}(${val});`;
+      }
+      case "customAction": {
+        if (action.plugin === "submit") {
+          return `console.log("Submit", { ${fields.map((f) => f.name).join(", ")} });\n      message.success("提交成功");`;
+        }
+        return `// Custom Action: ${action.plugin}`;
+      }
+      default:
+        return `// Unsupported action: ${action.type}`;
+    }
+  });
+
+  return `() => {\n      ${statements.join("\n      ")}\n    }`;
+}
+
 // 辅助函数：转驼峰
 function toCamelCase(str: string): string {
-  return str.replace(/([-_][a-z])/g, (group) =>
-    group.toUpperCase().replace("-", "").replace("_", "")
+  if (!str) return "";
+  return str.replace(/([-_.\s][a-z])/g, (group) =>
+    group.toUpperCase().replace("-", "").replace("_", "").replace(".", "").replace(" ", "")
   );
 }
