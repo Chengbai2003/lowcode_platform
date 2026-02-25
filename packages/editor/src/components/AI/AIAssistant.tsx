@@ -8,8 +8,9 @@ import {
   SettingOutlined,
   DatabaseOutlined
 } from '@ant-design/icons';
-import type { A2UISchema } from '@lowcode-platform/renderer';
-import { safeValidateSchema } from '@lowcode-platform/renderer';
+import type { A2UISchema } from '@lowcode-platform/types';
+import { validateSchemaWithWhitelist } from '@lowcode-platform/renderer';
+import { componentRegistry } from '@lowcode-platform/components';
 import { aiApi } from './api';
 import { serverAIService } from './ServerAIService';
 import { AIConfig } from './AIConfig';
@@ -219,7 +220,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   }, [inputValue, loading, currentSchema, onSchemaUpdate, onError, currentModel]);
 
   const applySchema = useCallback((schema: A2UISchema) => {
-    const result = safeValidateSchema(schema);
+    const whitelist = Object.keys(componentRegistry);
+    const result = validateSchemaWithWhitelist(schema, whitelist);
     if (!result.success) {
       message.error(`AI 生成的 Schema 不合法: ${result.error.issues[0]?.message || '结构体错误'}`);
       return;

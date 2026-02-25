@@ -1,10 +1,10 @@
-import type { A2UISchema } from '@lowcode-platform/renderer';
+import type { A2UISchema } from "@lowcode-platform/types";
 
 // AI模型配置接口
 export interface AIModelConfig {
   id: string;
   name: string;
-  provider: 'openai' | 'anthropic' | 'ollama' | 'mock';
+  provider: "openai" | "anthropic" | "ollama" | "mock";
   apiKey?: string;
   baseURL?: string;
   model: string;
@@ -45,18 +45,26 @@ export interface AIService {
   name: string;
   isAvailable(): boolean;
   generateResponse(request: AIRequest): Promise<AIResponse>;
-  streamResponse?(request: AIRequest, onMessage: (chunk: string) => void, onError?: (error: any) => void): Promise<void>;
-
+  streamResponse?(
+    request: AIRequest,
+    onMessage: (chunk: string) => void,
+    onError?: (error: any) => void,
+  ): Promise<void>;
 }
 
 // 错误类型
 export class AIServiceError extends Error {
   constructor(
     message: string,
-    public code: 'API_KEY_MISSING' | 'MODEL_NOT_AVAILABLE' | 'RATE_LIMIT' | 'NETWORK_ERROR' | 'INVALID_RESPONSE',
-    public details?: any
+    public code:
+      | "API_KEY_MISSING"
+      | "MODEL_NOT_AVAILABLE"
+      | "RATE_LIMIT"
+      | "NETWORK_ERROR"
+      | "INVALID_RESPONSE",
+    public details?: any,
   ) {
     super(message);
-    this.name = 'AIServiceError';
+    this.name = "AIServiceError";
   }
 }

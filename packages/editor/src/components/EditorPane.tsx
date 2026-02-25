@@ -2,7 +2,7 @@ import React from 'react';
 import { Layout } from 'antd';
 import Editor from '@monaco-editor/react';
 import { AIAssistant } from './AI';
-import type { A2UISchema } from '@lowcode-platform/renderer';
+import type { A2UISchema } from '@lowcode-platform/types';
 
 const { Sider } = Layout;
 

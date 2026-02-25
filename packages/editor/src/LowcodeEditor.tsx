@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { ConfigProvider, theme, message, Modal } from 'antd';
 import type { LowcodeEditorProps } from './types';
-import type { A2UISchema } from '@lowcode-platform/renderer';
+import type { A2UISchema } from '@lowcode-platform/types';
 import { safeValidateSchema } from '@lowcode-platform/renderer';
 import { componentRegistry } from '@lowcode-platform/components';
 import { compileToCode } from '@lowcode-platform/compiler';
@@ -12,6 +12,7 @@ import {
   PreviewPane,
 } from './components';
 import { useDraftStorage } from './hooks/useDraftStorage';
+import { useSchemaHistory } from './hooks/useSchemaHistory';
 
 // 导入样式
 import './components/AI/AIAssistant.css';
@@ -57,7 +58,7 @@ export function LowcodeEditor({
       );
   }, [initialSchema]);
 
-  const [json, setJson] = useState(initialJson);
+  const { state: json, push: setJson, forcePush: setJsonForce, undo, redo, canUndo, canRedo, historySize } = useSchemaHistory(initialJson);
   const [schema, setSchema] = useState<A2UISchema | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'json' | 'visual' | 'code' | 'ai'>('json');
@@ -74,11 +75,11 @@ export function LowcodeEditor({
       Modal.confirm({
         title: '发现未保存的草稿',
         content: `上次编辑于 ${savedTime}，是否恢复？`,
-        onOk: () => setJson(draft.json),
+        onOk: () => setJsonForce(draft.json),
         onCancel: () => clearDraft(),
       });
     }
-  }, [loadDraft, clearDraft, initialJson]);
+  }, [loadDraft, clearDraft, initialJson, setJsonForce]);
 
   // 解析 JSON 并更新 schema
   useEffect(() => {
@@ -129,11 +130,33 @@ export function LowcodeEditor({
   // 处理AI生成的Schema更新
   const handleAISchemaUpdate = useCallback((newSchema: A2UISchema) => {
     setSchema(newSchema);
-    setJson(JSON.stringify(newSchema, null, 2));
+    setJsonForce(JSON.stringify(newSchema, null, 2));
     onChange?.(newSchema);
     // 不切换到JSON编辑器，保持当前（AI）视图，用户可以在右侧预览
     // message.success('AI助手已更新Schema！'); // 移除重复提示，AIAssistant 已有提示
-  }, [onChange]);
+  }, [onChange, setJsonForce]);
+
+  // 全局键盘快捷键 (Undo/Redo)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        if (e.shiftKey) {
+          e.preventDefault();
+          redo();
+        } else {
+          e.preventDefault();
+          undo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'y') {
+        e.preventDefault();
+        redo();
+      }
+    };
+    
+    // 只在当前没有其它输入框捕获焦点时处理全局快捷键（Monaco 内部本身有撤销，这里主要是对整个工具链的保证）
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   // 合并自定义组件与默认注册表
   const allComponents = useMemo(() => {
@@ -148,6 +171,11 @@ export function LowcodeEditor({
           onCompile={handleCompile}
           previewTheme={previewTheme}
           onThemeChange={(t) => setPreviewTheme(t)}
+          onUndo={undo}
+          onRedo={redo}
+          canUndo={canUndo}
+          canRedo={canRedo}
+          historySize={historySize}
         />
         <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <ActivityBar activeTab={activeTab} setActiveTab={setActiveTab} />

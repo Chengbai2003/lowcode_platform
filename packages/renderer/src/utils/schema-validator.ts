@@ -44,3 +44,35 @@ export function safeValidateSchema(input: unknown) {
   }
   return { success: false as const, error: result.error };
 }
+
+export function validateSchemaWithWhitelist(
+  input: unknown,
+  whitelist: string[],
+) {
+  const result = A2UISchemaValidator.safeParse(input);
+  if (!result.success) return { success: false as const, error: result.error };
+
+  const schema = result.data as unknown as A2UISchema;
+  const unknownTypes: string[] = [];
+
+  for (const comp of Object.values(schema.components)) {
+    if (!whitelist.includes(comp.type)) {
+      unknownTypes.push(`${comp.id} → ${comp.type}`);
+    }
+  }
+
+  if (unknownTypes.length > 0) {
+    return {
+      success: false as const,
+      error: {
+        issues: [
+          {
+            message: `未注册的组件类型: ${unknownTypes.join(", ")}`,
+          },
+        ],
+      },
+    };
+  }
+
+  return { success: true as const, data: schema };
+}

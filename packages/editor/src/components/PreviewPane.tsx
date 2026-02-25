@@ -1,7 +1,7 @@
 import React from 'react';
 import { Layout, ConfigProvider, theme } from 'antd';
 import { Renderer } from '@lowcode-platform/renderer';
-import type { ComponentRegistry, A2UISchema } from '@lowcode-platform/renderer';
+import type { ComponentRegistry, A2UISchema } from '@lowcode-platform/types';
 
 const { Content } = Layout;
 

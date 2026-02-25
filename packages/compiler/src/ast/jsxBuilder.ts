@@ -1,5 +1,5 @@
 import * as babelTypes from '@babel/types';
-import { A2UISchema } from '@lowcode-platform/renderer';
+import type { A2UISchema } from '@lowcode-platform/types';
 import { compileStyle } from '../styleCompiler';
 import { FieldInfo, toCamelCase, isExpression } from './utils';
 import { buildActionListAST } from './actionBuilder';

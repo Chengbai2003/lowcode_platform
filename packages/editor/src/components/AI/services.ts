@@ -1,20 +1,20 @@
-import type { AIModelConfig, AIService, AIRequest, AIResponse } from './types';
-import type { A2UISchema } from '@lowcode-platform/renderer';
-import { AIServiceError } from './types';
+import type { AIModelConfig, AIService, AIRequest, AIResponse } from "./types";
+import type { A2UISchema } from "@lowcode-platform/types";
+import { AIServiceError } from "./types";
 
 // OpenAI 服务实现
 export class OpenAIService implements AIService {
-  name = 'OpenAI';
+  name = "OpenAI";
   private apiKey: string;
   private baseURL: string;
   private model: string;
 
   constructor(config: AIModelConfig) {
     if (!config.apiKey) {
-      throw new AIServiceError('OpenAI API key is required', 'API_KEY_MISSING');
+      throw new AIServiceError("OpenAI API key is required", "API_KEY_MISSING");
     }
     this.apiKey = config.apiKey;
-    this.baseURL = config.baseURL || 'https://api.openai.com/v1';
+    this.baseURL = config.baseURL || "https://api.openai.com/v1";
     this.model = config.model;
   }
 
@@ -25,12 +25,12 @@ export class OpenAIService implements AIService {
   async generateResponse(request: AIRequest): Promise<AIResponse> {
     try {
       const messages = this.buildMessages(request);
-      
+
       const response = await fetch(`${this.baseURL}/chat/completions`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Authorization': `Bearer ${this.apiKey}`,
-          'Content-Type': 'application/json',
+          Authorization: `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: this.model,
@@ -41,24 +41,36 @@ export class OpenAIService implements AIService {
       });
 
       if (!response.ok) {
-        throw new AIServiceError(`OpenAI API error: ${response.statusText}`, 'NETWORK_ERROR');
+        throw new AIServiceError(
+          `OpenAI API error: ${response.statusText}`,
+          "NETWORK_ERROR",
+        );
       }
 
       const data = await response.json();
       const content = data.choices[0]?.message?.content;
-      
+
       if (!content) {
-        throw new AIServiceError('Invalid response from OpenAI', 'INVALID_RESPONSE');
+        throw new AIServiceError(
+          "Invalid response from OpenAI",
+          "INVALID_RESPONSE",
+        );
       }
 
       return this.parseAIResponse(content, request);
     } catch (error: any) {
       if (error instanceof AIServiceError) throw error;
-      throw new AIServiceError(`OpenAI service error: ${error.message || 'Unknown error'}`, 'NETWORK_ERROR', error);
+      throw new AIServiceError(
+        `OpenAI service error: ${error.message || "Unknown error"}`,
+        "NETWORK_ERROR",
+        error,
+      );
     }
   }
 
-  private buildMessages(request: AIRequest): Array<{ role: string; content: string }> {
+  private buildMessages(
+    request: AIRequest,
+  ): Array<{ role: string; content: string }> {
     const systemPrompt = `你是一个专业的低代码平台AI助手，专门帮助用户生成、分析和优化UI界面。
 
 你的能力包括：
@@ -85,43 +97,50 @@ A2UI Schema格式：
 **Schema**：[JSON格式的A2UI Schema]
 **建议**：[可选的优化建议列表]`;
 
-    const messages = [{ role: 'system', content: systemPrompt }];
+    const messages = [{ role: "system", content: systemPrompt }];
 
     // 添加上下文
     if (request.context?.currentSchema) {
       messages.push({
-        role: 'user',
-        content: `当前Schema：\n\`\`\`json\n${JSON.stringify(request.context.currentSchema, null, 2)}\n\`\`\``
+        role: "user",
+        content: `当前Schema：\n\`\`\`json\n${JSON.stringify(request.context.currentSchema, null, 2)}\n\`\`\``,
       });
     }
 
     // 添加用户请求
     messages.push({
-      role: 'user',
-      content: request.prompt
+      role: "user",
+      content: request.prompt,
     });
 
     return messages;
   }
 
-  private parseAIResponse(content: string, request: AIRequest): AIResponse {
+  private parseAIResponse(content: string, _request: AIRequest): AIResponse {
     // 解析AI响应，提取说明、Schema和建议
-    const explanationMatch = content.match(/\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const explanationMatch = content.match(
+      /\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/,
+    );
     const schemaMatch = content.match(/\*\*Schema\*\*：([\s\S]*?)(?=\*\*|$)/);
-    const suggestionsMatch = content.match(/\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const suggestionsMatch = content.match(
+      /\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/,
+    );
 
     let schema: A2UISchema | undefined;
     try {
       if (schemaMatch) {
-        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, '');
+        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, "");
         schema = JSON.parse(jsonStr);
       }
     } catch (error) {
-      console.warn('Failed to parse AI generated schema:', error);
+      console.warn("Failed to parse AI generated schema:", error);
     }
 
-    const suggestions = suggestionsMatch 
-      ? suggestionsMatch[1].split('\n').filter(s => s.trim()).map(s => s.replace(/^[-*]\s*/, ''))
+    const suggestions = suggestionsMatch
+      ? suggestionsMatch[1]
+          .split("\n")
+          .filter((s) => s.trim())
+          .map((s) => s.replace(/^[-*]\s*/, ""))
       : [];
 
     return {
@@ -131,49 +150,56 @@ A2UI Schema格式：
     };
   }
 
-  async analyzeSchema(schema: A2UISchema): Promise<{ analysis: string; issues: string[]; suggestions: string[] }> {
+  async analyzeSchema(
+    schema: A2UISchema,
+  ): Promise<{ analysis: string; issues: string[]; suggestions: string[] }> {
     const request: AIRequest = {
-      prompt: '请分析这个UI设计，评估其结构、可用性和最佳实践遵循情况。',
-      context: { currentSchema: schema }
+      prompt: "请分析这个UI设计，评估其结构、可用性和最佳实践遵循情况。",
+      context: { currentSchema: schema },
     };
 
     const response = await this.generateResponse(request);
-    
+
     return {
       analysis: response.content,
       issues: [],
-      suggestions: response.suggestions || []
+      suggestions: response.suggestions || [],
     };
   }
 
-  async optimizeSchema(schema: A2UISchema): Promise<{ optimizedSchema: A2UISchema; suggestions: string[] }> {
+  async optimizeSchema(
+    schema: A2UISchema,
+  ): Promise<{ optimizedSchema: A2UISchema; suggestions: string[] }> {
     const request: AIRequest = {
-      prompt: '请优化这个UI设计，提升用户体验、性能和代码质量。',
-      context: { currentSchema: schema }
+      prompt: "请优化这个UI设计，提升用户体验、性能和代码质量。",
+      context: { currentSchema: schema },
     };
 
     const response = await this.generateResponse(request);
-    
+
     return {
       optimizedSchema: response.schema || schema,
-      suggestions: response.suggestions || []
+      suggestions: response.suggestions || [],
     };
   }
 }
 
 // Anthropic Claude服务实现
 export class AnthropicService implements AIService {
-  name = 'Anthropic Claude';
+  name = "Anthropic Claude";
   private apiKey: string;
   private baseURL: string;
   private model: string;
 
   constructor(config: AIModelConfig) {
     if (!config.apiKey) {
-      throw new AIServiceError('Anthropic API key is required', 'API_KEY_MISSING');
+      throw new AIServiceError(
+        "Anthropic API key is required",
+        "API_KEY_MISSING",
+      );
     }
     this.apiKey = config.apiKey;
-    this.baseURL = config.baseURL || 'https://api.anthropic.com';
+    this.baseURL = config.baseURL || "https://api.anthropic.com";
     this.model = config.model;
   }
 
@@ -210,15 +236,15 @@ A2UI Schema格式：
 **建议**：[可选的优化建议列表]`;
 
       const response = await fetch(`${this.baseURL}/v1/messages`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'x-api-key': this.apiKey,
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
+          "x-api-key": this.apiKey,
+          "Content-Type": "application/json",
+          "anthropic-version": "2023-06-01",
         },
         body: JSON.stringify({
           model: this.model,
-          messages: [{ role: 'user', content: request.prompt }],
+          messages: [{ role: "user", content: request.prompt }],
           system: systemPrompt,
           max_tokens: request.options?.maxTokens || 2000,
           temperature: request.options?.temperature || 0.7,
@@ -226,40 +252,57 @@ A2UI Schema格式：
       });
 
       if (!response.ok) {
-        throw new AIServiceError(`Anthropic API error: ${response.statusText}`, 'NETWORK_ERROR');
+        throw new AIServiceError(
+          `Anthropic API error: ${response.statusText}`,
+          "NETWORK_ERROR",
+        );
       }
 
       const data = await response.json();
       const content = data.content?.[0]?.text;
 
       if (!content) {
-        throw new AIServiceError('Invalid response from Anthropic', 'INVALID_RESPONSE');
+        throw new AIServiceError(
+          "Invalid response from Anthropic",
+          "INVALID_RESPONSE",
+        );
       }
 
       return this.parseAIResponse(content, request);
     } catch (error: any) {
       if (error instanceof AIServiceError) throw error;
-      throw new AIServiceError(`Anthropic service error: ${error.message || 'Unknown error'}`, 'NETWORK_ERROR', error);
+      throw new AIServiceError(
+        `Anthropic service error: ${error.message || "Unknown error"}`,
+        "NETWORK_ERROR",
+        error,
+      );
     }
   }
 
-  private parseAIResponse(content: string, request: AIRequest): AIResponse {
-    const explanationMatch = content.match(/\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/);
+  private parseAIResponse(content: string, _request: AIRequest): AIResponse {
+    const explanationMatch = content.match(
+      /\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/,
+    );
     const schemaMatch = content.match(/\*\*Schema\*\*：([\s\S]*?)(?=\*\*|$)/);
-    const suggestionsMatch = content.match(/\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const suggestionsMatch = content.match(
+      /\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/,
+    );
 
     let schema: any;
     try {
       if (schemaMatch) {
-        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, '');
+        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, "");
         schema = JSON.parse(jsonStr);
       }
     } catch (error) {
-      console.warn('Failed to parse AI generated schema:', error);
+      console.warn("Failed to parse AI generated schema:", error);
     }
 
     const suggestions = suggestionsMatch
-      ? suggestionsMatch[1].split('\n').filter(s => s.trim()).map(s => s.replace(/^[-*]\s*/, ''))
+      ? suggestionsMatch[1]
+          .split("\n")
+          .filter((s) => s.trim())
+          .map((s) => s.replace(/^[-*]\s*/, ""))
       : [];
 
     return {
@@ -272,12 +315,12 @@ A2UI Schema格式：
 
 // Ollama本地模型服务实现
 export class OllamaService implements AIService {
-  name = 'Ollama';
+  name = "Ollama";
   private baseURL: string;
   private model: string;
 
   constructor(config: AIModelConfig) {
-    this.baseURL = config.baseURL || 'http://localhost:11434';
+    this.baseURL = config.baseURL || "http://localhost:11434";
     this.model = config.model;
   }
 
@@ -314,59 +357,76 @@ A2UI Schema格式：
 **建议**：[可选的优化建议列表]`;
 
       const response = await fetch(`${this.baseURL}/api/chat`, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: this.model,
           messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: request.prompt }
+            { role: "system", content: systemPrompt },
+            { role: "user", content: request.prompt },
           ],
           stream: false,
           options: {
             temperature: request.options?.temperature || 0.7,
             num_predict: request.options?.maxTokens || 2000,
-          }
+          },
         }),
       });
 
       if (!response.ok) {
-        throw new AIServiceError(`Ollama API error: ${response.statusText}`, 'NETWORK_ERROR');
+        throw new AIServiceError(
+          `Ollama API error: ${response.statusText}`,
+          "NETWORK_ERROR",
+        );
       }
 
       const data = await response.json();
       const content = data.message?.content;
 
       if (!content) {
-        throw new AIServiceError('Invalid response from Ollama', 'INVALID_RESPONSE');
+        throw new AIServiceError(
+          "Invalid response from Ollama",
+          "INVALID_RESPONSE",
+        );
       }
 
       return this.parseAIResponse(content, request);
     } catch (error: any) {
       if (error instanceof AIServiceError) throw error;
-      throw new AIServiceError(`Ollama service error: ${error.message || 'Unknown error'}`, 'NETWORK_ERROR', error);
+      throw new AIServiceError(
+        `Ollama service error: ${error.message || "Unknown error"}`,
+        "NETWORK_ERROR",
+        error,
+      );
     }
   }
 
-  private parseAIResponse(content: string, request: AIRequest): AIResponse {
-    const explanationMatch = content.match(/\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/);
+  private parseAIResponse(content: string, _request: AIRequest): AIResponse {
+    const explanationMatch = content.match(
+      /\*\*说明\*\*：([\s\S]*?)(?=\*\*|$)/,
+    );
     const schemaMatch = content.match(/\*\*Schema\*\*：([\s\S]*?)(?=\*\*|$)/);
-    const suggestionsMatch = content.match(/\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/);
+    const suggestionsMatch = content.match(
+      /\*\*建议\*\*：([\s\S]*?)(?=\*\*|$)/,
+    );
 
     let schema: any;
     try {
       if (schemaMatch) {
-        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, '');
+        const jsonStr = schemaMatch[1].trim().replace(/```json\n?|\n?```/g, "");
         schema = JSON.parse(jsonStr);
       }
     } catch (error) {
-      console.warn('Failed to parse AI generated schema:', error);
+      console.warn("Failed to parse AI generated schema:", error);
     }
 
     const suggestions = suggestionsMatch
-      ? suggestionsMatch[1].split('\n').filter(s => s.trim()).map(s => s.replace(/^[-*]\s*/, ''))
+      ? suggestionsMatch[1]
+          .split("\n")
+          .filter((s) => s.trim())
+          .map((s) => s.replace(/^[-*]\s*/, ""))
       : [];
 
     return {

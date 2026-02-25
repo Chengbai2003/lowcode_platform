@@ -13,7 +13,7 @@
   "dependencies": {
     "@babel/generator": "^7.29.1",
     "@babel/types": "^7.29.0",
-    "@lowcode-platform/renderer": "workspace:*"
+    "@lowcode-platform/types": "workspace:*"
   },
   "devDependencies": {
     "@types/babel__generator": "^7.27.0",
