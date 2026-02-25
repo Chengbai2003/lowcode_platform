@@ -20,6 +20,9 @@ export { store } from './store';
 export { useAppDispatch, useAppSelector } from './store/hooks';
 export { setComponentData, setMultipleComponentData, clearComponentData, setComponentConfig, resetAllData } from './store/componentSlice';
 
+// 导出表单验证相关
+export { validateSchema, safeValidateSchema } from './utils/schema-validator';
+
 /**
  * Redux Provider 包装组件
  */

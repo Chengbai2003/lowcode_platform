@@ -9,6 +9,7 @@ import {
   DatabaseOutlined
 } from '@ant-design/icons';
 import type { A2UISchema } from '@lowcode-platform/renderer';
+import { safeValidateSchema } from '@lowcode-platform/renderer';
 import { aiApi } from './api';
 import { serverAIService } from './ServerAIService';
 import { AIConfig } from './AIConfig';
@@ -218,7 +219,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   }, [inputValue, loading, currentSchema, onSchemaUpdate, onError, currentModel]);
 
   const applySchema = useCallback((schema: A2UISchema) => {
-    onSchemaUpdate(schema);
+    const result = safeValidateSchema(schema);
+    if (!result.success) {
+      message.error(`AI 生成的 Schema 不合法: ${result.error.issues[0]?.message || '结构体错误'}`);
+      return;
+    }
+    onSchemaUpdate(result.data);
     message.success('Schema已应用到编辑器！');
   }, [onSchemaUpdate]);
 

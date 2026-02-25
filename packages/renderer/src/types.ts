@@ -16,6 +16,7 @@ export interface A2UIComponent {
  * 整个页面数据 (A2UI Response)
  */
 export interface A2UISchema {
+  version?: number; // Schema 版本号，默认 1
   rootId: string; // 入口节点 ID
   components: Record<string, A2UIComponent>; // 组件池：ID -> Component
 }

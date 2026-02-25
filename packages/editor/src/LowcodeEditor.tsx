@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
-import { ConfigProvider, theme, message } from 'antd';
+import { ConfigProvider, theme, message, Modal } from 'antd';
 import type { LowcodeEditorProps } from './types';
 import type { A2UISchema } from '@lowcode-platform/renderer';
+import { safeValidateSchema } from '@lowcode-platform/renderer';
 import { componentRegistry } from '@lowcode-platform/components';
 import { compileToCode } from '@lowcode-platform/compiler';
 import {
@@ -10,6 +11,7 @@ import {
   EditorPane,
   PreviewPane,
 } from './components';
+import { useDraftStorage } from './hooks/useDraftStorage';
 
 // 导入样式
 import './components/AI/AIAssistant.css';
@@ -61,20 +63,36 @@ export function LowcodeEditor({
   const [activeTab, setActiveTab] = useState<'json' | 'visual' | 'code' | 'ai'>('json');
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light');
   const [compiledCode, setCompiledCode] = useState<string>('');
+  
+  const { saveDraft, loadDraft, clearDraft } = useDraftStorage('default');
+
+  // 挂载时检查草稿
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft && draft.json !== initialJson) {
+      const savedTime = new Date(draft.savedAt).toLocaleTimeString();
+      Modal.confirm({
+        title: '发现未保存的草稿',
+        content: `上次编辑于 ${savedTime}，是否恢复？`,
+        onOk: () => setJson(draft.json),
+        onCancel: () => clearDraft(),
+      });
+    }
+  }, [loadDraft, clearDraft, initialJson]);
 
   // 解析 JSON 并更新 schema
   useEffect(() => {
     try {
-      const parsed = JSON.parse(json) as A2UISchema;
+      const raw = JSON.parse(json);
+      const result = safeValidateSchema(raw);
 
-      // 简单校验 A2UI 结构
-      if (!parsed.rootId || !parsed.components) {
-        throw new Error('Invalid A2UI Schema: Missing rootId or components');
+      if (!result.success) {
+        throw new Error(`Schema 校验失败: ${result.error.issues[0]?.message || '非法 Schema'}`);
       }
 
-      setSchema(parsed);
+      setSchema(result.data);
       setError(null);
-      onChange?.(parsed);
+      onChange?.(result.data);
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : '无效的 JSON';
       setError(errorMessage);
@@ -86,8 +104,9 @@ export function LowcodeEditor({
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (value !== undefined) {
       setJson(value);
+      saveDraft(value);
     }
-  }, []);
+  }, [saveDraft]);
 
   // 编译处理函数
   const handleCompile = useCallback(() => {
@@ -97,6 +116,7 @@ export function LowcodeEditor({
         setCompiledCode(code);
         setActiveTab('code');
         message.success('编译成功！');
+        clearDraft(); // 如果编译成功，可以认为状态稳定，清理草稿（可选策略，这里加上了）
       } catch (e: any) {
         console.error(e);
         message.error('编译失败: ' + e.message);
