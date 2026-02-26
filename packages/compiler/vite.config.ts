@@ -11,6 +11,12 @@ export default defineConfig({
     },
     rollupOptions: {
       external: ["react", "react-dom", "antd", "@babel/types", "@babel/generator"],
+      output: {
+        globals: {
+          "@babel/types": "babelTypes",
+          "@babel/generator": "generate"
+        }
+      }
     },
   },
   plugins: [dts()],

@@ -3,8 +3,8 @@
  * apiCall, delay, waitCondition
  */
 
-import type { ActionHandler } from '../../types/dsl';
-import { resolveValue, resolveValues } from '../parser';
+import type { ActionHandler } from "@lowcode-platform/types";
+import { resolveValue, resolveValues } from "../parser";
 
 /**
  * API调用
@@ -24,7 +24,7 @@ import { resolveValue, resolveValues } from '../parser';
 export const apiCall: ActionHandler = async (action, context, executor) => {
   const {
     url,
-    method = 'GET',
+    method = "GET",
     body,
     headers,
     params,
@@ -52,7 +52,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       }
       const queryString = searchParams.toString();
       if (queryString) {
-        fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
+        fullUrl += (fullUrl.includes("?") ? "&" : "?") + queryString;
       }
     }
 
@@ -60,12 +60,14 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     const config: RequestInit = {
       method: String(resolvedMethod).toUpperCase(),
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
         ...(resolvedHeaders as Record<string, string>),
       },
     };
 
-    if (['POST', 'PUT', 'PATCH'].includes(String(resolvedMethod).toUpperCase())) {
+    if (
+      ["POST", "PUT", "PATCH"].includes(String(resolvedMethod).toUpperCase())
+    ) {
       if (resolvedBody !== undefined) {
         config.body = JSON.stringify(resolvedBody);
       }
@@ -75,14 +77,18 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // 使用context中的api方法（如果存在）
     if (context.api) {
-      const apiMethod = String(resolvedMethod).toLowerCase() as keyof typeof context.api;
-      if (typeof context.api[apiMethod] === 'function') {
+      const apiMethod = String(
+        resolvedMethod,
+      ).toLowerCase() as keyof typeof context.api;
+      if (typeof context.api[apiMethod] === "function") {
         const apiFn = context.api[apiMethod] as any;
-        const args = ['GET', 'DELETE'].includes(String(resolvedMethod).toUpperCase())
+        const args = ["GET", "DELETE"].includes(
+          String(resolvedMethod).toUpperCase(),
+        )
           ? [fullUrl]
           : [fullUrl, resolvedBody];
         response = await apiFn(...args);
-      } else if (typeof context.api.request === 'function') {
+      } else if (typeof context.api.request === "function") {
         response = await context.api.request(config);
       }
     } else {
@@ -101,7 +107,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     if (resultTo) {
       if (context.dispatch) {
         context.dispatch({
-          type: 'SET_FIELD',
+          type: "SET_FIELD",
           payload: { field: resultTo, value: response },
         });
       }
@@ -130,7 +136,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       if (context.ui?.message?.error) {
         context.ui.message.error(errorObj.message);
       } else {
-        console.error('API call failed:', errorObj);
+        console.error("API call failed:", errorObj);
       }
     }
 
@@ -156,11 +162,11 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 export const delay: ActionHandler = async (action) => {
   const { ms } = action;
 
-  if (typeof ms !== 'number' || ms < 0) {
-    throw new Error('delay: ms must be a positive number');
+  if (typeof ms !== "number" || ms < 0) {
+    throw new Error("delay: ms must be a positive number");
   }
 
-  await new Promise(resolve => setTimeout(resolve, ms));
+  await new Promise((resolve) => setTimeout(resolve, ms));
 
   return { delayed: ms };
 };
@@ -175,7 +181,11 @@ export const delay: ActionHandler = async (action) => {
  *   onTimeout?: Action[];
  * }
  */
-export const waitCondition: ActionHandler = async (action, context, executor) => {
+export const waitCondition: ActionHandler = async (
+  action,
+  context,
+  executor,
+) => {
   const { condition, interval = 100, timeout = 30000, onTimeout } = action;
 
   const startTime = Date.now();
@@ -200,15 +210,19 @@ export const waitCondition: ActionHandler = async (action, context, executor) =>
     }
 
     // 等待
-    await new Promise(resolve => setTimeout(resolve, resolvedInterval));
+    await new Promise((resolve) => setTimeout(resolve, resolvedInterval));
   }
 };
 
 /**
  * 辅助函数：设置嵌套属性值
  */
-function setNestedValue(obj: Record<string, any>, path: string, value: any): void {
-  const keys = path.split('.');
+function setNestedValue(
+  obj: Record<string, any>,
+  path: string,
+  value: any,
+): void {
+  const keys = path.split(".");
   const lastKey = keys.pop();
 
   if (!lastKey) {
@@ -218,7 +232,7 @@ function setNestedValue(obj: Record<string, any>, path: string, value: any): voi
   let current = obj;
 
   for (const key of keys) {
-    if (current[key] == null || typeof current[key] !== 'object') {
+    if (current[key] == null || typeof current[key] !== "object") {
       current[key] = {};
     }
     current = current[key];

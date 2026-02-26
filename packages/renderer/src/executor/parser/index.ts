@@ -8,7 +8,7 @@ export {
   interpolateTemplate,
   parseAndEvaluate,
   isExpression,
-} from './expressionParser';
+} from "./expressionParser";
 
 export {
   resolveValue,
@@ -18,9 +18,6 @@ export {
   safeGet,
   safeSet,
   deepMerge,
-} from './valueResolver';
+} from "./valueResolver";
 
-export type {
-  ParsedExpression,
-  ExpressionType,
-} from '../../types/dsl';
+export type { ParsedExpression, ExpressionType } from "@lowcode-platform/types";

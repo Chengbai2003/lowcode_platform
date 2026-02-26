@@ -3,8 +3,8 @@
  * dispatch, setState, resetForm
  */
 
-import type { ActionHandler } from '../../types/dsl';
-import { resolveValue, resolveValues } from '../parser';
+import type { ActionHandler } from "@lowcode-platform/types";
+import { resolveValue, resolveValues } from "../parser";
 
 /**
  * Redux Dispatch
@@ -14,10 +14,10 @@ export const dispatch: ActionHandler = async (action, context) => {
   const { action: actionPayload } = action;
   const resolvedAction = resolveValue(actionPayload, context);
 
-  if (context.dispatch && typeof context.dispatch === 'function') {
+  if (context.dispatch && typeof context.dispatch === "function") {
     context.dispatch(resolvedAction);
   } else {
-    console.warn('No dispatch method available in context');
+    console.warn("No dispatch method available in context");
   }
 
   return { action: resolvedAction };
@@ -37,7 +37,7 @@ export const setState: ActionHandler = async (action, context) => {
   // 如果有dispatch，触发相应的action
   if (context.dispatch) {
     context.dispatch({
-      type: 'SET_STATE',
+      type: "SET_STATE",
       payload: resolvedState,
     });
   }
@@ -55,14 +55,14 @@ export const resetForm: ActionHandler = async (action, context) => {
   // 通过dispatch触发表单重置
   if (context.dispatch) {
     context.dispatch({
-      type: 'RESET_FORM',
+      type: "RESET_FORM",
       payload: { form },
     });
   }
 
   // 清除formData中的对应表单数据
-  if (context.formData && typeof context.formData === 'object') {
-    const formKey = typeof form === 'string' ? form : String(form);
+  if (context.formData && typeof context.formData === "object") {
+    const formKey = typeof form === "string" ? form : String(form);
     if (context.formData[formKey]) {
       delete context[formKey];
     }

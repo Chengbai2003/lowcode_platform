@@ -3,7 +3,7 @@
  * 支持解析和执行 {{ }} 语法表达式
  */
 
-import type { ParsedExpression } from '../../types/dsl';
+import type { ParsedExpression } from "@lowcode-platform/types";
 
 /**
  * 表达式正则表达式
@@ -40,7 +40,10 @@ function isTemplateString(str: string): boolean {
   // 如果表达式前后有文本，则是模板字符串
   const firstMatch = matches[0];
   const lastMatch = matches[matches.length - 1];
-  return trimmed.indexOf(firstMatch) > 0 || trimmed.lastIndexOf(lastMatch) < trimmed.length - lastMatch.length;
+  return (
+    trimmed.indexOf(firstMatch) > 0 ||
+    trimmed.lastIndexOf(lastMatch) < trimmed.length - lastMatch.length
+  );
 }
 
 /**
@@ -52,9 +55,9 @@ export function parseExpression(str: string): ParsedExpression {
   // 情况1：字面量（不是表达式）
   if (!isExpressionString(trimmed)) {
     return {
-      type: 'literal',
+      type: "literal",
       raw: str,
-      value: parseLiteral(str),  // 传递原始字符串而不是trim后的
+      value: parseLiteral(str), // 传递原始字符串而不是trim后的
     };
   }
 
@@ -71,7 +74,7 @@ export function parseExpression(str: string): ParsedExpression {
       }
     }
     return {
-      type: 'template',
+      type: "template",
       raw: str,
       variables,
     };
@@ -84,7 +87,7 @@ export function parseExpression(str: string): ParsedExpression {
 
     if (isSimpleVariable(expr)) {
       return {
-        type: 'variable',
+        type: "variable",
         raw: str,
         variables: [expr],
       };
@@ -92,7 +95,7 @@ export function parseExpression(str: string): ParsedExpression {
 
     // 情况4：复杂表达式（如 "{{formData.age > 18}}"）
     return {
-      type: 'complex',
+      type: "complex",
       raw: str,
       expression: expr,
       variables: extractVariables(expr),
@@ -100,7 +103,7 @@ export function parseExpression(str: string): ParsedExpression {
   }
 
   return {
-    type: 'literal',
+    type: "literal",
     raw: str,
     value: str,
   };
@@ -113,8 +116,8 @@ export function parseExpression(str: string): ParsedExpression {
 function extractVariables(expr: string): string[] {
   const variables: string[] = [];
   const patterns = [
-    /([a-zA-Z_$][a-zA-Z0-9_$]*)\.[a-zA-Z_$][a-zA-Z0-9_$]*/g,  // 对象属性访问
-    /([a-zA-Z_$][a-zA-Z0-9_$]*)/g,  // 简单变量名
+    /([a-zA-Z_$][a-zA-Z0-9_$]*)\.[a-zA-Z_$][a-zA-Z0-9_$]*/g, // 对象属性访问
+    /([a-zA-Z_$][a-zA-Z0-9_$]*)/g, // 简单变量名
   ];
 
   for (const pattern of patterns) {
@@ -123,7 +126,16 @@ function extractVariables(expr: string): string[] {
       const varName = match[1];
       // 过滤掉关键字和已存在的变量
       if (
-        !['true', 'false', 'null', 'undefined', 'if', 'else', 'for', 'while'].includes(varName) &&
+        ![
+          "true",
+          "false",
+          "null",
+          "undefined",
+          "if",
+          "else",
+          "for",
+          "while",
+        ].includes(varName) &&
         !variables.includes(varName)
       ) {
         variables.push(varName);
@@ -151,16 +163,18 @@ function parseLiteral(str: string): any {
   }
 
   // 布尔值
-  if (trimmed === 'true') return true;
-  if (trimmed === 'false') return false;
+  if (trimmed === "true") return true;
+  if (trimmed === "false") return false;
 
   // null和undefined
-  if (trimmed === 'null') return null;
-  if (trimmed === 'undefined') return undefined;
+  if (trimmed === "null") return null;
+  if (trimmed === "undefined") return undefined;
 
   // JSON对象/数组
-  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
-    (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+  if (
+    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+  ) {
     try {
       return JSON.parse(trimmed);
     } catch {
@@ -169,8 +183,10 @@ function parseLiteral(str: string): any {
   }
 
   // 字符串（去掉引号）
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-    (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
     return trimmed.slice(1, -1);
   }
 
@@ -180,25 +196,28 @@ function parseLiteral(str: string): any {
 /**
  * 执行表达式
  */
-export function evaluateExpression(expr: ParsedExpression, context: Record<string, any>): any {
+export function evaluateExpression(
+  expr: ParsedExpression,
+  context: Record<string, any>,
+): any {
   switch (expr.type) {
-    case 'literal':
+    case "literal":
       return expr.value;
 
-    case 'variable':
+    case "variable":
       if (expr.variables && expr.variables.length > 0) {
         const varName = expr.variables[0];
         return getNestedValue(context, varName);
       }
       return undefined;
 
-    case 'complex':
+    case "complex":
       if (expr.expression) {
         return executeComplexExpression(expr.expression, context);
       }
       return undefined;
 
-    case 'template':
+    case "template":
       if (expr.raw) {
         return interpolateTemplate(expr.raw, context);
       }
@@ -213,11 +232,11 @@ export function evaluateExpression(expr: ParsedExpression, context: Record<strin
  * 获取嵌套对象的值（如 "formData.user.name"）
  */
 function getNestedValue(obj: any, path: string): any {
-  const keys = path.split('.');
+  const keys = path.split(".");
   let current = obj;
 
   for (const key of keys) {
-    if (current == null || typeof current !== 'object') {
+    if (current == null || typeof current !== "object") {
       return undefined;
     }
     current = current[key];
@@ -261,12 +280,12 @@ function createSandbox(context: Record<string, any>): any {
     },
     get(target, key: string | symbol, receiver) {
       // 阻止访问 constructor (防止通过 ({}).constructor 访问 Function)
-      if (key === 'constructor') {
+      if (key === "constructor") {
         return undefined;
       }
 
       // 阻止访问 __proto__ 等
-      if (key === '__proto__' || key === 'prototype') {
+      if (key === "__proto__" || key === "prototype") {
         return undefined;
       }
 
@@ -276,7 +295,7 @@ function createSandbox(context: Record<string, any>): any {
       }
 
       // 如果 key 是 symbol，允许访问（如 Symbol.iterator）
-      if (typeof key === 'symbol') {
+      if (typeof key === "symbol") {
         // 这里需要小心，某些 symbol 可能会导致问题，但通常是安全的
         // 为了简单起见，且避免 Symbol.unscopables 等问题，我们可以放行
         return Reflect.get(target, key, receiver);
@@ -288,7 +307,7 @@ function createSandbox(context: Record<string, any>): any {
       // 然后 get() 被调用。如果我们返回 undefined，那就相当于变量值为 undefined。
       // 这防止了访问 window, document 等。
       return undefined;
-    }
+    },
   });
 }
 
@@ -299,17 +318,17 @@ function createSandbox(context: Record<string, any>): any {
 function validateSafety(code: string): boolean {
   // 禁止访问构造函数、原型链
   const dangerousKeywords = [
-    'constructor',
-    '__proto__',
-    'prototype',
-    'Function',
-    'eval',
-    'setTimeout',
-    'setInterval',
-    'import',
-    'window',
-    'document',
-    'globalThis',
+    "constructor",
+    "__proto__",
+    "prototype",
+    "Function",
+    "eval",
+    "setTimeout",
+    "setInterval",
+    "import",
+    "window",
+    "document",
+    "globalThis",
   ];
 
   for (const keyword of dangerousKeywords) {
@@ -324,7 +343,10 @@ function validateSafety(code: string): boolean {
 /**
  * 执行复杂表达式（使用 Proxy 沙箱 + with 语句）
  */
-function executeComplexExpression(expr: string, context: Record<string, any>): any {
+function executeComplexExpression(
+  expr: string,
+  context: Record<string, any>,
+): any {
   try {
     // 1. 静态安全检查
     // 这是为了弥补 with(proxy) 无法拦截字面量属性访问的缺陷
@@ -342,7 +364,7 @@ function executeComplexExpression(expr: string, context: Record<string, any>): a
     // 使用 with 语句限制作用域
     // 注意：这里我们仍然使用了 new Function，但是包裹在 with(sandbox) 中
     // 并且 sandbox 的 Proxy 强制拦截了所有查找
-    // 
+    //
     // 实现原理：
     // with(sandbox) { return (expression); }
     // 当 expression 访问 'window' 时：
@@ -356,7 +378,7 @@ function executeComplexExpression(expr: string, context: Record<string, any>): a
 
     // 构建函数体
     // "sandbox" 是参数名
-    const fn = new Function('sandbox', `with(sandbox) { return (${expr}); }`);
+    const fn = new Function("sandbox", `with(sandbox) { return (${expr}); }`);
 
     return fn(sandbox);
   } catch (error) {
@@ -368,7 +390,10 @@ function executeComplexExpression(expr: string, context: Record<string, any>): a
 /**
  * 插值模板字符串
  */
-export function interpolateTemplate(template: string, context: Record<string, any>): string {
+export function interpolateTemplate(
+  template: string,
+  context: Record<string, any>,
+): string {
   // replace all occurrences
   return template.replace(EXPRESSION_REGEX, (match, expr) => {
     const trimmed = expr.trim();
@@ -377,11 +402,11 @@ export function interpolateTemplate(template: string, context: Record<string, an
 
     // 处理undefined和null
     if (value === undefined || value === null) {
-      return '';
+      return "";
     }
 
     // 处理对象和数组
-    if (typeof value === 'object') {
+    if (typeof value === "object") {
       return JSON.stringify(value);
     }
 
@@ -392,9 +417,12 @@ export function interpolateTemplate(template: string, context: Record<string, an
 /**
  * 快捷方法：直接解析并执行表达式
  */
-export function parseAndEvaluate(str: any, context: { [key: string]: any }): any {
+export function parseAndEvaluate(
+  str: any,
+  context: { [key: string]: any },
+): any {
   // 非字符串直接返回
-  if (typeof str !== 'string') {
+  if (typeof str !== "string") {
     return str;
   }
 
@@ -406,12 +434,12 @@ export function parseAndEvaluate(str: any, context: { [key: string]: any }): any
  * 判断是否是表达式
  */
 export function isExpression(value: any): boolean {
-  if (typeof value !== 'string') {
+  if (typeof value !== "string") {
     return false;
   }
   const trimmed = value.trim();
   // 纯表达式格式：{{expression}}
-  if (trimmed.startsWith('{{') && trimmed.endsWith('}}')) {
+  if (trimmed.startsWith("{{") && trimmed.endsWith("}}")) {
     EXPRESSION_REGEX.lastIndex = 0;
     return EXPRESSION_REGEX.test(trimmed);
   }

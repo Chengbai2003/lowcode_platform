@@ -7,7 +7,7 @@ import { flattenSchemaValues } from './utils/schema';
 import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
 import { DSLExecutor } from './executor';
-import type { ActionList, ExecutionContext } from './types/dsl';
+import type { ActionList, ExecutionContext } from '@lowcode-platform/types';
 
 /**
  * 事件派发中心

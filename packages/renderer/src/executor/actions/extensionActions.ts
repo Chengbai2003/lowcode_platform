@@ -3,8 +3,8 @@
  * customScript, customAction
  */
 
-import type { ActionHandler, ExecutionContext } from '../../types/dsl';
-import { validateCodeSafety } from '../validation/astValidator';
+import type { ActionHandler, ExecutionContext } from "@lowcode-platform/types";
+import { validateCodeSafety } from "../validation/astValidator";
 
 /**
  * 自定义脚本Action
@@ -17,7 +17,7 @@ export const customScript: ActionHandler = async (action, context) => {
 
   // 验证代码安全性
   if (!validateCodeSafety(code)) {
-    throw new Error('Code validation failed: Potentially unsafe code detected');
+    throw new Error("Code validation failed: Potentially unsafe code detected");
   }
 
   try {
@@ -43,13 +43,13 @@ export const customAction: ActionHandler = async (action, context) => {
   const { plugin, config } = action;
 
   // 检查插件是否注册
-  if (!context.plugins || typeof context.plugins !== 'object') {
-    throw new Error('Plugin system not available');
+  if (!context.plugins || typeof context.plugins !== "object") {
+    throw new Error("Plugin system not available");
   }
 
   const pluginHandler = (context.plugins as Record<string, any>)[plugin];
 
-  if (!pluginHandler || typeof pluginHandler !== 'function') {
+  if (!pluginHandler || typeof pluginHandler !== "function") {
     throw new Error(`Plugin "${plugin}" not found or not a function`);
   }
 
@@ -70,16 +70,16 @@ export const customAction: ActionHandler = async (action, context) => {
 function createSandboxContext(context: ExecutionContext): Record<string, any> {
   // 安全的白名单属性
   const safeProps = [
-    'data',
-    'formData',
-    'user',
-    'route',
-    'state',
-    'dispatch',
-    'getState',
-    'utils',
-    'navigate',
-    'back',
+    "data",
+    "formData",
+    "user",
+    "route",
+    "state",
+    "dispatch",
+    "getState",
+    "utils",
+    "navigate",
+    "back",
   ];
 
   const sandbox: Record<string, any> = {};
@@ -108,7 +108,7 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
 function executeWithTimeout(
   code: string,
   sandbox: Record<string, any>,
-  timeout: number
+  timeout: number,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
@@ -121,7 +121,9 @@ function executeWithTimeout(
       const values = Object.values(sandbox);
 
       // 创建异步函数
-      const asyncFn = new Function(...keys, `
+      const asyncFn = new Function(
+        ...keys,
+        `
         return (async function() {
           try {
             return await (${code});
@@ -129,7 +131,8 @@ function executeWithTimeout(
             throw error;
           }
         })();
-      `);
+      `,
+      );
 
       // 执行
       asyncFn(...values)

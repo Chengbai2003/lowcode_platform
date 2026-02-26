@@ -269,6 +269,7 @@ AI 集成经历了关键重构，当前采用清晰的**单向调用架构**：
 ### 🎯 优先改进建议
 
 1. **P0 — 安全深水区**：彻底废除 `new Function()`，引入或自研真正的白名单 AST 解析引擎（如基于 JS-Interpreter）。
-2. **P1 — 类型攻坚战**：逐步剔除 `any`，为组件 props 定义精确的 TypeScript 接口，同时引入 Zod 构建严密的运行时校验。
-3. **P2 — 补充自动化流**：目前已建立各包基础测试覆盖，下一步重点是接通 CI（GitHub Actions）实现合并主分支的防劣化校验。
-4. **P2 — 研发基建**：花半天时间引入 ESLint + Prettier + husky + lint-staged，终结代码风格争议。
+2. **P1 — 编译器架构升级（端云分离）**：将 `compiler` 的代码生成动作从纯前端迁移至后端 Node.js 服务端（向 Editor 提供导出接口）。作为“按需出码”的云端服务，彻底解决浏览器运行 `@babel/types` 等构建工具库引发的环境兼容问题（如 `process is not defined`）与前端包体积膨胀问题。
+3. **P1 — 类型攻坚战**：逐步剔除 `any`，为组件 props 定义精确的 TypeScript 接口，同时引入 Zod 构建严密的运行时校验。
+4. **P2 — 补充自动化流**：目前已建立各包基础测试覆盖，下一步重点是接通 CI（GitHub Actions）实现合并主分支的防劣化校验。
+5. **P2 — 研发基建**：花半天时间引入 ESLint + Prettier + husky + lint-staged，终结代码风格争议。

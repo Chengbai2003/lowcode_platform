@@ -1,4 +1,4 @@
-import type { A2UISchema, A2UIComponent } from "@lowcode-platform/renderer";
+import type { A2UISchema, A2UIComponent } from "@lowcode-platform/types";
 import * as babelTypes from "@babel/types";
 import generate from "@babel/generator";
 import { CompileOptions, FieldInfo, toCamelCase } from "./ast/utils";

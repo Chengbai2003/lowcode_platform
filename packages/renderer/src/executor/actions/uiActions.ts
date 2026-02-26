@@ -3,20 +3,21 @@
  * message, modal, confirm, notification
  */
 
-import type { ActionHandler } from '../../types/dsl';
-import { resolveValue } from '../parser';
+import type { ActionHandler } from "@lowcode-platform/types";
+import { resolveValue } from "../parser";
 
 /**
  * 显示消息提示
  * Action: { type: 'message'; content: Value; messageType?: 'success' | 'error' | 'warning' | 'info'; duration?: number; }
  */
 export const message: ActionHandler = async (action, context) => {
-  const { content, messageType = 'info' } = action;
+  const { content, messageType = "info" } = action;
   const resolvedContent = resolveValue(content, context);
 
   if (context.ui?.message) {
-    const messageFn = context.ui.message[messageType as keyof typeof context.ui.message];
-    if (typeof messageFn === 'function') {
+    const messageFn =
+      context.ui.message[messageType as keyof typeof context.ui.message];
+    if (typeof messageFn === "function") {
       messageFn(String(resolvedContent));
     }
   } else {
@@ -40,8 +41,8 @@ export const modal: ActionHandler = async (action, context, executor) => {
     const confirmResult = await context.ui.modal.confirm({
       title: String(resolvedTitle),
       content: String(resolvedContent),
-      okText: '确定',
-      cancelText: showCancel ? '取消' : undefined,
+      okText: "确定",
+      cancelText: showCancel ? "取消" : undefined,
       maskClosable: false,
     });
 
@@ -82,27 +83,37 @@ export const notification: ActionHandler = async (action, context) => {
   const {
     title,
     description,
-    messageType = 'info',
+    messageType = "info",
     duration = 4.5,
-    placement = 'topRight',
+    placement = "topRight",
   } = action;
 
   const resolvedTitle = resolveValue(title, context);
-  const resolvedDescription = description ? resolveValue(description, context) : undefined;
+  const resolvedDescription = description
+    ? resolveValue(description, context)
+    : undefined;
 
   if (context.ui?.notification) {
-    const notifyFn = context.ui.notification[messageType as keyof typeof context.ui.notification];
-    if (typeof notifyFn === 'function') {
+    const notifyFn =
+      context.ui.notification[
+        messageType as keyof typeof context.ui.notification
+      ];
+    if (typeof notifyFn === "function") {
       notifyFn({
         message: String(resolvedTitle),
-        description: resolvedDescription ? String(resolvedDescription) : undefined,
+        description: resolvedDescription
+          ? String(resolvedDescription)
+          : undefined,
         duration,
         placement,
       });
     }
   } else {
     // 降级到console
-    console.log(`[${messageType.toUpperCase()}] ${resolvedTitle}`, resolvedDescription || '');
+    console.log(
+      `[${messageType.toUpperCase()}] ${resolvedTitle}`,
+      resolvedDescription || "",
+    );
   }
 
   return { success: true };

@@ -3,8 +3,8 @@
  * setField, mergeField, clearField
  */
 
-import type { ActionHandler } from '../../types/dsl';
-import { resolveValue, safeSet } from '../parser';
+import type { ActionHandler } from "@lowcode-platform/types";
+import { resolveValue, safeSet } from "../parser";
 
 /**
  * 设置字段值
@@ -17,7 +17,7 @@ export const setField: ActionHandler = async (action, context) => {
   // 如果context中有dispatch，使用Redux更新
   if (context.dispatch) {
     context.dispatch({
-      type: 'SET_FIELD',
+      type: "SET_FIELD",
       payload: { field, value: resolvedValue },
     });
   }
@@ -36,14 +36,14 @@ export const mergeField: ActionHandler = async (action, context) => {
   const { field, value } = action;
   const resolvedValue = resolveValue(value, context);
 
-  if (typeof resolvedValue !== 'object' || resolvedValue === null) {
-    throw new Error('mergeField: value must be an object');
+  if (typeof resolvedValue !== "object" || resolvedValue === null) {
+    throw new Error("mergeField: value must be an object");
   }
 
   // 使用dispatch更新
   if (context.dispatch) {
     context.dispatch({
-      type: 'MERGE_FIELD',
+      type: "MERGE_FIELD",
       payload: { field, value: resolvedValue },
     });
   }
@@ -66,13 +66,13 @@ export const clearField: ActionHandler = async (action, context) => {
   // 使用dispatch更新
   if (context.dispatch) {
     context.dispatch({
-      type: 'CLEAR_FIELD',
+      type: "CLEAR_FIELD",
       payload: { field },
     });
   }
 
   // 从context.data中删除
-  const keys = field.split('.');
+  const keys = field.split(".");
   const lastKey = keys.pop();
   if (lastKey) {
     let current = context.data;
@@ -98,7 +98,7 @@ function safeGet(obj: any, path: string, defaultValue: any = undefined): any {
     return defaultValue;
   }
 
-  const keys = path.split('.');
+  const keys = path.split(".");
   let current = obj;
 
   for (const key of keys) {
@@ -114,13 +114,19 @@ function safeGet(obj: any, path: string, defaultValue: any = undefined): any {
 /**
  * 辅助函数：深度合并对象
  */
-function deepMerge(target: Record<string, any>, source: Record<string, any>): Record<string, any> {
+function deepMerge(
+  target: Record<string, any>,
+  source: Record<string, any>,
+): Record<string, any> {
   const result = { ...target };
 
   for (const key in source) {
     if (source[key] == null) {
       result[key] = source[key];
-    } else if (typeof source[key] === 'object' && typeof result[key] === 'object') {
+    } else if (
+      typeof source[key] === "object" &&
+      typeof result[key] === "object"
+    ) {
       result[key] = deepMerge(result[key], source[key]);
     } else {
       result[key] = source[key];
