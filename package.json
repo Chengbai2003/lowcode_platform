@@ -8,7 +8,7 @@
     "dev:server": "pnpm --filter @lowcode-platform/server dev",
     "build": "pnpm build:packages",
     "build:server": "pnpm --filter @lowcode-platform/server build",
-    "build:packages": "pnpm --filter compiler --filter components --filter renderer --filter editor build",
+    "build:packages": "pnpm --filter @lowcode-platform/types --filter compiler --filter components --filter renderer --filter editor build",
     "clean": "pnpm -r clean",
     "type-check": "pnpm -r type-check",
     "lint": "pnpm -r lint"
