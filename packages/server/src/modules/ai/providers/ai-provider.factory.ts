@@ -1,207 +1,142 @@
 /**
- * AI Provider 工厂
- * 负责创建和管理不同的 AI Provider 实例
+ * AI Provider 工厂 (Vercel AI SDK)
+ * 根据配置动态创建 AI SDK LanguageModel 实例
  */
 
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { IAIProvider, ProviderConfig } from './ai-provider.interface';
-import { OpenAIProvider } from './openai-provider';
-import { AnthropicProvider } from './anthropic-provider';
-import { OllamaProvider } from './ollama-provider';
-
-export type ProviderType =
-  | 'openai'
-  | 'anthropic'
-  | 'ollama'
-  | 'lmstudio'
-  | string;
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import type { LanguageModel } from "ai";
+import { createOpenAI } from "@ai-sdk/openai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { ollama } from "ollama-ai-provider";
+import { ProviderConfig, ProviderType } from "./ai-provider.interface";
+import {
+  ModelConfigService,
+  AIModelConfigEntity,
+} from "../model-config.service";
 
 @Injectable()
 export class AIProviderFactory {
   private readonly logger = new Logger(AIProviderFactory.name);
-  private readonly providers: Map<string, IAIProvider> = new Map();
-  private readonly providerConfigs: Map<string, ProviderConfig> = new Map();
 
-  constructor(private readonly configService: ConfigService) {
-    this.initializeProviders();
-  }
-
-  /**
-   * 初始化所有 Provider
-   */
-  private initializeProviders(): void {
-    this.logger.log('Initializing AI providers...');
-
-    // 默认不注册任何 Provider，完全由用户在前端配置或通过 ai-models.json 管理
-    // 如果需要系统级默认 Provider，可以在这里恢复，但目前根据用户需求清除
-
-    // OpenAI
-    this.registerProvider('openai', OpenAIProvider, {
-      apiKey: this.configService.get<string>('ai.openai.apiKey') || '',
-      baseURL: this.configService.get<string>('ai.openai.baseURL') || 'https://api.openai.com/v1',
-      model: this.configService.get<string>('ai.openai.model') || 'gpt-4o-mini',
-      temperature: this.configService.get<number>('ai.openai.temperature') ?? 0.7,
-      maxTokens: this.configService.get<number>('ai.openai.maxTokens') ?? 4096,
-    });
-
-    // Anthropic
-    this.registerProvider('anthropic', AnthropicProvider, {
-      apiKey: this.configService.get<string>('ai.anthropic.apiKey') || '',
-      baseURL: this.configService.get<string>('ai.anthropic.baseURL') || 'https://api.anthropic.com',
-      model: this.configService.get<string>('ai.anthropic.model') || 'claude-3-sonnet-20240229',
-      temperature: this.configService.get<number>('ai.anthropic.temperature') ?? 0.7,
-      maxTokens: this.configService.get<number>('ai.anthropic.maxTokens') ?? 4096,
-    });
-
-    // Ollama
-    this.registerProvider('ollama', OllamaProvider, {
-      baseURL: this.configService.get<string>('ai.ollama.baseURL') || 'http://localhost:11434',
-      model: this.configService.get<string>('ai.ollama.model') || 'llama3.2',
-      temperature: this.configService.get<number>('ai.ollama.temperature') ?? 0.7,
-      maxTokens: this.configService.get<number>('ai.ollama.maxTokens') ?? 4096,
-    });
-
-    // 注册自定义 Provider
-    this.registerCustomProviders();
-
-    this.logger.log(`Initialized ${this.providers.size} providers`);
-  }
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly modelConfigService: ModelConfigService,
+  ) {}
 
   /**
-   * 注册 Provider
+   * 根据 providerType + config 创建 LanguageModel 实例
    */
-  private registerProvider(
-    name: string,
-    ProviderClass: new () => IAIProvider,
+  createLanguageModel(
+    type: ProviderType,
     config: ProviderConfig,
-  ): void {
-    try {
-      const provider = new ProviderClass();
-      provider.initialize(config);
-
-      this.providers.set(name, provider);
-      this.providerConfigs.set(name, config);
-
-      this.logger.log(
-        `[${name}] Provider registered (${provider.isAvailable ? 'available' : 'unavailable'})`,
-      );
-    } catch (error) {
-      this.logger.error(`[${name}] Failed to register provider:`, error);
-    }
-  }
-
-  /**
-   * 注册自定义 Provider
-   */
-  private registerCustomProviders(): void {
-    const customProviders = this.configService.get<Record<string, ProviderConfig>>('ai.custom', {});
-
-    for (const [name, config] of Object.entries(customProviders)) {
-      // 自定义 Provider 默认使用 OpenAI 兼容的接口
-      this.registerProvider(name, OpenAIProvider, {
-        ...config,
-        // 自定义 Provider 的 name 使用配置中的 name
-        ...{ name },
-      });
-    }
-  }
-
-  /**
-   * 获取 Provider
-   */
-  getProvider(name: string): IAIProvider | undefined {
-    return this.providers.get(name);
-  }
-
-  /**
-   * 获取默认 Provider
-   */
-  getDefaultProvider(): IAIProvider {
-    const defaultName = this.configService.get<string>('ai.defaultProvider', 'openai');
-    const provider = this.providers.get(defaultName);
-
-    if (!provider) {
-      throw new Error(`Default provider '${defaultName}' not found`);
-    }
-
-    if (!provider.isAvailable) {
-      throw new Error(`Default provider '${defaultName}' is not available`);
-    }
-
-    return provider;
-  }
-
-  /**
-   * 获取所有可用的 Provider
-   */
-  getAvailableProviders(): Array<{ name: string; provider: IAIProvider }> {
-    const available: Array<{ name: string; provider: IAIProvider }> = [];
-
-    for (const [name, provider] of this.providers) {
-      if (provider.isAvailable) {
-        available.push({ name, provider });
+  ): LanguageModel {
+    switch (type) {
+      case "anthropic": {
+        const anthropic = createAnthropic({
+          apiKey: config.apiKey,
+          baseURL: config.baseURL || undefined,
+        });
+        return anthropic(config.model);
+      }
+      case "ollama": {
+        return ollama(config.model, {
+          // ollama-ai-provider 使用 simulateStreaming
+        }) as any;
+      }
+      case "openai":
+      default: {
+        // OpenAI 兼容（也支持 DeepSeek、GLM、SiliconFlow 等）
+        const openai = createOpenAI({
+          apiKey: config.apiKey,
+          baseURL: config.baseURL || undefined,
+        });
+        return openai(config.model);
       }
     }
-
-    return available;
   }
 
   /**
-   * 获取所有 Provider 的状态
+   * 根据 modelId 解析出 LanguageModel
+   * 优先查 ModelConfigService（用户自定义），再查环境变量默认配置
+   */
+  resolveModel(
+    modelId?: string,
+    providerName?: string,
+  ): {
+    model: LanguageModel;
+    config: ProviderConfig;
+  } {
+    // 1. 如果有 modelId，先查自定义模型配置
+    if (modelId) {
+      const customModel = this.modelConfigService.getModel(modelId);
+      if (customModel) {
+        return {
+          model: this.createLanguageModel(customModel.provider, customModel),
+          config: customModel,
+        };
+      }
+
+      // modelId 也可能是默认 Provider 名（如 'openai'）
+      const envConfig = this.getEnvProviderConfig(modelId);
+      if (envConfig) {
+        return {
+          model: this.createLanguageModel(modelId, envConfig),
+          config: envConfig,
+        };
+      }
+
+      throw new Error(`Model config '${modelId}' not found`);
+    }
+
+    // 2. 使用 providerName 或默认 Provider
+    const name =
+      providerName ||
+      this.configService.get<string>("ai.defaultProvider", "openai");
+    const envConfig = this.getEnvProviderConfig(name);
+    if (!envConfig) {
+      throw new Error(`Provider '${name}' not configured`);
+    }
+
+    return {
+      model: this.createLanguageModel(name, envConfig),
+      config: envConfig,
+    };
+  }
+
+  /**
+   * 获取环境变量中的 Provider 配置
+   */
+  private getEnvProviderConfig(name: string): ProviderConfig | null {
+    const key = `ai.${name}`;
+    const config = this.configService.get(key);
+    if (!config || !config.model) return null;
+
+    return {
+      apiKey: config.apiKey || "",
+      baseURL: config.baseURL || "",
+      model: config.model,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 4096,
+    };
+  }
+
+  /**
+   * 获取所有可用的 Provider 状态（用于 /providers/status 接口）
    */
   getAllProviderStatus(): Array<{
     name: string;
     available: boolean;
     config: ProviderConfig | undefined;
   }> {
-    const status = [];
-
-    for (const [name, provider] of this.providers) {
-      status.push({
+    const providers = ["openai", "anthropic", "ollama"];
+    return providers.map((name) => {
+      const config = this.getEnvProviderConfig(name);
+      return {
         name,
-        available: provider.isAvailable,
-        config: this.providerConfigs.get(name),
-      });
-    }
-
-    return status;
-  }
-
-  /**
-   * 重新加载 Provider 配置
-   */
-  reloadProviders(): void {
-    this.logger.log('Reloading AI providers...');
-    this.providers.clear();
-    this.providerConfigs.clear();
-    this.initializeProviders();
-  }
-  /**
-   * 创建临时的 Provider 实例
-   * 用于处理自定义模型配置
-   */
-  createProviderInstance(type: string, config: ProviderConfig): IAIProvider {
-    let ProviderClass: new () => IAIProvider;
-
-    switch (type) {
-      case 'openai':
-        ProviderClass = OpenAIProvider;
-        break;
-      case 'anthropic':
-        ProviderClass = AnthropicProvider;
-        break;
-      case 'ollama':
-        ProviderClass = OllamaProvider;
-        break;
-      default:
-        // 尝试查找已注册的自定义 Provider 类型
-        // 如果找不到，默认使用 OpenAIProvider（因为很多兼容 OpenAI 协议）
-        ProviderClass = OpenAIProvider;
-    }
-
-    const provider = new ProviderClass();
-    provider.initialize(config);
-    return provider;
+        available: !!config?.apiKey || name === "ollama", // ollama 不需要 apiKey
+        config: config || undefined,
+      };
+    });
   }
 }

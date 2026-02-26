@@ -9,33 +9,23 @@ import {
   IsNumber,
   IsBoolean,
   IsEnum,
-  ArrayMinSize,
-  ValidateNested,
   Min,
   Max,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { Type } from "class-transformer";
 
 export enum MessageRole {
-  SYSTEM = 'system',
-  USER = 'user',
-  ASSISTANT = 'assistant',
-}
-
-export class ChatMessageDto {
-  @IsEnum(MessageRole)
-  role!: MessageRole;
-
-  @IsString()
-  content!: string;
+  SYSTEM = "system",
+  USER = "user",
+  ASSISTANT = "assistant",
+  DATA = "data",
+  TOOL = "tool",
 }
 
 export class ChatRequestDto {
+  // 不做过深验证，信任前端传入或者在运行时校验
   @IsArray()
-  @ArrayMinSize(1)
-  @ValidateNested({ each: true })
-  @Type(() => ChatMessageDto)
-  messages!: ChatMessageDto[];
+  messages!: any[];
 
   @IsString()
   @IsOptional()
@@ -119,13 +109,4 @@ export class GenerateSchemaDto {
   @Max(2)
   @Type(() => Number)
   temperature?: number;
-}
-
-/**
- * 流式选项 DTO
- */
-export class StreamOptionsDto {
-  @IsBoolean()
-  @IsOptional()
-  includeUsage?: boolean;
 }
