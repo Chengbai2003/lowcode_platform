@@ -9,10 +9,12 @@ import {
   IsNumber,
   IsBoolean,
   IsEnum,
+  ValidateNested,
+  Allow,
   Min,
   Max,
 } from "class-validator";
-import { Type } from "class-transformer";
+import { Type, Exclude, Expose } from "class-transformer";
 
 export enum MessageRole {
   SYSTEM = "system",
@@ -22,10 +24,23 @@ export enum MessageRole {
   TOOL = "tool",
 }
 
+/**
+ * 消息 DTO
+ * 与 AI SDK 的 ModelMessage 格式兼容
+ */
+export class ChatMessageDto {
+  @IsString()
+  role!: string;
+
+  @Allow()
+  content!: any; // string | ContentPart[] — ai-sdk 支持多种格式
+}
+
 export class ChatRequestDto {
-  // 不做过深验证，信任前端传入或者在运行时校验
   @IsArray()
-  messages!: any[];
+  @ValidateNested({ each: true })
+  @Type(() => ChatMessageDto)
+  messages!: ChatMessageDto[];
 
   @IsString()
   @IsOptional()

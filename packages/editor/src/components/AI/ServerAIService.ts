@@ -5,7 +5,7 @@ export class ServerAIService implements AIService {
   name: string = "Server AI Service";
   private readonly baseUrl = "/api/v1/ai";
 
-  constructor() {}
+  constructor() { }
 
   isAvailable(): boolean {
     return true;
@@ -85,29 +85,17 @@ export class ServerAIService implements AIService {
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let buffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-
-          // AI SDK pipeTextStreamToResponse 直接输出纯文本流
-          // 每个 chunk 就是文本片段
-          onMessage(trimmed);
+        // AI SDK pipeTextStreamToResponse 直接输出纯文本流
+        // 每个 chunk 就是文本片段，直接传给 onMessage
+        const text = decoder.decode(value, { stream: true });
+        if (text) {
+          onMessage(text);
         }
-      }
-
-      // 处理 buffer 中剩余内容
-      if (buffer.trim()) {
-        onMessage(buffer.trim());
       }
     } catch (error) {
       console.error("ServerAIService streamResponse error:", error);

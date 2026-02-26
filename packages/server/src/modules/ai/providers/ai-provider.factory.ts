@@ -22,7 +22,7 @@ export class AIProviderFactory {
   constructor(
     private readonly configService: ConfigService,
     private readonly modelConfigService: ModelConfigService,
-  ) {}
+  ) { }
 
   /**
    * 根据 providerType + config 创建 LanguageModel 实例
@@ -51,7 +51,10 @@ export class AIProviderFactory {
           apiKey: config.apiKey,
           baseURL: config.baseURL || undefined,
         });
-        return openai(config.model);
+        // 使用 .chat() 强制走 Chat Completions API（/v1/chat/completions）
+        // 而非 ai-sdk v3+ 默认的 Responses API（/v3/responses）
+        // 第三方 OpenAI 兼容服务（火山引擎、DeepSeek 等）通常只支持前者
+        return openai.chat(config.model);
       }
     }
   }
