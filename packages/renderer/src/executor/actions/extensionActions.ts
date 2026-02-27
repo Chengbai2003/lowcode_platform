@@ -4,7 +4,6 @@
  */
 
 import type { ActionHandler, ExecutionContext } from "@lowcode-platform/types";
-import { validateCodeSafety } from "../validation/astValidator";
 
 /**
  * 自定义脚本Action
@@ -149,6 +148,31 @@ function executeWithTimeout(
       reject(error);
     }
   });
+}
+
+/**
+ * 校验用户原生脚本的安全边界
+ */
+function validateCodeSafety(code: string): boolean {
+  if (!code || typeof code !== "string") return false;
+
+  const blacklist = [
+    /eval\s*\(/i,
+    /setTimeout\s*\(/i,
+    /setInterval\s*\(/i,
+    /new\s+Function/i,
+    /document\./i,
+    /window\./i,
+    /globalThis\./i,
+    /process\./i,
+    /require\s*\(/i,
+    /import\(/i,
+    /__proto__/i,
+    /constructor/i,
+    /prototype/i,
+  ];
+
+  return !blacklist.some((regex) => regex.test(code));
 }
 
 /**
