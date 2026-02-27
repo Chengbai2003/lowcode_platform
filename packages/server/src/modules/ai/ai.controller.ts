@@ -12,8 +12,12 @@ import {
   HttpStatus,
   HttpCode,
   Logger,
+  UseGuards,
+  Param,
+  Delete,
 } from "@nestjs/common";
 import { Response } from "express";
+import { AuthGuard } from "../../common/guards/auth.guard";
 import { AIService } from "./ai.service";
 import { ChatRequestDto, GenerateSchemaDto } from "./dto/chat-request.dto";
 import { SaveModelDto } from "./dto/save-model.dto";
@@ -21,13 +25,14 @@ import { DeleteModelDto } from "./dto/delete-model.dto";
 import { ModelConfigService } from "./model-config.service";
 
 @Controller("ai")
+@UseGuards(AuthGuard)
 export class AIController {
   private readonly logger = new Logger(AIController.name);
 
   constructor(
     private readonly aiService: AIService,
     private readonly modelConfigService: ModelConfigService,
-  ) {}
+  ) { }
 
   // ---- Chat ----
 
@@ -83,7 +88,29 @@ export class AIController {
     result.pipeTextStreamToResponse(response);
   }
 
-  // ---- Provider / Model Management (保留不变) ----
+  // ---- Provider / Model Management (Security Hardened) ----
+
+  /**
+   * 安全地移除响应体中的敏感字段
+   */
+  private sanitizeModel(model: any) {
+    if (!model) return model;
+
+    // 如果是深层对象或者是我们在后端使用的类型需要剥离暴露在前端的 apiKey
+    const safeModel = { ...model };
+    if (safeModel.apiKey !== undefined) {
+      delete safeModel.apiKey;
+    }
+
+    // 如果存在 config 内潜藏的 apiKey
+    if (safeModel.config && safeModel.config.apiKey !== undefined) {
+      const safeConfig = { ...safeModel.config };
+      delete safeConfig.apiKey;
+      safeModel.config = safeConfig;
+    }
+
+    return safeModel;
+  }
 
   /**
    * 获取所有可用的 Provider
@@ -98,14 +125,15 @@ export class AIController {
    */
   @Get("providers/status")
   async getProviderStatus() {
-    return { providers: await this.aiService.getAllProviderStatus() };
+    const statuses = await this.aiService.getAllProviderStatus();
+    return { providers: statuses.map(s => this.sanitizeModel(s)) };
   }
 
   /**
    * 检查特定 Provider 的健康状态
    */
   @Get("providers/:name/health")
-  async checkProviderHealth(@Query("name") name: string) {
+  async checkProviderHealth(@Param("name") name: string) {
     return { provider: (await this.aiService.getProviderHealth(name))[0] };
   }
 
@@ -130,7 +158,7 @@ export class AIController {
         updatedAt: 0,
       }));
 
-    return [...defaultModels, ...customModels];
+    return [...defaultModels, ...customModels].map(m => this.sanitizeModel(m));
   }
 
   /**
@@ -142,15 +170,10 @@ export class AIController {
   }
 
   /**
-   * 删除模型配置
+   * 删除模型配置 (Restful)
    */
-  @Get("models/:id/delete")
-  deleteModelGet(@Query("id") id: string) {
+  @Delete("models/:id")
+  deleteModel(@Param("id") id: string) {
     return this.modelConfigService.deleteModel(id);
-  }
-
-  @Post("models/delete")
-  deleteModelPost(@Body() body: DeleteModelDto) {
-    return this.modelConfigService.deleteModel(body.id);
   }
 }

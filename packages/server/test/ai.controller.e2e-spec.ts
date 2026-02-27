@@ -6,11 +6,15 @@ import { ModelConfigService } from "../src/modules/ai/model-config.service";
 import { AIService } from "../src/modules/ai/ai.service";
 import { ConfigService } from "@nestjs/config";
 
-describe("AIController (e2e) - DTO Validation", () => {
+describe("AIController (e2e) - Security & Routes Validation", () => {
   let app: INestApplication;
   let modelConfigService: ModelConfigService;
+  const TEST_SECRET = 'test-secret';
 
   beforeEach(async () => {
+    // 注入模拟的环境变量用于鉴权拦截器
+    process.env.API_SECRET = TEST_SECRET;
+
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AIController],
       providers: [
@@ -53,9 +57,10 @@ describe("AIController (e2e) - DTO Validation", () => {
   });
 
   describe("POST /api/ai/models", () => {
-    it("should pass with valid full payload", () => {
+    it("should pass with valid full payload when token is provided", () => {
       return request(app.getHttpServer())
         .post("/ai/models")
+        .set('Authorization', `Bearer ${TEST_SECRET}`)
         .send({
           id: "test-model",
           name: "Test Model",
@@ -70,6 +75,7 @@ describe("AIController (e2e) - DTO Validation", () => {
     it("should fail when missing required fields (id, name, provider, model)", () => {
       return request(app.getHttpServer())
         .post("/ai/models")
+        .set('Authorization', `Bearer ${TEST_SECRET}`)
         .send({
           provider: "openai",
           temperature: 0.7,
@@ -89,6 +95,7 @@ describe("AIController (e2e) - DTO Validation", () => {
     it("should fail when temperature is out of range", () => {
       return request(app.getHttpServer())
         .post("/ai/models")
+        .set('Authorization', `Bearer ${TEST_SECRET}`)
         .send({
           id: "test",
           name: "test",
@@ -107,6 +114,7 @@ describe("AIController (e2e) - DTO Validation", () => {
     it("should reject non-whitelisted properties", () => {
       return request(app.getHttpServer())
         .post("/ai/models")
+        .set('Authorization', `Bearer ${TEST_SECRET}`)
         .send({
           id: "test",
           name: "test",
@@ -123,22 +131,26 @@ describe("AIController (e2e) - DTO Validation", () => {
     });
   });
 
-  describe("POST /api/ai/models/delete", () => {
-    it("should pass with valid id payload", () => {
+  describe("DELETE /api/ai/models/:id", () => {
+    it("should fail when no authorization header is provided (Security 401)", () => {
       return request(app.getHttpServer())
-        .post("/ai/models/delete")
-        .send({ id: "model-1" })
-        .expect(201);
+        .delete("/ai/models/model-1")
+        // NO Authorization header
+        .expect(401);
     });
 
-    it("should fail when id is missing", () => {
+    it("should fail when wrong token is provided (Security 401)", () => {
       return request(app.getHttpServer())
-        .post("/ai/models/delete")
-        .send({})
-        .expect(400)
-        .expect((res: request.Response) => {
-          expect(res.body.message).toContain("id should not be empty");
-        });
+        .delete("/ai/models/model-1")
+        .set('Authorization', 'Bearer WRONG_TOKEN')
+        .expect(401);
+    });
+
+    it("should delete the model properly when token is provided (Restful)", () => {
+      return request(app.getHttpServer())
+        .delete("/ai/models/model-1")
+        .set('Authorization', `Bearer ${TEST_SECRET}`)
+        .expect(200); // `@Delete` returns 200 by default in NestJS
     });
   });
 });
