@@ -153,9 +153,15 @@ importers:
 
   packages/renderer:
     dependencies:
+      '@jsep-plugin/new':
+        specifier: ^1.0.4
+        version: 1.0.4(jsep@1.4.0)
       '@lowcode-platform/types':
         specifier: workspace:*
         version: link:../types
+      jsep:
+        specifier: ^1.4.0
+        version: 1.4.0
       react:
         specifier: ^18.2.0
         version: 18.3.1
@@ -815,6 +821,12 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
+
+  '@jsep-plugin/new@1.0.4':
+    resolution: {integrity: sha512-4dDTnQVDV675bMZ7du3nWyiRBvCQHEEYr6bNSIYC5hPmLsEmvGW5oyoDDvz2LdL7kk/4Oip44/+eZnr2BfJz3A==}
+    engines: {node: '>= 10.16.0'}
+    peerDependencies:
+      jsep: ^0.4.0||^1.0.0
 
   '@lukeed/csprng@1.1.0':
     resolution: {integrity: sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA==}
@@ -2493,6 +2505,10 @@ packages:
     peerDependenciesMeta:
       canvas:
         optional: true
+
+  jsep@1.4.0:
+    resolution: {integrity: sha512-B7qPcEVE3NVkmSJbaYxvv4cHkVW7DQsZz13pUMrfS8z8Q/BuShN+gcTXrUlPiGqM2/t/EEaI030bpxMqY8gMlw==}
+    engines: {node: '>= 10.16.0'}
 
   jsesc@3.1.0:
     resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
@@ -4556,6 +4572,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  '@jsep-plugin/new@1.0.4(jsep@1.4.0)':
+    dependencies:
+      jsep: 1.4.0
 
   '@lukeed/csprng@1.1.0': {}
 
@@ -6678,6 +6698,8 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+
+  jsep@1.4.0: {}
 
   jsesc@3.1.0: {}
 

@@ -47,4 +47,57 @@ describe('Expression Parser Security Sandbox', () => {
     const result = parseAndEvaluate('{{ globalThis }}', context);
     expect(result).toBeUndefined();
   });
+
+  // ========== 以下为 Step 1 新增的安全基线测试 ==========
+
+  it('应该阻止访问 process 对象', () => {
+    const result = parseAndEvaluate('{{ process }}', context);
+    expect(result).toBeUndefined();
+  });
+
+  it('应该阻止 require 调用', () => {
+    // 即使在 Node 环境中运行测试，要求也应该是被拦截或报错，而不是成功引入模块
+    const result = parseAndEvaluate("{{ require('fs') }}", context);
+    expect(result).toBeUndefined();
+  });
+
+  it('应该阻止 eval 调用', () => {
+    const result = parseAndEvaluate("{{ eval('1+1') }}", context);
+    expect(result).toBeUndefined();
+  });
+
+  it('应该阻止访问 this', () => {
+    const result = parseAndEvaluate('{{ this }}', context);
+    expect(result).toBeUndefined();
+  });
+
+  it('应该阻止或安全处理立即执行函数 (IIFE)', () => {
+    const result = parseAndEvaluate('{{ (() => { return 1; })() }}', context);
+    expect(result).toBeUndefined();
+  });
+
+  it('应该阻止复杂的原型链逃逸', () => {
+    const result = parseAndEvaluate("{{ ''.constructor.constructor('return this')() }}", context);
+    expect(result).toBeUndefined();
+  });
+
+  // ========== 以下为修复的 0day 安全漏洞基线测试 ==========
+
+  it('应该阻止访问 console 等可能引发副作用的对象', () => {
+    const result = parseAndEvaluate('{{ console.log("leak_info") }}', context);
+    expect(result).toBeUndefined();
+  });
+
+  it('应该阻止访问 Object 和 Array 从而防止原型污染和内存 DoS', () => {
+    const resultObj = parseAndEvaluate('{{ Object.assign(data, { hijacked: true }) }}', context);
+    expect(resultObj).toBeUndefined();
+
+    const resultArr = parseAndEvaluate('{{ Array.from({ length: 1e8 }) }}', context);
+    expect(resultArr).toBeUndefined();
+  });
+
+  it('应该阻止通过 new 构建高危类如 RegExp 防止 ReDoS', () => {
+    const result = parseAndEvaluate('{{ new RegExp("(a+)+") }}', context);
+    expect(result).toBeUndefined();
+  });
 });
