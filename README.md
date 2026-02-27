@@ -45,13 +45,13 @@ pnpm clean
 
 ## 包说明
 
-| 包名 | 说明 |
-|------|------|
-| `@lowcode-platform/renderer` | 运行时渲染引擎，内置完整的 DSL 解析器和安全沙箱 |
-| `@lowcode-platform/components` | 组件库，包含 Ant Design 5 组件封装和自定义组件 |
-| `@lowcode-platform/compiler` | 代码生成器，将扁平 Schema 编译为安全的 React 源代码 (AST 驱动) |
-| `@lowcode-platform/editor` | 平台前端，包含 Monaco Editor、实时预览与 AI 助手调用 |
-| `@lowcode-platform/server` | 平台后端，基于 NestJS 构建的统一大模型接入网关 |
+| 包名                           | 说明                                                           |
+| ------------------------------ | -------------------------------------------------------------- |
+| `@lowcode-platform/renderer`   | 运行时渲染引擎，内置完整的 DSL 解析器和安全沙箱                |
+| `@lowcode-platform/components` | 组件库，包含 Ant Design 5 组件封装和自定义组件                 |
+| `@lowcode-platform/compiler`   | 代码生成器，将扁平 Schema 编译为安全的 React 源代码 (AST 驱动) |
+| `@lowcode-platform/editor`     | 平台前端，包含 Monaco Editor、实时预览与 AI 助手调用           |
+| `@lowcode-platform/server`     | 平台后端，基于 NestJS 构建的统一大模型接入网关                 |
 
 ## JSON Schema 格式 (A2UI Flat Schema)
 
@@ -85,12 +85,14 @@ pnpm clean
 ## 可用组件
 
 ### 布局组件
+
 - `Container` - 容器组件，带默认样式
 - `Div` - 通用 div
 - `Space` - 间距组件
 - `Divider` - 分割线
 
 ### 表单组件
+
 - `Form` - 表单
 - `FormItem` - 表单项（带 label）
 - `Input` - 输入框
@@ -102,6 +104,7 @@ pnpm clean
 - `Slider` - 滑块
 
 ### 数据展示
+
 - `Table` - 表格
 - `Card` - 卡片
 - `List` - 列表
@@ -111,6 +114,7 @@ pnpm clean
 - `Title` - 标题
 
 ### 反馈组件
+
 - `Modal` - 模态框
 - `Alert` - 警告提示
 - `Progress` - 进度条
@@ -134,21 +138,20 @@ pnpm clean
 3. 重新构建：`pnpm build`
 
 示例：
+
 ```tsx
 // packages/components/src/components/MyComponent.tsx
-import React from 'react';
+import React from "react";
 
 export interface MyComponentProps {
   title?: string;
 }
 
-export const MyComponent: React.FC<MyComponentProps> = ({ title = '默认标题' }) => {
+export const MyComponent: React.FC<MyComponentProps> = ({
+  title = "默认标题",
+}) => {
   return <div className="my-component">{title}</div>;
 };
 
 export default MyComponent;
 ```
-
-## License
-
-MIT

@@ -4,20 +4,20 @@
  */
 
 import type { ParsedExpression } from "@lowcode-platform/types";
+import { safeEvaluate, SAFE_GLOBALS } from './safeEvaluator';
 
 /**
  * 表达式正则表达式
  * 匹配 {{ expression }} 格式
+ * 更改为工厂函数防止被意外污染 lastIndex 状态导致漏匹配
  */
-const EXPRESSION_REGEX = /\{\{([^{}]+)\}\}/g;
+const getExpressionRegex = () => /\{\{([\s\S]+?)\}\}/g;
 
 /**
  * 判断是否是表达式字符串
  */
 function isExpressionString(str: string): boolean {
-  // 重置正则匹配状态
-  EXPRESSION_REGEX.lastIndex = 0;
-  return EXPRESSION_REGEX.test(str);
+  return getExpressionRegex().test(str);
 }
 
 /**
@@ -31,7 +31,7 @@ function isSimpleVariable(str: string): boolean {
  * 判断是否是模板字符串（包含表达式和文本混合）
  */
 function isTemplateString(str: string): boolean {
-  const matches = str.match(EXPRESSION_REGEX);
+  const matches = str.match(getExpressionRegex());
   if (!matches) return false;
   // 如果有多个表达式，则是模板字符串
   if (matches.length > 1) return true;
@@ -65,8 +65,8 @@ export function parseExpression(str: string): ParsedExpression {
   if (isTemplateString(trimmed)) {
     const variables: string[] = [];
     let match;
-    EXPRESSION_REGEX.lastIndex = 0; // Reset before exec loop
-    while ((match = EXPRESSION_REGEX.exec(trimmed)) !== null) {
+    const regex = getExpressionRegex();
+    while ((match = regex.exec(trimmed)) !== null) {
       const expr = match[1].trim();
       // 提取变量名（简化处理，实际应该用AST）
       if (isSimpleVariable(expr)) {
@@ -81,7 +81,7 @@ export function parseExpression(str: string): ParsedExpression {
   }
 
   // 情况3：变量引用（如 "{{name}}"）
-  const exprMatch = trimmed.match(/^\{\{([^{}]+)\}\}$/);
+  const exprMatch = trimmed.match(/^\{\{([\s\S]+?)\}\}$/);
   if (exprMatch) {
     const expr = exprMatch[1].trim();
 
@@ -120,24 +120,20 @@ function extractVariables(expr: string): string[] {
     /([a-zA-Z_$][a-zA-Z0-9_$]*)/g, // 简单变量名
   ];
 
+  const BLACKLIST = [
+    "true", "false", "null", "undefined",
+    "if", "else", "for", "while", "return", "switch", "case", "default",
+    "typeof", "new", "this", "class", "extends", "let", "const", "var",
+    "function", "import", "export", "void", "delete", "in", "instanceof",
+    ...Object.keys(SAFE_GLOBALS)
+  ];
+
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(expr)) !== null) {
       const varName = match[1];
       // 过滤掉关键字和已存在的变量
-      if (
-        ![
-          "true",
-          "false",
-          "null",
-          "undefined",
-          "if",
-          "else",
-          "for",
-          "while",
-        ].includes(varName) &&
-        !variables.includes(varName)
-      ) {
+      if (!BLACKLIST.includes(varName) && !variables.includes(varName)) {
         variables.push(varName);
       }
     }
@@ -245,144 +241,20 @@ function getNestedValue(obj: any, path: string): any {
   return current;
 }
 
-/**
- * 创建沙箱环境
- */
-function createSandbox(context: Record<string, any>): any {
-  // 安全的全局对象白名单
-  const safeGlobals: Record<string, any> = {
-    Math,
-    JSON,
-    Date,
-    Array,
-    Object,
-    String,
-    Number,
-    Boolean,
-    RegExp,
-    parseInt,
-    parseFloat,
-    isNaN,
-    isFinite,
-    console, // 允许console用于调试
-  };
-
-  // 合并上下文和安全全局对象
-  const sandboxContext = { ...safeGlobals, ...context };
-
-  // 使用Proxy拦截属性访问
-  return new Proxy(sandboxContext, {
-    has(target, key: string | symbol) {
-      // 拦截所有属性访问，强制在沙箱内查找
-      // 返回true意味着"这个属性在target中存在"（即使实际上不存在）
-      // 这会迫使 `with` 语句在 target 中查找该属性，而不是向上查找全局作用域
-      return true;
-    },
-    get(target, key: string | symbol, receiver) {
-      // 阻止访问 constructor (防止通过 ({}).constructor 访问 Function)
-      if (key === "constructor") {
-        return undefined;
-      }
-
-      // 阻止访问 __proto__ 等
-      if (key === "__proto__" || key === "prototype") {
-        return undefined;
-      }
-
-      // 优先从上下文中获取
-      if (key in target) {
-        return Reflect.get(target, key, receiver);
-      }
-
-      // 如果 key 是 symbol，允许访问（如 Symbol.iterator）
-      if (typeof key === "symbol") {
-        // 这里需要小心，某些 symbol 可能会导致问题，但通常是安全的
-        // 为了简单起见，且避免 Symbol.unscopables 等问题，我们可以放行
-        return Reflect.get(target, key, receiver);
-      }
-
-      // 剩下的就是未定义的变量。
-      // 在沙箱中，访问未定义的变量应该返回 undefined 或者报错，而不是回退到全局对象
-      // 因为 has() 返回 true，所以 JS 引擎会认为变量在 scope 中。
-      // 然后 get() 被调用。如果我们返回 undefined，那就相当于变量值为 undefined。
-      // 这防止了访问 window, document 等。
-      return undefined;
-    },
-  });
-}
 
 /**
- * 校验表达式安全性
- * 静态分析代码，拦截潜在的危险操作
- */
-function validateSafety(code: string): boolean {
-  // 禁止访问构造函数、原型链
-  const dangerousKeywords = [
-    "constructor",
-    "__proto__",
-    "prototype",
-    "Function",
-    "eval",
-    "setTimeout",
-    "setInterval",
-    "import",
-    "window",
-    "document",
-    "globalThis",
-  ];
-
-  for (const keyword of dangerousKeywords) {
-    if (code.includes(keyword)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * 执行复杂表达式（使用 Proxy 沙箱 + with 语句）
+ * 执行复杂表达式（新版：使用 jsep AST + 白名单沙箱求值）
  */
 function executeComplexExpression(
   expr: string,
   context: Record<string, any>,
 ): any {
   try {
-    // 1. 静态安全检查
-    // 这是为了弥补 with(proxy) 无法拦截字面量属性访问的缺陷
-    // 例如：{{ [].constructor }}
-    if (!validateSafety(expr)) {
-      // console.warn('Expression blocked by safety check:', expr);
-      return undefined;
-    }
-
-    // 创建沙箱
-    const sandbox = createSandbox(context);
-
-    // ... (rest of the function)
-
-    // 使用 with 语句限制作用域
-    // 注意：这里我们仍然使用了 new Function，但是包裹在 with(sandbox) 中
-    // 并且 sandbox 的 Proxy 强制拦截了所有查找
-    //
-    // 实现原理：
-    // with(sandbox) { return (expression); }
-    // 当 expression 访问 'window' 时：
-    // 1. with 检查 'window' in sandbox -> Proxy.has('window') -> true
-    // 2. 读取 sandbox.window -> Proxy.get('window') -> undefined
-    //
-    // 从而屏蔽了全局对象
-
-    // 移除潜在的特定危险关键字（可选，作为深度防御）
-    // 但主要依赖 Proxy
-
-    // 构建函数体
-    // "sandbox" 是参数名
-    const fn = new Function("sandbox", `with(sandbox) { return (${expr}); }`);
-
-    return fn(sandbox);
+    return safeEvaluate(expr, context);
   } catch (error) {
-    // console.warn(`Failed to evaluate expression: ${expr}`, error);
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`[SafeEvaluator] Failed: ${expr}`, error);
+    }
     return undefined;
   }
 }
@@ -395,7 +267,7 @@ export function interpolateTemplate(
   context: Record<string, any>,
 ): string {
   // replace all occurrences
-  return template.replace(EXPRESSION_REGEX, (match, expr) => {
+  return template.replace(getExpressionRegex(), (_match, expr) => {
     const trimmed = expr.trim();
     const parsed = parseExpression(`{{${trimmed}}}`);
     const value = evaluateExpression(parsed, context);
@@ -440,10 +312,8 @@ export function isExpression(value: any): boolean {
   const trimmed = value.trim();
   // 纯表达式格式：{{expression}}
   if (trimmed.startsWith("{{") && trimmed.endsWith("}}")) {
-    EXPRESSION_REGEX.lastIndex = 0;
-    return EXPRESSION_REGEX.test(trimmed);
+    return getExpressionRegex().test(trimmed);
   }
   // 包含表达式的模板字符串：text {{expression}} more text
-  EXPRESSION_REGEX.lastIndex = 0;
-  return EXPRESSION_REGEX.test(trimmed);
+  return getExpressionRegex().test(trimmed);
 }

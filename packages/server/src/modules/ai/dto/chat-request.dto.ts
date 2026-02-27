@@ -9,30 +9,35 @@ import {
   IsNumber,
   IsBoolean,
   IsEnum,
-  ArrayMinSize,
   ValidateNested,
+  Allow,
   Min,
   Max,
-} from 'class-validator';
-import { Type } from 'class-transformer';
+} from "class-validator";
+import { Type, Exclude, Expose } from "class-transformer";
 
 export enum MessageRole {
-  SYSTEM = 'system',
-  USER = 'user',
-  ASSISTANT = 'assistant',
+  SYSTEM = "system",
+  USER = "user",
+  ASSISTANT = "assistant",
+  DATA = "data",
+  TOOL = "tool",
 }
 
+/**
+ * 消息 DTO
+ * 与 AI SDK 的 ModelMessage 格式兼容
+ */
 export class ChatMessageDto {
-  @IsEnum(MessageRole)
-  role!: MessageRole;
-
   @IsString()
-  content!: string;
+  role!: string;
+
+  @Allow()
+  content!: any; // string | ContentPart[] — ai-sdk 支持多种格式
 }
 
 export class ChatRequestDto {
   @IsArray()
-  @ArrayMinSize(1)
   @ValidateNested({ each: true })
   @Type(() => ChatMessageDto)
   messages!: ChatMessageDto[];
@@ -119,13 +124,4 @@ export class GenerateSchemaDto {
   @Max(2)
   @Type(() => Number)
   temperature?: number;
-}
-
-/**
- * 流式选项 DTO
- */
-export class StreamOptionsDto {
-  @IsBoolean()
-  @IsOptional()
-  includeUsage?: boolean;
 }

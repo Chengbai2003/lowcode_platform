@@ -162,6 +162,59 @@ describe('evaluateExpression', () => {
     const expr = parseExpression('{{nonexistent}}');
     expect(evaluateExpression(expr, context)).toBeUndefined();
   });
+
+  // ========== 以下为 Step 1 新增的回归基线测试 ==========
+
+  it('应该计算三元表达式', () => {
+    const expr = parseExpression("{{ age > 18 ? 'Adult' : 'Minor' }}");
+    expect(evaluateExpression(expr, context)).toBe('Adult');
+  });
+
+  it('应该解析深层嵌套属性访问链', () => {
+    const expr = parseExpression('{{ data.user.profile.avatar }}');
+    expect(evaluateExpression(expr, context)).toBe('avatar.jpg');
+  });
+
+  it('应该计算算术组合', () => {
+    const expr = parseExpression('{{ (a + b) * 2 }}');
+    expect(evaluateExpression(expr, context)).toBe(16);
+  });
+
+  it('应该计算逻辑组合', () => {
+    const expr = parseExpression('{{ a > 3 && b < 10 }}');
+    expect(evaluateExpression(expr, context)).toBe(true);
+  });
+
+  it('应该处理字符串严格相等比较', () => {
+    const expr = parseExpression("{{ name === 'John' }}");
+    expect(evaluateExpression(expr, context)).toBe(true);
+  });
+
+  it('应该支持取反运算 (!)', () => {
+    // 假设 context 里加上 disabled: false
+    const expr = parseExpression('{{ !disabled }}');
+    const localContext = { ...context, disabled: false };
+    expect(evaluateExpression(expr, localContext)).toBe(true);
+  });
+
+  it('应该支持数组索引访问', () => {
+    const expr = parseExpression('{{ items[0] }}');
+    const localContext = { ...context, items: [10, 20, 30] };
+    expect(evaluateExpression(expr, localContext)).toBe(10);
+  });
+
+  it('应该支持白名单内的方法调用', () => {
+    const expr1 = parseExpression('{{ Math.max(a, b) }}');
+    expect(evaluateExpression(expr1, context)).toBe(5);
+
+    const expr2 = parseExpression('{{ JSON.stringify(data) }}');
+    expect(evaluateExpression(expr2, context)).toBe('{"user":{"profile":{"avatar":"avatar.jpg"}}}');
+  });
+
+  it('应该安全返回 undefined 如果属性链断裂', () => {
+    const expr = parseExpression('{{ data.nonexistent.avatar }}');
+    expect(evaluateExpression(expr, context)).toBeUndefined();
+  });
 });
 
 describe('interpolateTemplate', () => {
@@ -184,6 +237,11 @@ describe('interpolateTemplate', () => {
   it('应该处理表达式和文本混合', () => {
     const result = interpolateTemplate('Hello {{name}}, welcome to {{city}}!', context);
     expect(result).toBe('Hello John, welcome to Beijing!');
+  });
+
+  it('应该处理模板字符串插值中包含复杂表达式', () => {
+    const result = interpolateTemplate('Hello {{ age + 10 }} years later', context);
+    expect(result).toBe('Hello 40 years later');
   });
 
   it('应该处理表达式为undefined或null的情况', () => {
@@ -289,5 +347,30 @@ describe('边界情况', () => {
     const result = parseExpression('-123');
     expect(result.type).toBe('literal');
     expect(result.value).toBe(-123);
+  });
+});
+
+describe('新引擎增强能力', () => {
+  const context = {
+    name: 'John',
+    age: 30,
+    a: 5,
+    b: 3,
+    items: [10, 20, 30],
+  };
+
+  it('应该正常求值 typeof 运算', () => {
+    const expr = parseExpression('{{ typeof name }}');
+    expect(evaluateExpression(expr, context)).toBe('string');
+  });
+
+  it('应该支持多层嵌套三元表达式', () => {
+    const expr = parseExpression("{{ a > 3 ? (b > 5 ? 'big' : 'mid') : 'small' }}");
+    expect(evaluateExpression(expr, context)).toBe('mid');
+  });
+
+  it('应该支持包含 new 关键字的实例化调用', () => {
+    const expr = parseExpression('{{ new Date("2020-01-01").getFullYear() }}');
+    expect(evaluateExpression(expr, context)).toBe(2020);
   });
 });
