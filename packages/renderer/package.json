@@ -18,7 +18,7 @@
     "dev": "vite",
     "build": "vite build",
     "type-check": "tsc --noEmit",
-    "clean": "rm -rf dist",
+    "clean": "rimraf dist",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest --coverage",
@@ -28,8 +28,8 @@
     "@jsep-plugin/new": "^1.0.4",
     "@lowcode-platform/types": "workspace:*",
     "jsep": "^1.4.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
