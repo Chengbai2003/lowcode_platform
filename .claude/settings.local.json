@@ -25,7 +25,8 @@
       "Bash(node:*)",
       "Bash(pnpm install:*)",
       "Bash(pnpm prisma:generate:*)",
-      "Bash(pnpm start:dev)"
+      "Bash(pnpm start:dev)",
+      "Bash(git add:*)"
     ]
   }
 }
