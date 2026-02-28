@@ -10,8 +10,8 @@ export class AIModelManager {
   private readonly baseUrl = '/api/v1/ai'; // 假设后端 API 前缀
 
   constructor() {
-    // 初始加载配置
-    this.loadConfigs();
+    // 不在构造函数中加载，避免模块求值时立即发请求（此时 token 可能尚未就绪）
+    // 由业务组件按需调用 loadConfigs()
   }
 
   // 获取当前激活的服务

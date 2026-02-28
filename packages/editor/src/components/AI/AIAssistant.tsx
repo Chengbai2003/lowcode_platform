@@ -46,6 +46,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   const [currentModel, setCurrentModel] = useState<string>('mock');
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const currentModelRef = useRef(currentModel);
+
+  // 同步 ref 值
+  useEffect(() => {
+    currentModelRef.current = currentModel;
+  }, [currentModel]);
 
   // 加载模型列表
   const loadModels = useCallback(async () => {
@@ -54,7 +60,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       setModels(allModels);
 
       // 设置当前选中模型
-      if (currentModel === 'mock') { // 仅当当前未选择有效模型时才自动选择
+      const currentModelValue = currentModelRef.current; // 使用 ref 获取最新值
+      if (currentModelValue === 'mock') { // 仅当当前未选择有效模型时才自动选择
         const defaultModel = allModels.find(m => m.isDefault && m.isAvailable) || allModels.find(m => m.isAvailable);
         if (defaultModel) {
           setCurrentModel(defaultModel.id);
@@ -62,9 +69,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       }
     } catch (error) {
       console.error('Failed to load models:', error);
-      message.error('加载模型列表失败');
     }
-  }, [currentModel]);
+  }, []);
+
 
   // 滚动到最新消息
   const scrollToBottom = useCallback(() => {
@@ -75,7 +82,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // 初始化
+  // 初始化（AIAssistant 是条件渲染的，仅 AI tab 激活时才挂载）
   useEffect(() => {
     loadModels();
     setMessages([
@@ -88,8 +95,25 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     ]);
   }, [loadModels]);
 
+  // 第一次展开Popover或者发送消息时才加载模型列表
+  const handleLoadModelsWhenNeeded = async () => {
+    if (models.length === 0) {
+      await loadModels();
+    }
+  }
+
   const handleSendMessage = useCallback(async () => {
     if (!inputValue.trim() || loading) return;
+
+    // 确保 models 已加载
+    if (models.length === 0) {
+      try {
+        await loadModels();
+      } catch (error) {
+        message.error('加载模型列表失败，请重试');
+        return;
+      }
+    }
 
     const userMessage: AIMessage = {
       id: Date.now().toString(),
@@ -354,6 +378,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                 trigger="click"
                 placement="topLeft"
                 arrow={false}
+                onOpenChange={(open) => {
+                  if (open) handleLoadModelsWhenNeeded();
+                }}
               >
                 <Button
                   type="text"

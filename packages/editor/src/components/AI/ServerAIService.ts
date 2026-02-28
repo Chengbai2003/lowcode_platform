@@ -1,5 +1,6 @@
 import { AIRequest, AIResponse, AIService } from "./types";
 import type { A2UISchema } from "@lowcode-platform/types";
+import { fetchApp } from "../../lib/httpClient";
 
 export class ServerAIService implements AIService {
   name: string = "Server AI Service";
@@ -13,26 +14,16 @@ export class ServerAIService implements AIService {
 
   async generateResponse(request: AIRequest): Promise<AIResponse> {
     try {
-      const response = await fetch(`${this.baseUrl}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            ...(request.context?.conversationHistory || []),
-            { role: "user", content: request.prompt },
-          ],
-          modelId: request.modelId,
-          temperature: request.options?.temperature,
-          maxTokens: request.options?.maxTokens,
-        }),
+      const data = await fetchApp.post(`${this.baseUrl}/chat`, {
+        messages: [
+          ...(request.context?.conversationHistory || []),
+          { role: "user", content: request.prompt },
+        ],
+        modelId: request.modelId,
+        temperature: request.options?.temperature,
+        maxTokens: request.options?.maxTokens,
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "AI service request failed");
-      }
-
-      const data = await response.json();
       const content = data.content || "";
 
       let schema: A2UISchema | undefined;
@@ -60,26 +51,15 @@ export class ServerAIService implements AIService {
     onError?: (error: any) => void,
   ): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/chat/stream`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: [
-            ...(request.context?.conversationHistory || []),
-            { role: "user", content: request.prompt },
-          ],
-          modelId: request.modelId,
-          temperature: request.options?.temperature,
-          maxTokens: request.options?.maxTokens,
-        }),
+      const response = await fetchApp.streamRequest(`${this.baseUrl}/chat/stream`, {
+        messages: [
+          ...(request.context?.conversationHistory || []),
+          { role: "user", content: request.prompt },
+        ],
+        modelId: request.modelId,
+        temperature: request.options?.temperature,
+        maxTokens: request.options?.maxTokens,
       });
-
-      if (!response.ok) {
-        const error = await response
-          .json()
-          .catch(() => ({ message: "Stream request failed" }));
-        throw new Error(error.message || "Stream request failed");
-      }
 
       if (!response.body) throw new Error("Response body is null");
 

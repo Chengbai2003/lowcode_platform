@@ -94,18 +94,22 @@ export class AIController {
    * 安全地移除响应体中的敏感字段
    */
   private sanitizeModel(model: any) {
-    if (!model) return model;
+    if (!model) return undefined;
 
     // 如果是深层对象或者是我们在后端使用的类型需要剥离暴露在前端的 apiKey
     const safeModel = { ...model };
-    if (safeModel.apiKey !== undefined) {
+
+    // 移除顶层 apiKey
+    if ('apiKey' in safeModel) {
       delete safeModel.apiKey;
     }
 
-    // 如果存在 config 内潜藏的 apiKey
-    if (safeModel.config && safeModel.config.apiKey !== undefined) {
+    // 如果存在 config 对象，深拷贝并移除 apiKey
+    if (safeModel.config && typeof safeModel.config === 'object') {
       const safeConfig = { ...safeModel.config };
-      delete safeConfig.apiKey;
+      if ('apiKey' in safeConfig) {
+        delete safeConfig.apiKey;
+      }
       safeModel.config = safeConfig;
     }
 
