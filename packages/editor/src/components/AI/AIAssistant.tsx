@@ -56,6 +56,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   // 加载模型列表
   const loadModels = useCallback(async () => {
     try {
+      console.log('loadModels===', aiApi)
       const allModels = await aiApi.getModels();
       setModels(allModels);
 

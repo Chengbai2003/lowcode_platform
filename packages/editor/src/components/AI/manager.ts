@@ -1,6 +1,7 @@
 import type { AIModelConfig, AIService } from './types';
 import { ServerAIService } from './ServerAIService';
 import { MockAIService } from './mockService';
+import { fetchApp } from '../../lib/httpClient';
 
 // AI模型管理器
 export class AIModelManager {
@@ -42,15 +43,7 @@ export class AIModelManager {
 
     try {
       // 保存到后端
-      const response = await fetch(`${this.baseUrl}/models`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newConfig)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save model to server');
-      }
+      await fetchApp.post(`${this.baseUrl}/models`, newConfig);
 
       this.configs.set(id, newConfig);
       // Removed registerService call
@@ -70,15 +63,7 @@ export class AIModelManager {
 
       try {
         // 保存到后端
-        const response = await fetch(`${this.baseUrl}/models`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(updated)
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to update model on server');
-        }
+        await fetchApp.post(`${this.baseUrl}/models`, updated);
 
         this.configs.set(modelId, updated);
       } catch (e) {
@@ -93,16 +78,7 @@ export class AIModelManager {
     if (modelId === 'mock') return false;
 
     try {
-      const response = await fetch(`${this.baseUrl}/models/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: modelId })
-      });
-
-      if (!response.ok) { // 即使后端删除失败，前端也尝试清理? 暂时严格处理
-        console.error('Failed to delete model on server');
-        return false;
-      }
+      await fetchApp.post(`${this.baseUrl}/models/delete`, { id: modelId });
 
       this.configs.delete(modelId);
       return true;
@@ -131,46 +107,44 @@ export class AIModelManager {
   // 从服务端加载配置
   async loadConfigs(): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/models`);
-      if (response.ok) {
-        const models = await response.json();
-        if (Array.isArray(models)) {
-          // 清除除了 mock 之外的现有配置
-          this.configs.clear();
+      console.log('loadConfigs===', fetchApp);
+      const models = await fetchApp.get<any[]>(`${this.baseUrl}/models`);
+      if (Array.isArray(models)) {
+        // 清除除了 mock 之外的现有配置
+        this.configs.clear();
 
-          // 重新添加 mock
-          // 实际上服务端可能不返回 mock，我们需要手动保留
-          // 或者统一由服务端管理 mock（如果服务端有 mock provider）
+        // 重新添加 mock
+        // 实际上服务端可能不返回 mock，我们需要手动保留
+        // 或者统一由服务端管理 mock（如果服务端有 mock provider）
 
-          // 暂时策略：保留 mock，合并服务端数据
+        // 暂时策略：保留 mock，合并服务端数据
 
-          // 预定义的本地 Mock
-          const mockConfig: AIModelConfig = {
-            id: 'mock',
-            name: 'Mock AI (本地兜底)',
-            provider: 'mock',
-            model: 'mock',
-            isDefault: models.length === 0, // 如果没有其他模型，Mock 为默认
-            isAvailable: true,
-          }
-          this.configs.set('mock', mockConfig);
-
-          models.forEach((model: any) => {
-            // 转换服务端字段到前端字段 (如果字段名一致则直接使用)
-            const config: AIModelConfig = {
-              id: model.id,
-              name: model.name,
-              provider: model.provider,
-              model: model.model, // 对应后端的 model 字段
-              baseURL: model.baseURL,
-              apiKey: model.apiKey, // 注意：通常不应该返回 apiKey 给前端，但这里是用户配置的，可能需要回显? 
-              // 安全起见，服务端可能脱敏，前端只需要知道有 key
-              isDefault: model.isDefault,
-              isAvailable: true, // 假设服务端返回的都可用
-            };
-            this.configs.set(config.id, config);
-          });
+        // 预定义的本地 Mock
+        const mockConfig: AIModelConfig = {
+          id: 'mock',
+          name: 'Mock AI (本地兜底)',
+          provider: 'mock',
+          model: 'mock',
+          isDefault: models.length === 0, // 如果没有其他模型，Mock 为默认
+          isAvailable: true,
         }
+        this.configs.set('mock', mockConfig);
+
+        models.forEach((model: any) => {
+          // // 转换服务端字段到前端字段 (如果字段名一致则直接使用)
+          const config: AIModelConfig = {
+            id: model.id,
+            name: model.name,
+            provider: model.provider,
+            model: model.model, // 对应后端的 model 字段
+            baseURL: model.baseURL,
+            apiKey: model.apiKey, // 注意：通常不应该返回 apiKey 给前端，但这里是用户配置的，可能可能需要回显?
+            // 安全起见，服务端可能脱敏，前端只需要知道有 key
+            isDefault: model.isDefault,
+            isAvailable: true, // 假设服务端返回的都可用
+          };
+          this.configs.set(config.id, config);
+        });
       }
     } catch (error) {
       console.error('Failed to load AI model configs from server:', error);

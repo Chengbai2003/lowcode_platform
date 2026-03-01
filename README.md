@@ -129,6 +129,94 @@ pnpm clean
 - **Vite** - 构建工具
 - **Monaco Editor** - 代码编辑器
 
+## 🔐 认证配置
+
+本项目使用简单的 **Bearer Token** 认证机制，用于前端与后端之间的身份验证。
+
+### 快速开始
+
+**默认配置**（开箱即用）：
+```
+后端 API_SECRET: dev-secret-token-change-in-production
+前端 VITE_API_SECRET: dev-secret-token-change-in-production
+```
+
+无需任何配置即可开始使用。
+
+---
+
+### 配置说明
+
+#### 后端配置
+
+在 `packages/server/.env` 文件中设置：
+
+```bash
+API_SECRET=your-secret-here
+```
+
+#### 前端配置
+
+**方式一：环境变量**
+
+在 `packages/editor/.env.local` 文件中设置：
+
+```bash
+VITE_API_SECRET=your-secret-here
+```
+
+**方式二：宿主应用注入**
+
+```typescript
+import { setApiSecret } from '@lowcode-platform/editor';
+
+setApiSecret('your-secret-here');
+```
+
+---
+
+### 安全建议
+
+| 部署环境 | 默认 Token 安全性 | 建议 |
+|---------|------------------|------|
+| 本地开发 | ✅ 安全 | 使用默认值 |
+| 内网部署 | ✅ 安全 | 使用默认值（网络隔离） |
+| 公网部署 | ❌ 不安全 | **必须修改**为强随机字符串 |
+
+**生成强随机 Token**：
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+---
+
+### 高级认证
+
+本项目提供简单的基础认证，适合自部署场景。
+
+如需以下功能，请 Fork 项目后自行实现：
+- 🚀 JWT / Session 认证
+- 🚀 用户登录系统
+- 🚀 OAuth / SSO 集成
+- 🚀 多租户隔离
+- 🚀 动态 Token 管理
+
+---
+
+### API 调用示例
+
+使用 `fetchApp` 调用 API，自动携带 Token：
+
+```typescript
+import { fetchApp } from './lib/httpClient';
+
+const data = await fetchApp.get('/api/v1/ai/models');
+await fetchApp.post('/api/v1/ai/models', config);
+await fetchApp.delete('/api/v1/ai/models/delete', { id });
+```
+
+请求自动添加 `Authorization: Bearer <token>` header。
+
 ## 开发指南
 
 ### 添加自定义组件
