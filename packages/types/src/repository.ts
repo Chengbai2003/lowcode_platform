@@ -1,4 +1,5 @@
 import type { A2UISchema } from "./schema";
+import type { AISession, AISessionMeta } from "./session";
 
 /**
  * 项目元数据
@@ -68,4 +69,20 @@ export interface ProjectRepository {
 
   /** 从 JSON 导入项目 */
   import(data: string): Promise<Project>;
+
+  // 会话管理方法
+  /** 保存会话 */
+  saveSession(session: AISession): Promise<void>;
+
+  /** 加载会话 */
+  loadSession(sessionId: string): Promise<AISession | null>;
+
+  /** 获取会话列表，可按项目筛选 */
+  listSessions(projectId?: string): Promise<AISessionMeta[]>;
+
+  /** 删除会话 */
+  deleteSession(sessionId: string): Promise<void>;
+
+  /** 清理会话历史 */
+  clearOldSessions(maxAgeDays?: number): Promise<void>;
 }

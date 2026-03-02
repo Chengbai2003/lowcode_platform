@@ -3,11 +3,10 @@
   "compilerOptions": {
     "composite": true,
     "outDir": "./dist",
-    "rootDir": "./src"
+    "rootDir": "./src",
+    "module": "ESNext",
+    "moduleResolution": "bundler"
   },
   "include": ["src"],
-  "references": [
-    { "path": "../renderer" },
-    { "path": "../components" }
-  ]
+  "references": [{ "path": "../renderer" }, { "path": "../components" }]
 }
