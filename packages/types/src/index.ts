@@ -4,3 +4,4 @@ export * from "./dsl";
 export * from "./prompt";
 export * from "./repository";
 export * from "./api";
+export * from "./property-panel";

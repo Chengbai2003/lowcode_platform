@@ -55,6 +55,7 @@
     "pnpm": ">=8.0.0"
   },
   "dependencies": {
+    "@lowcode-platform/types": "workspace:*",
     "@reduxjs/toolkit": "^2.11.2",
     "react-redux": "^9.2.0"
   }
