@@ -1,25 +1,25 @@
 /* AI Configuration Modal Styles */
-.ai-config {
+.aiConfig {
   max-height: 600px;
   overflow-y: auto;
 }
 
-.model-list-container {
+.modelListContainer {
   padding: 8px 0;
 }
 
-.model-list-header {
+.modelListHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
 }
 
-.model-list-header .ant-typography {
+.modelListHeader .ant-typography {
   margin: 0;
 }
 
-.model-card {
+.modelCard {
   width: 100%;
   margin-bottom: 8px;
   background: #fafafa;
@@ -27,73 +27,73 @@
   transition: all 0.2s;
 }
 
-.model-card:hover {
+.modelCard:hover {
   background: #f5f5f5;
   border-color: #d9d9d9;
 }
 
-.model-card .ant-card-actions {
+.modelCard .ant-card-actions {
   border-top: 1px solid #e8e8e8;
   background: #fafafa;
 }
 
-.model-card .ant-card-actions > li {
+.modelCard .ant-card-actions > li {
   margin: 0;
 }
 
-.model-card .ant-card-actions > li:not(:last-child) {
+.modelCard .ant-card-actions > li:not(:last-child) {
   border-inline-end: 1px solid #e8e8e8;
 }
 
-.model-form-container {
+.modelFormContainer {
   padding: 8px 0;
 }
 
-.model-form-header {
+.modelFormHeader {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
 }
 
-.model-form-header .ant-typography {
+.modelFormHeader .ant-typography {
   margin: 0;
 }
 
-.ai-config-modal .ant-modal-body {
+.aiConfigModal .ant-modal-body {
   padding: 24px;
 }
 
-.ai-config-modal .ant-list-item {
+.aiConfigModal .ant-list-item {
   padding: 8px 0;
 }
 
-.ai-config-modal .ant-list-item-meta {
+.aiConfigModal .ant-list-item-meta {
   align-items: flex-start;
 }
 
-.ai-config-modal .ant-card-meta-description {
+.aiConfigModal .ant-card-meta-description {
   margin-top: 4px;
 }
 
 /* Dark mode support */
 @media (prefers-color-scheme: dark) {
-  .model-card {
+  .modelCard {
     background: #1e1e1e;
     border-color: #303030;
   }
 
-  .model-card:hover {
+  .modelCard:hover {
     background: #2a2d2e;
     border-color: #424242;
   }
 
-  .model-card .ant-card-actions {
+  .modelCard .ant-card-actions {
     border-top-color: #303030;
     background: #1e1e1e;
   }
 
-  .model-card .ant-card-actions > li:not(:last-child) {
+  .modelCard .ant-card-actions > li:not(:last-child) {
     border-inline-end-color: #303030;
   }
 }

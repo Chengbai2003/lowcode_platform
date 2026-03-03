@@ -13,11 +13,7 @@ import {
 } from "./components";
 import { useDraftStorage } from "./hooks/useDraftStorage";
 import { useSchemaHistory } from "./hooks/useSchemaHistory";
-
-// 导入样式
-import "./components/AI/AIAssistant.css";
-import "./components/AI/AIConfig.css";
-import "./components/AIAssistant.css";
+import styles from "./LowcodeEditor.module.css";
 
 /**
  * JSON Schema 编辑器，支持实时预览
@@ -59,7 +55,7 @@ export function LowcodeEditor({
   }, [initialSchema]);
 
   const {
-    state: json,
+    present: json,
     push: setJson,
     forcePush: setJsonForce,
     undo,
@@ -189,42 +185,52 @@ export function LowcodeEditor({
     return { ...componentsOnly, ...customComponents };
   }, [customComponents]);
 
+  // 设置CSS变量
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--editor-height",
+      typeof height === "number" ? `${height}px` : height,
+    );
+  }, [height]);
+
   // 简化的布局逻辑：使用 flexbox
   return (
     <ConfigProvider theme={{ algorithm: theme.defaultAlgorithm }}>
-      <div style={{ height, display: "flex", flexDirection: "column" }}>
-        <EditorHeader
-          onCompile={handleCompile}
-          previewTheme={previewTheme}
-          onThemeChange={(t) => setPreviewTheme(t)}
-          onUndo={undo}
-          onRedo={redo}
-          canUndo={canUndo}
-          canRedo={canRedo}
-          historySize={historySize}
-        />
-        <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-          <ActivityBar activeTab={activeTab} setActiveTab={setActiveTab} />
-          <EditorPane
-            activeTab={activeTab}
-            width={editorWidth}
-            json={json}
-            compiledCode={compiledCode}
-            editorTheme={editorTheme}
-            showLineNumbers={showLineNumbers}
-            wordWrap={wordWrap}
-            handleEditorChange={handleEditorChange}
-            schema={schema}
-            onSchemaUpdate={handleAISchemaUpdate}
-            onError={onError}
-          />
-          <PreviewPane
-            error={error}
-            schema={schema}
-            allComponents={allComponents}
-            eventContext={eventContext}
+      <div className={styles.lowcodeEditor}>
+        <div className={styles.editorLayout}>
+          <EditorHeader
+            onCompile={handleCompile}
             previewTheme={previewTheme}
+            onThemeChange={(t) => setPreviewTheme(t)}
+            onUndo={undo}
+            onRedo={redo}
+            canUndo={canUndo}
+            canRedo={canRedo}
+            historySize={historySize}
           />
+          <div className={styles.layoutWithHeader}>
+            <ActivityBar activeTab={activeTab} setActiveTab={setActiveTab} />
+            <EditorPane
+              activeTab={activeTab}
+              width={editorWidth}
+              json={json}
+              compiledCode={compiledCode}
+              editorTheme={editorTheme}
+              showLineNumbers={showLineNumbers}
+              wordWrap={wordWrap}
+              handleEditorChange={handleEditorChange}
+              schema={schema}
+              onSchemaUpdate={handleAISchemaUpdate}
+              onError={onError}
+            />
+            <PreviewPane
+              error={error}
+              schema={schema}
+              allComponents={allComponents}
+              eventContext={eventContext}
+              previewTheme={previewTheme}
+            />
+          </div>
         </div>
       </div>
     </ConfigProvider>

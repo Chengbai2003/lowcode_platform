@@ -1,0 +1,17 @@
+.lowcodeEditor {
+  height: var(--editor-height, 100vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.editorLayout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.layoutWithHeader {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}

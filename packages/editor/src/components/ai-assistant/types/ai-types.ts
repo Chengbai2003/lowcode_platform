@@ -43,7 +43,7 @@ export interface AIRequest {
 // AI服务接口
 export interface AIService {
   name: string;
-  isAvailable(): boolean;
+  isAvailable(): boolean | Promise<boolean>;
   generateResponse(request: AIRequest): Promise<AIResponse>;
   streamResponse?(
     request: AIRequest,

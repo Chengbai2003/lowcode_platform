@@ -1,7 +1,7 @@
-import { AIModelConfig } from './types';
-import { fetchApp } from '../../lib/httpClient';
+import { AIModelConfig } from "../types/ai-types";
+import { fetchApp } from "../../../lib/httpClient";
 
-const BASE_URL = '/api/v1/ai';
+const BASE_URL = "/api/v1/ai";
 
 export const aiApi = {
   // 获取所有模型配置
@@ -10,7 +10,12 @@ export const aiApi = {
       const data = await fetchApp.get<AIModelConfig[]>(`${BASE_URL}/models`);
 
       // 检查响应格式
-      if (data && typeof data === 'object' && 'data' in data && Array.isArray((data as any).data)) {
+      if (
+        data &&
+        typeof data === "object" &&
+        "data" in data &&
+        Array.isArray((data as any).data)
+      ) {
         return (data as any).data;
       }
 
@@ -18,20 +23,23 @@ export const aiApi = {
         return data;
       }
 
-      console.warn('Unexpected response format for models:', data);
+      console.warn("Unexpected response format for models:", data);
       return [];
     } catch (error) {
-      console.error('Error fetching models:', error);
+      console.error("Error fetching models:", error);
       return [];
     }
   },
 
   // 保存模型配置 (新增或更新)
   async saveModel(config: AIModelConfig): Promise<AIModelConfig> {
-    const data = await fetchApp.post<AIModelConfig>(`${BASE_URL}/models`, config);
+    const data = await fetchApp.post<AIModelConfig>(
+      `${BASE_URL}/models`,
+      config,
+    );
 
     // 检查响应格式
-    if (data && typeof data === 'object' && 'data' in data) {
+    if (data && typeof data === "object" && "data" in data) {
       return (data as any).data;
     }
 
@@ -44,8 +52,8 @@ export const aiApi = {
       await fetchApp.delete(`${BASE_URL}/models/${id}`);
       return true;
     } catch (error) {
-      console.error('Error deleting model:', error);
+      console.error("Error deleting model:", error);
       return false;
     }
-  }
+  },
 };

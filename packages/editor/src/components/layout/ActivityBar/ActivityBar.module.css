@@ -1,0 +1,37 @@
+.activityBar {
+  width: 48px;
+  background: #252526;
+  border-right: 1px solid #303030;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 12px;
+}
+
+.tabItem {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  color: #858585;
+  border-left: 2px solid transparent;
+  background: transparent;
+  transition: all 0.2s ease;
+}
+
+.tabItem:hover {
+  background: #37373d;
+}
+
+.tabItem.active {
+  color: #fff;
+  border-left: 2px solid #007fd4;
+  background: #37373d;
+}
+
+.icon {
+  width: 24px;
+  height: 24px;
+}

@@ -11,11 +11,11 @@ import {
 import type { A2UISchema } from "@lowcode-platform/types";
 import { validateAndAutoFix } from "@lowcode-platform/renderer";
 import { componentRegistry } from "@lowcode-platform/components";
-import { aiApi } from "./api";
-import { serverAIService } from "./ServerAIService";
-import { AIConfig } from "./AIConfig";
-import type { AIModelConfig } from "./types";
-import "./AIAssistant.css";
+import { aiApi } from "../api/ai-api";
+import { serverAIService } from "../api/ServerAIService";
+import { AIConfig } from "../AIConfig/AIConfig";
+import type { AIModelConfig } from "../types/ai-types";
+import styles from "./AIAssistant.module.css";
 
 interface AIMessage {
   id: string;
@@ -30,7 +30,7 @@ interface AIMessage {
 
 interface AIAssistantProps {
   currentSchema: A2UISchema | null;
-  onSchemaUpdate: (schema: A2UISchema) => void;
+  onSchemaUpdate?: (schema: A2UISchema) => void;
   onError?: (error: string) => void;
 }
 
@@ -56,7 +56,6 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   // 加载模型列表
   const loadModels = useCallback(async () => {
     try {
-      console.log('loadModels===', aiApi)
       const allModels = await aiApi.getModels();
       setModels(allModels);
 
@@ -65,8 +64,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       if (currentModelValue === "mock") {
         // 仅当当前未选择有效模型时才自动选择
         const defaultModel =
-          allModels.find((m) => m.isDefault && m.isAvailable) ||
-          allModels.find((m) => m.isAvailable);
+          allModels.find((m: AIModelConfig) => m.isDefault && m.isAvailable) ||
+          allModels.find((m: AIModelConfig) => m.isAvailable);
         if (defaultModel) {
           setCurrentModel(defaultModel.id);
         }
@@ -180,7 +179,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
             modelId,
             context: { currentSchema: currentSchema || undefined },
           },
-          (chunk) => {
+          (chunk: string) => {
             fullContent += chunk;
             setMessages((prev) =>
               prev.map((msg) => {
@@ -195,7 +194,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
               }),
             );
           },
-          (error) => {
+          (error: Error) => {
             throw error;
           },
         );
@@ -291,7 +290,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         return;
       }
       if (result.data) {
-        onSchemaUpdate(result.data);
+        onSchemaUpdate?.(result.data);
         message.success("Schema已应用到编辑器！");
       }
     },
@@ -305,45 +304,30 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
   // 模型选择下拉框内容
   const modelSelectContent = (
-    <div style={{ padding: "8px 0", minWidth: "200px" }}>
-      <div
-        style={{
-          padding: "0 12px 8px 12px",
-          fontSize: "12px",
-          color: "#858585",
-        }}
-      >
-        选择AI模型
-      </div>
+    <div className={styles.modelSelectContent}>
+      <div className={styles.modelSelectHeader}>选择AI模型</div>
       {models.map((model) => (
         <div
           key={model.id}
-          style={{
-            padding: "8px 12px",
-            cursor: "pointer",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            background: currentModel === model.id ? "#37373d" : "transparent",
-          }}
+          className={`${styles.modelItem} ${currentModel === model.id ? styles.selectedModel : ""}`}
           onClick={() => {
             setCurrentModel(model.id);
             // Removed setDefaultModel call as it was local specific
           }}
         >
-          <span style={{ color: "#cccccc" }}>{model.name}</span>
-          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+          <span className={styles.modelName}>{model.name}</span>
+          <div className={styles.modelStatus}>
             {model.isAvailable && (
-              <span style={{ color: "#52c41a", fontSize: "12px" }}>✓</span>
+              <span className={styles.availableIndicator}>✓</span>
             )}
             {model.isDefault && (
-              <span style={{ color: "#1890ff", fontSize: "12px" }}>默认</span>
+              <span className={styles.defaultLabel}>默认</span>
             )}
           </div>
         </div>
       ))}
-      <Divider style={{ margin: "8px 0" }} />
-      <div style={{ padding: "0 12px" }}>
+      <Divider className={styles.divider} />
+      <div className={styles.configButtonContainer}>
         <Button
           type="text"
           size="small"
@@ -351,11 +335,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           onClick={() => {
             setConfigVisible(true);
           }}
-          style={{
-            width: "100%",
-            justifyContent: "flex-start",
-            color: "#cccccc",
-          }}
+          className={styles.manageModelsButton}
         >
           管理模型
         </Button>
@@ -364,32 +344,37 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   );
 
   return (
-    <div className="ai-assistant">
-      <div className="ai-content">
-        <div className="messages-container">
+    <div className={styles.aiAssistant}>
+      <div className={styles.aiContent}>
+        <div className={styles.messagesContainer}>
           {messages.map((message) => (
-            <div key={message.id} className={`message ${message.type}`}>
+            <div
+              key={message.id}
+              className={`${styles.message} ${styles[`message${message.type.charAt(0).toUpperCase() + message.type.slice(1)}`]}`}
+            >
               {message.status === "loading" ? (
-                <LoadingOutlined className="loading-icon" />
+                <LoadingOutlined className={styles.loadingIcon} />
               ) : message.status === "error" ? (
-                <span className="error-message">❌ {message.content}</span>
+                <span className={styles.errorMessage}>
+                  ❌ {message.content}
+                </span>
               ) : (
-                <div className="message-content">
-                  <div className="message-text">{message.content}</div>
+                <div className={styles.messageContent}>
+                  <div className={styles.messageText}>{message.content}</div>
 
                   {message.modelUsed && (
-                    <div className="model-indicator">
-                      <span className="model-label">
+                    <div className={styles.modelIndicator}>
+                      <span className={styles.modelLabel}>
                         模型: {message.modelUsed}
                       </span>
                     </div>
                   )}
 
                   {message.suggestions && message.suggestions.length > 0 && (
-                    <div className="suggestions">
-                      <div className="suggestions-title">💡 建议：</div>
+                    <div className={styles.suggestions}>
+                      <div className={styles.suggestionsTitle}>💡 建议：</div>
                       {message.suggestions.map((suggestion, index) => (
-                        <Tag key={index} className="suggestion-tag">
+                        <Tag key={index} className={styles.suggestionTag}>
                           {suggestion}
                         </Tag>
                       ))}
@@ -397,7 +382,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                   )}
 
                   {message.schema && (
-                    <div className="schema-actions">
+                    <div className={styles.schemaActions}>
                       <Button
                         type="primary"
                         size="small"
@@ -410,7 +395,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                   )}
                 </div>
               )}
-              <div className="message-time">
+              <div className={styles.messageTime}>
                 {message.timestamp.toLocaleTimeString()}
               </div>
             </div>
@@ -418,9 +403,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        <Divider className="divider" />
+        <Divider className={styles.divider} />
 
-        <div className="input-area">
+        <div className={styles.inputArea}>
           <Input.TextArea
             value={inputValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
@@ -435,8 +420,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
               }
             }}
           />
-          <div className="input-area-footer">
-            <div className="input-area-header">
+          <div className={styles.inputAreaFooter}>
+            <div className={styles.inputAreaHeader}>
               <Popover
                 content={modelSelectContent}
                 trigger="click"
@@ -450,7 +435,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                   type="text"
                   size="small"
                   icon={<DatabaseOutlined />}
-                  style={{ color: "#cccccc" }}
+                  className={styles.modelButton}
                 >
                   {getCurrentModelName()}
                 </Button>
@@ -465,12 +450,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                     loadModels();
                     setConfigVisible(true);
                   }}
-                  style={{ color: "#858585" }}
+                  className={styles.configButton}
                 />
               </Tooltip>
 
               <Tooltip title="AI功能说明">
-                <BulbOutlined className="help-icon" />
+                <BulbOutlined className={styles.helpIcon} />
               </Tooltip>
             </div>
 
@@ -480,7 +465,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
               onClick={handleSendMessage}
               loading={loading}
               disabled={!inputValue.trim()}
-              className="send-button"
+              className={styles.sendButton}
             >
               发送
             </Button>
@@ -494,7 +479,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           setConfigVisible(false);
           loadModels();
         }}
-        onConfigChange={(modelId) => setCurrentModel(modelId)}
+        onConfigChange={(modelId: string) => setCurrentModel(modelId)}
       />
     </div>
   );

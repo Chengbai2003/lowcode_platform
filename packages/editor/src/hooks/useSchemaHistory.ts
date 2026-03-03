@@ -1,52 +1,62 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 
-interface HistoryState<T> {
-  past: T[];
-  present: T;
-  future: T[];
+export interface SchemaHistoryState {
+  past: string[];
+  present: string;
+  future: string[];
 }
 
-export function useSchemaHistory<T>(initialState: T, maxHistory = 50) {
-  const [history, setHistory] = useState<HistoryState<T>>({
+export const useSchemaHistory = (
+  initialState: string,
+  capacity: number = 50,
+) => {
+  const [history, setHistory] = useState<SchemaHistoryState>({
     past: [],
     present: initialState,
     future: [],
   });
 
-  const lastPushTime = useRef(0);
-  const DEBOUNCE_MS = 500;
-
   const push = useCallback(
-    (newState: T) => {
-      const now = Date.now();
+    (value: string) => {
       setHistory((prev) => {
-        if (now - lastPushTime.current < DEBOUNCE_MS) {
-          return { ...prev, present: newState };
+        // 防止重复值进入历史记录
+        if (prev.present === value) {
+          return prev;
         }
-        lastPushTime.current = now;
-        const newPast = [...prev.past, prev.present].slice(-maxHistory);
-        return { past: newPast, present: newState, future: [] };
+
+        // 如果当前值与present不同，则更新
+        const newPast = [...prev.past, prev.present];
+
+        // 控制历史记录长度
+        if (newPast.length > capacity) {
+          newPast.shift(); // 移除最老的历史记录
+        }
+
+        return {
+          past: newPast,
+          present: value,
+          future: [], // 每次push后清空未来记录
+        };
       });
     },
-    [maxHistory],
+    [capacity],
   );
 
-  const forcePush = useCallback(
-    (newState: T) => {
-      lastPushTime.current = 0;
-      setHistory((prev) => {
-        const newPast = [...prev.past, prev.present].slice(-maxHistory);
-        return { past: newPast, present: newState, future: [] };
-      });
-    },
-    [maxHistory],
-  );
+  const forcePush = useCallback((value: string) => {
+    setHistory((prev) => ({
+      ...prev,
+      present: value,
+      future: [],
+    }));
+  }, []);
 
   const undo = useCallback(() => {
     setHistory((prev) => {
       if (prev.past.length === 0) return prev;
+
       const previous = prev.past[prev.past.length - 1];
-      const newPast = prev.past.slice(0, -1);
+      const newPast = prev.past.slice(0, prev.past.length - 1);
+
       return {
         past: newPast,
         present: previous,
@@ -58,8 +68,10 @@ export function useSchemaHistory<T>(initialState: T, maxHistory = 50) {
   const redo = useCallback(() => {
     setHistory((prev) => {
       if (prev.future.length === 0) return prev;
+
       const next = prev.future[0];
       const newFuture = prev.future.slice(1);
+
       return {
         past: [...prev.past, prev.present],
         present: next,
@@ -69,7 +81,7 @@ export function useSchemaHistory<T>(initialState: T, maxHistory = 50) {
   }, []);
 
   return {
-    state: history.present,
+    ...history,
     push,
     forcePush,
     undo,
@@ -78,4 +90,4 @@ export function useSchemaHistory<T>(initialState: T, maxHistory = 50) {
     canRedo: history.future.length > 0,
     historySize: history.past.length,
   };
-}
+};

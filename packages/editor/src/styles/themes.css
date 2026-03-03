@@ -1,0 +1,57 @@
+/* Light theme is default, defined in :root */
+
+/* Dark theme overrides */
+[data-theme="dark"] {
+  /* Background colors */
+  --bg-primary: #141414;
+  --bg-secondary: #1f1f1f;
+  --bg-tertiary: #262626;
+  --bg-panel: #1d1d1d;
+  --bg-header: #1f1f1f;
+  --bg-sidebar: #252526;
+  --bg-editor: #1e1e1e;
+  --bg-preview: #1e1e1e;
+  --bg-preview-content: #141414;
+
+  /* Text colors */
+  --text-primary: #ffffff;
+  --text-secondary: #d9d9d9;
+  --text-tertiary: #8c8c8c;
+  --text-inverse: #262626;
+  --text-disabled: #595959;
+
+  /* Border colors */
+  --border-primary: #303030;
+  --border-secondary: #434343;
+  --border-tertiary: #262626;
+  --border-dark: #303030;
+  --border-editor: #303030;
+}
+
+/* Alternative dark mode using prefers-color-scheme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Only override if not already overridden by data-theme */
+    --bg-primary: #141414;
+    --bg-secondary: #1f1f1f;
+    --bg-tertiary: #262626;
+    --bg-panel: #1d1d1d;
+    --bg-header: #1f1f1f;
+    --bg-sidebar: #252526;
+    --bg-editor: #1e1e1e;
+    --bg-preview: #1e1e1e;
+    --bg-preview-content: #141414;
+
+    --text-primary: #ffffff;
+    --text-secondary: #d9d9d9;
+    --text-tertiary: #8c8c8c;
+    --text-inverse: #262626;
+    --text-disabled: #595959;
+
+    --border-primary: #303030;
+    --border-secondary: #434343;
+    --border-tertiary: #262626;
+    --border-dark: #303030;
+    --border-editor: #303030;
+  }
+}

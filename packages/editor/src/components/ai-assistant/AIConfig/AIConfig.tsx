@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import {
   Modal,
   Form,
@@ -13,8 +13,8 @@ import {
   Alert,
   List,
   Popconfirm,
-  Card
-} from 'antd';
+  Card,
+} from "antd";
 import {
   SettingOutlined,
   ApiOutlined,
@@ -22,12 +22,12 @@ import {
   DeleteOutlined,
   EditOutlined,
   CheckCircleOutlined,
-  DatabaseOutlined
-} from '@ant-design/icons';
-import { aiApi } from './api';
-import { serverAIService } from './ServerAIService';
-import type { AIModelConfig } from './types';
-import './AIConfig.css';
+  DatabaseOutlined,
+} from "@ant-design/icons";
+import { aiApi } from "../api/ai-api";
+import { serverAIService } from "../api/ServerAIService";
+import type { AIModelConfig } from "../types/ai-types";
+import styles from "./AIConfig.module.css";
 
 const { Option } = Select;
 const { Title, Text } = Typography;
@@ -38,16 +38,16 @@ interface AIConfigProps {
   onConfigChange?: (modelId: string) => void;
 }
 
-type ViewMode = 'list' | 'edit' | 'add';
+type ViewMode = "list" | "edit" | "add";
 
 export const AIConfig: React.FC<AIConfigProps> = ({
   visible,
   onClose,
-  onConfigChange
+  onConfigChange,
 }) => {
   const [form] = Form.useForm();
   const [models, setModels] = useState<AIModelConfig[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [editingModel, setEditingModel] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
       loadModels();
     }
 
-    setViewMode('list');
+    setViewMode("list");
     setEditingModel(null);
   }, [visible]);
 
@@ -66,31 +66,31 @@ export const AIConfig: React.FC<AIConfigProps> = ({
   };
 
   const handleAddModel = () => {
-    setViewMode('add');
+    setViewMode("add");
     setEditingModel(null);
     form.resetFields();
     form.setFieldsValue({
-      provider: 'openai',
-      baseURL: ''
+      provider: "openai",
+      baseURL: "",
     });
   };
 
   const handleEditModel = (model: AIModelConfig) => {
-    setViewMode('edit');
+    setViewMode("edit");
     setEditingModel(model.id);
     form.setFieldsValue({
       name: model.name,
       provider: model.provider,
       model: model.model,
-      apiKey: model.apiKey || '',
-      baseURL: model.baseURL || '',
+      apiKey: model.apiKey || "",
+      baseURL: model.baseURL || "",
       maxTokens: model.maxTokens || 2000,
-      temperature: model.temperature || 0.7
+      temperature: model.temperature || 0.7,
     });
   };
 
   const handleBackToList = () => {
-    setViewMode('list');
+    setViewMode("list");
     setEditingModel(null);
     form.resetFields();
   };
@@ -99,7 +99,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
     try {
       const values = await form.validateFields();
 
-      if (viewMode === 'add') {
+      if (viewMode === "add") {
         // 新增模型
         const id = `${values.provider}-${Date.now()}`;
         await aiApi.saveModel({
@@ -111,12 +111,12 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           baseURL: values.baseURL,
           maxTokens: values.maxTokens,
           temperature: values.temperature,
-          isAvailable: true
+          isAvailable: true,
         });
-        message.success('模型添加成功！');
-      } else if (viewMode === 'edit' && editingModel) {
+        message.success("模型添加成功！");
+      } else if (viewMode === "edit" && editingModel) {
         // 更新模型
-        // Update needs full object or we fetch existing first. 
+        // Update needs full object or we fetch existing first.
         // Ideally saveModel handles upsert.
         // We need to pass the ID.
         await aiApi.saveModel({
@@ -128,43 +128,42 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           baseURL: values.baseURL,
           maxTokens: values.maxTokens,
           temperature: values.temperature,
-          isAvailable: true
+          isAvailable: true,
         } as any);
-        message.success('模型更新成功！');
+        message.success("模型更新成功！");
       }
 
       // 重新加载模型列表
       loadModels();
-      setViewMode('list');
+      setViewMode("list");
       setEditingModel(null);
-
     } catch (error: any) {
-      message.error(`保存失败: ${error.message || '未知错误'}`);
+      message.error(`保存失败: ${error.message || "未知错误"}`);
     }
   };
 
   const handleDelete = async (modelId: string) => {
     if (await aiApi.deleteModel(modelId)) {
-      message.success('模型已删除');
+      message.success("模型已删除");
       loadModels();
     } else {
-      message.warning('无法删除该模型');
+      message.warning("无法删除该模型");
     }
   };
 
   const handleSetDefault = async (modelId: string) => {
-    // Currently API doesn't support setting default per user in a simple way 
+    // Currently API doesn't support setting default per user in a simple way
     // without updating the whole model config.
     // For simplicity, we just trigger the callback to let UI know.
     // Ideally we update the model isDefault flag on server.
-    const model = models.find(m => m.id === modelId);
+    const model = models.find((m) => m.id === modelId);
     if (model) {
       await aiApi.saveModel({ ...model, isDefault: true });
-      // We should also unset others, but server side 'saveModel' logic 
+      // We should also unset others, but server side 'saveModel' logic
       // in 'ModelConfigService.ts' I wrote earlier handles unsetting others!
     }
     loadModels();
-    message.success('已设为默认模型');
+    message.success("已设为默认模型");
     onConfigChange?.(modelId);
   };
 
@@ -178,10 +177,10 @@ export const AIConfig: React.FC<AIConfigProps> = ({
 
       // 如果是在编辑模式，我们可能还没保存，这时候测试会用旧配置。
       // 为了支持编辑时测试，我们需要 Server 端支持 "validate config" 接口，或者我们前端构造一个临时 ServerAIService (但这稍微复杂)
-      // 
+      //
       // 策略：提示用户先保存再测试，或者只在 List 模式下允许测试。
       // 目前 UI 上 Edit 模式也有 Test 按钮吗？看代码 card actions 里有，但 form 里好像没有 Test 按钮。
-      // 
+      //
       // 修正：handleTest 是在 Card 上触发的，那时候不在编辑模式，所以可以直接用 model.id
 
       /*
@@ -195,14 +194,14 @@ export const AIConfig: React.FC<AIConfigProps> = ({
 
       // 测试简单的请求
       await service.generateResponse({
-        prompt: '你好',
+        prompt: "你好",
         modelId: model.id,
-        options: { maxTokens: 50 }
+        options: { maxTokens: 50 },
       });
 
       message.success(`${model.name} 连接测试成功！`);
     } catch (error: any) {
-      message.error(`连接测试失败：${error.message || '未知错误'}`);
+      message.error(`连接测试失败：${error.message || "未知错误"}`);
     } finally {
       setTesting(null);
     }
@@ -210,36 +209,32 @@ export const AIConfig: React.FC<AIConfigProps> = ({
 
   const getProviderLabel = (provider: string) => {
     const labels: Record<string, string> = {
-      openai: 'OpenAI Compatible (GLM/GPT)',
-      anthropic: 'Anthropic',
-      ollama: 'Ollama (Local)',
-      mock: 'Mock AI'
+      openai: "OpenAI Compatible (GLM/GPT)",
+      anthropic: "Anthropic",
+      ollama: "Ollama (Local)",
+      mock: "Mock AI",
     };
     return labels[provider] || provider;
   };
 
   const getProviderDefaultBaseURL = (provider: string) => {
     const defaults: Record<string, string> = {
-      openai: '', // Default to empty for custom compatible models
-      anthropic: 'https://api.anthropic.com',
-      ollama: 'http://localhost:11434'
+      openai: "", // Default to empty for custom compatible models
+      anthropic: "https://api.anthropic.com",
+      ollama: "http://localhost:11434",
     };
-    return defaults[provider] || '';
+    return defaults[provider] || "";
   };
 
   const handleProviderChange = (provider: string) => {
-    form.setFieldValue('baseURL', getProviderDefaultBaseURL(provider));
+    form.setFieldValue("baseURL", getProviderDefaultBaseURL(provider));
   };
 
   const renderList = () => (
-    <div className="model-list-container">
-      <div className="model-list-header">
+    <div className={styles.modelListContainer}>
+      <div className={styles.modelListHeader}>
         <Title level={4}>AI 模型管理</Title>
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={handleAddModel}
-        >
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleAddModel}>
           添加模型
         </Button>
       </div>
@@ -250,7 +245,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           <List.Item key={model.id}>
             <Card
               size="small"
-              className="model-card"
+              className={styles.modelCard}
               actions={[
                 <Button
                   icon={<EditOutlined />}
@@ -260,7 +255,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
                 >
                   编辑
                 </Button>,
-                model.provider !== 'mock' && (
+                model.provider !== "mock" && (
                   <Button
                     icon={<ApiOutlined />}
                     type="text"
@@ -281,7 +276,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
                     设为默认
                   </Button>
                 ),
-                model.provider !== 'mock' && (
+                model.provider !== "mock" && (
                   <Popconfirm
                     title="确认删除"
                     description="确定要删除这个模型吗？"
@@ -299,28 +294,47 @@ export const AIConfig: React.FC<AIConfigProps> = ({
                       删除
                     </Button>
                   </Popconfirm>
-                )
+                ),
               ].filter(Boolean)}
             >
               <Card.Meta
-                avatar={<DatabaseOutlined style={{ fontSize: '24px', color: model.isAvailable ? '#52c41a' : '#858585' }} />}
+                avatar={
+                  <DatabaseOutlined
+                    style={{
+                      fontSize: "24px",
+                      color: model.isAvailable ? "#52c41a" : "#858585",
+                    }}
+                  />
+                }
                 title={
                   <Space>
                     <span>{model.name}</span>
-                    {model.isDefault && <span style={{ color: '#1890ff', fontSize: '12px' }}>默认</span>}
-                    {model.isAvailable && <span style={{ color: '#52c41a', fontSize: '12px' }}>✓ 可用</span>}
+                    {model.isDefault && (
+                      <span style={{ color: "#1890ff", fontSize: "12px" }}>
+                        默认
+                      </span>
+                    )}
+                    {model.isAvailable && (
+                      <span style={{ color: "#52c41a", fontSize: "12px" }}>
+                        ✓ 可用
+                      </span>
+                    )}
                   </Space>
                 }
                 description={
-                  <Space direction="vertical" size="small" style={{ width: '100%' }}>
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                  <Space
+                    direction="vertical"
+                    size="small"
+                    style={{ width: "100%" }}
+                  >
+                    <Text type="secondary" style={{ fontSize: "12px" }}>
                       提供商: {getProviderLabel(model.provider)}
                     </Text>
-                    <Text type="secondary" style={{ fontSize: '12px' }}>
+                    <Text type="secondary" style={{ fontSize: "12px" }}>
                       模型: {model.model}
                     </Text>
                     {model.baseURL && (
-                      <Text type="secondary" style={{ fontSize: '12px' }}>
+                      <Text type="secondary" style={{ fontSize: "12px" }}>
                         地址: {model.baseURL}
                       </Text>
                     )}
@@ -335,22 +349,20 @@ export const AIConfig: React.FC<AIConfigProps> = ({
   );
 
   const renderForm = () => {
-    const isEdit = viewMode === 'edit';
+    const isEdit = viewMode === "edit";
 
     return (
-      <div className="model-form-container">
-        <div className="model-form-header">
-          <Button onClick={handleBackToList}>
-            ← 返回
-          </Button>
-          <Title level={4}>{isEdit ? '编辑模型' : '添加模型'}</Title>
+      <div className={styles.modelFormContainer}>
+        <div className={styles.modelFormHeader}>
+          <Button onClick={handleBackToList}>← 返回</Button>
+          <Title level={4}>{isEdit ? "编辑模型" : "添加模型"}</Title>
         </div>
 
         <Form form={form} layout="vertical" style={{ marginTop: 16 }}>
           <Form.Item
             name="name"
             label="模型名称"
-            rules={[{ required: true, message: '请输入模型名称' }]}
+            rules={[{ required: true, message: "请输入模型名称" }]}
           >
             <Input placeholder="例如: My Custom Model" />
           </Form.Item>
@@ -358,10 +370,15 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           <Form.Item
             name="provider"
             label="提供商"
-            rules={[{ required: true, message: '请选择提供商' }]}
+            rules={[{ required: true, message: "请选择提供商" }]}
           >
-            <Select placeholder="Select Provider" onChange={handleProviderChange}>
-              <Option value="openai">OpenAI Compatible (GLM, DeepSeek, etc.)</Option>
+            <Select
+              placeholder="Select Provider"
+              onChange={handleProviderChange}
+            >
+              <Option value="openai">
+                OpenAI Compatible (GLM, DeepSeek, etc.)
+              </Option>
               <Option value="anthropic">Anthropic</Option>
               <Option value="ollama">Ollama</Option>
             </Select>
@@ -370,9 +387,9 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           <Form.Item
             name="model"
             label="Model ID"
-            rules={[{ required: true, message: 'Please input Model ID' }]}
+            rules={[{ required: true, message: "Please input Model ID" }]}
             extra={
-              <Text type="secondary" style={{ fontSize: '12px' }}>
+              <Text type="secondary" style={{ fontSize: "12px" }}>
                 Example: glm-4, gpt-4o, llama3
               </Text>
             }
@@ -385,8 +402,8 @@ export const AIConfig: React.FC<AIConfigProps> = ({
             shouldUpdate={(prev, curr) => prev.provider !== curr.provider}
           >
             {({ getFieldValue }) => {
-              const provider = getFieldValue('provider');
-              if (provider === 'ollama') {
+              const provider = getFieldValue("provider");
+              if (provider === "ollama") {
                 return (
                   <Alert
                     message="Ollama 配置"
@@ -397,7 +414,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
                   />
                 );
               }
-              if (provider === 'openai') {
+              if (provider === "openai") {
                 return (
                   <Alert
                     message="OpenAI Compatible Configuration"
@@ -408,7 +425,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
                   />
                 );
               }
-              if (provider === 'anthropic') {
+              if (provider === "anthropic") {
                 return (
                   <Alert
                     message="Anthropic 配置"
@@ -428,8 +445,8 @@ export const AIConfig: React.FC<AIConfigProps> = ({
             shouldUpdate={(prev, curr) => prev.provider !== curr.provider}
           >
             {({ getFieldValue }) => {
-              const provider = getFieldValue('provider');
-              if (provider === 'ollama') {
+              const provider = getFieldValue("provider");
+              if (provider === "ollama") {
                 return null; // Ollama 不需要 API Key
               }
               return (
@@ -437,7 +454,10 @@ export const AIConfig: React.FC<AIConfigProps> = ({
                   name="apiKey"
                   label="API Key"
                   rules={[
-                    { required: provider !== 'ollama', message: '请输入 API Key' }
+                    {
+                      required: provider !== "ollama",
+                      message: "请输入 API Key",
+                    },
                   ]}
                 >
                   <Input.Password placeholder="sk-..." />
@@ -458,12 +478,8 @@ export const AIConfig: React.FC<AIConfigProps> = ({
 
           <Title level={5}>高级选项</Title>
 
-          <Form.Item
-            name="maxTokens"
-            label="最大 Token 数"
-            initialValue={2000}
-          >
-            <InputNumber min={100} max={128000} style={{ width: '100%' }} />
+          <Form.Item name="maxTokens" label="最大 Token 数" initialValue={2000}>
+            <InputNumber min={100} max={128000} style={{ width: "100%" }} />
           </Form.Item>
 
           <Form.Item
@@ -472,7 +488,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
             initialValue={0.7}
             extra="值越高越有创意，值越低越确定性"
           >
-            <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
+            <InputNumber min={0} max={2} step={0.1} style={{ width: "100%" }} />
           </Form.Item>
         </Form>
       </div>
@@ -482,7 +498,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
   return (
     <Modal
       title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <SettingOutlined />
           <span>AI 模型配置</span>
         </div>
@@ -491,7 +507,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
       onCancel={onClose}
       width={700}
       footer={
-        viewMode === 'list' ? (
+        viewMode === "list" ? (
           <Button onClick={onClose}>关闭</Button>
         ) : (
           <Space>
@@ -502,10 +518,10 @@ export const AIConfig: React.FC<AIConfigProps> = ({
           </Space>
         )
       }
-      className="ai-config-modal"
+      className={styles.aiConfigModal}
     >
-      <div className="ai-config">
-        {viewMode === 'list' ? renderList() : renderForm()}
+      <div className={styles.aiConfig}>
+        {viewMode === "list" ? renderList() : renderForm()}
       </div>
     </Modal>
   );

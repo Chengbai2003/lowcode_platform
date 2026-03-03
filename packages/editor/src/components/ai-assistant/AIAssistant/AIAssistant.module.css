@@ -1,5 +1,5 @@
 /* AI Assistant Styles */
-.ai-assistant {
+.aiAssistant {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -8,7 +8,7 @@
   color: #cccccc;
 }
 
-.ai-content {
+.aiContent {
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -16,28 +16,28 @@
   overflow: hidden;
 }
 
-.messages-container {
+.messagesContainer {
   flex: 1;
   overflow-y: auto;
   margin-bottom: 16px;
   padding-right: 8px;
 }
 
-.messages-container::-webkit-scrollbar {
+.messagesContainer::-webkit-scrollbar {
   width: 6px;
 }
 
-.messages-container::-webkit-scrollbar-track {
+.messagesContainer::-webkit-scrollbar-track {
   background: #252526;
   border-radius: 3px;
 }
 
-.messages-container::-webkit-scrollbar-thumb {
+.messagesContainer::-webkit-scrollbar-thumb {
   background: #424242;
   border-radius: 3px;
 }
 
-.messages-container::-webkit-scrollbar-thumb:hover {
+.messagesContainer::-webkit-scrollbar-thumb:hover {
   background: #4f4f4f;
 }
 
@@ -58,7 +58,7 @@
   }
 }
 
-.message-content {
+.messageContent {
   background: #37373d;
   padding: 12px 16px;
   border-radius: 12px;
@@ -68,51 +68,51 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.message.user {
+.messageUser {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
 }
 
-.message.user .message-content {
+.messageUser .messageContent {
   background: #007fd4;
   color: white;
   border-left: none;
   border-bottom-right-radius: 2px;
 }
 
-.message.ai {
+.messageAi {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
 }
 
-.message.ai .message-content {
+.messageAi .messageContent {
   background: #37373d;
   border-left: 3px solid #007fd4;
   border-bottom-left-radius: 2px;
 }
 
-.message.system .message-content {
+.messageSystem .messageContent {
   background: #1e1e1e;
   border: 1px solid #3e3e42;
   border-left: 3px solid #808080;
   margin-right: 20px;
 }
 
-.message-text {
+.messageText {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
-.model-indicator {
+.modelIndicator {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #424242;
 }
 
-.model-label {
+.modelLabel {
   font-size: 11px;
   color: #858585;
   background: #2d2d30;
@@ -120,7 +120,7 @@
   border-radius: 3px;
 }
 
-.loading-icon {
+.loadingIcon {
   color: #007fd4;
   font-size: 16px;
   animation: spin 1s linear infinite;
@@ -136,7 +136,7 @@
   }
 }
 
-.error-message {
+.errorMessage {
   color: #f48771;
   background: #2d1b1b;
   border: 1px solid #8c3d3d;
@@ -149,13 +149,13 @@
   margin-top: 8px;
 }
 
-.suggestions-title {
+.suggestionsTitle {
   font-size: 12px;
   color: #858585;
   margin-bottom: 8px;
 }
 
-.suggestion-tag {
+.suggestionTag {
   margin: 2px 4px 2px 0;
   background: #264f78;
   border-color: #264f78;
@@ -165,18 +165,18 @@
   border-radius: 2px;
 }
 
-.schema-actions {
+.schemaActions {
   margin-top: 12px;
   text-align: left;
 }
 
-.message-time {
+.messageTime {
   font-size: 11px;
   color: #858585;
   margin-top: 4px;
 }
 
-.message.user .message-time {
+.messageUser .messageTime {
   text-align: right;
 }
 
@@ -185,77 +185,77 @@
   border-color: #303030;
 }
 
-.input-area {
+.inputArea {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.input-area-footer {
+.inputAreaFooter {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
 }
 
-.input-area-header {
+.inputAreaHeader {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.help-icon {
+.helpIcon {
   color: #858585;
   cursor: pointer;
   transition: color 0.2s;
 }
 
-.help-icon:hover {
+.helpIcon:hover {
   color: #cccccc;
 }
 
-.input-area .ant-input {
+.inputArea .ant-input {
   background: #252526;
   border-color: #3e3e42;
   color: #cccccc;
   border-radius: 4px;
 }
 
-.input-area .ant-input:focus,
-.input-area .ant-input-focused {
+.inputArea .ant-input:focus,
+.inputArea .ant-input-focused {
   border-color: #007fd4;
   box-shadow: 0 0 0 2px rgba(0, 127, 212, 0.2);
 }
 
-.input-area .ant-input::placeholder {
+.inputArea .ant-input::placeholder {
   color: #858585;
 }
 
-.input-area .ant-btn {
+.inputArea .ant-btn {
   flex-shrink: 0;
   border-radius: 4px;
   height: 32px;
 }
 
-.send-button {
+.sendButton {
   color: white !important;
 }
 
-.send-button:hover {
+.sendButton:hover {
   color: white !important;
 }
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .message.user .message-content {
+  .messageUser .messageContent {
     margin-left: 20px;
   }
 
-  .message.ai .message-content {
+  .messageAi .messageContent {
     margin-right: 20px;
   }
 
-  .message.system .message-content {
+  .messageSystem .messageContent {
     margin-right: 0;
   }
 }

@@ -18,7 +18,8 @@ import { fetchApp } from "./lib/httpClient";
 
 // 默认 API Secret（使用环境变量或默认值）
 const DEFAULT_API_SECRET =
-  (import.meta.env?.VITE_API_SECRET as string) || 'dev-secret-token-change-in-production';
+  (import.meta.env?.VITE_API_SECRET as string) ||
+  "dev-secret-token-change-in-production";
 
 // 初始化时设置默认 Token
 fetchApp.setApiSecret(DEFAULT_API_SECRET);
@@ -47,10 +48,8 @@ export function getApiSecret(): string {
 }
 
 // 导出样式
-import "./components/AI/AIAssistant.css";
-import "./components/AI/AIConfig.css";
-import "./components/AIAssistant.css";
+import "./styles/globals.css";
 
 export { LowcodeEditor } from "./LowcodeEditor";
 export type { LowcodeEditorProps } from "./types";
-export { AIAssistant } from "./components/AIAssistant";
+export { AIAssistant } from "./components/ai-assistant/AIAssistant/AIAssistant";

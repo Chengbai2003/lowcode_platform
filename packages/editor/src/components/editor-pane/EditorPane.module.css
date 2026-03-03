@@ -1,0 +1,57 @@
+.editorPane {
+  background: #1e1e1e;
+  border-right: 1px solid #303030;
+}
+
+.editorPaneContent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editorHeader {
+  padding: 8px 16px;
+  background: #252526;
+  color: #cccccc;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 500;
+  border-bottom: 1px solid #303030;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.editorBody {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.visualEditorPlaceholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #858585;
+  padding: 20px;
+  text-align: center;
+}
+
+.constructionIcon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.visualEditorTitle {
+  font-size: 16px;
+  font-weight: 500;
+  margin-bottom: 8px;
+}
+
+.visualEditorDescription {
+  font-size: 13px;
+}
