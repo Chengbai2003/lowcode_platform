@@ -13,6 +13,9 @@ import {
 } from "./components";
 import { useDraftStorage } from "./hooks/useDraftStorage";
 import { useSchemaHistory } from "./hooks/useSchemaHistory";
+import { useFloatingIslandHotkey } from "./hooks/useFloatingIslandHotkey";
+import { FloatingIsland } from "./components/ai-assistant/FloatingIsland";
+import { HistoryDrawer } from "./components/ai-assistant/HistoryDrawer";
 import styles from "./LowcodeEditor.module.css";
 
 /**
@@ -66,13 +69,16 @@ export function LowcodeEditor({
   } = useSchemaHistory(initialJson);
   const [schema, setSchema] = useState<A2UISchema | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"json" | "visual" | "code" | "ai">(
+  const [activeTab, setActiveTab] = useState<"json" | "visual" | "code">(
     "json",
   );
   const [previewTheme, setPreviewTheme] = useState<"light" | "dark">("light");
   const [compiledCode, setCompiledCode] = useState<string>("");
 
   const { saveDraft, loadDraft, clearDraft } = useDraftStorage("default");
+
+  // 浮动岛快捷键
+  useFloatingIslandHotkey();
 
   // 挂载时检查草稿
   useEffect(() => {
@@ -145,10 +151,22 @@ export function LowcodeEditor({
       setSchema(newSchema);
       setJsonForce(JSON.stringify(newSchema, null, 2));
       onChange?.(newSchema);
-      // 不切换到JSON编辑器，保持当前（AI）视图，用户可以在右侧预览
-      // message.success('AI助手已更新Schema！'); // 移除重复提示，AIAssistant 已有提示
+      message.success("Schema 已更新！");
     },
     [onChange, setJsonForce],
+  );
+
+  // 处理历史回滚
+  const handleRollback = useCallback(
+    (actionResult: any) => {
+      // 根据 actionResult 类型处理回滚
+      if (actionResult && schema) {
+        // 简单实现：重新加载历史 schema
+        // 实际实现需要根据 actionResult.updates 等信息恢复
+        message.info("回滚功能需要完整实现 actionResult 解析");
+      }
+    },
+    [schema],
   );
 
   // 全局键盘快捷键 (Undo/Redo)
@@ -219,9 +237,6 @@ export function LowcodeEditor({
               showLineNumbers={showLineNumbers}
               wordWrap={wordWrap}
               handleEditorChange={handleEditorChange}
-              schema={schema}
-              onSchemaUpdate={handleAISchemaUpdate}
-              onError={onError}
             />
             <PreviewPane
               error={error}
@@ -232,6 +247,14 @@ export function LowcodeEditor({
             />
           </div>
         </div>
+        {/* AI 浮动岛 */}
+        <FloatingIsland
+          currentSchema={schema}
+          onSchemaUpdate={handleAISchemaUpdate}
+          onError={onError}
+        />
+        {/* AI 历史抽屉 */}
+        <HistoryDrawer onRollback={handleRollback} />
       </div>
     </ConfigProvider>
   );

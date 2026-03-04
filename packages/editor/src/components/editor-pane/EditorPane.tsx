@@ -1,14 +1,12 @@
 import React from "react";
 import { Layout } from "antd";
 import Editor from "@monaco-editor/react";
-import { AIAssistant } from "../ai-assistant/AIAssistant/AIAssistant";
-import type { A2UISchema } from "@lowcode-platform/types";
 import styles from "./EditorPane.module.css";
 
 const { Sider } = Layout;
 
 interface EditorPaneProps {
-  activeTab: "json" | "visual" | "code" | "ai";
+  activeTab: "json" | "visual" | "code";
   width: number | string;
   json: string;
   compiledCode?: string;
@@ -16,9 +14,6 @@ interface EditorPaneProps {
   showLineNumbers: boolean;
   wordWrap: boolean;
   handleEditorChange: (value: string | undefined) => void;
-  schema?: A2UISchema | null;
-  onSchemaUpdate?: (schema: A2UISchema) => void;
-  onError?: (error: string) => void;
 }
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
@@ -30,9 +25,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   showLineNumbers,
   wordWrap,
   handleEditorChange,
-  schema,
-  onSchemaUpdate,
-  onError,
 }) => {
   return (
     <Sider width={width} className={styles.editorPane}>
@@ -43,9 +35,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               ? "JSON SCHEMA"
               : activeTab === "code"
                 ? "REACT CODE"
-                : activeTab === "ai"
-                  ? "AI ASSISTANT"
-                  : "VISUAL EDITOR"}
+                : "VISUAL EDITOR"}
           </span>
         </div>
 
@@ -95,14 +85,6 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               <div className={styles.visualEditorDescription}>
                 即将支持拖拽布局与属性配置
               </div>
-            </div>
-          ) : activeTab === "ai" ? (
-            <div style={{ height: "100%", width: "100%" }}>
-              <AIAssistant
-                currentSchema={schema || null}
-                onSchemaUpdate={onSchemaUpdate}
-                onError={onError}
-              />
             </div>
           ) : null}
         </div>

@@ -32,7 +32,8 @@
     "@monaco-editor/react": "^4.6.0",
     "antd": "^5.0.0",
     "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react-dom": "^18.0.0",
+    "zustand": "^5.0.11"
   },
   "peerDependencies": {
     "antd": "^5.0.0",

@@ -27,7 +27,9 @@
       "Bash(pnpm prisma:generate:*)",
       "Bash(pnpm start:dev)",
       "Bash(git add:*)",
-      "Skill(git-commit)"
+      "Skill(git-commit)",
+      "Bash(pnpm type-check:*)",
+      "Bash(pnpm test:*)"
     ]
   }
 }

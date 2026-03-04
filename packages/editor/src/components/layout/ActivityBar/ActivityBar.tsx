@@ -5,8 +5,8 @@ import styles from "./ActivityBar.module.css";
 const { Sider } = Layout;
 
 interface ActivityBarProps {
-  activeTab: "json" | "visual" | "code" | "ai";
-  setActiveTab: (tab: "json" | "visual" | "code" | "ai") => void;
+  activeTab: "json" | "visual" | "code";
+  setActiveTab: (tab: "json" | "visual" | "code") => void;
 }
 
 export const ActivityBar: React.FC<ActivityBarProps> = ({
@@ -66,23 +66,7 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
         </svg>
       </div>
 
-      <div
-        className={`${styles.tabItem} ${activeTab === "ai" ? styles.active : ""}`}
-        onClick={() => setActiveTab("ai")}
-        title="AI 助手"
-      >
-        {/* AI Icon */}
-        <svg
-          className={styles.icon}
-          viewBox="0 0 1024 1024"
-          width="24"
-          height="24"
-          fill="currentColor"
-        >
-          <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" />
-          <path d="M464 336c0-26.5 21.5-48 48-48s48 21.5 48 48-21.5 48-48 48-48-21.5-48-48zm-24 192h48v160h-48zm96 0h48v160h-48zm-192 0h48v160h-48zm288 0h48v160h-48z" />
-        </svg>
-      </div>
+      {/* AI 助手已移至浮动岛，使用 Cmd+K 触发 */}
     </Sider>
   );
 };
