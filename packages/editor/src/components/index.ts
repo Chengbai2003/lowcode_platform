@@ -6,6 +6,9 @@ export { PreviewPane } from "./layout/PreviewPane/PreviewPane";
 // Editor pane components
 export { EditorPane } from "./editor-pane/EditorPane";
 
+// PropertyPanel components
+export { PropertyPanel } from "./PropertyPanel";
+
 // TreeView components
 export { ComponentTree } from "./TreeView/ComponentTree";
 export {

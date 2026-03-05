@@ -10,6 +10,7 @@ import {
   ActivityBar,
   EditorPane,
   PreviewPane,
+  PropertyPanel,
 } from "./components";
 import { useDraftStorage } from "./hooks/useDraftStorage";
 import { useSchemaHistory } from "./hooks/useSchemaHistory";
@@ -266,13 +267,20 @@ export function LowcodeEditor({
               onSelectComponent={handleSelectComponent}
               handleEditorChange={handleEditorChange}
             />
-            <PreviewPane
-              error={error}
-              schema={schema}
-              allComponents={allComponents}
-              eventContext={eventContext}
-              previewTheme={previewTheme}
-            />
+            <div className={styles.mainContent}>
+              <PreviewPane
+                error={error}
+                schema={schema}
+                allComponents={allComponents}
+                eventContext={eventContext}
+                previewTheme={previewTheme}
+              />
+              <PropertyPanel
+                schema={schema}
+                selectedId={selectedId}
+                onSchemaChange={handleSchemaChangeFromTree}
+              />
+            </div>
           </div>
         </div>
         {/* AI 浮动岛 */}
