@@ -137,36 +137,49 @@ interface A2UISchema {
 
 ### 3.1 表达式解析器
 
-表达式解析器（`expressionParser.ts`）是安全性的关键节点：
+表达式解析器（`expressionParser.ts`）安全性分析：
 
-**已做的安全措施**：
+**已完成的安全措施**：
 
-- Proxy 沙箱（`createSandbox`），拦截对全局对象的访问
-- 静态安全校验（`validateSafety`），拦截 `eval`、`Function`、`import` 等危险操作
-- `with` 语句 + Proxy `has` trap 实现变量隔离
-- AST 验证器（`astValidator.ts`）基于正则的危险模式检测
+- ✅ **jsep AST 解析器**：已用 `jsep` + 白名单求值器（`safeEvaluator.ts`）替换 `new Function()`
+- ✅ **白名单全局对象**：`SAFE_GLOBALS` 只暴露 Math、JSON、Date、String、Number 等安全对象
+- ✅ **原型链保护**：阻止访问 `__proto__`、`prototype`、`constructor`
+- ✅ **多语句拒绝**：Compound 节点只执行第一个表达式，防止恶意串联注入
+- ✅ **函数调用限制**：只允许白名单对象的方法调用（如 `Math.max`）
+- ✅ `new` 表达式限制：只能实例化白名单中的类（如 `new Date()`）
 
-**仍存在的风险**：
+> [!SUCCESS]
+> **表达式引擎安全改造已完成**。数据绑定表达式 `{{expr}}` 的执行不再依赖 `new Function()`，从根本上消除了代码注入风险。
 
-- 底层仍使用 `new Function()` 执行动态代码，这是根本性安全隐患
-- 黑名单式的安全校验容易被绕过
-- `validateWithAST()` 标注 TODO 未实现，深度 AST 验证缺失
+### 3.2 customScript Action
 
-> [!CAUTION]
-> 表达式引擎使用 `new Function()` 动态执行用户输入，即使有 Proxy 沙箱保护，仍然是**最高优先级的安全风险**。建议替换为 QuickJS WASM 或白名单 AST 解析器。
+`customScript` 是 DSL 扩展点，允许用户执行自定义脚本。由于需要支持多行异步逻辑，无法使用 jsep。
 
-### 3.2 服务端安全
+**已实施的多层防护**：
 
-| 项目         | 状态 | 说明                                                                 |
-| ------------ | :--: | -------------------------------------------------------------------- |
-| DTO 校验     |  ✅  | ValidationPipe whitelist + forbidNonWhitelisted                      |
-| 异常过滤     |  ✅  | HttpExceptionFilter 统一异常处理                                     |
-| 限流         |  ✅  | @nestjs/throttler 双层限流（10次/秒、100次/分钟）                    |
-| CORS         |  ⚠️  | 已改为环境变量驱动（未配置时禁止跨域），但 `.env.example` 仍建议 `*` |
-| API 鉴权     |  ❌  | 完全缺失，任何人可调用 AI 接口消耗 Token                             |
-| API Key 暴露 |  ❌  | `/ai/providers/status` 接口返回 config 含 apiKey                     |
-| `.env` 管理  |  ✅  | 仅有 `.env.example`（良好实践），未将 `.env` 纳入版本控制            |
-| DELETE 方法  |  ⚠️  | 删除模型使用 `@Get("models/:id/delete")`，违反 RESTful 规范          |
+1. **黑名单静态校验**（`validateCodeSafety`）：拦截 `eval`、`document`、`window`、`process`、`require` 等
+2. **沙箱隔离**（`createSandboxContext`）：只暴露白名单属性（data、formData、user 等）
+3. **Proxy 加强防护**：拦截 `constructor`、`__proto__`、`prototype` 访问，`has()` trap 阻止逃逸
+4. **超时机制**：默认 10 秒超时，防止无限循环
+
+> [!NOTE]
+> `customScript` 是高级功能，使用场景有限。多层防护已将风险降至可控范围。
+
+### 3.3 服务端安全
+
+| 项目         | 状态 | 说明                                                          |
+| ------------ | :--: | ------------------------------------------------------------- |
+| DTO 校验     |  ✅  | ValidationPipe whitelist + forbidNonWhitelisted               |
+| 异常过滤     |  ✅  | HttpExceptionFilter 统一异常处理                              |
+| 限流         |  ✅  | @nestjs/throttler 双层限流（10次/秒、100次/分钟）             |
+| CORS         |  ✅  | 已改为环境变量驱动（未配置时禁止跨域）                        |
+| API 鉴权     |  ✅  | **已实现**：`AuthGuard` Bearer Token 鉴权，所有 AI 接口已启用 |
+| API Key 暴露 |  ✅  | **已修复**：`sanitizeModel()` 移除响应中的 apiKey             |
+| `.env` 管理  |  ✅  | 仅有 `.env.example`（良好实践），未将 `.env` 纳入版本控制     |
+| DELETE 方法  |  ✅  | **已修复**：使用 `@Delete("models/:id")` 符合 RESTful 规范    |
+
+> [!SUCCESS]
+> **后端安全加固已完成**。所有 P0 安全问题已解决：API 鉴权启用、敏感信息过滤、REST 规范修正。
 
 ---
 
@@ -376,44 +389,40 @@ NestJS 标准结构，全局前缀 `/api/v1`，核心模块为 `ai`（controller
 5. **AST 编译器成熟** — Babel AST 管线，从根源消除 XSS 注入风险，支持 Tailwind 样式编译
 6. **Zod 运行时校验完善** — 三层校验 + 引用完整性检查，编辑器实时容错与编译时严格校验双轨并行
 7. **AI 架构安全** — 前端已移除直连大模型逻辑，API Key 统一由后端管理
+8. **安全基线达标** — 表达式引擎使用 jsep 白名单求值器，后端 API 鉴权已启用，敏感信息已过滤
 
 ### ⚠️ 核心问题
 
-1. **安全隐患残留** — 表达式引擎底层仍使用 `new Function()`，Proxy 沙箱 + 黑名单机制防不住恶意绕过
-2. **后端安全缺失** — 无 API 鉴权、Provider 状态接口暴露 apiKey、DELETE 操作使用 GET
-3. **组件属性面板缺失** — 用户无法对 AI 生成的单个组件微调配置，只能通过再次对话或手动编辑 JSON
-4. **类型安全不足** — 核心数据结构和组件注册表大量使用 `any`
-5. **工程化极简主义** — 无 Lint、无格式化、无 Git Hooks、无 CI/CD
-6. **AI Schema 校验断裂** — AI 生成的 Schema 未经 `safeValidateSchema()` 校验就注入编辑器
+1. ~~**安全隐患残留** — 表达式引擎底层仍使用 `new Function()`~~ ✅ **已解决**（jsep 白名单求值器）
+2. ~~**后端安全缺失** — 无 API 鉴权、Provider 状态接口暴露 apiKey~~ ✅ **已解决**（AuthGuard + sanitizeModel）
+3. ~~**组件属性面板缺失**~~ ✅ **已解决**（Sprint 2 已实现 PropertyPanel）
+4. **类型安全不足** — 核心数据结构和组件注册表大量使用 `any`（P2 优化）
+5. **工程化极简主义** — 无 Lint、无格式化、无 Git Hooks、无 CI/CD（P2 优化）
+6. ~~**AI Schema 校验断裂**~~ ✅ **已解决**（Sprint 2 已实现 SchemaValidator + autoFix）
 
 ### 📊 综合评分
 
-| 维度       | 评分 (1-10) | 说明                                                                    |
-| ---------- | :---------: | ----------------------------------------------------------------------- |
-| 架构设计   |    **8**    | 6 包分层清晰，AI 协议选型正确，前后端职责明确                           |
-| 功能完整度 |    **8**    | DSL 引擎强大，编译器 AST 架构成熟，双输出通道完备                       |
-| 代码质量   |    **7**    | 注释详尽，模块拆分合理，但 `any` 过度使用                               |
-| 安全性     |    **6**    | 编译器 XSS 已根除，但运行时沙箱和后端鉴权均有漏洞                       |
-| 测试覆盖   |   **8.5**   | 全包测试基建覆盖，renderer/server 高质量，compiler 已对齐               |
-| 工程化     |    **3**    | 基建几乎全无，严重依赖工程师自觉                                        |
-| AI 集成    |    **8**    | 多 Provider 流式输出，前后端分离安全，缺 Schema 输出校验                |
-| 开发体验   |    **7**    | AGENT.md 优秀，构建脚本合理，缺代码检查工具                             |
-| **综合**   |   **7.0**   | **协议选型前瞻 + 核心引擎扎实，补齐安全/属性面板/工程化后具备开源潜力** |
+| 维度       | 评分 (1-10) | 说明                                                              |
+| ---------- | :---------: | ----------------------------------------------------------------- |
+| 架构设计   |    **8**    | 6 包分层清晰，AI 协议选型正确，前后端职责明确                     |
+| 功能完整度 |   **8.5**   | DSL 引擎强大，编译器 AST 架构成熟，双输出通道完备，属性面板已实现 |
+| 代码质量   |    **7**    | 注释详尽，模块拆分合理，但 `any` 过度使用                         |
+| 安全性     |    **8**    | 表达式引擎安全改造完成，后端鉴权启用，敏感信息过滤                |
+| 测试覆盖   |   **8.5**   | 全包测试基建覆盖，renderer/server 高质量，compiler 已对齐         |
+| 工程化     |    **3**    | 基建几乎全无，严重依赖工程师自觉                                  |
+| AI 集成    |   **8.5**   | 多 Provider 流式输出，前后端分离安全，Schema 校验闭环已实现       |
+| 开发体验   |    **7**    | AGENT.md 优秀，构建脚本合理，缺代码检查工具                       |
+| **综合**   |   **7.5**   | **安全基线达标 + 核心功能完备，补齐工程化后具备开源首发条件**     |
 
 ### 🎯 优先改进建议
 
-1. **P0 — 安全深水区**：彻底废除 `new Function()`，引入或自研真正的白名单 AST 解析引擎（如基于 JS-Interpreter）。
-2. **P1 — 编译器架构升级（端云分离）**：将 `compiler` 的代码生成动作从纯前端迁移至后端 Node.js 服务端（向 Editor 提供导出接口）。作为“按需出码”的云端服务，彻底解决浏览器运行 `@babel/types` 等构建工具库引发的环境兼容问题（如 `process is not defined`）与前端包体积膨胀问题。
-3. **P1 — 类型攻坚战**：逐步剔除 `any`，为组件 props 定义精确的 TypeScript 接口，同时引入 Zod 构建严密的运行时校验。
-4. **P2 — 补充自动化流**：目前已建立各包基础测试覆盖，下一步重点是接通 CI（GitHub Actions）实现合并主分支的防劣化校验。
-5. **P2 — 研发基建**：花半天时间引入 ESLint + Prettier + husky + lint-staged，终结代码风格争议。
-   | 优先级 | 建议 |
-   | :----: | -------------------------------------------------------------------------------------- |
-   | **P0** | 安全加固：废除 `new Function()`（替换为 QuickJS WASM）、后端增加 API 鉴权、过滤 apiKey |
-   | **P1** | AI Schema 闭环：注入前增加 `safeValidateSchema()` 校验 |
-   | **P1** | 组件属性元数据：为每个组件定义 Property Panel Schema，支持可视化属性配置 |
-   | **P1** | 类型攻坚：逐步消除 `any`，为组件 props 定义精确 TypeScript 接口 |
-   | **P2** | 工程化基建：ESLint + Prettier + Husky + lint-staged（半天可完成） |
-   | **P2** | CI/CD：GitHub Actions 配置 build + test + type-check 流水线 |
-   | **P3** | 多目标编译：Compiler 支持 Vue、小程序等输出 |
-   | **P3** | 实时协作：基于 CRDT 的多人 Schema 协同编辑 |
+|   优先级   | 建议                                                                          |
+| :--------: | ----------------------------------------------------------------------------- |
+| ~~**P0**~~ | ~~安全加固：废除 `new Function()`、后端增加 API 鉴权、过滤 apiKey~~ ✅ 已完成 |
+| ~~**P1**~~ | ~~组件属性元数据：为每个组件定义 Property Panel Schema~~ ✅ 已完成            |
+| ~~**P1**~~ | ~~AI Schema 闭环：注入前增加校验 + autoFix~~ ✅ 已完成                        |
+|   **P1**   | 类型攻坚：逐步消除 `any`，为组件 props 定义精确 TypeScript 接口               |
+|   **P2**   | 工程化基建：ESLint + Prettier + Husky + lint-staged（半天可完成）             |
+|   **P2**   | CI/CD：GitHub Actions 配置 build + test + type-check 流水线                   |
+|   **P3**   | 多目标编译：Compiler 支持 Vue、小程序等输出                                   |
+|   **P3**   | 实时协作：基于 CRDT 的多人 Schema 协同编辑                                    |
