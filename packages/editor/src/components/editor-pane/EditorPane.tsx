@@ -1,6 +1,8 @@
 import React from "react";
 import { Layout } from "antd";
 import Editor from "@monaco-editor/react";
+import { ComponentTree } from "../TreeView/ComponentTree";
+import type { A2UISchema } from "@lowcode-platform/types";
 import styles from "./EditorPane.module.css";
 
 const { Sider } = Layout;
@@ -9,10 +11,14 @@ interface EditorPaneProps {
   activeTab: "json" | "visual" | "code";
   width: number | string;
   json: string;
+  schema: A2UISchema | null;
   compiledCode?: string;
   editorTheme: string;
   showLineNumbers: boolean;
   wordWrap: boolean;
+  selectedId: string | null;
+  onSchemaChange: (schema: A2UISchema) => void;
+  onSelectComponent: (id: string) => void;
   handleEditorChange: (value: string | undefined) => void;
 }
 
@@ -20,10 +26,14 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   activeTab,
   width,
   json,
+  schema,
   compiledCode,
   editorTheme,
   showLineNumbers,
   wordWrap,
+  selectedId,
+  onSchemaChange,
+  onSelectComponent,
   handleEditorChange,
 }) => {
   return (
@@ -79,12 +89,13 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               }}
             />
           ) : activeTab === "visual" ? (
-            <div className={styles.visualEditorPlaceholder}>
-              <div className={styles.constructionIcon}>🚧</div>
-              <div className={styles.visualEditorTitle}>可视化编辑器开发中</div>
-              <div className={styles.visualEditorDescription}>
-                即将支持拖拽布局与属性配置
-              </div>
+            <div className={styles.visualEditorContainer}>
+              <ComponentTree
+                schema={schema}
+                selectedId={selectedId}
+                onSelect={onSelectComponent}
+                onSchemaChange={onSchemaChange}
+              />
             </div>
           ) : null}
         </div>

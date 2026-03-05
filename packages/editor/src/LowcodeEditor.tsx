@@ -16,6 +16,7 @@ import { useSchemaHistory } from "./hooks/useSchemaHistory";
 import { useFloatingIslandHotkey } from "./hooks/useFloatingIslandHotkey";
 import { FloatingIsland } from "./components/ai-assistant/FloatingIsland";
 import { HistoryDrawer } from "./components/ai-assistant/HistoryDrawer";
+import { useSelectionStore } from "./store/editor-store";
 import styles from "./LowcodeEditor.module.css";
 
 /**
@@ -77,8 +78,30 @@ export function LowcodeEditor({
 
   const { saveDraft, loadDraft, clearDraft } = useDraftStorage("default");
 
+  // Selection store integration
+  const selectedId = useSelectionStore((state) => state.selectedId);
+  const selectComponent = useSelectionStore((state) => state.selectComponent);
+
   // 浮动岛快捷键
   useFloatingIslandHotkey();
+
+  // 处理组件选择（用于 ComponentTree）
+  const handleSelectComponent = useCallback(
+    (id: string) => {
+      selectComponent(id);
+    },
+    [selectComponent],
+  );
+
+  // 处理 Schema 变化（用于 ComponentTree 右键菜单操作）
+  const handleSchemaChangeFromTree = useCallback(
+    (newSchema: A2UISchema) => {
+      setSchema(newSchema);
+      setJsonForce(JSON.stringify(newSchema, null, 2));
+      onChange?.(newSchema);
+    },
+    [onChange, setJsonForce],
+  );
 
   // 挂载时检查草稿
   useEffect(() => {
@@ -124,7 +147,7 @@ export function LowcodeEditor({
         saveDraft(value);
       }
     },
-    [saveDraft],
+    [setJson, saveDraft],
   );
 
   // 编译处理函数
@@ -136,14 +159,15 @@ export function LowcodeEditor({
         setActiveTab("code");
         message.success("编译成功！");
         clearDraft(); // 如果编译成功，可以认为状态稳定，清理草稿（可选策略，这里加上了）
-      } catch (e: any) {
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : "未知错误";
         console.error(e);
-        message.error("编译失败: " + e.message);
+        message.error("编译失败: " + errorMessage);
       }
     } else {
       message.warning("Schema 为空，无法编译");
     }
-  }, [schema]);
+  }, [schema, clearDraft]);
 
   // 处理AI生成的Schema更新
   const handleAISchemaUpdate = useCallback(
@@ -158,7 +182,7 @@ export function LowcodeEditor({
 
   // 处理历史回滚
   const handleRollback = useCallback(
-    (actionResult: any) => {
+    (actionResult: unknown) => {
       // 根据 actionResult 类型处理回滚
       if (actionResult && schema) {
         // 简单实现：重新加载历史 schema
@@ -198,7 +222,7 @@ export function LowcodeEditor({
         acc[key] = componentRegistry[key].component;
         return acc;
       },
-      {} as Record<string, React.ComponentType<any>>,
+      {} as Record<string, React.ComponentType<Record<string, unknown>>>,
     );
     return { ...componentsOnly, ...customComponents };
   }, [customComponents]);
@@ -232,10 +256,14 @@ export function LowcodeEditor({
               activeTab={activeTab}
               width={editorWidth}
               json={json}
+              schema={schema}
               compiledCode={compiledCode}
               editorTheme={editorTheme}
               showLineNumbers={showLineNumbers}
               wordWrap={wordWrap}
+              selectedId={selectedId}
+              onSchemaChange={handleSchemaChangeFromTree}
+              onSelectComponent={handleSelectComponent}
               handleEditorChange={handleEditorChange}
             />
             <PreviewPane

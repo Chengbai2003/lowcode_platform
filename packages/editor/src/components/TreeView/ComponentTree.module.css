@@ -1,0 +1,214 @@
+/* ComponentTree 主容器 */
+.componentTree {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  color: #cccccc;
+  font-size: 13px;
+}
+
+.treeHeader {
+  padding: 8px 12px;
+  background: #252526;
+  border-bottom: 1px solid #303030;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: #858585;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.treeContent {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0;
+}
+
+.emptyState {
+  padding: 20px;
+  text-align: center;
+  color: #858585;
+}
+
+/* 树节点 */
+.treeNode {
+  user-select: none;
+}
+
+.treeNodeContent {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 1px 4px;
+  transition: background-color 0.15s ease;
+}
+
+.treeNodeContent:hover {
+  background-color: #2a2d2e;
+}
+
+.treeNodeContent.selected {
+  background-color: #094771;
+}
+
+/* 展开图标 */
+.expandIcon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+  color: #858585;
+  cursor: pointer;
+  visibility: hidden;
+  transition: transform 0.2s ease;
+}
+
+.expandIcon.visible {
+  visibility: visible;
+}
+
+.expandIcon:hover {
+  color: #cccccc;
+}
+
+.expandIcon.expanded {
+  transform: rotate(180deg);
+}
+
+/* 组件图标 */
+.componentIcon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 6px;
+  font-size: 14px;
+}
+
+/* 组件类型 */
+.componentType {
+  font-weight: 500;
+  margin-right: 8px;
+  color: #4fc1ff;
+}
+
+/* 组件 ID */
+.componentId {
+  font-size: 11px;
+  color: #858585;
+  background: #2d2d2d;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-right: 8px;
+}
+
+/* 组件标签（自定义显示名称） */
+.componentLabel {
+  font-size: 12px;
+  color: #d4d4d4;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 子节点容器 */
+.treeNodeChildren {
+  /* 继承父节点样式 */
+}
+
+/* 右键菜单 */
+.contextMenu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 140px;
+  background: #252526;
+  border: 1px solid #454545;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  padding: 4px 0;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: #cccccc;
+  transition: background-color 0.15s ease;
+}
+
+.menuItem:hover:not(.disabled) {
+  background-color: #094771;
+}
+
+.menuItem.disabled {
+  color: #5a5a5a;
+  cursor: not-allowed;
+}
+
+.menuItem.danger {
+  color: #f14c4c;
+}
+
+.menuItem.danger:hover:not(.disabled) {
+  background-color: #5a1d1d;
+}
+
+.menuIcon {
+  margin-right: 8px;
+  font-size: 14px;
+}
+
+.menuDivider {
+  height: 1px;
+  background: #454545;
+  margin: 4px 8px;
+}
+
+/* 移动目标选择器 */
+.selectorHint {
+  color: #858585;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.treeSelector {
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  padding: 8px;
+  background: #1e1e1e;
+}
+
+/* 滚动条样式 */
+.treeContent::-webkit-scrollbar,
+.treeSelector::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.treeContent::-webkit-scrollbar-track,
+.treeSelector::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+
+.treeContent::-webkit-scrollbar-thumb,
+.treeSelector::-webkit-scrollbar-thumb {
+  background: #424242;
+  border-radius: 4px;
+}
+
+.treeContent::-webkit-scrollbar-thumb:hover,
+.treeSelector::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}

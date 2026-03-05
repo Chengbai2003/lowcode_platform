@@ -55,3 +55,9 @@
 .visualEditorDescription {
   font-size: 13px;
 }
+
+.visualEditorContainer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}

@@ -6,6 +6,17 @@ export { PreviewPane } from "./layout/PreviewPane/PreviewPane";
 // Editor pane components
 export { EditorPane } from "./editor-pane/EditorPane";
 
+// TreeView components
+export { ComponentTree } from "./TreeView/ComponentTree";
+export {
+  schemaToTree,
+  deleteComponent,
+  copyComponent,
+  moveComponent,
+  moveComponentTo,
+} from "./TreeView/schemaToTree";
+export type { TreeNodeData, ComponentTreeProps } from "./TreeView/treeTypes";
+
 // AI assistant components
 export { AIAssistant } from "./ai-assistant/AIAssistant/AIAssistant";
 export { AIConfig } from "./ai-assistant/AIConfig/AIConfig";

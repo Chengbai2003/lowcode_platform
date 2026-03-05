@@ -1,7 +1,7 @@
 import React from "react";
 import { Layout, ConfigProvider, theme } from "antd";
-import { Renderer } from "@lowcode-platform/renderer";
 import type { ComponentRegistry, A2UISchema } from "@lowcode-platform/types";
+import { SelectableCanvas } from "./SelectableCanvas";
 import styles from "./PreviewPane.module.css";
 
 const { Content } = Layout;
@@ -9,7 +9,7 @@ const { Content } = Layout;
 interface PreviewPaneProps {
   schema: A2UISchema | null;
   allComponents: ComponentRegistry;
-  eventContext: Record<string, any>;
+  eventContext: Record<string, unknown>;
   previewTheme: "light" | "dark";
   error: string | null;
 }
@@ -39,16 +39,12 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
               <h3 className={styles.errorTitle}>渲染错误</h3>
               <pre>{error}</pre>
             </div>
-          ) : schema ? (
-            <Renderer
+          ) : (
+            <SelectableCanvas
               schema={schema}
-              components={allComponents}
+              allComponents={allComponents}
               eventContext={eventContext}
             />
-          ) : (
-            <div className={styles.noContentMessage}>
-              暂无内容，请在左侧编辑器输入 Schema
-            </div>
           )}
         </ConfigProvider>
       </div>
