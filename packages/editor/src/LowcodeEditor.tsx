@@ -11,6 +11,7 @@ import {
   EditorPane,
   PreviewPane,
   PropertyPanel,
+  ErrorBoundary,
 } from "./components";
 import { useDraftStorage } from "./hooks/useDraftStorage";
 import { useSchemaHistory } from "./hooks/useSchemaHistory";
@@ -21,9 +22,9 @@ import { useSelectionStore } from "./store/editor-store";
 import styles from "./LowcodeEditor.module.css";
 
 /**
- * JSON Schema 编辑器，支持实时预览
+ * 编辑器内部组件
  */
-export function LowcodeEditor({
+function LowcodeEditorInner({
   initialSchema,
   editorWidth = "50%",
   theme: editorTheme = "vs-dark",
@@ -293,5 +294,17 @@ export function LowcodeEditor({
         <HistoryDrawer onRollback={handleRollback} />
       </div>
     </ConfigProvider>
+  );
+}
+
+/**
+ * JSON Schema 编辑器，支持实时预览
+ * 使用 ErrorBoundary 包裹以捕获渲染错误
+ */
+export function LowcodeEditor(props: LowcodeEditorProps) {
+  return (
+    <ErrorBoundary>
+      <LowcodeEditorInner {...props} />
+    </ErrorBoundary>
   );
 }

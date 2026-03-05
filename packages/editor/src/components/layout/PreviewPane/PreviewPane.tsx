@@ -2,6 +2,7 @@ import React from "react";
 import { Layout, ConfigProvider, theme } from "antd";
 import type { ComponentRegistry, A2UISchema } from "@lowcode-platform/types";
 import { SelectableCanvas } from "./SelectableCanvas";
+import { NoSchemaEmptyState } from "../../EmptyState";
 import styles from "./PreviewPane.module.css";
 
 const { Content } = Layout;
@@ -39,6 +40,8 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
               <h3 className={styles.errorTitle}>渲染错误</h3>
               <pre>{error}</pre>
             </div>
+          ) : !schema ? (
+            <NoSchemaEmptyState />
           ) : (
             <SelectableCanvas
               schema={schema}

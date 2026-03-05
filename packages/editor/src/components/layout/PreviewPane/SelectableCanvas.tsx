@@ -8,6 +8,7 @@ import type {
 import { useSelectionStore } from "../../../store/editor-store";
 import { SelectionHighlight } from "./SelectionHighlight";
 import { useComponentPosition } from "./useComponentPosition";
+import { NoSchemaEmptyState } from "../../EmptyState";
 import styles from "./PreviewPane.module.css";
 
 interface SelectableCanvasProps {
@@ -110,9 +111,7 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
               onComponentClick={handleComponentClick}
             />
           ) : (
-            <div className={styles.noContentMessage}>
-              暂无内容，请在左侧编辑器输入 Schema
-            </div>
+            <NoSchemaEmptyState />
           )}
         </div>
 

@@ -9,6 +9,24 @@ export { EditorPane } from "./editor-pane/EditorPane";
 // PropertyPanel components
 export { PropertyPanel } from "./PropertyPanel";
 
+// Error handling components
+export { ErrorBoundary, withErrorBoundary } from "./ErrorBoundary";
+
+// Empty state components
+export {
+  EmptyState,
+  NoSchemaEmptyState,
+  NoSelectionEmptyState,
+  NoComponentsEmptyState,
+  NoResultsEmptyState,
+  ErrorEmptyState,
+} from "./EmptyState";
+export type {
+  EmptyStateProps,
+  EmptyStateVariant,
+  EmptyStateAction,
+} from "./EmptyState";
+
 // TreeView components
 export { ComponentTree } from "./TreeView/ComponentTree";
 export {
@@ -19,6 +37,9 @@ export {
   moveComponentTo,
 } from "./TreeView/schemaToTree";
 export type { TreeNodeData, ComponentTreeProps } from "./TreeView/treeTypes";
+
+// Toolbar components
+export { UndoRedoButtons, useUndoRedoShortcuts } from "./Toolbar";
 
 // AI assistant components
 export { AIAssistant } from "./ai-assistant/AIAssistant/AIAssistant";

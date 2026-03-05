@@ -1,5 +1,5 @@
 import React, { useMemo, useCallback } from "react";
-import { Collapse, Empty } from "antd";
+import { Collapse } from "antd";
 import type { A2UISchema, PropertyMeta } from "@lowcode-platform/types";
 import { getComponentMeta } from "@lowcode-platform/components";
 import { StringEditor } from "./editors/StringEditor";
@@ -7,6 +7,7 @@ import { NumberEditor } from "./editors/NumberEditor";
 import { BooleanEditor } from "./editors/BooleanEditor";
 import { SelectEditor } from "./editors/SelectEditor";
 import { ColorEditor } from "./editors/ColorEditor";
+import { NoSelectionEmptyState } from "../EmptyState";
 import styles from "./PropertyPanel.module.css";
 
 interface PropertyPanelProps {
@@ -131,10 +132,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           <span className={styles.panelTitle}>属性面板</span>
         </div>
         <div className={styles.panelBody}>
-          <Empty
-            description="请选择一个组件"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-          />
+          <NoSelectionEmptyState />
         </div>
       </div>
     );

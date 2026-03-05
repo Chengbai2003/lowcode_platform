@@ -12,6 +12,7 @@ import {
   handleContextMenuAction,
 } from "./ContextMenu";
 import { schemaToTree, moveComponentTo } from "./schemaToTree";
+import { NoComponentsEmptyState } from "../EmptyState";
 import styles from "./ComponentTree.module.css";
 
 /**
@@ -138,7 +139,7 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
 
       <div className={styles.treeContent}>
         {treeData.length === 0 ? (
-          <div className={styles.emptyState}>暂无组件</div>
+          <NoComponentsEmptyState />
         ) : (
           treeData.map((node) => (
             <TreeNode

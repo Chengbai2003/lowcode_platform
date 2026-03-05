@@ -44,6 +44,7 @@ export function setApiSecret(token: string): void {
  * 获取当前 API Secret（调试用）
  */
 export function getApiSecret(): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (fetchApp as any).apiSecret;
 }
 
@@ -53,3 +54,46 @@ import "./styles/globals.css";
 export { LowcodeEditor } from "./LowcodeEditor";
 export type { LowcodeEditorProps } from "./types";
 export { AIAssistant } from "./components/ai-assistant/AIAssistant/AIAssistant";
+
+// Export stores
+export {
+  useHistoryStore,
+  useCanUndo,
+  useCanRedo,
+  useUndoStackSize,
+  useRedoStackSize,
+  useIsExecuting,
+  useUndoHistory,
+  useRedoHistory,
+  createCommandOptions,
+  useSelectionStore,
+  useEditorStore,
+} from "./store";
+export type { Command, CommandOptions, CommandFactory } from "./store";
+
+// Export commands
+export {
+  UpdateSchemaCommand,
+  createUpdateSchemaCommand,
+  ComponentCommand,
+  createAddComponentCommand,
+  createDeleteComponentCommand,
+  createMoveComponentCommand,
+  createUpdatePropsCommand,
+  MacroCommand,
+  createMacroCommand,
+} from "./commands";
+export type { SchemaChangeCallback, ComponentOperation } from "./commands";
+
+// Export hooks
+export {
+  useSchemaHistory,
+  useSchemaHistoryStore,
+  useSchemaCommands,
+  useFloatingIslandHotkey,
+  useDraftStorage,
+} from "./hooks";
+export type { SchemaHistoryOptions } from "./hooks";
+
+// Export components
+export { UndoRedoButtons, useUndoRedoShortcuts } from "./components/Toolbar";

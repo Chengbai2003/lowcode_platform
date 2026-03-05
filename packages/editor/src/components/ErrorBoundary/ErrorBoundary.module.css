@@ -1,0 +1,125 @@
+.errorBoundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 24px;
+  background-color: var(--bg-primary, #ffffff);
+  border-radius: 8px;
+  border: 1px solid var(--border-secondary, #e8e8e8);
+}
+
+.errorContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 480px;
+  text-align: center;
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  margin-bottom: 20px;
+  background-color: #fff1f0;
+  border-radius: 50%;
+  color: #ff4d4f;
+}
+
+.title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #262626);
+}
+
+.description {
+  margin: 0 0 16px 0;
+  font-size: 14px;
+  color: var(--text-secondary, #595959);
+  line-height: 1.6;
+}
+
+.errorDetails {
+  width: 100%;
+  margin-bottom: 20px;
+  text-align: left;
+}
+
+.errorDetails details {
+  background-color: var(--bg-tertiary, #f5f5f5);
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid var(--border-tertiary, #f0f0f0);
+}
+
+.errorDetails summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #595959);
+  user-select: none;
+}
+
+.errorDetails summary:hover {
+  color: var(--text-primary, #262626);
+}
+
+.errorStack {
+  margin: 12px 0 0 0;
+  padding: 12px;
+  font-family: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #ff4d4f;
+  background-color: #fff1f0;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.retryButton,
+.reloadButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.retryButton {
+  background-color: var(--primary-color, #1890ff);
+  color: #ffffff;
+}
+
+.retryButton:hover {
+  background-color: var(--primary-color-hover, #40a9ff);
+}
+
+.reloadButton {
+  background-color: transparent;
+  color: var(--text-secondary, #595959);
+  border: 1px solid var(--border-primary, #d9d9d9);
+}
+
+.reloadButton:hover {
+  color: var(--text-primary, #262626);
+  border-color: var(--primary-color, #1890ff);
+}
