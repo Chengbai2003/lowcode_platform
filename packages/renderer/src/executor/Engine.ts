@@ -16,106 +16,51 @@ import type {
 import dataActions from "./actions/dataActions";
 import uiActions from "./actions/uiActions";
 import navActions from "./actions/navActions";
-import stateActions from "./actions/stateActions";
 import flowActions from "./actions/flowActions";
 import asyncActions from "./actions/asyncActions";
 import debugActions from "./actions/debugActions";
 import extensionActions from "./actions/extensionActions";
 
 /**
- * 创建废弃 Action 处理器包装器
- * 在执行前输出警告日志
- */
-function createDeprecatedHandler(
-  name: string,
-  handler: ActionHandler,
-): ActionHandler {
-  return (action, context, engine) => {
-    console.warn(
-      `[DSL Deprecated] Action "${name}" is deprecated and will be removed in v1.0. ` +
-        `See documentation for migration guide.`,
-    );
-    return handler(action, context, engine);
-  };
-}
-
-/**
- * 内置Action处理器
+ * 内置Action处理器 (8种精简方案)
  *
- * 处理器分类：
- * - 核心 Action (12种): setField, mergeField, message, modal, confirm, navigate,
- *                       setState, apiCall, delay, if, tryCatch, log
- * - 高级 Action (5种): notification, waitCondition, loop, switch, customAction
- * - 废弃 Action (10种): clearField, openTab, closeTab, back, dispatch, resetForm,
- *                       parallel, sequence, debug, customScript
+ * | 分类 | Action | 用途 |
+ * |-----|--------|------|
+ * | 数据 | setValue | 设置字段/状态值 |
+ * | 网络 | apiCall | API 请求 |
+ * | 路由 | navigate | 页面跳转 |
+ * | 交互 | feedback | 消息/通知 |
+ * | 弹窗 | dialog | 模态框/确认框 |
+ * | 控制 | if, loop | 条件分支/循环 |
+ * | 工具 | delay, log | 延迟/日志 |
+ * | 逃生舱 | customScript | 自定义脚本 |
  */
 const BUILTIN_HANDLERS: ActionRegistry = {
-  // ============================================================================
-  // 核心数据操作
-  // ============================================================================
-  setField: dataActions.setField,
-  mergeField: dataActions.mergeField,
+  // 数据
+  setValue: dataActions.setValue,
 
-  // ============================================================================
-  // 核心 UI 交互
-  // ============================================================================
-  message: uiActions.message,
-  modal: uiActions.modal,
-  confirm: uiActions.confirm,
+  // 网络
+  apiCall: asyncActions.apiCall,
 
-  // ============================================================================
-  // 核心导航
-  // ============================================================================
+  // 路由
   navigate: navActions.navigate,
 
-  // ============================================================================
-  // 核心状态管理
-  // ============================================================================
-  setState: stateActions.setState,
+  // 交互
+  feedback: uiActions.feedback,
 
-  // ============================================================================
-  // 核心异步操作
-  // ============================================================================
-  apiCall: asyncActions.apiCall,
-  delay: asyncActions.delay,
+  // 弹窗
+  dialog: uiActions.dialog,
 
-  // ============================================================================
-  // 核心流程控制
-  // ============================================================================
+  // 流程控制
   if: flowActions.if,
-  tryCatch: flowActions.tryCatch,
+  loop: flowActions.loop,
 
-  // ============================================================================
-  // 核心调试
-  // ============================================================================
+  // 工具
+  delay: asyncActions.delay,
   log: debugActions.log,
 
-  // ============================================================================
-  // 高级 Action (不推荐 AI 生成)
-  // ============================================================================
-  notification: uiActions.notification,
-  waitCondition: asyncActions.waitCondition,
-  loop: flowActions.loop,
-  switch: flowActions.switch,
-  customAction: extensionActions.customAction,
-
-  // ============================================================================
-  // 废弃 Action (向后兼容，将在 v1.0 移除)
-  // ============================================================================
-  clearField: createDeprecatedHandler("clearField", dataActions.clearField),
-  openTab: createDeprecatedHandler("openTab", navActions.openTab),
-  closeTab: createDeprecatedHandler("closeTab", navActions.closeTab),
-  back: createDeprecatedHandler("back", navActions.back),
-  dispatch: createDeprecatedHandler("dispatch", stateActions.dispatch),
-  resetForm: createDeprecatedHandler("resetForm", stateActions.resetForm),
-  parallel: createDeprecatedHandler("parallel", flowActions.parallel),
-  sequence: createDeprecatedHandler("sequence", flowActions.sequence),
-  debug: createDeprecatedHandler("debug", debugActions.debug),
-  // customScript 已废弃且存在安全风险，但仍保留向后兼容
-  customScript: createDeprecatedHandler(
-    "customScript",
-    extensionActions.customScript,
-  ),
+  // 逃生舱
+  customScript: extensionActions.customScript,
 };
 
 /**
@@ -161,7 +106,7 @@ export class DSLExecutor {
   ): Promise<BatchActionResult> {
     const startTime = Date.now();
 
-    // 将 onLog 方法注入到上下文中，供 debugActions 使用
+    // 将 onLog 方法注入到上下文中
     const contextWithLog = {
       ...context,
       onLog: this.options.onLog,
@@ -215,7 +160,6 @@ export class DSLExecutor {
 
         this.options.onError(errorObj, action, contextWithLog);
 
-        // 记录错误
         this.log(
           "error",
           `Action ${i + 1}/${actions.length} failed: ${errorObj.message}`,
@@ -224,10 +168,6 @@ export class DSLExecutor {
             error: errorObj,
           },
         );
-
-        // 是否继续执行后续Action？
-        // 默认：继续执行，除非是tryCatch块内部
-        // 可以通过配置来改变行为
       }
     }
 
@@ -285,7 +225,6 @@ export class DSLExecutor {
       throw new Error(`Unknown action type: ${actionType}`);
     }
 
-    // 调用处理器，传入引擎实例（用于嵌套调用）
     return handler(action, context, this);
   }
 
@@ -351,10 +290,14 @@ export class DSLExecutor {
       getState: () => ({}),
       utils: {
         formatDate: (date: Date | string, format = "YYYY-MM-DD") => {
-          // 简化实现
           return String(date);
         },
         uuid: () => {
+          // 使用 crypto.randomUUID()（如果可用），否则降级到 Math.random()
+          if (typeof crypto !== "undefined" && crypto.randomUUID) {
+            return crypto.randomUUID();
+          }
+          // 降级方案（非加密安全，仅用于不重要的场景）
           return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
             /[xy]/g,
             (c) => {

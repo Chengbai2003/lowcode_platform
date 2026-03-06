@@ -5,25 +5,10 @@ import type { Value } from "../context";
  */
 export type NavigateAction = {
   type: "navigate";
+  /** 目标路径 */
   to: Value;
+  /** 路径参数 */
   params?: Record<string, Value>;
+  /** 是否替换当前历史记录 */
   replace?: boolean;
-};
-
-export type OpenTabAction = {
-  type: "openTab";
-  id: string;
-  title: Value;
-  path: Value;
-  closeOthers?: boolean;
-};
-
-export type CloseTabAction = {
-  type: "closeTab";
-  id?: string;
-};
-
-export type BackAction = {
-  type: "back";
-  count?: number;
 };

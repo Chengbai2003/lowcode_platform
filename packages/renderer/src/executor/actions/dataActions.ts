@@ -1,146 +1,105 @@
 /**
  * 数据操作 Actions
- * setField, mergeField, clearField
+ * setValue - 统一的值设置
  */
 
 import type { ActionHandler } from "@lowcode-platform/types";
-import { resolveValue, safeSet } from "../parser";
+import { resolveValue } from "../parser";
 
 /**
- * 设置字段值
- * Action: { type: 'setField'; field: string; value: Value; }
+ * 检查键名是否安全，防止原型污染
  */
-export const setField: ActionHandler = async (action, context) => {
-  const { field, value } = action;
+function isSafeKey(key: string): boolean {
+  const unsafeKeys = ["__proto__", "constructor", "prototype"];
+  return !unsafeKeys.includes(key);
+}
+
+/**
+ * 设置值
+ * Action: { type: 'setValue'; field: string; value: Value; merge?: boolean; }
+ *
+ * 覆盖场景：
+ * - 设置字段：{ type: "setValue", field: "user.name", value: "张三" }
+ * - 合并对象：{ type: "setValue", field: "user", value: { age: 18 }, merge: true }
+ * - 设置状态：{ type: "setValue", field: "state.loading", value: false }
+ * - 清除值：{ type: "setValue", field: "temp", value: null }
+ */
+export const setValue: ActionHandler = async (action, context) => {
+  const { field, value, merge = false } = action;
   const resolvedValue = resolveValue(value, context);
 
-  // 如果context中有dispatch，使用Redux更新
+  // 解析路径
+  const keys = field.split(".");
+  const lastKey = keys.pop();
+
+  if (!lastKey) {
+    throw new Error(`setValue: invalid field path "${field}"`);
+  }
+
+  // 获取目标对象
+  let target: any = context.data;
+
+  // 特殊路径处理
+  if (keys[0] === "state") {
+    target = context.state;
+    keys.shift(); // 移除 "state" 前缀
+  } else if (keys[0] === "formData") {
+    target = context.formData;
+    keys.shift();
+  }
+
+  // 遍历到父级（安全检查每个 key）
+  for (const key of keys) {
+    // 原型污染防护：跳过危险键名
+    if (!isSafeKey(key)) {
+      throw new Error(
+        `setValue: forbidden key "${key}" - potential prototype pollution`,
+      );
+    }
+    if (target[key] == null || typeof target[key] !== "object") {
+      target[key] = {};
+    }
+    target = target[key];
+  }
+
+  // 设置值（安全检查 lastKey）
+  if (!isSafeKey(lastKey)) {
+    throw new Error(
+      `setValue: forbidden key "${lastKey}" - potential prototype pollution`,
+    );
+  }
+
+  if (merge && typeof resolvedValue === "object" && resolvedValue !== null) {
+    // 合并模式：过滤危险键名后浅合并
+    const safeValue: Record<string, any> = {};
+    for (const [k, v] of Object.entries(resolvedValue)) {
+      if (isSafeKey(k)) {
+        safeValue[k] = v;
+      }
+    }
+    if (typeof target[lastKey] !== "object" || target[lastKey] === null) {
+      target[lastKey] = {};
+    }
+    Object.assign(target[lastKey], safeValue);
+  } else {
+    // 直接设置
+    target[lastKey] = resolvedValue;
+  }
+
+  // 触发 dispatch（如果存在）
   if (context.dispatch) {
     context.dispatch({
       type: "SET_FIELD",
-      payload: { field, value: resolvedValue },
+      payload: { field, value: resolvedValue, merge },
     });
   }
 
-  // 同时更新context中的data
-  safeSet(context.data, field, resolvedValue);
-
-  return resolvedValue;
+  return { field, value: resolvedValue, merge };
 };
 
 /**
- * 合并字段值
- * Action: { type: 'mergeField'; field: string; value: Record<string, any>; }
- */
-export const mergeField: ActionHandler = async (action, context) => {
-  const { field, value } = action;
-  const resolvedValue = resolveValue(value, context);
-
-  if (typeof resolvedValue !== "object" || resolvedValue === null) {
-    throw new Error("mergeField: value must be an object");
-  }
-
-  // 使用dispatch更新
-  if (context.dispatch) {
-    context.dispatch({
-      type: "MERGE_FIELD",
-      payload: { field, value: resolvedValue },
-    });
-  }
-
-  // 同时更新context中的data
-  const currentValue = safeGet(context.data, field, {});
-  const mergedValue = deepMerge(currentValue, resolvedValue);
-  safeSet(context.data, field, mergedValue);
-
-  return mergedValue;
-};
-
-/**
- * 清除字段值
- * Action: { type: 'clearField'; field: string; }
- */
-export const clearField: ActionHandler = async (action, context) => {
-  const { field } = action;
-
-  // 使用dispatch更新
-  if (context.dispatch) {
-    context.dispatch({
-      type: "CLEAR_FIELD",
-      payload: { field },
-    });
-  }
-
-  // 从context.data中删除
-  const keys = field.split(".");
-  const lastKey = keys.pop();
-  if (lastKey) {
-    let current = context.data;
-    for (const key of keys) {
-      if (current[key]) {
-        current = current[key];
-      } else {
-        // 路径不存在，无法清除
-        return;
-      }
-    }
-    delete current[lastKey];
-  }
-
-  return undefined;
-};
-
-/**
- * 辅助函数：安全地获取嵌套属性
- */
-function safeGet(obj: any, path: string, defaultValue: any = undefined): any {
-  if (obj == null) {
-    return defaultValue;
-  }
-
-  const keys = path.split(".");
-  let current = obj;
-
-  for (const key of keys) {
-    if (current == null) {
-      return defaultValue;
-    }
-    current = current[key];
-  }
-
-  return current !== undefined ? current : defaultValue;
-}
-
-/**
- * 辅助函数：深度合并对象
- */
-function deepMerge(
-  target: Record<string, any>,
-  source: Record<string, any>,
-): Record<string, any> {
-  const result = { ...target };
-
-  for (const key in source) {
-    if (source[key] == null) {
-      result[key] = source[key];
-    } else if (
-      typeof source[key] === "object" &&
-      typeof result[key] === "object"
-    ) {
-      result[key] = deepMerge(result[key], source[key]);
-    } else {
-      result[key] = source[key];
-    }
-  }
-
-  return result;
-}
-
-/**
- * 导出所有数据操作Actions
+ * 导出所有数据操作 Actions
  */
 export default {
-  setField,
-  mergeField,
-  clearField,
+  setValue,
 };

@@ -1,44 +1,27 @@
 /**
- * 扩展点 Actions
- * customScript, customAction
- *
- * @deprecated customScript 存在安全风险，将在 v1.0 移除
+ * 高级逃生舱 Action
+ * customScript - 基于 Proxy + with 的安全自定义脚本
  */
 
+// 假设你的类型定义路径
 import type { ActionHandler, ExecutionContext } from "@lowcode-platform/types";
 
 /**
- * 自定义脚本Action
- * 执行用户提供的JS代码（经过AST安全验证）
- *
- * @deprecated 存在代码注入安全风险，请使用 customAction 替代
- *
- * Action: { type: 'customScript'; code: string; timeout?: number; }
- *
- * ⚠️ 安全警告：
- * 此 Action 允许执行任意 JavaScript 代码，存在严重的 XSS 和代码注入风险。
- * 在生产环境中应通过 ExecutorOptions.enableCustomScript: false 禁用此功能。
+ * 自定义脚本 Action Handler
  */
-export const customScript: ActionHandler = async (action, context, engine) => {
+export const customScript: ActionHandler = async (action, context) => {
   const { code, timeout = 10000 } = action;
 
-  // 安全警告
-  console.warn(
-    "[DSL Security] customScript action is deprecated and poses security risks. " +
-      "Consider using customAction instead.",
-  );
-
-  // 验证代码安全性
-  if (!validateCodeSafety(code)) {
-    throw new Error("Code validation failed: Potentially unsafe code detected");
+  if (!code || typeof code !== "string") {
+    throw new Error("customScript: code is required and must be a string");
   }
 
   try {
-    // 创建沙箱环境
-    const sandbox = createSandboxContext(context);
+    // 1. 提取安全的上下文变量
+    const sandboxContext = createSandboxContext(context);
 
-    // 执行代码（带超时）
-    const result = await executeWithTimeout(code, sandbox, timeout);
+    // 2. 在安全沙箱中执行代码
+    const result = await executeInSandbox(code, sandboxContext, timeout);
     return result;
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -49,44 +32,9 @@ export const customScript: ActionHandler = async (action, context, engine) => {
 };
 
 /**
- * 自定义Action
- * 执行插件注册的自定义处理器
- *
- * Action: { type: 'customAction'; plugin: string; config: Record<string, any>; }
- */
-export const customAction: ActionHandler = async (action, context) => {
-  const { plugin, config } = action;
-
-  // 检查插件是否注册
-  if (!context.plugins || typeof context.plugins !== "object") {
-    throw new Error("Plugin system not available");
-  }
-
-  const pluginHandler = (context.plugins as Record<string, any>)[plugin];
-
-  if (!pluginHandler || typeof pluginHandler !== "function") {
-    throw new Error(`Plugin "${plugin}" not found or not a function`);
-  }
-
-  try {
-    // 执行插件处理器
-    const result = await pluginHandler(config, context);
-    return result;
-  } catch (error) {
-    const errorObj = error instanceof Error ? error : new Error(String(error));
-    throw new Error(
-      `Plugin "${plugin}" execution failed: ${errorObj.message}`,
-      { cause: error },
-    );
-  }
-};
-
-/**
- * 创建沙箱上下文
- * 只暴露安全的API给用户代码
+ * 提取并构建基础上下文（白名单机制）
  */
 function createSandboxContext(context: ExecutionContext): Record<string, any> {
-  // 安全的白名单属性
   const safeProps = [
     "data",
     "formData",
@@ -103,12 +51,11 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
   const sandbox: Record<string, any> = {};
 
   for (const prop of safeProps) {
-    if (context[prop as keyof ExecutionContext] !== undefined) {
-      sandbox[prop] = context[prop as keyof ExecutionContext];
+    if ((context as any)[prop] !== undefined) {
+      sandbox[prop] = (context as any)[prop];
     }
   }
 
-  // 暴露简化的API
   if (context.ui) {
     sandbox.message = context.ui.message;
   }
@@ -117,43 +64,92 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
     sandbox.api = context.api;
   }
 
+  // 注入一些安全的内置对象，防止用户代码报错
+  sandbox.Math = Math;
+  sandbox.Date = Date;
+  sandbox.JSON = JSON;
+  sandbox.console = {
+    log: (...args: any[]) => console.log("[Sandbox Log]:", ...args),
+    warn: (...args: any[]) => console.warn("[Sandbox Warn]:", ...args),
+    error: (...args: any[]) => console.error("[Sandbox Error]:", ...args),
+  };
+
   return sandbox;
 }
 
 /**
- * 带超时的代码执行
+ * 核心：基于 Proxy 和 with 的安全代码执行器
  */
-function executeWithTimeout(
+function executeInSandbox(
   code: string,
   sandbox: Record<string, any>,
   timeout: number,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(new Error(`Execution timeout (${timeout}ms)`));
+      reject(
+        new Error(
+          `Execution timeout (${timeout}ms) - Note: Only stops async hangs.`,
+        ),
+      );
     }, timeout);
 
-    try {
-      // 提取沙箱中的变量名和值
-      const keys = Object.keys(sandbox);
-      const values = Object.values(sandbox);
+    // 1. 创建 Proxy 拦截器
+    const sandboxProxy = new Proxy(sandbox, {
+      // 拦截变量检查：强制 with 语句认为所有变量都存在于 sandboxProxy 中
+      // 这样就能把所有未定义的全局变量访问（如 window, document）强行拉入 get 拦截
+      has(target, key) {
+        return true;
+      },
+      // 拦截变量读取
+      get(target, key, receiver) {
+        // 防御 1：防止通过 Symbol.unscopables 逃逸 with 作用域
+        if (key === Symbol.unscopables) return undefined;
 
-      // 创建异步函数
-      const asyncFn = new Function(
-        ...keys,
-        `
+        // 防御 2：死守核心全局变量和危险构造器
+        if (
+          ["window", "document", "globalThis", "eval", "Function"].includes(
+            key as string,
+          )
+        ) {
+          return undefined;
+        }
+
+        // 防御 3：防止通过对象的 constructor 向上攀爬获取 Function (例如: {}.constructor('return window')() )
+        const value = Reflect.get(target, key, receiver);
+        if (typeof value === "function" && value === Function) {
+          return undefined;
+        }
+        if (
+          key === "__proto__" ||
+          key === "prototype" ||
+          key === "constructor"
+        ) {
+          return undefined;
+        }
+
+        return value;
+      },
+    });
+
+    try {
+      // 2. 组装执行代码
+      // 注意：不能使用 "use strict"，因为严格模式下禁止使用 with 语句
+      const wrappedCode = `
         return (async function() {
-          try {
-            return await (${code});
-          } catch (error) {
-            throw error;
+          with (sandboxProxy) {
+            ${code}
           }
         })();
-      `,
-      );
+      `;
 
-      // 执行
-      asyncFn(...values)
+      // 3. 创建执行环境
+      const asyncFn = new Function("sandboxProxy", wrappedCode);
+
+      // 4. 执行代码：利用 call 改变 this 指向，防止 this 指向全局 window
+      // 将 proxy 作为 this 传入，同时也作为 sandboxProxy 参数传入
+      asyncFn
+        .call(sandboxProxy, sandboxProxy)
         .then((result: any) => {
           clearTimeout(timeoutId);
           resolve(result);
@@ -164,40 +160,13 @@ function executeWithTimeout(
         });
     } catch (error) {
       clearTimeout(timeoutId);
-      reject(error);
+      reject(
+        new Error(`Syntax Error in Custom Script: ${(error as Error).message}`),
+      );
     }
   });
 }
 
-/**
- * 校验用户原生脚本的安全边界
- */
-function validateCodeSafety(code: string): boolean {
-  if (!code || typeof code !== "string") return false;
-
-  const blacklist = [
-    /eval\s*\(/i,
-    /setTimeout\s*\(/i,
-    /setInterval\s*\(/i,
-    /new\s+Function/i,
-    /document\./i,
-    /window\./i,
-    /globalThis\./i,
-    /process\./i,
-    /require\s*\(/i,
-    /import\(/i,
-    /__proto__/i,
-    /constructor/i,
-    /prototype/i,
-  ];
-
-  return !blacklist.some((regex) => regex.test(code));
-}
-
-/**
- * 导出所有扩展点Actions
- */
 export default {
   customScript,
-  customAction,
 };
