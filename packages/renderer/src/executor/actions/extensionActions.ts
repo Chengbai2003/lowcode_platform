@@ -1,6 +1,8 @@
 /**
  * 扩展点 Actions
  * customScript, customAction
+ *
+ * @deprecated customScript 存在安全风险，将在 v1.0 移除
  */
 
 import type { ActionHandler, ExecutionContext } from "@lowcode-platform/types";
@@ -9,10 +11,22 @@ import type { ActionHandler, ExecutionContext } from "@lowcode-platform/types";
  * 自定义脚本Action
  * 执行用户提供的JS代码（经过AST安全验证）
  *
+ * @deprecated 存在代码注入安全风险，请使用 customAction 替代
+ *
  * Action: { type: 'customScript'; code: string; timeout?: number; }
+ *
+ * ⚠️ 安全警告：
+ * 此 Action 允许执行任意 JavaScript 代码，存在严重的 XSS 和代码注入风险。
+ * 在生产环境中应通过 ExecutorOptions.enableCustomScript: false 禁用此功能。
  */
-export const customScript: ActionHandler = async (action, context) => {
+export const customScript: ActionHandler = async (action, context, engine) => {
   const { code, timeout = 10000 } = action;
+
+  // 安全警告
+  console.warn(
+    "[DSL Security] customScript action is deprecated and poses security risks. " +
+      "Consider using customAction instead.",
+  );
 
   // 验证代码安全性
   if (!validateCodeSafety(code)) {
@@ -28,7 +42,9 @@ export const customScript: ActionHandler = async (action, context) => {
     return result;
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    throw new Error(`Custom script execution failed: ${errorObj.message}`);
+    throw new Error(`Custom script execution failed: ${errorObj.message}`, {
+      cause: error,
+    });
   }
 };
 
@@ -58,7 +74,10 @@ export const customAction: ActionHandler = async (action, context) => {
     return result;
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    throw new Error(`Plugin "${plugin}" execution failed: ${errorObj.message}`);
+    throw new Error(
+      `Plugin "${plugin}" execution failed: ${errorObj.message}`,
+      { cause: error },
+    );
   }
 };
 

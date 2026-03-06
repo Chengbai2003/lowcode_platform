@@ -1,6 +1,6 @@
-import * as babelTypes from '@babel/types';
-import { FieldInfo } from './utils';
-import { toCamelCase } from './utils';
+import * as babelTypes from "@babel/types";
+import { FieldInfo } from "./utils";
+import { toCamelCase } from "./utils";
 
 /**
  * 将 ActionList 编译为 JS 闭包 AST
@@ -8,10 +8,13 @@ import { toCamelCase } from './utils';
  */
 export function buildActionListAST(
   actions: any[],
-  fields: FieldInfo[]
+  fields: FieldInfo[],
 ): babelTypes.ArrowFunctionExpression {
   if (!actions || actions.length === 0) {
-    return babelTypes.arrowFunctionExpression([], babelTypes.blockStatement([]));
+    return babelTypes.arrowFunctionExpression(
+      [],
+      babelTypes.blockStatement([]),
+    );
   }
 
   const statements: babelTypes.Statement[] = actions.map((action) => {
@@ -26,12 +29,19 @@ export function buildActionListAST(
               : babelTypes.cloneNode(buildValueAST(action.value));
 
           return babelTypes.expressionStatement(
-            babelTypes.callExpression(babelTypes.identifier(field.setterName), [valNode])
+            babelTypes.callExpression(babelTypes.identifier(field.setterName), [
+              valNode,
+            ]),
           );
         }
         // not found, insert comment
         const emptyStmt = babelTypes.emptyStatement();
-        babelTypes.addComment(emptyStmt, "leading", ` Field ${action.field} not found`, true);
+        babelTypes.addComment(
+          emptyStmt,
+          "leading",
+          ` Field ${action.field} not found`,
+          true,
+        );
         return emptyStmt;
       }
 
@@ -44,9 +54,12 @@ export function buildActionListAST(
 
         return babelTypes.expressionStatement(
           babelTypes.callExpression(
-            babelTypes.memberExpression(babelTypes.identifier("message"), babelTypes.identifier(msgType)),
-            [contentNode]
-          )
+            babelTypes.memberExpression(
+              babelTypes.identifier("message"),
+              babelTypes.identifier(msgType),
+            ),
+            [contentNode],
+          ),
         );
       }
 
@@ -60,11 +73,14 @@ export function buildActionListAST(
           babelTypes.assignmentExpression(
             "=",
             babelTypes.memberExpression(
-              babelTypes.memberExpression(babelTypes.identifier("window"), babelTypes.identifier("location")),
-              babelTypes.identifier("href")
+              babelTypes.memberExpression(
+                babelTypes.identifier("window"),
+                babelTypes.identifier("location"),
+              ),
+              babelTypes.identifier("href"),
             ),
-            toNode
-          )
+            toNode,
+          ),
         );
       }
 
@@ -83,33 +99,42 @@ export function buildActionListAST(
                   babelTypes.callExpression(babelTypes.identifier("fetch"), [
                     urlNode,
                     babelTypes.objectExpression([
-                      babelTypes.objectProperty(babelTypes.identifier("method"), babelTypes.stringLiteral(method)),
+                      babelTypes.objectProperty(
+                        babelTypes.identifier("method"),
+                        babelTypes.stringLiteral(method),
+                      ),
                     ]),
                   ]),
-                  babelTypes.identifier("then")
+                  babelTypes.identifier("then"),
                 ),
                 [
                   babelTypes.arrowFunctionExpression(
                     [babelTypes.identifier("res")],
                     babelTypes.callExpression(
-                      babelTypes.memberExpression(babelTypes.identifier("res"), babelTypes.identifier("json")),
-                      []
-                    )
+                      babelTypes.memberExpression(
+                        babelTypes.identifier("res"),
+                        babelTypes.identifier("json"),
+                      ),
+                      [],
+                    ),
                   ),
-                ]
+                ],
               ),
-              babelTypes.identifier("then")
+              babelTypes.identifier("then"),
             ),
             [
               babelTypes.arrowFunctionExpression(
                 [babelTypes.identifier("data")],
                 babelTypes.callExpression(
-                  babelTypes.memberExpression(babelTypes.identifier("console"), babelTypes.identifier("log")),
-                  [babelTypes.identifier("data")]
-                )
+                  babelTypes.memberExpression(
+                    babelTypes.identifier("console"),
+                    babelTypes.identifier("log"),
+                  ),
+                  [babelTypes.identifier("data")],
+                ),
               ),
-            ]
-          )
+            ],
+          ),
         );
       }
 
@@ -122,42 +147,115 @@ export function buildActionListAST(
 
         return babelTypes.expressionStatement(
           babelTypes.callExpression(
-            babelTypes.memberExpression(babelTypes.identifier("console"), babelTypes.identifier(level)),
-            [valNode]
-          )
+            babelTypes.memberExpression(
+              babelTypes.identifier("console"),
+              babelTypes.identifier(level),
+            ),
+            [valNode],
+          ),
         );
       }
 
       case "customAction": {
         if (action.plugin === "submit") {
           const objProps = fields.map((f) =>
-            babelTypes.objectProperty(babelTypes.identifier(f.name), babelTypes.identifier(f.name), false, true)
+            babelTypes.objectProperty(
+              babelTypes.identifier(f.name),
+              babelTypes.identifier(f.name),
+              false,
+              true,
+            ),
           );
 
           return babelTypes.blockStatement([
             babelTypes.expressionStatement(
               babelTypes.callExpression(
-                babelTypes.memberExpression(babelTypes.identifier("console"), babelTypes.identifier("log")),
-                [babelTypes.stringLiteral("Submit"), babelTypes.objectExpression(objProps)]
-              )
+                babelTypes.memberExpression(
+                  babelTypes.identifier("console"),
+                  babelTypes.identifier("log"),
+                ),
+                [
+                  babelTypes.stringLiteral("Submit"),
+                  babelTypes.objectExpression(objProps),
+                ],
+              ),
             ),
             babelTypes.expressionStatement(
               babelTypes.callExpression(
-                babelTypes.memberExpression(babelTypes.identifier("message"), babelTypes.identifier("success")),
-                [babelTypes.stringLiteral("提交成功")]
-              )
-            )
+                babelTypes.memberExpression(
+                  babelTypes.identifier("message"),
+                  babelTypes.identifier("success"),
+                ),
+                [babelTypes.stringLiteral("提交成功")],
+              ),
+            ),
           ]);
         }
 
         const emptyStmt = babelTypes.emptyStatement();
-        babelTypes.addComment(emptyStmt, "leading", ` Custom Action: ${action.plugin}`, true);
+        babelTypes.addComment(
+          emptyStmt,
+          "leading",
+          ` Custom Action: ${action.plugin}`,
+          true,
+        );
         return emptyStmt;
       }
 
       default: {
         const emptyStmt = babelTypes.emptyStatement();
-        babelTypes.addComment(emptyStmt, "leading", ` Unsupported action: ${action.type}`, true);
+
+        // 废弃的 Action 类型
+        const deprecatedActions = [
+          "clearField",
+          "openTab",
+          "closeTab",
+          "back",
+          "dispatch",
+          "resetForm",
+          "parallel",
+          "sequence",
+          "debug",
+          "customScript",
+        ];
+
+        // 高级 Action 类型 (不推荐 AI 生成)
+        const advancedActions = [
+          "notification",
+          "waitCondition",
+          "loop",
+          "switch",
+          "mergeField",
+          "modal",
+          "confirm",
+          "setState",
+          "delay",
+          "if",
+          "tryCatch",
+        ];
+
+        if (deprecatedActions.includes(action.type)) {
+          babelTypes.addComment(
+            emptyStmt,
+            "leading",
+            ` DEPRECATED: Action "${action.type}" is deprecated and will be removed in v1.0`,
+            true,
+          );
+        } else if (advancedActions.includes(action.type)) {
+          babelTypes.addComment(
+            emptyStmt,
+            "leading",
+            ` TODO: Implement advanced action: ${action.type}`,
+            true,
+          );
+        } else {
+          babelTypes.addComment(
+            emptyStmt,
+            "leading",
+            ` Unknown action: ${action.type}`,
+            true,
+          );
+        }
         return emptyStmt;
       }
     }
@@ -165,7 +263,7 @@ export function buildActionListAST(
 
   // Flatten block statements from actions mapping
   const flattenedStmts: babelTypes.Statement[] = [];
-  statements.forEach(stmt => {
+  statements.forEach((stmt) => {
     if (babelTypes.isBlockStatement(stmt)) {
       flattenedStmts.push(...stmt.body);
     } else {
@@ -173,7 +271,10 @@ export function buildActionListAST(
     }
   });
 
-  return babelTypes.arrowFunctionExpression([], babelTypes.blockStatement(flattenedStmts));
+  return babelTypes.arrowFunctionExpression(
+    [],
+    babelTypes.blockStatement(flattenedStmts),
+  );
 }
 
 /**
@@ -190,8 +291,8 @@ function buildValueAST(val: any): babelTypes.Expression {
   if (typeof val === "object") {
     return babelTypes.objectExpression(
       Object.entries(val).map(([k, v]) =>
-        babelTypes.objectProperty(babelTypes.identifier(k), buildValueAST(v))
-      )
+        babelTypes.objectProperty(babelTypes.identifier(k), buildValueAST(v)),
+      ),
     );
   }
   return babelTypes.identifier("undefined");

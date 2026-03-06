@@ -20,49 +20,102 @@ import stateActions from "./actions/stateActions";
 import flowActions from "./actions/flowActions";
 import asyncActions from "./actions/asyncActions";
 import debugActions from "./actions/debugActions";
+import extensionActions from "./actions/extensionActions";
+
+/**
+ * 创建废弃 Action 处理器包装器
+ * 在执行前输出警告日志
+ */
+function createDeprecatedHandler(
+  name: string,
+  handler: ActionHandler,
+): ActionHandler {
+  return (action, context, engine) => {
+    console.warn(
+      `[DSL Deprecated] Action "${name}" is deprecated and will be removed in v1.0. ` +
+        `See documentation for migration guide.`,
+    );
+    return handler(action, context, engine);
+  };
+}
 
 /**
  * 内置Action处理器
+ *
+ * 处理器分类：
+ * - 核心 Action (12种): setField, mergeField, message, modal, confirm, navigate,
+ *                       setState, apiCall, delay, if, tryCatch, log
+ * - 高级 Action (5种): notification, waitCondition, loop, switch, customAction
+ * - 废弃 Action (10种): clearField, openTab, closeTab, back, dispatch, resetForm,
+ *                       parallel, sequence, debug, customScript
  */
 const BUILTIN_HANDLERS: ActionRegistry = {
-  // 数据操作
+  // ============================================================================
+  // 核心数据操作
+  // ============================================================================
   setField: dataActions.setField,
   mergeField: dataActions.mergeField,
-  clearField: dataActions.clearField,
 
-  // UI交互
+  // ============================================================================
+  // 核心 UI 交互
+  // ============================================================================
   message: uiActions.message,
   modal: uiActions.modal,
   confirm: uiActions.confirm,
-  notification: uiActions.notification,
 
-  // 导航
+  // ============================================================================
+  // 核心导航
+  // ============================================================================
   navigate: navActions.navigate,
-  openTab: navActions.openTab,
-  closeTab: navActions.closeTab,
-  back: navActions.back,
 
-  // 状态管理
-  dispatch: stateActions.dispatch,
+  // ============================================================================
+  // 核心状态管理
+  // ============================================================================
   setState: stateActions.setState,
-  resetForm: stateActions.resetForm,
 
-  // 异步操作
+  // ============================================================================
+  // 核心异步操作
+  // ============================================================================
   apiCall: asyncActions.apiCall,
   delay: asyncActions.delay,
-  waitCondition: asyncActions.waitCondition,
 
-  // 流程控制
+  // ============================================================================
+  // 核心流程控制
+  // ============================================================================
   if: flowActions.if,
-  switch: flowActions.switch,
-  loop: flowActions.loop,
-  parallel: flowActions.parallel,
-  sequence: flowActions.sequence,
   tryCatch: flowActions.tryCatch,
 
-  // 调试
+  // ============================================================================
+  // 核心调试
+  // ============================================================================
   log: debugActions.log,
-  debug: debugActions.debug,
+
+  // ============================================================================
+  // 高级 Action (不推荐 AI 生成)
+  // ============================================================================
+  notification: uiActions.notification,
+  waitCondition: asyncActions.waitCondition,
+  loop: flowActions.loop,
+  switch: flowActions.switch,
+  customAction: extensionActions.customAction,
+
+  // ============================================================================
+  // 废弃 Action (向后兼容，将在 v1.0 移除)
+  // ============================================================================
+  clearField: createDeprecatedHandler("clearField", dataActions.clearField),
+  openTab: createDeprecatedHandler("openTab", navActions.openTab),
+  closeTab: createDeprecatedHandler("closeTab", navActions.closeTab),
+  back: createDeprecatedHandler("back", navActions.back),
+  dispatch: createDeprecatedHandler("dispatch", stateActions.dispatch),
+  resetForm: createDeprecatedHandler("resetForm", stateActions.resetForm),
+  parallel: createDeprecatedHandler("parallel", flowActions.parallel),
+  sequence: createDeprecatedHandler("sequence", flowActions.sequence),
+  debug: createDeprecatedHandler("debug", debugActions.debug),
+  // customScript 已废弃且存在安全风险，但仍保留向后兼容
+  customScript: createDeprecatedHandler(
+    "customScript",
+    extensionActions.customScript,
+  ),
 };
 
 /**
