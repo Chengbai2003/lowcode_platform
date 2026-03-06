@@ -4,7 +4,7 @@ import type { LowcodeEditorProps } from "./types";
 import type { A2UISchema } from "@lowcode-platform/types";
 import { safeValidateSchema } from "@lowcode-platform/renderer";
 import { componentRegistry } from "@lowcode-platform/components";
-import { compileToCode } from "@lowcode-platform/compiler";
+import { compileSchema } from "./services/compilerApi";
 import {
   EditorHeader,
   ActivityBar,
@@ -153,14 +153,15 @@ function LowcodeEditorInner({
   );
 
   // 编译处理函数
-  const handleCompile = useCallback(() => {
+  const handleCompile = useCallback(async () => {
     if (schema) {
       try {
-        const code = compileToCode(schema);
+        // 调用后端编译 API
+        const code = await compileSchema(schema);
         setCompiledCode(code);
         setActiveTab("code");
         message.success("编译成功！");
-        clearDraft(); // 如果编译成功，可以认为状态稳定，清理草稿（可选策略，这里加上了）
+        clearDraft();
       } catch (e) {
         const errorMessage = e instanceof Error ? e.message : "未知错误";
         console.error(e);

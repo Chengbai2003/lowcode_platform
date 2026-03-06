@@ -22,7 +22,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@lowcode-platform/compiler": path.resolve(__dirname, "../compiler/src"),
       "@lowcode-platform/components": path.resolve(
         __dirname,
         "../components/src",

@@ -9,7 +9,9 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
   },
   "include": ["src/**/*"]
 }

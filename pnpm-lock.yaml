@@ -174,9 +174,6 @@ importers:
       '@ant-design/icons':
         specifier: ^5.2.6
         version: 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@lowcode-platform/compiler':
-        specifier: workspace:*
-        version: link:../compiler
       '@lowcode-platform/components':
         specifier: workspace:*
         version: link:../components
@@ -284,6 +281,15 @@ importers:
       '@ai-sdk/vue':
         specifier: ^3.0.101
         version: 3.0.101(vue@3.5.29(typescript@5.9.3))(zod@4.3.6)
+      '@babel/generator':
+        specifier: ^7.29.1
+        version: 7.29.1
+      '@babel/types':
+        specifier: ^7.29.0
+        version: 7.29.0
+      '@lowcode-platform/types':
+        specifier: workspace:*
+        version: link:../types
       '@nestjs/common':
         specifier: ^10.3.0
         version: 10.4.22(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -311,6 +317,9 @@ importers:
       ollama-ai-provider:
         specifier: ^1.2.0
         version: 1.2.0(zod@4.3.6)
+      prettier:
+        specifier: ^3.2.5
+        version: 3.8.1
       reflect-metadata:
         specifier: ^0.2.1
         version: 0.2.2
@@ -321,6 +330,9 @@ importers:
       '@nestjs/testing':
         specifier: ^10.3.0
         version: 10.4.22(@nestjs/common@10.4.22(class-transformer@0.5.1)(class-validator@0.14.3)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@10.4.22)(@nestjs/platform-express@10.4.22)
+      '@types/babel__generator':
+        specifier: ^7.27.0
+        version: 7.27.0
       '@types/express':
         specifier: ^4.17.21
         version: 4.17.25
