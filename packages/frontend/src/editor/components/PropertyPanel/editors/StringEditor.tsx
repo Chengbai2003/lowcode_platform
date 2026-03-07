@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import styles from "../PropertyPanel.module.css";
+import styles from "../PropertyPanel.module.scss";
 
 interface StringEditorProps {
   label: string;

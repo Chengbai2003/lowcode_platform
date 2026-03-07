@@ -15,7 +15,7 @@ import { aiApi } from "../api/ai-api";
 import { serverAIService } from "../api/ServerAIService";
 import { AIConfig } from "../AIConfig/AIConfig";
 import type { AIModelConfig } from "../types/ai-types";
-import styles from "./AIAssistant.module.css";
+import styles from "./AIAssistant.module.scss";
 
 interface AIMessage {
   id: string;

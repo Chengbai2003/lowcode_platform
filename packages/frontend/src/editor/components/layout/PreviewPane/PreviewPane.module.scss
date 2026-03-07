@@ -1,0 +1,156 @@
+@import '@styles/_variables.scss';
+@import '@styles/_mixins.scss';
+
+.previewPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--preview-bg-color, #{$bg-elevated});
+  position: relative;
+}
+
+.tabBar {
+  height: 40px;
+  border-bottom: 1px solid $border-base;
+  background: $bg-base;
+  display: flex;
+  align-items: center;
+  padding: 0 $spacing-md;
+  gap: $spacing-lg;
+  flex-shrink: 0;
+}
+
+.tab {
+  height: 100%;
+  padding: 0 $spacing-xs;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-muted;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all $transition-base $transition-timing;
+
+  &:hover:not(.disabled) {
+    color: $text-secondary;
+  }
+
+  &.active {
+    color: $accent;
+    border-bottom-color: $accent;
+  }
+
+  &.disabled {
+    color: $text-disabled;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+}
+
+.tabActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.compileButton {
+  padding: $spacing-xs $spacing-md;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-inverse;
+  background: $accent;
+  border: none;
+  border-radius: $radius-md;
+  cursor: pointer;
+  @include transition-all;
+
+  &:hover:not(:disabled) {
+    background: $accent-hover;
+  }
+
+  &:disabled {
+    background: $bg-active;
+    color: $text-disabled;
+    cursor: not-allowed;
+  }
+}
+
+.previewContainer {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.editorContainer {
+  width: 100%;
+  height: 100%;
+}
+
+/* Dark theme variables */
+.previewPane.dark-theme {
+  --preview-bg-color: #1e1e1e;
+  --preview-content-bg-color: #141414;
+}
+
+/* Light theme variables */
+.previewPane.light-theme {
+  --preview-bg-color: #{$bg-elevated};
+  --preview-content-bg-color: #{$bg-base};
+}
+
+/* Selectable Canvas */
+.selectableCanvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: $spacing-md;
+}
+
+.previewContent {
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Selection Highlight */
+.selectionHighlight {
+  @include transition-all;
+  border: 2px solid $accent;
+  border-radius: $radius-sm;
+  pointer-events: none;
+}
+
+.componentLabel {
+  position: absolute;
+  top: -22px;
+  left: -2px;
+  background: $accent;
+  color: $text-inverse;
+  font-size: 10px;
+  font-family: $font-family-mono;
+  padding: 2px 6px;
+  border-radius: $radius-sm $radius-sm 0 0;
+  white-space: nowrap;
+  z-index: 1001;
+  line-height: 1.4;
+}
+
+/* Hover Highlight */
+.hoverHighlight {
+  @include transition-all;
+  border: 1px dashed $accent;
+  border-radius: $radius-sm;
+  pointer-events: none;
+}
+
+/* Override lowcode-component-wrapper cursor */
+:global(.lowcode-component-wrapper) {
+  cursor: pointer;
+  height: 100%;
+}

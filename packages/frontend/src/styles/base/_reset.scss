@@ -1,0 +1,90 @@
+// ============================================
+// CSS Reset - 现代化重置样式
+// ============================================
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: $font-family;
+  font-size: $font-size-base;
+  line-height: $line-height-normal;
+  color: $text-primary;
+  background: $bg-base;
+}
+
+// 标题重置
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+}
+
+// 段落重置
+p {
+  margin: 0;
+}
+
+// 列表重置
+ul, ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+// 链接重置
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+// 按钮重置
+button {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+// 输入框重置
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+// 图片重置
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+// 表格重置
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+// 代码重置
+code,
+pre {
+  font-family: $font-family-mono;
+}

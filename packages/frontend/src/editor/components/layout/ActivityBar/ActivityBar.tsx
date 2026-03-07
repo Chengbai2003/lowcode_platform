@@ -1,6 +1,6 @@
 import React from "react";
 import { Layout } from "antd";
-import styles from "./ActivityBar.module.css";
+import styles from "./ActivityBar.module.scss";
 
 const { Sider } = Layout;
 

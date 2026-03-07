@@ -1,0 +1,336 @@
+@import '@styles/_variables.scss';
+@import '@styles/_mixins.scss';
+
+.propertyPanel {
+  @include flex-column;
+  height: 100%;
+  width: 320px;
+  flex-shrink: 0;
+  background: $bg-elevated;
+  box-shadow: $shadow-md;
+}
+
+.tabsContainer {
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+  @include flex-center;
+  flex-shrink: 0;
+
+  .tabs {
+    @include pill-button-group;
+    width: 100%;
+    border: 1px solid $border-base;
+
+    button {
+      @include pill-button-item;
+      flex: 1;
+      padding: 6px $spacing-md;
+      font-size: $font-size-sm;
+      font-weight: $font-weight-medium;
+      border: none;
+      background: transparent;
+      color: $text-muted;
+      cursor: pointer;
+      @include transition-all;
+
+      &.active {
+        background: $bg-base;
+        color: $text-primary;
+        box-shadow: $shadow-sm;
+      }
+
+      &:hover:not(.active) {
+        color: $text-secondary;
+      }
+    }
+  }
+}
+
+.panelHeader {
+  @include flex-between;
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+  background: $bg-elevated;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+
+  h3 {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin: 0;
+  }
+
+  .componentId {
+    font-size: 10px;
+    font-family: $font-family-mono;
+    color: $text-muted;
+    background: $bg-hover;
+    padding: 2px 6px;
+    border-radius: $radius-sm;
+  }
+}
+
+.panelBody {
+  flex: 1;
+  overflow-y: auto;
+  @include scrollbar;
+}
+
+.propertiesSection {
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sectionLabel {
+  @include label-uppercase;
+  margin-bottom: $spacing-md;
+  display: block;
+}
+
+.propertiesList {
+  @include flex-column;
+  gap: $spacing-md;
+}
+
+/* 编辑器通用样式 */
+.propertyItem {
+  @include flex-column;
+  gap: $spacing-sm;
+}
+
+.propertyLabel {
+  @include flex-between;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  font-weight: $font-weight-medium;
+
+  .description {
+    color: $text-tertiary;
+    font-weight: $font-weight-normal;
+    font-size: 11px;
+  }
+}
+
+.propertyInput {
+  width: 100%;
+
+  input,
+  textarea,
+  select {
+    @include input-base;
+    background: $bg-base;
+    font-size: $font-size-sm;
+    padding: $spacing-sm $spacing-md;
+    border-radius: $radius-md;
+
+    &:focus {
+      border-color: $accent;
+      box-shadow: 0 0 0 1px $accent;
+    }
+  }
+
+  textarea {
+    min-height: 60px;
+    resize: vertical;
+    font-family: $font-family-mono;
+    font-size: $font-size-xs;
+  }
+}
+
+/* 按钮组样式 */
+.buttonGroup {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $spacing-xs;
+  background: $bg-base;
+  padding: $spacing-xs;
+  border-radius: $radius-md;
+  border: 1px solid $border-base;
+  box-shadow: $shadow-sm;
+
+  button {
+    padding: 6px $spacing-sm;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    border-radius: $radius-sm;
+    border: none;
+    background: transparent;
+    color: $text-secondary;
+    cursor: pointer;
+    @include transition-all;
+
+    &.active {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+
+    &:hover:not(.active) {
+      color: $text-primary;
+    }
+  }
+}
+
+/* 对齐按钮组 */
+.alignmentGroup {
+  display: flex;
+  gap: $spacing-sm;
+
+  .alignButtons {
+    flex: 1;
+    display: flex;
+    background: $bg-base;
+    border-radius: $radius-md;
+    border: 1px solid $border-base;
+    padding: $spacing-xs;
+    box-shadow: $shadow-sm;
+
+    button {
+      flex: 1;
+      padding: 6px;
+      border: none;
+      background: transparent;
+      color: $text-secondary;
+      cursor: pointer;
+      border-radius: $radius-sm;
+      @include flex-center;
+      @include transition-all;
+
+      &.active {
+        background: $accent-light;
+        color: $accent-hover;
+      }
+
+      &:hover:not(.active) {
+        background: $bg-hover;
+        color: $text-primary;
+      }
+
+      svg {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  }
+}
+
+/* 间距输入组 */
+.spacingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-sm;
+
+  .spacingInput {
+    @include flex-start;
+    background: $bg-base;
+    border: 1px solid $border-base;
+    border-radius: $radius-md;
+    overflow: hidden;
+    @include transition-all;
+
+    &:focus-within {
+      border-color: $accent;
+      box-shadow: 0 0 0 1px $accent;
+    }
+
+    .label {
+      font-size: 10px;
+      font-weight: $font-weight-medium;
+      color: $text-tertiary;
+      width: 28px;
+      text-align: center;
+      border-right: 1px solid $border-base;
+      background: $bg-hover;
+      @include flex-center;
+      height: 100%;
+      flex-shrink: 0;
+    }
+
+    input {
+      flex: 1;
+      border: none;
+      padding: $spacing-sm;
+      font-size: $font-size-xs;
+      color: $text-primary;
+      outline: none;
+      background: transparent;
+
+      &::-webkit-inner-spin-button,
+      &::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+    }
+  }
+}
+
+/* 颜色选择器 */
+.colorInputWrapper {
+  @include flex-between;
+  padding: 10px $spacing-md;
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  box-shadow: $shadow-sm;
+
+  .colorLabel {
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  .colorControls {
+    @include flex-start;
+    gap: $spacing-sm;
+
+    .colorValue {
+      font-size: $font-size-xs;
+      font-family: $font-family-mono;
+      color: $text-muted;
+    }
+
+    .colorSwatch {
+      width: 20px;
+      height: 20px;
+      border-radius: $radius-sm;
+      border: 1px solid $border-base;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+    }
+  }
+}
+
+/* 滑块样式 */
+.sliderWrapper {
+  @include flex-between;
+  padding: 10px $spacing-md;
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  box-shadow: $shadow-sm;
+
+  .sliderLabel {
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  input[type="range"] {
+    width: 96px;
+    accent-color: $accent;
+  }
+}
+
+/* 空状态 */
+.emptyState {
+  padding: $spacing-2xl;
+  text-align: center;
+  color: $text-tertiary;
+  font-size: $font-size-sm;
+}

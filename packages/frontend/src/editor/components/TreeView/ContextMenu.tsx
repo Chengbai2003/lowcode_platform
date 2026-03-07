@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Modal, Tree, message } from "antd";
 import type { TreeDataNode } from "antd";
+import { Copy, ArrowUp, ArrowDown, FolderOpen, Trash2 } from "lucide-react";
 import type {
   ContextMenuProps,
   ContextMenuAction,
@@ -13,7 +14,7 @@ import {
   moveComponent,
   canMove,
 } from "./schemaToTree";
-import styles from "./ComponentTree.module.css";
+import styles from "./ComponentTree.module.scss";
 
 /**
  * 右键菜单组件
@@ -65,33 +66,33 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     {
       key: "copy" as ContextMenuAction,
       label: "复制",
-      icon: "📋",
+      icon: <Copy size={14} />,
       disabled: isRoot,
     },
     { type: "divider" as const },
     {
       key: "moveUp" as ContextMenuAction,
       label: "上移",
-      icon: "⬆️",
+      icon: <ArrowUp size={14} />,
       disabled: !moveStatus.up || isRoot,
     },
     {
       key: "moveDown" as ContextMenuAction,
       label: "下移",
-      icon: "⬇️",
+      icon: <ArrowDown size={14} />,
       disabled: !moveStatus.down || isRoot,
     },
     {
       key: "moveTo" as ContextMenuAction,
       label: "移动到...",
-      icon: "📁",
+      icon: <FolderOpen size={14} />,
       disabled: isRoot,
     },
     { type: "divider" as const },
     {
       key: "delete" as ContextMenuAction,
       label: "删除",
-      icon: "🗑️",
+      icon: <Trash2 size={14} />,
       danger: true,
       disabled: isRoot,
     },

@@ -3,7 +3,7 @@ import { Button, Tooltip, Dropdown } from "antd";
 import { UndoOutlined, RedoOutlined } from "@ant-design/icons";
 import type { MenuProps } from "antd";
 import { useHistoryStore, useCanUndo, useCanRedo } from "../../store/history";
-import styles from "./UndoRedoButtons.module.css";
+import styles from "./UndoRedoButtons.module.scss";
 
 interface UndoRedoButtonsProps {
   /** 自定义撤销按钮类名 */

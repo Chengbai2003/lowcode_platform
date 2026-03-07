@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, memo } from "react";
-import { Renderer } from "../../../../renderer";
+import { Renderer, LowcodeProvider } from "../../../../renderer";
 import type {
   A2UISchema,
   ComponentRegistry,
@@ -9,7 +9,7 @@ import { useSelectionStore } from "../../../store/editor-store";
 import { SelectionHighlight } from "./SelectionHighlight";
 import { useComponentPosition } from "./useComponentPosition";
 import { NoSchemaEmptyState } from "../../EmptyState";
-import styles from "./PreviewPane.module.css";
+import styles from "./PreviewPane.module.scss";
 
 interface SelectableCanvasProps {
   schema: A2UISchema | null;
@@ -104,12 +104,14 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
       >
         <div className={styles.previewContent}>
           {schema ? (
-            <Renderer
-              schema={schema}
-              components={allComponents}
-              eventContext={eventContext}
-              onComponentClick={handleComponentClick}
-            />
+            <LowcodeProvider>
+              <Renderer
+                schema={schema}
+                components={allComponents}
+                eventContext={eventContext}
+                onComponentClick={handleComponentClick}
+              />
+            </LowcodeProvider>
           ) : (
             <NoSchemaEmptyState />
           )}

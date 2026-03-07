@@ -1,10 +1,6 @@
 // Layout components
 export { EditorHeader } from "./layout/Header/Header";
-export { ActivityBar } from "./layout/ActivityBar/ActivityBar";
 export { PreviewPane } from "./layout/PreviewPane/PreviewPane";
-
-// Editor pane components
-export { EditorPane } from "./editor-pane/EditorPane";
 
 // PropertyPanel components
 export { PropertyPanel } from "./PropertyPanel";
@@ -44,6 +40,7 @@ export { UndoRedoButtons, useUndoRedoShortcuts } from "./Toolbar";
 // AI assistant components
 export { AIAssistant } from "./ai-assistant/AIAssistant/AIAssistant";
 export { AIConfig } from "./ai-assistant/AIConfig/AIConfig";
+export { HistoryDrawer } from "./ai-assistant/HistoryDrawer";
 
 // Export all AI types and services
 export type {

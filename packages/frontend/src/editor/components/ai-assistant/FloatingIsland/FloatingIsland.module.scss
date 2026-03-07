@@ -1,0 +1,475 @@
+@import '@styles/_variables.scss';
+@import '@styles/_mixins.scss';
+
+// 主容器 - 匹配 lowcode: fixed z-50 flex flex-col w-80 bg-white shadow-2xl rounded-2xl border border-emerald-500/20 overflow-hidden
+.floatingIsland {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: $z-modal;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-width: calc(100vw - 48px);
+  background: $bg-base;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-xl;
+  border: 1px solid rgba($primary, 0.2);
+  overflow: hidden;
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// 头部 - 匹配 lowcode: flex items-center justify-between bg-emerald-500 px-4 py-3 text-white
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: $primary;
+  padding: $spacing-sm $spacing-md;
+  color: $text-inverse;
+  flex-shrink: 0;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.headerTitle {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.backButton,
+.iconButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: $radius-sm;
+  color: $text-inverse;
+  @include transition-all;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  &.danger:hover {
+    background: rgba($error, 0.3);
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.backButton {
+  margin-left: -$spacing-xs;
+}
+
+// 上下文标签
+.contextChip {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  padding: $spacing-sm $spacing-md;
+  background: $bg-elevated;
+  border-bottom: 1px solid $border-base;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  flex-shrink: 0;
+}
+
+.contextIcon {
+  color: $primary;
+  flex-shrink: 0;
+}
+
+.contextText {
+  flex: 1;
+  @include text-ellipsis;
+}
+
+.clearContext {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: $radius-sm;
+  color: $text-tertiary;
+  @include transition-all;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+}
+
+// 内容区域
+.content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 320px;
+  max-height: 480px;
+}
+
+// 聊天视图 - 匹配 lowcode: h-80 overflow-y-auto bg-slate-50
+.chatView {
+  flex: 1;
+  overflow-y: auto;
+  background: $bg-elevated;
+  padding: $spacing-md;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}
+
+// 消息行 - 匹配 lowcode: flex gap-3
+.messageRow {
+  display: flex;
+  gap: $spacing-sm;
+  align-items: flex-start;
+
+  &.user {
+    flex-direction: row-reverse;
+  }
+}
+
+// 头像
+.avatar {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-full;
+  background: $primary-light;
+  color: $primary;
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  &.user {
+    background: $bg-active;
+    color: $text-secondary;
+  }
+}
+
+.userAvatar {
+  font-size: 10px;
+  font-weight: $font-weight-bold;
+}
+
+// 消息气泡
+.messageBubble {
+  padding: $spacing-sm $spacing-md;
+  font-size: $font-size-sm;
+  line-height: $line-height-normal;
+  max-width: 80%;
+  word-break: break-word;
+  border-radius: $radius-lg;
+
+  // AI 消息 - 匹配 lowcode: bg-white border border-slate-200 rounded-2xl rounded-tl-sm
+  .messageRow:not(.user) & {
+    background: $bg-base;
+    border: 1px solid $border-base;
+    color: $text-primary;
+    border-radius: $radius-lg $radius-lg $radius-lg 4px;
+  }
+
+  // 用户消息 - 匹配 lowcode: bg-emerald-500 text-white rounded-tr-sm
+  .messageRow.user & {
+    background: $primary;
+    color: $text-inverse;
+    border-radius: $radius-lg $radius-lg 4px $radius-lg;
+  }
+}
+
+// 输入区域
+.inputArea {
+  border-top: 1px solid $border-base;
+  padding: $spacing-sm;
+  background: $bg-base;
+  flex-shrink: 0;
+}
+
+.inputRow {
+  display: flex;
+  align-items: flex-start;
+  gap: $spacing-sm;
+}
+
+.historyToggle {
+  display: flex;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: $radius-full;
+  border: none;
+  background: $bg-hover;
+  color: $text-secondary;
+  cursor: pointer;
+  @include transition-all;
+
+  &:hover {
+    background: $bg-active;
+  }
+
+  &.active {
+    background: $primary-light;
+    color: $primary;
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+.inputWrapper {
+  flex: 1;
+  position: relative;
+}
+
+// 文本域 - 匹配 lowcode 输入框样式
+.textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 120px;
+  padding: $spacing-sm $spacing-xl $spacing-sm $spacing-md;
+  border: 1px solid $border-base;
+  border-radius: $radius-lg;
+  font-size: $font-size-sm;
+  line-height: $line-height-normal;
+  resize: none;
+  outline: none;
+  background: $bg-elevated;
+  color: $text-primary;
+  font-family: $font-family;
+  @include transition-all;
+
+  &::placeholder {
+    color: $text-tertiary;
+  }
+
+  &:focus {
+    border-color: $primary;
+    box-shadow: 0 0 0 2px rgba($primary, 0.1);
+  }
+}
+
+.sendButton {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: $radius-full;
+  background: $primary;
+  color: $text-inverse;
+  cursor: pointer;
+  @include transition-all;
+  box-shadow: $shadow-sm;
+
+  &:hover:not(.disabled) {
+    background: $primary-hover;
+  }
+
+  &.disabled {
+    background: $bg-active;
+    color: $text-disabled;
+    cursor: not-allowed;
+  }
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.inputFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: $spacing-sm;
+  padding: 0 $spacing-xs;
+}
+
+.modelButton {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  background: transparent;
+  cursor: pointer;
+  font-size: $font-size-xs;
+  color: $text-tertiary;
+  @include transition-all;
+
+  &:hover {
+    border-color: $primary;
+    color: $primary;
+  }
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+// 历史记录视图
+.historyView {
+  flex: 1;
+  overflow-y: auto;
+  background: $bg-elevated;
+}
+
+.sessionList {
+  display: flex;
+  flex-direction: column;
+}
+
+// 会话项 - 匹配 lowcode: flex flex-col gap-1 p-4 text-left hover:bg-emerald-50/50 transition-colors border-b border-slate-100
+.sessionItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: $spacing-md;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-bottom: 1px solid $border-light;
+  width: 100%;
+  @include transition-all;
+
+  &:hover {
+    background: rgba($primary, 0.05);
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sessionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.sessionTitle {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+}
+
+.sessionIcon {
+  color: $primary;
+  flex-shrink: 0;
+}
+
+.sessionTime {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: $font-size-xs;
+  color: $text-tertiary;
+  flex-shrink: 0;
+
+  svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+.sessionPreview {
+  font-size: $font-size-xs;
+  color: $text-tertiary;
+  margin: 0;
+  padding-left: 22px;
+  @include text-ellipsis;
+}
+
+// 空状态
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: $text-tertiary;
+  gap: $spacing-sm;
+
+  svg {
+    opacity: 0.5;
+  }
+}
+
+// 详情视图
+.detailView {
+  flex: 1;
+  overflow-y: auto;
+  background: $bg-elevated;
+  padding: $spacing-md;
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-md;
+}

@@ -1,14 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import {
-  CloseOutlined,
-  SendOutlined,
-  HistoryOutlined,
-  DatabaseOutlined,
-  LoadingOutlined,
-  AimOutlined,
-  CloseCircleOutlined,
-} from "@ant-design/icons";
-import { message, Dropdown } from "antd";
+import React, { useState, useEffect, useCallback } from "react";
+import { Bot, X, ChevronLeft, Trash2 } from "lucide-react";
+import { message, Popconfirm } from "antd";
 import type {
   A2UISchema,
   AISession,
@@ -25,7 +17,9 @@ import { serverAIService } from "../api/ServerAIService";
 import type { AIModelConfig } from "../types/ai-types";
 import { aiApi } from "../api/ai-api";
 import { sessionRepository } from "../../../store/db/session-repository";
-import styles from "./FloatingIsland.module.css";
+import { ChatView } from "./ChatView";
+import { HistoryView, DetailView } from "./HistoryView";
+import styles from "./FloatingIsland.module.scss";
 
 interface FloatingIslandProps {
   currentSchema: A2UISchema | null;
@@ -33,24 +27,29 @@ interface FloatingIslandProps {
   onError?: (error: string) => void;
 }
 
+type ViewMode = "chat" | "history" | "detail";
+
 export const FloatingIsland: React.FC<FloatingIslandProps> = ({
   currentSchema,
   onSchemaUpdate,
   onError,
 }) => {
+  // 状态
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const [currentModel, setCurrentModel] = useState<string>("mock");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [view, setView] = useState<ViewMode>("chat");
+  const [sessions, setSessions] = useState<AISession[]>([]);
+  const [selectedSession, setSelectedSession] = useState<AISession | null>(
+    null,
+  );
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
   // Store 状态
   const isOpen = useEditorStore((state) => state.isFloatingIslandOpen);
   const setFloatingIslandOpen = useEditorStore(
     (state) => state.setFloatingIslandOpen,
-  );
-  const toggleHistoryDrawer = useEditorStore(
-    (state) => state.toggleHistoryDrawer,
   );
   const clearSelection = useSelectionStore((state) => state.clearSelection);
   const currentSessionId = useEditorStore((state) => state.currentSessionId);
@@ -62,44 +61,67 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
   // AI 上下文
   const aiContext = useAIContext({ currentSchema });
 
+  // 加载历史会话
+  const loadSessions = useCallback(async () => {
+    setIsLoadingHistory(true);
+    try {
+      const sessionList = await sessionRepository.listSessions();
+      const fullSessions: AISession[] = [];
+      for (const meta of sessionList) {
+        const session = await sessionRepository.getSession(meta.id);
+        if (session) fullSessions.push(session);
+      }
+      setSessions(fullSessions);
+    } catch (error) {
+      console.error("Failed to load sessions:", error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  // 删除会话
+  const handleDeleteSession = useCallback(
+    async (sessionId: string) => {
+      try {
+        await sessionRepository.deleteSession(sessionId);
+        setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        if (selectedSession?.id === sessionId) {
+          setSelectedSession(null);
+          setView("history");
+        }
+        message.success("会话已删除");
+      } catch (error) {
+        console.error("Failed to delete session:", error);
+        message.error("删除会话失败");
+      }
+    },
+    [selectedSession],
+  );
+
   // 加载模型列表
   useEffect(() => {
+    if (!isOpen) return;
+
     const loadModels = async () => {
       try {
         const allModels = await aiApi.getModels();
         setModels(allModels);
-
         const defaultModel =
           allModels.find((m: AIModelConfig) => m.isDefault && m.isAvailable) ||
           allModels.find((m: AIModelConfig) => m.isAvailable);
-        if (defaultModel) {
-          setCurrentModel(defaultModel.id);
-        }
+        if (defaultModel) setCurrentModel(defaultModel.id);
       } catch (error) {
         console.error("Failed to load models:", error);
       }
     };
 
-    if (isOpen) {
-      loadModels();
-    }
+    loadModels();
   }, [isOpen]);
 
-  // 自动聚焦
+  // 加载历史记录
   useEffect(() => {
-    if (isOpen && textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  }, [isOpen]);
-
-  // 自动调整高度
-  const adjustTextareaHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-    }
-  }, []);
+    if (isOpen && view === "history") loadSessions();
+  }, [isOpen, view, loadSessions]);
 
   // 发送消息
   const handleSend = useCallback(async () => {
@@ -109,7 +131,6 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
     const timestamp = Date.now();
 
     try {
-      // 1. 获取或创建当前会话
       let sessionId = currentSessionId;
       let session: AISession | null = null;
 
@@ -142,26 +163,20 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         });
       }
 
-      // 2. 创建用户消息
       const userMessage: AISessionMessage = {
         id: generateMessageId(),
         role: "user",
         content: inputValue,
         timestamp,
-        context: {
-          selectedComponentIds: aiContext.selectedComponentIds,
-        },
+        context: { selectedComponentIds: aiContext.selectedComponentIds },
       };
 
       let prompt = inputValue;
-      const lowerInput = inputValue.toLowerCase();
-
-      // 构建带上下文的 prompt
       if (aiContext.formattedContext) {
         prompt = `[上下文]\n${aiContext.formattedContext}\n\n[请求]\n${inputValue}`;
       }
 
-      // 根据关键词增强 prompt
+      const lowerInput = inputValue.toLowerCase();
       if (
         lowerInput.includes("分析") ||
         lowerInput.includes("analyze") ||
@@ -184,7 +199,6 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
 
       let fullContent = "";
 
-      // 使用流式响应
       if (serverAIService.streamResponse) {
         await serverAIService.streamResponse(
           {
@@ -208,16 +222,14 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         fullContent = response.content;
       }
 
-      // 3. 解析 Schema（增强容错）
       let aiSchema: A2UISchema | undefined;
       let actionResult: AISessionMessage["actionResult"] | undefined;
 
       try {
-        // 尝试多种 JSON 提取方式
         const jsonPatterns = [
-          /```json\s*([\s\S]*?)\s*```/, // 标准 markdown
-          /```\s*([\s\S]*?)\s*```/, // 无语言标记
-          /\{[\s\S]*"rootId"[\s\S]*\}/, // 直接 JSON 对象
+          /```json\s*([\s\S]*?)\s*```/,
+          /```\s*([\s\S]*?)\s*```/,
+          /\{[\s\S]*"rootId"[\s\S]*\}/,
         ];
 
         let jsonStr: string | null = null;
@@ -230,15 +242,11 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         }
 
         if (jsonStr) {
-          // 清理可能的尾随逗号和注释
           const cleaned = jsonStr
-            .replace(/,\s*([}\]])/g, "$1") // 移除尾随逗号
-            .replace(/\/\/.*$/gm, "") // 移除单行注释
-            .replace(/\/\*[\s\S]*?\*\//g, ""); // 移除多行注释
-
+            .replace(/,\s*([}\]])/g, "$1")
+            .replace(/\/\/.*$/gm, "")
+            .replace(/\/\*[\s\S]*?\*\//g, "");
           aiSchema = JSON.parse(cleaned);
-
-          // 构建 actionResult 用于回滚
           actionResult = {
             type: "component_update",
             props: aiSchema as unknown as Record<string, unknown>,
@@ -248,7 +256,6 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         console.warn("JSON 解析失败，AI 返回格式可能不正确:", e);
       }
 
-      // 4. 创建 AI 消息
       const aiMessage: AISessionMessage = {
         id: generateMessageId(),
         role: "assistant",
@@ -257,7 +264,6 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         actionResult,
       };
 
-      // 5. 保存消息到会话
       if (sessionId) {
         await sessionRepository.addMessage(sessionId, userMessage);
         await sessionRepository.addMessage(sessionId, aiMessage);
@@ -270,9 +276,13 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
 
       setInputValue("");
       setFloatingIslandOpen(false);
-    } catch (error: any) {
-      onError?.(error.message || "AI 服务暂时不可用");
-      message.error(error.message || "AI 服务暂时不可用");
+      setView("chat");
+      loadSessions();
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : "AI 服务暂时不可用";
+      onError?.(errorMessage);
+      message.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -288,137 +298,108 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
     currentSessionId,
     setCurrentSessionId,
     addSession,
+    loadSessions,
   ]);
 
-  // 键盘事件
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  // 模型选择菜单
-  const modelMenuItems = models.map((model) => ({
-    key: model.id,
-    label: (
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <span>{model.name}</span>
-        {model.isDefault && (
-          <span style={{ fontSize: 12, color: "#999" }}>默认</span>
-        )}
-      </div>
-    ),
-    onClick: () => setCurrentModel(model.id),
-  }));
+  if (!isOpen) return null;
 
   const currentModelName =
     models.find((m) => m.id === currentModel)?.name || "选择模型";
 
-  if (!isOpen) return null;
-
   return (
     <div
-      className={styles.main}
+      className={styles.floatingIsland}
       role="dialog"
       aria-modal="true"
       aria-label="AI 助手"
     >
       {/* 头部 */}
       <div className={styles.header}>
-        <span className={styles.title}>AI 助手</span>
-        <button
-          className={styles.closeButton}
-          onClick={() => setFloatingIslandOpen(false)}
-          aria-label="关闭"
-        >
-          <CloseOutlined />
-        </button>
-      </div>
-
-      {/* 上下文标签 */}
-      {aiContext.selectedComponentIds.length > 0 && (
-        <div className={styles.contextChip}>
-          <AimOutlined className={styles.contextIcon} />
-          <span className={styles.contextText}>
-            {aiContext.formattedContext}
-          </span>
-          <button
-            className={styles.clearContext}
-            onClick={clearSelection}
-            aria-label="清除选择"
-          >
-            <CloseCircleOutlined />
-          </button>
-        </div>
-      )}
-
-      {/* 输入区域 */}
-      <div className={styles.inputArea}>
-        <textarea
-          ref={textareaRef}
-          className={styles.textarea}
-          value={inputValue}
-          onChange={(e) => {
-            setInputValue(e.target.value);
-            adjustTextareaHeight();
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder="描述你想要的修改，或让 AI 优化现有设计..."
-          rows={2}
-          disabled={isLoading}
-          aria-label="输入你的问题"
-        />
-
-        <div className={styles.footer}>
-          <div className={styles.leftActions}>
-            {/* 模型选择 */}
-            <Dropdown menu={{ items: modelMenuItems }} trigger={["click"]}>
-              <button className={styles.modelButton} type="button">
-                <DatabaseOutlined />
-                <span>{currentModelName}</span>
-              </button>
-            </Dropdown>
-
-            {/* 历史记录 */}
+        <div className={styles.headerLeft}>
+          {(view === "history" || view === "detail") && (
             <button
-              className={styles.historyButton}
+              className={styles.backButton}
               onClick={() => {
-                setFloatingIslandOpen(false);
-                toggleHistoryDrawer();
+                if (view === "detail") {
+                  setSelectedSession(null);
+                  setView("history");
+                } else {
+                  setView("chat");
+                }
               }}
-              aria-label="查看历史记录"
+              aria-label="返回"
             >
-              <HistoryOutlined />
+              <ChevronLeft size={18} />
             </button>
-          </div>
-
-          {/* 发送按钮 */}
+          )}
+          {view === "chat" && <Bot size={18} />}
+          <span className={styles.headerTitle}>
+            {view === "history"
+              ? "历史会话"
+              : view === "detail"
+                ? selectedSession?.title || "会话详情"
+                : "A2UI 助手"}
+          </span>
+        </div>
+        <div className={styles.headerActions}>
+          {view === "detail" && selectedSession && (
+            <Popconfirm
+              title="确定删除此会话？"
+              onConfirm={() => handleDeleteSession(selectedSession.id)}
+              okText="删除"
+              cancelText="取消"
+            >
+              <button className={`${styles.iconButton} ${styles.danger}`}>
+                <Trash2 size={16} />
+              </button>
+            </Popconfirm>
+          )}
           <button
-            className={styles.sendButton}
-            onClick={handleSend}
-            disabled={!inputValue.trim() || isLoading}
-            aria-label="发送消息"
+            className={styles.iconButton}
+            onClick={() => {
+              setFloatingIslandOpen(false);
+              setView("chat");
+            }}
+            aria-label="关闭"
           >
-            {isLoading ? <LoadingOutlined /> : <SendOutlined />}
-            <span>发送</span>
+            <X size={16} />
           </button>
         </div>
       </div>
 
-      {/* 加载状态 */}
-      {isLoading && (
-        <div className={styles.loading}>
-          <div className={styles.spinner} />
-          <span>AI 正在生成...</span>
-        </div>
-      )}
+      {/* 内容区域 */}
+      <div className={styles.content}>
+        {view === "chat" && (
+          <ChatView
+            inputValue={inputValue}
+            isLoading={isLoading}
+            models={models}
+            currentModelName={currentModelName}
+            hasSelectedComponents={aiContext.selectedComponentIds.length > 0}
+            formattedContext={aiContext.formattedContext || ""}
+            onInputChange={setInputValue}
+            onSend={handleSend}
+            onShowHistory={() => setView("history")}
+            onClearSelection={clearSelection}
+            onSelectModel={setCurrentModel}
+          />
+        )}
+
+        {view === "history" && (
+          <HistoryView
+            sessions={sessions}
+            isLoading={isLoadingHistory}
+            onSelectSession={(session) => {
+              setSelectedSession(session);
+              setView("detail");
+            }}
+          />
+        )}
+
+        {view === "detail" && selectedSession && (
+          <DetailView session={selectedSession} />
+        )}
+      </div>
     </div>
   );
 };

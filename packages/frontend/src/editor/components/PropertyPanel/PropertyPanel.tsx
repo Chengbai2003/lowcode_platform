@@ -8,7 +8,7 @@ import { BooleanEditor } from "./editors/BooleanEditor";
 import { SelectEditor } from "./editors/SelectEditor";
 import { ColorEditor } from "./editors/ColorEditor";
 import { NoSelectionEmptyState } from "../EmptyState";
-import styles from "./PropertyPanel.module.css";
+import styles from "./PropertyPanel.module.scss";
 
 interface PropertyPanelProps {
   schema: A2UISchema | null;
@@ -144,7 +144,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
     <div className={styles.propertyPanel}>
       <div className={styles.panelHeader}>
         <span className={styles.panelTitle}>{meta.displayName}</span>
-        <span className={styles.componentType}>{component.type}</span>
+        <span className={styles.componentId}>{component.id}</span>
       </div>
       <div className={styles.panelBody}>
         <Collapse

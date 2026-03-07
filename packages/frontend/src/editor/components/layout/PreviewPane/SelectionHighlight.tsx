@@ -1,6 +1,6 @@
 import React, { memo } from "react";
 import type { ComponentPosition } from "./useComponentPosition";
-import styles from "./PreviewPane.module.css";
+import styles from "./PreviewPane.module.scss";
 
 interface SelectionHighlightProps {
   position: ComponentPosition | null;

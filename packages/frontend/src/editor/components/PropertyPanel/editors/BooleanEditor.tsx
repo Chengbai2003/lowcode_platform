@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { Switch } from "antd";
-import styles from "../PropertyPanel.module.css";
+import styles from "../PropertyPanel.module.scss";
 
 interface BooleanEditorProps {
   label: string;

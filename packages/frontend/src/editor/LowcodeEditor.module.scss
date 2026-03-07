@@ -1,0 +1,45 @@
+@import '@styles/_variables.scss';
+@import '@styles/_mixins.scss';
+
+.lowcodeEditor {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: $bg-base;
+  color: $text-primary;
+  font-family: $font-family;
+  overflow: hidden;
+}
+
+.mainLayout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.leftSidebar {
+  width: 300px;
+  flex: none;
+  border-right: 1px solid $border-base;
+  background: $bg-base;
+  display: flex;
+  flex-direction: column;
+}
+
+.centerPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: $bg-elevated;
+  position: relative;
+}
+
+.rightSidebar {
+  width: 320px;
+  flex: none;
+  border-left: 1px solid $border-base;
+  background: $bg-elevated;
+  display: flex;
+  flex-direction: column;
+}

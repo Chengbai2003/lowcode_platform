@@ -7,7 +7,7 @@ import {
   Search,
   type LucideIcon,
 } from "lucide-react";
-import styles from "./EmptyState.module.css";
+import styles from "./EmptyState.module.scss";
 
 export type EmptyStateVariant =
   | "default"

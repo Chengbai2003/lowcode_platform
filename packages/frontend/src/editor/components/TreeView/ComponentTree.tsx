@@ -13,7 +13,7 @@ import {
 } from "./ContextMenu";
 import { schemaToTree, moveComponentTo } from "./schemaToTree";
 import { NoComponentsEmptyState } from "../EmptyState";
-import styles from "./ComponentTree.module.css";
+import styles from "./ComponentTree.module.scss";
 
 /**
  * 组件树主组件
@@ -132,7 +132,7 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
     <div className={styles.componentTree}>
       <div className={styles.treeHeader}>
         <span>组件树</span>
-        <span style={{ fontSize: "10px", color: "#666" }}>
+        <span className={styles.componentCount}>
           {schema ? Object.keys(schema.components).length : 0} 个组件
         </span>
       </div>
@@ -141,17 +141,19 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
         {treeData.length === 0 ? (
           <NoComponentsEmptyState />
         ) : (
-          treeData.map((node) => (
-            <TreeNode
-              key={node.id}
-              node={node}
-              selectedId={selectedId}
-              onSelect={onSelect}
-              onContextMenu={handleContextMenu}
-              expandedKeys={expandedKeys}
-              onToggleExpand={handleToggleExpand}
-            />
-          ))
+          <div className={styles.treeList}>
+            {treeData.map((node) => (
+              <TreeNode
+                key={node.id}
+                node={node}
+                selectedId={selectedId}
+                onSelect={onSelect}
+                onContextMenu={handleContextMenu}
+                expandedKeys={expandedKeys}
+                onToggleExpand={handleToggleExpand}
+              />
+            ))}
+          </div>
         )}
       </div>
 

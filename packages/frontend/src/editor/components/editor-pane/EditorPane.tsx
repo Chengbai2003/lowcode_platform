@@ -3,7 +3,7 @@ import { Layout } from "antd";
 import Editor from "@monaco-editor/react";
 import { ComponentTree } from "../TreeView/ComponentTree";
 import type { A2UISchema } from "../../types";
-import styles from "./EditorPane.module.css";
+import styles from "./EditorPane.module.scss";
 
 const { Sider } = Layout;
 

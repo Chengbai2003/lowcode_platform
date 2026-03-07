@@ -1,0 +1,105 @@
+// ============================================
+// 设计系统变量
+// ============================================
+
+// 颜色系统 (参考 Tailwind Slate + Emerald)
+$primary: #10b981;              // emerald-500
+$primary-hover: #059669;        // emerald-600
+$primary-active: #047857;       // emerald-700
+$primary-light: #d1fae5;        // emerald-100
+
+$success: #10b981;              // emerald-500
+$warning: #f59e0b;              // amber-500
+$error: #ef4444;                // red-500
+$info: #3b82f6;                 // blue-500
+
+$accent: #3b82f6;               // blue-500
+$accent-hover: #2563eb;         // blue-600
+$accent-light: #dbeafe;         // blue-100
+
+// 背景色 (Slate 系列)
+$bg-base: #ffffff;              // white
+$bg-elevated: #f8fafc;          // slate-50
+$bg-hover: #f1f5f9;             // slate-100
+$bg-active: #e2e8f0;            // slate-200
+
+// 边框色 (Slate 系列)
+$border-base: #e2e8f0;          // slate-200
+$border-light: #f1f5f9;         // slate-100
+$border-dark: #cbd5e1;          // slate-300
+
+// 文字色 (Slate 系列)
+$text-primary: #0f172a;         // slate-900
+$text-secondary: #475569;       // slate-600
+$text-tertiary: #94a3b8;        // slate-400
+$text-disabled: #cbd5e1;        // slate-300
+$text-inverse: #ffffff;         // white
+$text-muted: #64748b;           // slate-500
+
+// 间距系统（基于 4px）
+$spacing-unit: 4px;
+$spacing-xs: $spacing-unit;        // 4px
+$spacing-sm: $spacing-unit * 2;    // 8px
+$spacing-md: $spacing-unit * 4;    // 16px
+$spacing-lg: $spacing-unit * 6;    // 24px
+$spacing-xl: $spacing-unit * 8;    // 32px
+$spacing-2xl: $spacing-unit * 12;  // 48px
+
+// 圆角
+$radius-sm: 4px;
+$radius-md: 8px;
+$radius-lg: 12px;
+$radius-xl: 16px;
+$radius-full: 9999px;
+
+// 阴影
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+$shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+$shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+$shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
+
+// 字体
+$font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-family-mono: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+
+// 字号
+$font-size-xs: 12px;
+$font-size-sm: 13px;
+$font-size-base: 14px;
+$font-size-md: 16px;
+$font-size-lg: 18px;
+$font-size-xl: 20px;
+$font-size-2xl: 24px;
+
+// 字重
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+// 行高
+$line-height-tight: 1.25;
+$line-height-normal: 1.5;
+$line-height-relaxed: 1.75;
+
+// 过渡动画
+$transition-fast: 150ms;
+$transition-base: 200ms;
+$transition-slow: 300ms;
+$transition-timing: cubic-bezier(0.4, 0, 0.2, 1);
+
+// Z-index 层级
+$z-dropdown: 1000;
+$z-sticky: 1020;
+$z-fixed: 1030;
+$z-modal-backdrop: 1040;
+$z-modal: 1050;
+$z-popover: 1060;
+$z-tooltip: 1070;
+
+// 断点（响应式）
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;

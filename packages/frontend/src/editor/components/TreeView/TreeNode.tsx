@@ -1,54 +1,41 @@
 import React from "react";
+import {
+  ChevronDown,
+  LayoutTemplate,
+  Square,
+  Type,
+  TextCursorInput,
+  RectangleHorizontal,
+} from "lucide-react";
 import type { TreeNodeData } from "./treeTypes";
-import styles from "./ComponentTree.module.css";
+import styles from "./ComponentTree.module.scss";
 
 /**
- * 组件类型图标映射
+ * 组件类型到图标的映射
  */
-const COMPONENT_ICONS: Record<string, string> = {
-  Page: "📄",
-  Container: "📦",
-  Card: "🃏",
-  Button: "🔘",
-  Input: "✏️",
-  TextArea: "📝",
-  InputNumber: "🔢",
-  Select: "📋",
-  Checkbox: "☑️",
-  Radio: "📻",
-  Switch: "🔀",
-  Slider: "🎚️",
-  Form: "📋",
-  FormItem: "📎",
-  Table: "📊",
-  List: "📜",
-  Tabs: "📑",
-  TabPane: "📖",
-  Collapse: "📁",
-  Modal: "🪟",
-  Space: "␣",
-  Divider: "➖",
-  Row: "↔️",
-  Col: "↕️",
-  Layout: "🏗️",
-  Header: "🔝",
-  Content: "📄",
-  Footer: "🔚",
-  Typography: "🔤",
-  Text: "📝",
-  Title: "📌",
-  Tag: "🏷️",
-  Badge: "🛡️",
-  Alert: "⚠️",
-  Spin: "⏳",
+const getComponentIcon = (type: string) => {
+  const iconProps = { size: 16, className: styles.icon };
+
+  switch (type) {
+    case "Page":
+      return <LayoutTemplate {...iconProps} />;
+    case "Container":
+    case "Card":
+      return <Square {...iconProps} />;
+    case "Input":
+    case "TextArea":
+    case "InputNumber":
+      return <TextCursorInput {...iconProps} />;
+    case "Button":
+      return <RectangleHorizontal {...iconProps} />;
+    case "Typography":
+    case "Text":
+    case "Title":
+      return <Type {...iconProps} />;
+    default:
+      return <Square {...iconProps} />;
+  }
 };
-
-/**
- * 获取组件图标
- */
-function getComponentIcon(type: string): string {
-  return COMPONENT_ICONS[type] || "🔲";
-}
 
 interface TreeNodeProps {
   node: TreeNodeData;
@@ -91,25 +78,15 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
     <div className={styles.treeNode}>
       <div
         className={`${styles.treeNodeContent} ${isSelected ? styles.selected : ""}`}
-        style={{ paddingLeft: `${node.depth * 16 + 8}px` }}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
       >
-        {/* 展开/折叠按钮 */}
+        {/* 展开/折叠图标 */}
         <span
           className={`${styles.expandIcon} ${hasChildren ? styles.visible : ""} ${isExpanded ? styles.expanded : ""}`}
           onClick={handleToggleExpand}
         >
-          {hasChildren && (
-            <svg
-              viewBox="0 0 1024 1024"
-              width="12"
-              height="12"
-              fill="currentColor"
-            >
-              <path d="M764.6 453.8L533.3 685c-12.1 12.1-31.7 12.1-43.8 0L258.2 453.8c-12.1-12.1-12.1-31.7 0-43.8l5.5-5.5c12.1-12.1 31.7-12.1 43.8 0L512 609l204.5-204.5c12.1-12.1 31.7-12.1 43.8 0l5.5 5.5c12.1 12.1 12.1 31.7-0.2 43.8z" />
-            </svg>
-          )}
+          {hasChildren && <ChevronDown size={16} />}
         </span>
 
         {/* 组件图标 */}
@@ -117,18 +94,8 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
           {getComponentIcon(node.type)}
         </span>
 
-        {/* 组件类型 */}
-        <span className={styles.componentType}>{node.type}</span>
-
-        {/* 组件 ID */}
-        <span className={styles.componentId}>{node.id}</span>
-
-        {/* 标签（如果有自定义显示名称） */}
-        {node.label !== node.type && (
-          <span className={styles.componentLabel} title={node.label}>
-            {node.label}
-          </span>
-        )}
+        {/* 组件名称 */}
+        <span className={styles.componentName}>{node.label || node.type}</span>
       </div>
 
       {/* 子节点 */}

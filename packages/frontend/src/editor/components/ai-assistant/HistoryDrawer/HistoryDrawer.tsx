@@ -15,13 +15,14 @@ import type {
   AISession,
   AISessionMeta,
   AISessionMessage,
+  A2UISchema,
 } from "../../../../types";
 import { useEditorStore } from "../../../store";
 import { sessionRepository } from "../../../store/db/session-repository";
-import styles from "./HistoryDrawer.module.css";
+import styles from "./HistoryDrawer.module.scss";
 
 interface HistoryDrawerProps {
-  onRollback?: (schema: any) => void;
+  onRollback?: (schema: A2UISchema | unknown) => void;
 }
 
 // 日期分组

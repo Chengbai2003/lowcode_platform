@@ -1,0 +1,249 @@
+@import '@styles/_variables.scss';
+@import '@styles/_mixins.scss';
+
+.header {
+  @include flex-between;
+  height: 56px;
+  padding: 0 $spacing-md;
+  background: $bg-base;
+  border-bottom: 1px solid $border-base;
+  box-shadow: $shadow-sm;
+  z-index: $z-sticky;
+  flex-shrink: 0;
+}
+
+.leftSection {
+  @include flex-start;
+  gap: $spacing-md;
+
+  .logoContainer {
+    @include flex-start;
+    gap: $spacing-sm;
+
+    .logoIcon {
+      width: 32px;
+      height: 32px;
+      background: $primary;
+      border-radius: $radius-md;
+      @include flex-center;
+      color: $text-inverse;
+      font-size: 20px;
+    }
+
+    .brandName {
+      font-size: $font-size-lg;
+      font-weight: $font-weight-bold;
+      color: $primary;
+      letter-spacing: -0.02em;
+    }
+  }
+
+  .divider {
+    width: 1px;
+    height: 16px;
+    background: $border-base;
+    margin: 0 $spacing-sm;
+  }
+
+  .projectName {
+    @include flex-start;
+    gap: $spacing-sm;
+    padding: $spacing-xs $spacing-sm;
+    border-radius: $radius-md;
+    cursor: pointer;
+    @include transition-all;
+
+    &:hover {
+      background: $bg-hover;
+    }
+
+    span {
+      font-size: $font-size-sm;
+      font-weight: $font-weight-medium;
+      color: $text-secondary;
+    }
+
+    svg {
+      color: $text-tertiary;
+    }
+  }
+}
+
+.centerSection {
+  @include flex-start;
+  gap: $spacing-sm;
+
+  .actionButton {
+    @include flex-start;
+    gap: 6px;
+    padding: 6px $spacing-md;
+    border-radius: $radius-md;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    @include transition-all;
+
+    &:hover:not(:disabled) {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    svg {
+      width: 18px;
+      height: 18px;
+    }
+  }
+
+  .divider {
+    width: 1px;
+    height: 16px;
+    background: $border-base;
+    margin: 0 $spacing-xs;
+  }
+
+  .historyControls {
+    @include flex-start;
+    gap: $spacing-xs;
+
+    button {
+      padding: 6px;
+      border-radius: $radius-md;
+      background: transparent;
+      border: none;
+      color: $text-muted;
+      cursor: pointer;
+      @include transition-all;
+
+      &:hover:not(:disabled) {
+        background: $bg-hover;
+        color: $text-primary;
+      }
+
+      &:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+
+      svg {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+
+  .compileButton {
+    @include flex-start;
+    gap: 6px;
+    padding: 6px $spacing-md;
+    border-radius: $radius-md;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-semibold;
+    color: $text-inverse;
+    background: $primary;
+    border: none;
+    cursor: pointer;
+    box-shadow: $shadow-sm;
+    @include transition-all;
+
+    &:hover {
+      background: $primary-hover;
+      box-shadow: $shadow-md;
+    }
+
+    &:active {
+      background: $primary-active;
+    }
+
+    svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+  }
+}
+
+.rightSection {
+  @include flex-start;
+  gap: $spacing-md;
+
+  .modeToggle {
+    @include pill-button-group;
+    padding: 2px;
+    border: 1px solid $border-base;
+    margin-right: $spacing-sm;
+
+    button {
+      padding: $spacing-xs $spacing-md;
+      font-size: $font-size-xs;
+      font-weight: $font-weight-semibold;
+      border-radius: $radius-full;
+      border: none;
+      background: transparent;
+      color: $text-muted;
+      cursor: pointer;
+      @include transition-all;
+
+      &.active {
+        background: $bg-base;
+        color: $text-primary;
+        box-shadow: $shadow-sm;
+      }
+
+      &:hover:not(.active) {
+        color: $text-secondary;
+      }
+    }
+  }
+
+  .iconButtons {
+    @include flex-start;
+    gap: $spacing-xs;
+
+    button {
+      padding: 6px;
+      border-radius: $radius-md;
+      background: transparent;
+      border: none;
+      color: $text-muted;
+      cursor: pointer;
+      @include transition-all;
+
+      &:hover {
+        background: $bg-hover;
+        color: $text-primary;
+      }
+
+      svg {
+        width: 18px;
+        height: 18px;
+      }
+    }
+  }
+
+  .userAvatar {
+    width: 32px;
+    height: 32px;
+    border-radius: $radius-full;
+    background: #e0e7ff;
+    border: 1px solid $border-base;
+    @include flex-center;
+    color: #6366f1;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-bold;
+    cursor: pointer;
+    margin-left: $spacing-sm;
+    @include transition-all;
+
+    &:hover {
+      box-shadow: $shadow-sm;
+    }
+  }
+}

@@ -27,7 +27,7 @@ import {
 import { aiApi } from "../api/ai-api";
 import { serverAIService } from "../api/ServerAIService";
 import type { AIModelConfig } from "../types/ai-types";
-import styles from "./AIConfig.module.css";
+import styles from "./AIConfig.module.scss";
 
 const { Option } = Select;
 const { Title, Text } = Typography;
