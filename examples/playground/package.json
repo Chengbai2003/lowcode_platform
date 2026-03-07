@@ -13,9 +13,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "antd": "^5.12.0",
-    "@lowcode-platform/renderer": "workspace:*",
-    "@lowcode-platform/components": "workspace:*",
-    "@lowcode-platform/editor": "workspace:*"
+    "@lowcode-platform/frontend": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^18.2.45",

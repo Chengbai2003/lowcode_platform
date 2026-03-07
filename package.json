@@ -5,10 +5,10 @@
   "description": "A low-code platform with JSON schema to code generation",
   "scripts": {
     "dev": "pnpm --filter @lowcode-platform/playground dev",
-    "dev:server": "pnpm --filter @lowcode-platform/server dev",
+    "dev:server": "pnpm --filter @lowcode-platform/backend dev",
     "build": "pnpm build:packages",
-    "build:server": "pnpm --filter @lowcode-platform/server build",
-    "build:packages": "pnpm --filter @lowcode-platform/types --filter compiler --filter components --filter renderer --filter editor build",
+    "build:server": "pnpm --filter @lowcode-platform/backend build",
+    "build:packages": "pnpm --filter @lowcode-platform/frontend build",
     "clean": "pnpm -r clean",
     "type-check": "pnpm -r type-check",
     "lint": "eslint packages/",
@@ -55,7 +55,7 @@
     "pnpm": ">=8.0.0"
   },
   "dependencies": {
-    "@lowcode-platform/types": "workspace:*",
+    "@lowcode-platform/frontend": "workspace:*",
     "@reduxjs/toolkit": "^2.11.2",
     "react-redux": "^9.2.0"
   }

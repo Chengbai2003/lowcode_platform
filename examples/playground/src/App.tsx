@@ -1,5 +1,4 @@
-import { LowcodeEditor } from '@lowcode-platform/editor';
-import type { A2UISchema } from '@lowcode-platform/renderer';
+import { LowcodeEditor, type A2UISchema } from '@lowcode-platform/frontend';
 
 /**
  * 登录注册页面的初始 Schema (A2UI Flat Structure)
