@@ -1,5 +1,5 @@
-@import '@styles/_variables.scss';
-@import '@styles/_mixins.scss';
+@use '@styles/_variables.scss' as *;
+@use '@styles/_mixins.scss' as *;
 
 .propertyPanel {
   @include flex-column;
@@ -333,4 +333,471 @@
   text-align: center;
   color: $text-tertiary;
   font-size: $font-size-sm;
+}
+
+/* Tab 切换栏 */
+.tabBar {
+  display: flex;
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+  background: $bg-elevated;
+  flex-shrink: 0;
+
+  .tabButton {
+    flex: 1;
+    padding: 8px $spacing-md;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-xs;
+
+    &:hover {
+      color: $text-primary;
+    }
+
+    &.active {
+      color: $primary;
+      border-bottom-color: $primary;
+    }
+  }
+}
+
+/* 事件配置面板 */
+.eventConfigPanel {
+  @include flex-column;
+  height: 100%;
+  overflow-y: auto;
+  @include scrollbar;
+
+  .flowList {
+    flex: 1;
+    padding: $spacing-md;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-md;
+  }
+
+  .emptyState {
+    padding: $spacing-xl * 2;
+    text-align: center;
+    color: $text-tertiary;
+
+    .emptyText {
+      font-size: $font-size-sm;
+      margin-bottom: $spacing-sm;
+    }
+
+    .emptyHint {
+      font-size: $font-size-xs;
+      color: $text-disabled;
+    }
+  }
+
+  .addFlowButton {
+    margin: $spacing-md;
+    padding: $spacing-md;
+    background: $bg-base;
+    border: 2px dashed $border-base;
+    border-radius: $radius-lg;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+
+    &:hover {
+      border-color: $primary;
+      color: $primary;
+      background: rgba($primary, 0.05);
+    }
+  }
+}
+
+/* 事件流编辑器 */
+.eventFlow {
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-lg;
+  overflow: hidden;
+  box-shadow: $shadow-sm;
+
+  .flowHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $spacing-sm $spacing-md;
+    background: $bg-hover;
+    border-bottom: 1px solid $border-base;
+    gap: $spacing-md;
+  }
+
+  .flowTrigger {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    flex: 1;
+    min-width: 0;
+
+    .triggerIcon {
+      color: $primary;
+      flex-shrink: 0;
+    }
+
+    .triggerLabel {
+      flex: 1;
+      font-size: $font-size-sm;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+      font-family: $font-family-mono;
+      background: $bg-elevated;
+      padding: $spacing-xs $spacing-sm;
+      border-radius: $radius-sm;
+      border: 1px solid $border-base;
+    }
+  }
+
+  .flowActions {
+    display: flex;
+    gap: $spacing-xs;
+    flex-shrink: 0;
+
+    .flowActionBtn {
+      padding: 6px;
+      background: transparent;
+      border: none;
+      border-radius: $radius-sm;
+      color: $text-tertiary;
+      cursor: pointer;
+      transition: all $transition-base $transition-timing;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        background: $bg-hover;
+        color: $primary;
+      }
+
+      &.delete {
+        &:hover {
+          color: $error;
+          background: rgba($error, 0.1);
+        }
+      }
+    }
+  }
+
+  .actionChain {
+    padding: $spacing-md;
+    position: relative;
+
+    .emptyChain {
+      text-align: center;
+      padding: $spacing-lg;
+      color: $text-tertiary;
+
+      .emptyChainText {
+        font-size: $font-size-xs;
+        margin-bottom: $spacing-sm;
+      }
+
+      .addFirstActionBtn {
+        display: inline-flex;
+        align-items: center;
+        gap: $spacing-xs;
+        padding: $spacing-sm $spacing-md;
+        background: transparent;
+        border: 1px dashed $border-base;
+        border-radius: $radius-md;
+        color: $text-secondary;
+        font-size: $font-size-xs;
+        font-weight: $font-weight-medium;
+        cursor: pointer;
+        transition: all $transition-base $transition-timing;
+
+        &:hover {
+          border-color: $primary;
+          color: $primary;
+          background: rgba($primary, 0.05);
+        }
+      }
+    }
+
+    .actionNode {
+      position: relative;
+      padding-left: $spacing-lg;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: $border-base;
+      }
+
+      .actionDot {
+        position: absolute;
+        left: -4px;
+        top: 12px;
+        width: 10px;
+        height: 10px;
+        background: $bg-base;
+        border: 2px solid $primary;
+        border-radius: 50%;
+        z-index: 1;
+      }
+
+      .actionCard {
+        background: $bg-elevated;
+        border: 1px solid $border-base;
+        border-radius: $radius-md;
+        padding: $spacing-sm $spacing-md;
+        margin-bottom: $spacing-sm;
+        transition: all $transition-base $transition-timing;
+
+        &:hover {
+          border-color: $primary;
+          box-shadow: $shadow-sm;
+        }
+
+        .actionCardHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: $spacing-xs;
+        }
+
+        .actionTitle {
+          display: flex;
+          align-items: center;
+          gap: $spacing-xs;
+          font-size: $font-size-xs;
+          font-weight: $font-weight-semibold;
+          color: $text-primary;
+        }
+
+        .actionSummary {
+          font-size: 10px;
+          font-family: $font-family-mono;
+          color: $text-secondary;
+          background: $bg-hover;
+          padding: $spacing-xs $spacing-sm;
+          border-radius: $radius-sm;
+          word-break: break-all;
+        }
+
+        .deleteActionBtn {
+          padding: 4px;
+          background: transparent;
+          border: none;
+          border-radius: $radius-sm;
+          color: $text-tertiary;
+          cursor: pointer;
+          transition: all $transition-base $transition-timing;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          &:hover {
+            background: rgba($error, 0.1);
+            color: $error;
+          }
+        }
+      }
+    }
+
+    .addActionBtn {
+      width: 100%;
+      padding: $spacing-sm $spacing-md;
+      background: transparent;
+      border: 1px dashed $border-base;
+      border-radius: $radius-md;
+      color: $text-secondary;
+      font-size: $font-size-xs;
+      font-weight: $font-weight-medium;
+      cursor: pointer;
+      transition: all $transition-base $transition-timing;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: $spacing-xs;
+
+      &:hover {
+        border-color: $primary;
+        color: $primary;
+        background: rgba($primary, 0.05);
+      }
+    }
+  }
+}
+
+/* 动作图标 */
+.actionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: $radius-sm;
+  flex-shrink: 0;
+}
+
+/* 动作选择器弹窗 */
+.modalBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-xl;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.actionSelectorModal {
+  background: $bg-elevated;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-xl;
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.2s ease-out;
+
+  .modalHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: $spacing-lg;
+    border-bottom: 1px solid $border-base;
+    background: $bg-base;
+
+    .modalTitle {
+      font-size: $font-size-base;
+      font-weight: $font-weight-bold;
+      color: $text-primary;
+      margin: 0 0 4px 0;
+    }
+
+    .modalDesc {
+      font-size: $font-size-xs;
+      color: $text-tertiary;
+      margin: 0;
+    }
+
+    .modalClose {
+      padding: 6px;
+      background: transparent;
+      border: none;
+      border-radius: $radius-md;
+      color: $text-tertiary;
+      cursor: pointer;
+      transition: all $transition-base $transition-timing;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        background: $bg-hover;
+        color: $text-primary;
+      }
+    }
+  }
+
+  .actionGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: $spacing-md;
+    padding: $spacing-lg;
+    overflow-y: auto;
+    max-height: calc(80vh - 80px);
+    @include scrollbar;
+  }
+
+  .actionOption {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: $spacing-md;
+    border: 1px solid $border-base;
+    border-radius: $radius-lg;
+    background: $bg-base;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+    text-align: left;
+
+    &:hover {
+      border-color: $primary;
+      box-shadow: $shadow-md;
+      background: rgba($primary, 0.05);
+      transform: translateY(-2px);
+    }
+
+    .actionOptionIcon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      border-radius: $radius-md;
+      margin-bottom: $spacing-sm;
+    }
+
+    .actionOptionTitle {
+      font-size: $font-size-sm;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+      margin-bottom: 4px;
+    }
+
+    .actionOptionDesc {
+      font-size: 10px;
+      color: $text-tertiary;
+      line-height: 1.4;
+    }
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 触发器图标 */
+.triggerIcon {
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

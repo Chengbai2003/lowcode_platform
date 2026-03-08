@@ -1,3 +1,4 @@
+// eslint-disable @typescript-eslint/no-explicit-any
 /**
  * 高级逃生舱 Action
  * customScript - 基于 Proxy + with 的安全自定义脚本
@@ -25,7 +26,9 @@ export const customScript: ActionHandler = async (action, context) => {
     return result;
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    throw new Error(`Custom script execution failed: ${errorObj.message}`);
+    throw new Error(`Custom script execution failed: ${errorObj.message}`, {
+      cause: errorObj,
+    });
   }
 };
 
@@ -96,7 +99,7 @@ function executeInSandbox(
     const sandboxProxy = new Proxy(sandbox, {
       // 拦截变量检查：强制 with 语句认为所有变量都存在于 sandboxProxy 中
       // 这样就能把所有未定义的全局变量访问（如 window, document）强行拉入 get 拦截
-      has(target, key) {
+      has() {
         return true;
       },
       // 拦截变量读取

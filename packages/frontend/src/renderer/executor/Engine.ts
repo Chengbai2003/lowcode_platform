@@ -1,3 +1,4 @@
+// eslint-disable @typescript-eslint/no-explicit-any
 /**
  * DSL执行引擎
  * 负责解析和执行DSL Action序列
@@ -289,7 +290,8 @@ export class DSLExecutor {
       dispatch: () => {},
       getState: () => ({}),
       utils: {
-        formatDate: (date: Date | string, format = "YYYY-MM-DD") => {
+        formatDate: (date: Date | string, _format = "YYYY-MM-DD") => {
+          // TODO: 实现日期格式化
           return String(date);
         },
         uuid: () => {

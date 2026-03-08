@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useMemo, useEffect, memo } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
@@ -13,16 +14,21 @@ import type { ActionList, ExecutionContext } from '../types';
  * 事件派发中心
  * 负责解析和执行 DSL Action 序列
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class EventDispatcher {
   private context: Record<string, any>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private dispatch: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private getState: any;
   private dslExecutor: DSLExecutor;
   private executionContext: ExecutionContext;
 
   constructor(
     context: Record<string, any> = {},
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     dispatch: any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     getState: any
   ) {
     this.context = context;
@@ -32,7 +38,7 @@ export class EventDispatcher {
     // 创建DSL执行引擎
     this.dslExecutor = new DSLExecutor({
       debug: process.env.NODE_ENV !== 'production',
-      onError: (error, action, ctx) => {
+      onError: (error, action) => {
         console.error('[DSL Error]', error.message, { action });
       },
       onLog: (level, message, data) => {
@@ -61,6 +67,7 @@ export class EventDispatcher {
    */
   setContext(key: string, value: any) {
     this.context[key] = value;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (this.executionContext as any)[key] = value;
   }
 
@@ -386,8 +393,11 @@ function buildEventHandlers(
 
   const handlers: Record<string, (...args: any[]) => any> = {};
 
-  for (const [eventName, actions] of Object.entries(events)) {
-    handlers[eventName] = eventDispatcher.createHandler(actions);
+  // 直接以 trigger 为 key，actions 为 value
+  for (const [trigger, actions] of Object.entries(events)) {
+    if (actions.length > 0) {
+      handlers[trigger] = eventDispatcher.createHandler(actions);
+    }
   }
 
   return handlers;

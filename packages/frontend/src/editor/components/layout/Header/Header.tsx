@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   Zap,
   Edit2,
@@ -21,6 +21,8 @@ interface EditorHeaderProps {
   canUndo?: boolean;
   canRedo?: boolean;
   historySize?: number;
+  mode: "edit" | "preview";
+  onModeChange: (mode: "edit" | "preview") => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -32,8 +34,12 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   canUndo,
   canRedo,
   historySize = 0,
+  mode,
+  onModeChange,
 }) => {
-  const [mode, setMode] = React.useState<"edit" | "preview">("edit");
+  const handleThemeToggle = useCallback(() => {
+    onThemeChange(previewTheme === "light" ? "dark" : "light");
+  }, [onThemeChange, previewTheme]);
 
   return (
     <header className={styles.header}>
@@ -83,13 +89,13 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         <div className={styles.modeToggle}>
           <button
             className={mode === "edit" ? styles.active : ""}
-            onClick={() => setMode("edit")}
+            onClick={() => onModeChange("edit")}
           >
             编辑
           </button>
           <button
             className={mode === "preview" ? styles.active : ""}
-            onClick={() => setMode("preview")}
+            onClick={() => onModeChange("preview")}
           >
             预览
           </button>
@@ -98,12 +104,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
           <button title="历史记录">
             <History size={18} />
           </button>
-          <button
-            title="切换主题"
-            onClick={() =>
-              onThemeChange(previewTheme === "light" ? "dark" : "light")
-            }
-          >
+          <button title="切换主题" onClick={handleThemeToggle}>
             <Moon size={18} />
           </button>
           <button title="帮助">

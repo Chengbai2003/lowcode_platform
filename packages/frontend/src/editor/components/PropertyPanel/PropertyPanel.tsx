@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import { Collapse } from "antd";
 import type { A2UISchema, PropertyMeta } from "../../../types";
 import { getComponentMeta } from "../../../components";
@@ -8,6 +8,7 @@ import { BooleanEditor } from "./editors/BooleanEditor";
 import { SelectEditor } from "./editors/SelectEditor";
 import { ColorEditor } from "./editors/ColorEditor";
 import { NoSelectionEmptyState } from "../EmptyState";
+import { EventConfigPanel } from "./EventConfigPanel";
 import styles from "./PropertyPanel.module.scss";
 
 interface PropertyPanelProps {
@@ -25,6 +26,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   selectedId,
   onSchemaChange,
 }) => {
+  const [activeTab, setActiveTab] = useState<"props" | "events">("props");
   // 获取选中组件的配置
   const componentConfig = useMemo(() => {
     if (!schema || !selectedId) return null;
@@ -142,30 +144,56 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   return (
     <div className={styles.propertyPanel}>
-      <div className={styles.panelHeader}>
-        <span className={styles.panelTitle}>{meta.displayName}</span>
-        <span className={styles.componentId}>{component.id}</span>
-      </div>
-      <div className={styles.panelBody}>
-        <Collapse
-          defaultActiveKey={Object.keys(groupedProperties)}
-          ghost
-          expandIconPosition="end"
-          className={styles.collapse}
+      {/* Tab 切换 */}
+      <div className={styles.tabBar}>
+        <button
+          className={`${styles.tabButton} ${activeTab === "props" ? styles.active : ""}`}
+          onClick={() => setActiveTab("props")}
         >
-          {Object.entries(groupedProperties).map(([groupName, properties]) => (
-            <Collapse.Panel
-              key={groupName}
-              header={<span className={styles.groupHeader}>{groupName}</span>}
-              className={styles.collapsePanel}
-            >
-              <div className={styles.propertiesList}>
-                {properties.map((prop) => renderEditor(prop))}
-              </div>
-            </Collapse.Panel>
-          ))}
-        </Collapse>
+          属性
+        </button>
+        <button
+          className={`${styles.tabButton} ${activeTab === "events" ? styles.active : ""}`}
+          onClick={() => setActiveTab("events")}
+        >
+          事件
+        </button>
       </div>
+
+      {activeTab === "props" ? (
+        <>
+          <div className={styles.panelHeader}>
+            <span className={styles.panelTitle}>{meta.displayName}</span>
+            <span className={styles.componentId}>{component.id}</span>
+          </div>
+          <div className={styles.panelBody}>
+            <Collapse
+              defaultActiveKey={Object.keys(groupedProperties)}
+              ghost
+              expandIconPosition="end"
+              className={styles.collapse}
+            >
+              {Object.entries(groupedProperties).map(([groupName, properties]) => (
+                <Collapse.Panel
+                  key={groupName}
+                  header={<span className={styles.groupHeader}>{groupName}</span>}
+                  className={styles.collapsePanel}
+                >
+                  <div className={styles.propertiesList}>
+                    {properties.map((prop) => renderEditor(prop))}
+                  </div>
+                </Collapse.Panel>
+              ))}
+            </Collapse>
+          </div>
+        </>
+      ) : (
+        <EventConfigPanel
+          schema={schema}
+          selectedId={selectedId}
+          onSchemaChange={onSchemaChange}
+        />
+      )}
     </div>
   );
 };

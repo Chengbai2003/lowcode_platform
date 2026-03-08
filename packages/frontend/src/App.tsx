@@ -1,5 +1,5 @@
 import { LowcodeEditor } from "./editor/LowcodeEditor";
-import type { A2UISchema } from "./types";
+import type { A2UISchema, Action } from "./types";
 
 /**
  * 登录注册页面的初始 Schema (A2UI Flat Structure)
@@ -16,6 +16,8 @@ const loginPageSchema: A2UISchema = {
           justifyContent: "center",
           alignItems: "center",
           minHeight: "100%",
+          width: "100%",
+          height: "100%",
           background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         },
         width: "full",
@@ -44,7 +46,7 @@ const loginPageSchema: A2UISchema = {
         },
       },
       events: {
-        onFinish: [] as any,
+        onFinish: [] as Action[],
       },
       childrenIds: [
         "item_user",
@@ -73,7 +75,7 @@ const loginPageSchema: A2UISchema = {
         field: "username",
       },
       events: {
-        onChange: [] as any,
+        onChange: [] as Action[],
       },
     },
     item_pass: {
@@ -96,7 +98,7 @@ const loginPageSchema: A2UISchema = {
         field: "password",
       },
       events: {
-        onChange: [] as any,
+        onChange: [] as Action[],
       },
     },
     item_remember: {
@@ -115,7 +117,7 @@ const loginPageSchema: A2UISchema = {
         children: "记住我",
       },
       events: {
-        onChange: [] as any,
+        onChange: [] as Action[],
       },
     },
     item_submit: {
@@ -158,7 +160,7 @@ const loginPageSchema: A2UISchema = {
         children: "立即注册",
       },
       events: {
-        onClick: [] as any,
+        onClick: [] as Action[],
       },
     },
   },

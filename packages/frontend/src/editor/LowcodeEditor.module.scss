@@ -1,5 +1,5 @@
-@import '@styles/_variables.scss';
-@import '@styles/_mixins.scss';
+@use '@styles/_variables.scss' as *;
+@use '@styles/_mixins.scss' as *;
 
 .lowcodeEditor {
   display: flex;
@@ -12,10 +12,15 @@
   overflow: hidden;
 }
 
+.headerWrapper {
+  flex: none;
+}
+
 .mainLayout {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .leftSidebar {
@@ -25,6 +30,8 @@
   background: $bg-base;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 20;
 }
 
 .centerPane {
@@ -33,6 +40,12 @@
   flex-direction: column;
   background: $bg-elevated;
   position: relative;
+  z-index: 10;
+
+  &.fullWidth {
+    margin-left: 0;
+    margin-right: 0;
+  }
 }
 
 .rightSidebar {
@@ -42,4 +55,101 @@
   background: $bg-elevated;
   display: flex;
   flex-direction: column;
+  position: relative;
+  z-index: 20;
+}
+
+// 浮动预览条
+.floatingPreviewBar {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(4px);
+  padding: 10px 16px;
+  border-radius: 9999px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.previewStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+.statusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10b981;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.statusText {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.025em;
+  color: #f8fafc;
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: rgba(51, 65, 85, 0.8);
+  margin: 0 4px;
+}
+
+.exitPreviewButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(30, 41, 59, 0.8);
+  color: #f1f5f9;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: rgba(51, 65, 85, 0.8);
+  }
+}
+
+.newTabButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #10b981;
+  color: #ffffff;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #059669;
+  }
 }

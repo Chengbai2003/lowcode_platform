@@ -15,6 +15,7 @@ interface SelectableCanvasProps {
   schema: A2UISchema | null;
   allComponents: ComponentRegistry;
   eventContext: Record<string, unknown>;
+  isPreviewMode?: boolean;
 }
 
 /**
@@ -22,7 +23,7 @@ interface SelectableCanvasProps {
  * 为渲染的组件添加选中、悬停交互功能
  */
 export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
-  ({ schema, allComponents, eventContext }) => {
+  ({ schema, allComponents, eventContext, isPreviewMode = false }) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Selection store
@@ -51,14 +52,17 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
     // Handle component click
     const handleComponentClick = useCallback(
       (node: A2UIComponent) => {
-        selectComponent(node.id);
+        if (!isPreviewMode) {
+          selectComponent(node.id);
+        }
       },
-      [selectComponent],
+      [selectComponent, isPreviewMode],
     );
 
     // Handle container click (clear selection when clicking empty area)
     const handleContainerClick = useCallback(
       (e: React.MouseEvent) => {
+        if (isPreviewMode) return;
         // Only clear if clicking directly on the container (not on a component)
         if (
           e.target === containerRef.current ||
@@ -67,7 +71,7 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
           selectComponent(null);
         }
       },
-      [selectComponent],
+      [selectComponent, isPreviewMode],
     );
 
     // Handle mouse leave from container
@@ -102,14 +106,14 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        <div className={styles.previewContent}>
+        <div className={`${styles.previewContent} ${isPreviewMode ? styles.previewMode : ''}`}>
           {schema ? (
             <LowcodeProvider>
               <Renderer
                 schema={schema}
                 components={allComponents}
                 eventContext={eventContext}
-                onComponentClick={handleComponentClick}
+                onComponentClick={isPreviewMode ? undefined : handleComponentClick}
               />
             </LowcodeProvider>
           ) : (
@@ -117,15 +121,17 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
           )}
         </div>
 
-        {/* Hover highlight */}
-        <SelectionHighlight position={hoverPosition} variant="hover" />
+        {/* Hover highlight - hidden in preview mode */}
+        {!isPreviewMode && <SelectionHighlight position={hoverPosition} variant="hover" />}
 
-        {/* Selected highlight */}
-        <SelectionHighlight
-          position={selectedPosition}
-          componentName={getComponentName(selectedId)}
-          variant="selected"
-        />
+        {/* Selected highlight - hidden in preview mode */}
+        {!isPreviewMode && (
+          <SelectionHighlight
+            position={selectedPosition}
+            componentName={getComponentName(selectedId)}
+            variant="selected"
+          />
+        )}
       </div>
     );
   },
