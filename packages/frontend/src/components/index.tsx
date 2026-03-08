@@ -86,6 +86,19 @@ import { TextMeta } from './components/Text.meta';
 import { TitleMeta } from './components/Title.meta';
 import { TypographyMeta } from './components/Typography.meta';
 
+// P1 批次组件元数据
+import { CheckboxMeta } from './components/Checkbox.meta';
+import { RadioMeta } from './components/Radio.meta';
+import { SwitchMeta } from './components/Switch.meta';
+import { InputNumberMeta } from './components/InputNumber.meta';
+import { TextAreaMeta } from './components/TextArea.meta';
+import { TabsMeta } from './components/Tabs.meta';
+import { ModalMeta } from './components/Modal.meta';
+import { AlertMeta } from './components/Alert.meta';
+import { TableMeta } from './components/Table.meta';
+import { FormMeta } from './components/Form.meta';
+import { FormItemMeta } from './components/FormItem.meta';
+
 import type { ComponentPanelConfig } from '../types';
 
 interface ComponentRegistryEntry {
@@ -104,36 +117,36 @@ export const componentRegistry: Record<string, ComponentRegistryEntry> = {
   // 基础组件
   Button: { component: Button, meta: ButtonMeta },
   Input: { component: Input, meta: InputMeta },
-  TextArea: { component: TextArea, meta: InputMeta }, // TextArea 共享 Input 的元数据
-  InputNumber: { component: InputNumber, meta: InputMeta },
+  TextArea: { component: TextArea, meta: TextAreaMeta },
+  InputNumber: { component: InputNumber, meta: InputNumberMeta },
   Select: { component: Select, meta: SelectMeta },
-  Checkbox: { component: Checkbox, meta: undefined },
+  Checkbox: { component: Checkbox, meta: CheckboxMeta },
   CheckboxGroup: { component: CheckboxGroup, meta: undefined },
-  Radio: { component: Radio, meta: undefined },
+  Radio: { component: Radio, meta: RadioMeta },
   RadioGroup: { component: RadioGroup, meta: undefined },
   RadioButton: { component: RadioButton, meta: undefined },
-  Switch: { component: Switch, meta: undefined },
+  Switch: { component: Switch, meta: SwitchMeta },
   Slider: { component: Slider, meta: undefined },
 
   // 表单
-  Form: { component: Form, meta: undefined },
-  FormItem: { component: FormItem, meta: undefined },
+  Form: { component: Form, meta: FormMeta },
+  FormItem: { component: FormItem, meta: FormItemMeta },
 
   // 数据展示
-  Table: { component: Table, meta: undefined },
+  Table: { component: Table, meta: TableMeta },
   Card: { component: Card, meta: CardMeta },
   List: { component: List, meta: undefined },
   ListItem: { component: ListItem, meta: undefined },
-  Tabs: { component: Tabs, meta: undefined },
+  Tabs: { component: Tabs, meta: TabsMeta },
   TabPane: { component: TabPane, meta: undefined },
   Collapse: { component: Collapse, meta: undefined },
   CollapsePanel: { component: CollapsePanel, meta: undefined },
 
   // 反馈
-  Modal: { component: Modal, meta: undefined },
+  Modal: { component: Modal, meta: ModalMeta },
   Popover: { component: Popover, meta: undefined },
   Tooltip: { component: Tooltip, meta: undefined },
-  Alert: { component: Alert, meta: undefined },
+  Alert: { component: Alert, meta: AlertMeta },
 
   // 布局
   Space: { component: Space, meta: SpaceMeta },

@@ -4,7 +4,13 @@
 
 import * as babelTypes from '@babel/types';
 import { compileStyle } from '../styleCompiler';
-import { FieldInfo, toCamelCase, isExpression, buildValueAST } from './utils';
+import {
+  FieldInfo,
+  toCamelCase,
+  isExpression,
+  buildValueAST,
+  isValidExpressionPath,
+} from './utils';
 import { buildActionListAST } from './actionBuilder';
 
 /** Label wrapper 样式常量 */
@@ -135,7 +141,13 @@ export function buildJSXTree(
 
       let valNode: babelTypes.JSXAttribute['value'];
       if (isExpression(value)) {
-        valNode = babelTypes.jsxExpressionContainer(babelTypes.identifier((value as any).code));
+        // 安全验证：确保表达式路径合法
+        if (!isValidExpressionPath((value as any).code)) {
+          // 表达式不合法时，使用空字符串作为安全回退
+          valNode = babelTypes.jsxExpressionContainer(babelTypes.stringLiteral(''));
+        } else {
+          valNode = babelTypes.jsxExpressionContainer(babelTypes.identifier((value as any).code));
+        }
       } else if (typeof value === 'string') {
         valNode = babelTypes.stringLiteral(value);
       } else {

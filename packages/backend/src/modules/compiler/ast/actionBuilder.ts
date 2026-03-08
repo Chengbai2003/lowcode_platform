@@ -7,6 +7,64 @@ import * as babelTypes from '@babel/types';
 import { FieldInfo, toCamelCase, buildValueAST } from './utils';
 
 /**
+ * URL 白名单配置
+ */
+const ALLOWED_PROTOCOLS = ['http:', 'https:', ''];
+const ALLOWED_HOSTS: string[] = [
+  'localhost',
+  '127.0.0.1',
+  // 生产环境域名示例，可根据需要配置
+  // 'example.com',
+  // 'www.example.com',
+];
+
+/**
+ * URL 安全 sanitize - 只允许相对路径或白名单域名
+ */
+function sanitizeUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '/';
+
+  const trimmedUrl = url.trim();
+  const lowerUrl = trimmedUrl.toLowerCase();
+
+  // 拒绝危险协议
+  if (
+    lowerUrl.startsWith('javascript:') ||
+    lowerUrl.startsWith('data:') ||
+    lowerUrl.startsWith('file:')
+  ) {
+    console.warn(`[Security] Blocked dangerous URL: ${url}`);
+    return '/';
+  }
+
+  // 相对路径允许
+  if (trimmedUrl.startsWith('/') || trimmedUrl.startsWith('#') || !trimmedUrl.includes('://')) {
+    return trimmedUrl;
+  }
+
+  // 绝对 URL 验证
+  try {
+    const urlObj = new URL(trimmedUrl);
+    if (!ALLOWED_PROTOCOLS.includes(urlObj.protocol)) {
+      console.warn(`[Security] Blocked disallowed protocol: ${urlObj.protocol}`);
+      return '/';
+    }
+    const hostname = urlObj.hostname.toLowerCase();
+    if (
+      ALLOWED_HOSTS.length > 0 &&
+      !ALLOWED_HOSTS.some((a) => hostname === a || hostname.endsWith(`.${a}`))
+    ) {
+      console.warn(`[Security] Blocked disallowed host: ${hostname}`);
+      return '/';
+    }
+    return trimmedUrl;
+  } catch (e) {
+    console.warn(`[Security] Invalid URL format: ${url}`);
+    return '/';
+  }
+}
+
+/**
  * 将 ActionList 编译为 JS 闭包 AST
  *
  * 精简 Action 体系 (8种):
@@ -152,10 +210,11 @@ export function buildActionListAST(
 
       // 路由跳转
       case 'navigate': {
-        const toNode =
-          typeof action.to === 'string'
-            ? babelTypes.stringLiteral(action.to)
-            : babelTypes.cloneNode(buildValueAST(action.to));
+        // URL 安全验证：只允许相对路径或白名单域名
+        const toUrl = typeof action.to === 'string' ? action.to : '';
+        const safeUrl = sanitizeUrl(toUrl);
+
+        const toNode = babelTypes.stringLiteral(safeUrl);
 
         return babelTypes.expressionStatement(
           babelTypes.assignmentExpression(

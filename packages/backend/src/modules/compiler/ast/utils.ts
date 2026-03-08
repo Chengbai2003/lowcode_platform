@@ -37,6 +37,49 @@ export function isExpression(value: unknown): value is ExpressionNode {
 }
 
 /**
+ * 验证表达式路径是否安全（白名单验证）
+ *
+ * 只允许：
+ * - 合法的标识符：a-z, A-Z, 0-9, _, $
+ * - 属性访问：. 操作符
+ * - 数组访问：[数字]
+ *
+ * 拒绝：
+ * - 函数调用
+ * - 原型链访问：__proto__, prototype, constructor
+ * - 特殊字符注入
+ */
+export function isValidExpressionPath(code: string): boolean {
+  if (!code || typeof code !== 'string') return false;
+
+  // 拒绝包含危险关键词的表达式
+  const dangerousKeywords = [
+    '__proto__',
+    'prototype',
+    'constructor',
+    'eval',
+    'exec',
+    'Function',
+    'setTimeout',
+    'setInterval',
+    'process',
+    'require',
+    'window',
+    'document',
+    'global',
+  ];
+
+  for (const keyword of dangerousKeywords) {
+    if (code.includes(keyword)) return false;
+  }
+
+  // 白名单正则：只允许标识符和属性访问
+  // 例如：formData.userName, data.items[0], state.loading
+  const validPattern = /^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*|\[\d+\])*$/;
+  return validPattern.test(code);
+}
+
+/**
  * 转换为驼峰命名
  */
 export function toCamelCase(str: string): string {
