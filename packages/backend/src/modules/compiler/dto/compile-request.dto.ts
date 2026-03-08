@@ -2,14 +2,8 @@
  * Compiler 请求 DTO
  */
 
-import {
-  IsObject,
-  IsOptional,
-  IsString,
-  ValidateNested,
-  IsNotEmpty,
-} from "class-validator";
-import { Type } from "class-transformer";
+import { IsObject, IsOptional, IsString, ValidateNested, IsNotEmpty } from 'class-validator';
+import { Type } from 'class-transformer';
 
 /**
  * 编译选项

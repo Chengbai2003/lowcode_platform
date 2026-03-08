@@ -1,14 +1,7 @@
 /**
  * 值类型：可以是静态值或表达式
  */
-export type Value =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | Record<string, any>
-  | any[];
+export type Value = string | number | boolean | null | undefined | Record<string, any> | any[];
 
 /**
  * 执行上下文
@@ -84,12 +77,7 @@ export interface ExecutionContext {
       warning: (options: any) => void;
       info: (options: any) => void;
     };
-    openTab?: (options: {
-      id: string;
-      title: any;
-      path: any;
-      closeOthers?: boolean;
-    }) => void;
+    openTab?: (options: { id: string; title: any; path: any; closeOthers?: boolean }) => void;
   };
 
   // API客户端

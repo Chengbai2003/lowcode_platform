@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import styles from "../PropertyPanel.module.scss";
+import React, { useCallback } from 'react';
+import styles from '../PropertyPanel.module.scss';
 
 interface NumberEditorProps {
   label: string;
@@ -30,15 +30,13 @@ export const NumberEditor: React.FC<NumberEditorProps> = ({
     [onChange],
   );
 
-  const numValue = typeof value === "number" ? value : 0;
+  const numValue = typeof value === 'number' ? value : 0;
 
   return (
     <div className={styles.propertyItem}>
       <label className={styles.propertyLabel}>
         <span>{label}</span>
-        {description && (
-          <span className={styles.description}>{description}</span>
-        )}
+        {description && <span className={styles.description}>{description}</span>}
       </label>
       <div className={styles.propertyInput}>
         <input

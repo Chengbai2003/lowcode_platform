@@ -5,7 +5,7 @@
  * 用于指导 AI 生成符合规范的组件 Schema。
  */
 
-import { CORE_ACTION_TYPES } from "@lowcode-platform/frontend/types";
+import { CORE_ACTION_TYPES } from '@lowcode-platform/frontend/types';
 
 /**
  * 核心 Action 类型定义
@@ -17,59 +17,59 @@ const CORE_ACTIONS_DESCRIPTION = {
     example: `{ "type": "setField", "field": "userName", "value": "John" }`,
   },
   mergeField: {
-    description: "合并对象到字段",
+    description: '合并对象到字段',
     example: `{ "type": "mergeField", "field": "user", "value": { "name": "John" } }`,
   },
 
   // UI 交互
   message: {
-    description: "显示消息提示",
+    description: '显示消息提示',
     example: `{ "type": "message", "content": "操作成功", "messageType": "success" }`,
   },
   modal: {
-    description: "弹出模态框",
+    description: '弹出模态框',
     example: `{ "type": "modal", "title": "提示", "content": "确定要删除吗？" }`,
   },
   confirm: {
-    description: "确认对话框",
+    description: '确认对话框',
     example: `{ "type": "confirm", "title": "确认", "content": "确定继续吗？" }`,
   },
 
   // 导航
   navigate: {
-    description: "页面跳转",
+    description: '页面跳转',
     example: `{ "type": "navigate", "to": "/dashboard" }`,
   },
 
   // 状态管理
   setState: {
-    description: "设置组件状态",
+    description: '设置组件状态',
     example: `{ "type": "setState", "state": { "loading": false } }`,
   },
 
   // 异步操作
   apiCall: {
-    description: "发起 API 请求",
+    description: '发起 API 请求',
     example: `{ "type": "apiCall", "url": "/api/users", "method": "GET" }`,
   },
   delay: {
-    description: "延迟执行",
+    description: '延迟执行',
     example: `{ "type": "delay", "ms": 1000 }`,
   },
 
   // 流程控制
   if: {
-    description: "条件判断",
+    description: '条件判断',
     example: `{ "type": "if", "condition": "{{formData.valid}}", "then": [...], "else": [...] }`,
   },
   tryCatch: {
-    description: "异常捕获",
+    description: '异常捕获',
     example: `{ "type": "tryCatch", "try": [...], "catch": [...] }`,
   },
 
   // 调试
   log: {
-    description: "控制台日志",
+    description: '控制台日志',
     example: `{ "type": "log", "value": "{{formData}}" }`,
   },
 } as const;
@@ -82,7 +82,7 @@ export function buildActionsPrompt(): string {
     .map(([type, info]) => {
       return `### ${type}\n${info.description}\n\n示例:\n\`\`\`json\n${info.example}\n\`\`\``;
     })
-    .join("\n\n");
+    .join('\n\n');
 
   return `
 ## 可用 Action 类型
@@ -125,11 +125,7 @@ export function buildSystemPrompt(options?: {
   includeComponents?: boolean;
   componentList?: string[];
 }): string {
-  const {
-    includeActions = true,
-    includeComponents = true,
-    componentList = [],
-  } = options || {};
+  const { includeActions = true, includeComponents = true, componentList = [] } = options || {};
 
   let prompt = `你是一个低代码平台的 UI 生成助手。
 你的任务是根据用户需求生成符合 A2UI 协议的组件 Schema。
@@ -155,14 +151,14 @@ Schema 是一个扁平的组件映射表：
 `;
 
   if (includeActions) {
-    prompt += buildActionsPrompt() + "\n\n";
+    prompt += buildActionsPrompt() + '\n\n';
   }
 
   if (includeComponents && componentList.length > 0) {
     prompt += `
 ## 可用组件类型
 
-${componentList.map((c) => `- ${c}`).join("\n")}
+${componentList.map((c) => `- ${c}`).join('\n')}
 
 请只使用以上列出的组件类型。
 `;

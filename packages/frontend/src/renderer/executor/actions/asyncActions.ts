@@ -3,8 +3,8 @@
  * apiCall, delay
  */
 
-import type { ActionHandler } from "../../../types";
-import { resolveValue, resolveValues } from "../parser";
+import type { ActionHandler } from '../../../types';
+import { resolveValue, resolveValues } from '../parser';
 
 /**
  * URL 白名单检查（防止 SSRF）
@@ -16,7 +16,7 @@ function isSafeUrl(url: string): boolean {
     const parsed = new URL(url);
 
     // 只允许 http 和 https 协议
-    if (!["http:", "https:"].includes(parsed.protocol)) {
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
       return false;
     }
 
@@ -64,7 +64,7 @@ function isSafeUrl(url: string): boolean {
 export const apiCall: ActionHandler = async (action, context, executor) => {
   const {
     url,
-    method = "GET",
+    method = 'GET',
     body,
     headers,
     params,
@@ -81,7 +81,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
   const resolvedParams = params ? resolveValues(params, context) : undefined;
 
   // SSRF 防护：验证 URL 安全性
-  if (typeof resolvedUrl === "string" && !isSafeUrl(resolvedUrl)) {
+  if (typeof resolvedUrl === 'string' && !isSafeUrl(resolvedUrl)) {
     throw new Error(
       `apiCall: blocked unsafe URL "${resolvedUrl}" - only http/https to public endpoints allowed`,
     );
@@ -99,7 +99,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       }
       const queryString = searchParams.toString();
       if (queryString) {
-        fullUrl += (fullUrl.includes("?") ? "&" : "?") + queryString;
+        fullUrl += (fullUrl.includes('?') ? '&' : '?') + queryString;
       }
     }
 
@@ -107,15 +107,12 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     const config: RequestInit = {
       method: resolvedMethod,
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         ...(resolvedHeaders as Record<string, string>),
       },
     };
 
-    if (
-      ["POST", "PUT", "PATCH"].includes(resolvedMethod) &&
-      resolvedBody !== undefined
-    ) {
+    if (['POST', 'PUT', 'PATCH'].includes(resolvedMethod) && resolvedBody !== undefined) {
       config.body = JSON.stringify(resolvedBody);
     }
 
@@ -123,14 +120,13 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // 使用 context.api 或 fetch
     if (context.api) {
-      const apiMethod =
-        resolvedMethod.toLowerCase() as keyof typeof context.api;
-      if (typeof context.api[apiMethod] === "function") {
+      const apiMethod = resolvedMethod.toLowerCase() as keyof typeof context.api;
+      if (typeof context.api[apiMethod] === 'function') {
         const apiFn = context.api[apiMethod] as any;
-        response = await (["GET", "DELETE"].includes(resolvedMethod)
+        response = await (['GET', 'DELETE'].includes(resolvedMethod)
           ? apiFn(fullUrl)
           : apiFn(fullUrl, resolvedBody));
-      } else if (typeof context.api.request === "function") {
+      } else if (typeof context.api.request === 'function') {
         response = await context.api.request(config);
       }
     } else {
@@ -144,7 +140,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // 保存结果
     if (resultTo && context.data) {
-      const keys = resultTo.split(".");
+      const keys = resultTo.split('.');
       const lastKey = keys.pop();
       if (lastKey) {
         let target = context.data;
@@ -169,7 +165,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       if (context.ui?.message?.error) {
         context.ui.message.error(errorObj.message);
       } else {
-        console.error("API call failed:", errorObj);
+        console.error('API call failed:', errorObj);
       }
     }
 
@@ -193,8 +189,8 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 export const delay: ActionHandler = async (action) => {
   const { ms } = action;
 
-  if (typeof ms !== "number" || ms < 0) {
-    throw new Error("delay: ms must be a positive number");
+  if (typeof ms !== 'number' || ms < 0) {
+    throw new Error('delay: ms must be a positive number');
   }
 
   await new Promise((resolve) => setTimeout(resolve, ms));

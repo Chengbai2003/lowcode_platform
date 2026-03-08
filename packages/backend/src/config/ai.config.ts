@@ -46,7 +46,9 @@ export default registerAs('ai', () => ({
 
   // 代码生成专用配置
   codegen: {
-    systemPrompt: process.env.CODEGEN_SYSTEM_PROMPT || `You are a code generator for a low-code platform.
+    systemPrompt:
+      process.env.CODEGEN_SYSTEM_PROMPT ||
+      `You are a code generator for a low-code platform.
 Your task is to generate JSON schema for UI components based on user requirements.
 The schema follows the A2UI format with the following structure:
 - rootId: the root component ID

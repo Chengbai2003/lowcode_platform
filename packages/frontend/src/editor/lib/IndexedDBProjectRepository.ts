@@ -1,14 +1,8 @@
-import {
-  ProjectRepository,
-  Project,
-  ProjectMeta,
-  AISession,
-  AISessionMeta,
-} from "../../types";
-import { set, get, del } from "idb-keyval";
+import { ProjectRepository, Project, ProjectMeta, AISession, AISessionMeta } from '../../types';
+import { set, get, del } from 'idb-keyval';
 
-const PROJECT_META_KEY = "project_metas";
-const SESSION_META_KEY = "session_metas";
+const PROJECT_META_KEY = 'project_metas';
+const SESSION_META_KEY = 'session_metas';
 
 export class IndexedDBProjectRepository implements ProjectRepository {
   async save(project: Project): Promise<void> {
@@ -17,9 +11,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
 
     // 更新元数据列表
     const metas: ProjectMeta[] = (await get(PROJECT_META_KEY)) || [];
-    const existingIndex = metas.findIndex(
-      (meta) => meta.id === project.meta.id,
-    );
+    const existingIndex = metas.findIndex((meta) => meta.id === project.meta.id);
 
     if (existingIndex >= 0) {
       metas[existingIndex] = project.meta;
@@ -74,9 +66,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
 
       // 更新会话元数据列表
       const sessionMetas: AISessionMeta[] = (await get(SESSION_META_KEY)) || [];
-      const existingIndex = sessionMetas.findIndex(
-        (meta) => meta.id === session.id,
-      );
+      const existingIndex = sessionMetas.findIndex((meta) => meta.id === session.id);
 
       // 从 session 中提取元数据（不包含 messages）
       const { messages, ...meta } = session;
@@ -91,7 +81,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
 
       await set(SESSION_META_KEY, sessionMetas);
     } catch (error) {
-      console.error("Failed to save session:", error);
+      console.error('Failed to save session:', error);
       throw error;
     }
   }
@@ -100,7 +90,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
     try {
       return (await get(`session_${sessionId}`)) || null;
     } catch (error) {
-      console.error("Failed to load session:", error);
+      console.error('Failed to load session:', error);
       return null;
     }
   }
@@ -111,15 +101,13 @@ export class IndexedDBProjectRepository implements ProjectRepository {
 
       // 如果指定了 projectId，则过滤出关联该项目的会话
       if (projectId) {
-        sessionMetas = sessionMetas.filter(
-          (meta) => meta.projectId === projectId,
-        );
+        sessionMetas = sessionMetas.filter((meta) => meta.projectId === projectId);
       }
 
       // 按更新时间倒序排列
       return sessionMetas.sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (error) {
-      console.error("Failed to list sessions:", error);
+      console.error('Failed to list sessions:', error);
       return [];
     }
   }
@@ -133,7 +121,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
       sessionMetas = sessionMetas.filter((meta) => meta.id !== sessionId);
       await set(SESSION_META_KEY, sessionMetas);
     } catch (error) {
-      console.error("Failed to delete session:", error);
+      console.error('Failed to delete session:', error);
       throw error;
     }
   }
@@ -144,9 +132,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
       let sessionMetas: AISessionMeta[] = (await get(SESSION_META_KEY)) || [];
 
       // 找出需要删除的会话 ID
-      const sessionsToDelete = sessionMetas.filter(
-        (meta) => meta.updatedAt < cutoffTime,
-      );
+      const sessionsToDelete = sessionMetas.filter((meta) => meta.updatedAt < cutoffTime);
 
       // 删除会话数据
       for (const sessionMeta of sessionsToDelete) {
@@ -154,12 +140,10 @@ export class IndexedDBProjectRepository implements ProjectRepository {
       }
 
       // 更新元数据列表
-      sessionMetas = sessionMetas.filter(
-        (meta) => meta.updatedAt >= cutoffTime,
-      );
+      sessionMetas = sessionMetas.filter((meta) => meta.updatedAt >= cutoffTime);
       await set(SESSION_META_KEY, sessionMetas);
     } catch (error) {
-      console.error("Failed to clear old sessions:", error);
+      console.error('Failed to clear old sessions:', error);
       throw error;
     }
   }

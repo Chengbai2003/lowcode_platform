@@ -11,11 +11,11 @@ import {
   HttpCode,
   Logger,
   UseGuards,
-} from "@nestjs/common";
-import { AuthGuard } from "../../common/guards/auth.guard";
-import { AISession, AISessionMeta } from "@lowcode-platform/frontend/types";
+} from '@nestjs/common';
+import { AuthGuard } from '../../common/guards/auth.guard';
+import { AISession, AISessionMeta } from '@lowcode-platform/frontend/types';
 
-@Controller("ai/sessions")
+@Controller('ai/sessions')
 @UseGuards(AuthGuard)
 export class AISessionController {
   private readonly logger = new Logger(AISessionController.name);
@@ -30,27 +30,25 @@ export class AISessionController {
    */
   @Get()
   @HttpCode(HttpStatus.OK)
-  async getSessions(@Query("projectId") projectId?: string) {
+  async getSessions(@Query('projectId') projectId?: string) {
     try {
       let sessionArray = Array.from(this.sessionMetas.values());
 
       // 如果指定了 projectId，则过滤出关联该项目的会话
       if (projectId) {
-        sessionArray = sessionArray.filter(
-          (meta) => meta.projectId === projectId,
-        );
+        sessionArray = sessionArray.filter((meta) => meta.projectId === projectId);
       }
 
       // 按更新时间倒序排列
       sessionArray.sort((a, b) => b.updatedAt - a.updatedAt);
 
       this.logger.log(
-        `[getSessions] Returning ${sessionArray.length} sessions, projectId: ${projectId || "all"}`,
+        `[getSessions] Returning ${sessionArray.length} sessions, projectId: ${projectId || 'all'}`,
       );
 
       return { success: true, data: sessionArray };
     } catch (error) {
-      this.logger.error("Failed to get sessions:", error);
+      this.logger.error('Failed to get sessions:', error);
       throw error;
     }
   }
@@ -58,21 +56,21 @@ export class AISessionController {
   /**
    * 获取特定会话
    */
-  @Get(":id")
+  @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getSession(@Param("id") id: string) {
+  async getSession(@Param('id') id: string) {
     try {
       const session = this.sessions.get(id);
 
       if (!session) {
         this.logger.warn(`[getSession] Session not found: ${id}`);
-        return { success: false, data: null, message: "Session not found" };
+        return { success: false, data: null, message: 'Session not found' };
       }
 
       this.logger.log(`[getSession] Returning session: ${id}`);
       return { success: true, data: session };
     } catch (error) {
-      this.logger.error("Failed to get session:", error);
+      this.logger.error('Failed to get session:', error);
       throw error;
     }
   }
@@ -84,9 +82,7 @@ export class AISessionController {
   @HttpCode(HttpStatus.OK)
   async createSession(@Body() session: AISession) {
     try {
-      this.logger.log(
-        `[createSession] Creating/updating session: ${session.id}`,
-      );
+      this.logger.log(`[createSession] Creating/updating session: ${session.id}`);
 
       // 更新会话数据
       this.sessions.set(session.id, session);
@@ -99,7 +95,7 @@ export class AISessionController {
 
       return { success: true, data: session };
     } catch (error) {
-      this.logger.error("Failed to create session:", error);
+      this.logger.error('Failed to create session:', error);
       throw error;
     }
   }
@@ -107,9 +103,9 @@ export class AISessionController {
   /**
    * 更新会话
    */
-  @Put(":id")
+  @Put(':id')
   @HttpCode(HttpStatus.OK)
-  async updateSession(@Param("id") id: string, @Body() session: AISession) {
+  async updateSession(@Param('id') id: string, @Body() session: AISession) {
     try {
       this.logger.log(`[updateSession] Updating session: ${id}`);
 
@@ -124,7 +120,7 @@ export class AISessionController {
 
       return { success: true, data: session };
     } catch (error) {
-      this.logger.error("Failed to update session:", error);
+      this.logger.error('Failed to update session:', error);
       throw error;
     }
   }
@@ -132,9 +128,9 @@ export class AISessionController {
   /**
    * 删除会话
    */
-  @Delete(":id")
+  @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  async deleteSession(@Param("id") id: string) {
+  async deleteSession(@Param('id') id: string) {
     try {
       this.logger.log(`[deleteSession] Deleting session: ${id}`);
 
@@ -143,7 +139,7 @@ export class AISessionController {
 
       return { success: true, data: null };
     } catch (error) {
-      this.logger.error("Failed to delete session:", error);
+      this.logger.error('Failed to delete session:', error);
       throw error;
     }
   }

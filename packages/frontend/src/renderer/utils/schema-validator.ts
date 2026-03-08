@@ -1,6 +1,6 @@
-import { z } from "zod";
-import type { A2UISchema } from "../../types";
-import { autoFixSchema } from "./schema-auto-fix";
+import { z } from 'zod';
+import type { A2UISchema } from '../../types';
+import { autoFixSchema } from './schema-auto-fix';
 
 const A2UIComponentSchema = z.object({
   id: z.string().min(1),
@@ -28,7 +28,7 @@ export const A2UISchemaValidator = z
       }
       return true;
     },
-    { message: "Schema validation failed: rootId or childrenIds are dangling" },
+    { message: 'Schema validation failed: rootId or childrenIds are dangling' },
   );
 
 export function validateSchema(input: unknown): A2UISchema {
@@ -46,10 +46,7 @@ export function safeValidateSchema(input: unknown) {
   return { success: false as const, error: result.error };
 }
 
-export function validateSchemaWithWhitelist(
-  input: unknown,
-  whitelist: string[],
-) {
+export function validateSchemaWithWhitelist(input: unknown, whitelist: string[]) {
   const result = A2UISchemaValidator.safeParse(input);
   if (!result.success) return { success: false as const, error: result.error };
 
@@ -68,7 +65,7 @@ export function validateSchemaWithWhitelist(
       error: {
         issues: [
           {
-            message: `未注册的组件类型: ${unknownTypes.join(", ")}`,
+            message: `未注册的组件类型: ${unknownTypes.join(', ')}`,
           },
         ],
       },
@@ -138,7 +135,7 @@ export function validateAndAutoFix(input: unknown, whitelist: string[] = []) {
       error: {
         issues: [
           {
-            message: `存在未注册的组件类型: ${unknownTypes.join(", ")}`,
+            message: `存在未注册的组件类型: ${unknownTypes.join(', ')}`,
           },
         ],
       },

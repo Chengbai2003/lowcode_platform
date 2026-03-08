@@ -3,13 +3,7 @@
  * 记录请求和响应信息
  */
 
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
@@ -32,9 +26,7 @@ export class LoggingInterceptor implements NestInterceptor {
     request.requestId = requestId;
 
     // 记录请求信息
-    this.logger.log(
-      `[${requestId}] ${method} ${url} - ${ip} - ${userAgent}`,
-    );
+    this.logger.log(`[${requestId}] ${method} ${url} - ${ip} - ${userAgent}`);
 
     // 开发环境记录请求体
     if (process.env.NODE_ENV === 'development' && Object.keys(body).length > 0) {
@@ -47,9 +39,7 @@ export class LoggingInterceptor implements NestInterceptor {
           const duration = Date.now() - startTime;
           const statusCode = response.statusCode;
 
-          this.logger.log(
-            `[${requestId}] ${method} ${url} ${statusCode} - ${duration}ms`,
-          );
+          this.logger.log(`[${requestId}] ${method} ${url} ${statusCode} - ${duration}ms`);
         },
         error: (error) => {
           const duration = Date.now() - startTime;

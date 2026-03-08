@@ -1,6 +1,6 @@
-import { useMemo } from "react";
-import type { A2UIComponent, A2UISchema } from "../../types";
-import { useSelectionStore } from "../store";
+import { useMemo } from 'react';
+import type { A2UIComponent, A2UISchema } from '../../types';
+import { useSelectionStore } from '../store';
 
 export interface AIContext {
   selectedComponentIds: string[];
@@ -17,9 +17,7 @@ export interface UseAIContextProps {
  * AI 上下文 Hook
  * 返回当前选中组件的上下文信息，用于发送给 AI
  */
-export const useAIContext = ({
-  currentSchema,
-}: UseAIContextProps): AIContext => {
+export const useAIContext = ({ currentSchema }: UseAIContextProps): AIContext => {
   const selectedId = useSelectionStore((state) => state.selectedId);
   const selectedIds = useSelectionStore((state) => state.selectedIds);
 
@@ -34,7 +32,7 @@ export const useAIContext = ({
   // 格式化上下文为人类可读的字符串
   const formattedContext = useMemo(() => {
     if (!selectedComponent) {
-      return "";
+      return '';
     }
 
     const parts: string[] = [];
@@ -51,14 +49,14 @@ export const useAIContext = ({
           .map((key) => {
             const value = selectedComponent.props![key];
             const displayValue =
-              typeof value === "string"
+              typeof value === 'string'
                 ? value.length > 20
-                  ? value.substring(0, 20) + "..."
+                  ? value.substring(0, 20) + '...'
                   : value
                 : JSON.stringify(value);
             return `${key}=${displayValue}`;
           })
-          .join(", ");
+          .join(', ');
         parts.push(`属性: ${propSummary}`);
       }
     }
@@ -68,12 +66,11 @@ export const useAIContext = ({
       parts.push(`子组件数量: ${selectedComponent.childrenIds.length}`);
     }
 
-    return parts.join("\n");
+    return parts.join('\n');
   }, [selectedComponent, selectedId]);
 
   return {
-    selectedComponentIds:
-      selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : [],
+    selectedComponentIds: selectedIds.length > 0 ? selectedIds : selectedId ? [selectedId] : [],
     selectedComponentProps: selectedComponent?.props ?? null,
     selectedComponentType: selectedComponent?.type ?? null,
     formattedContext,
@@ -83,9 +80,7 @@ export const useAIContext = ({
 /**
  * 获取单个选中组件的 Hook
  */
-export const useSelectedComponent = (
-  schema: A2UISchema | null,
-): A2UIComponent | null => {
+export const useSelectedComponent = (schema: A2UISchema | null): A2UIComponent | null => {
   const selectedId = useSelectionStore((state) => state.selectedId);
 
   return useMemo(() => {

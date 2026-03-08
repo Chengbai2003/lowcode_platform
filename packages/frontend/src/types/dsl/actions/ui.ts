@@ -1,5 +1,5 @@
-import type { Action } from "../action-union";
-import type { Value } from "../context";
+import type { Action } from '../action-union';
+import type { Value } from '../context';
 
 /**
  * UI交互 Actions
@@ -14,17 +14,17 @@ import type { Value } from "../context";
  * - 通知卡片：{ type: "feedback", kind: "notification", title: "系统通知", content: "有新消息" }
  */
 export type FeedbackAction = {
-  type: "feedback";
+  type: 'feedback';
   /** 反馈类型：message(轻量提示) 或 notification(通知卡片) */
-  kind?: "message" | "notification";
+  kind?: 'message' | 'notification';
   /** 内容文本 */
   content: Value;
   /** 标题（notification 时有效） */
   title?: Value;
   /** 消息级别 */
-  level?: "success" | "error" | "warning" | "info";
+  level?: 'success' | 'error' | 'warning' | 'info';
   /** 显示位置（notification 时有效） */
-  placement?: "topLeft" | "topRight" | "bottomLeft" | "bottomRight";
+  placement?: 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight';
   /** 自动关闭时间(ms)，0 表示不自动关闭 */
   duration?: number;
 };
@@ -37,9 +37,9 @@ export type FeedbackAction = {
  * - 确认框：{ type: "dialog", kind: "confirm", content: "确定删除？", onOk: [...] }
  */
 export type DialogAction = {
-  type: "dialog";
+  type: 'dialog';
   /** 弹窗类型：modal(信息弹窗) 或 confirm(确认框) */
-  kind: "modal" | "confirm";
+  kind: 'modal' | 'confirm';
   /** 标题 */
   title?: Value;
   /** 内容 */

@@ -1,6 +1,6 @@
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
-import type { AISessionMeta } from "../../types";
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
+import type { AISessionMeta } from '../../types';
 
 // ============================================
 // Selection Store - 组件选择状态
@@ -24,13 +24,11 @@ export const useSelectionStore = create<SelectionState>()(
       hoverId: null,
       selectedIds: [],
 
-      selectComponent: (id) =>
-        set({ selectedId: id, selectedIds: id ? [id] : [] }),
+      selectComponent: (id) => set({ selectedId: id, selectedIds: id ? [id] : [] }),
 
       setHover: (id) => set({ hoverId: id }),
 
-      clearSelection: () =>
-        set({ selectedId: null, hoverId: null, selectedIds: [] }),
+      clearSelection: () => set({ selectedId: null, hoverId: null, selectedIds: [] }),
 
       addToSelection: (id) =>
         set((state) => {
@@ -51,7 +49,7 @@ export const useSelectionStore = create<SelectionState>()(
           };
         }),
     }),
-    { name: "selection-store" },
+    { name: 'selection-store' },
   ),
 );
 
@@ -104,18 +102,13 @@ export const useEditorStore = create<EditorState>()(
 
       updateSessionMeta: (updated) =>
         set((state) => ({
-          sessions: state.sessions.map((s) =>
-            s.id === updated.id ? { ...s, ...updated } : s,
-          ),
+          sessions: state.sessions.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)),
         })),
 
       removeSession: (sessionId) =>
         set((state) => ({
           sessions: state.sessions.filter((s) => s.id !== sessionId),
-          currentSessionId:
-            state.currentSessionId === sessionId
-              ? null
-              : state.currentSessionId,
+          currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
         })),
 
       toggleHistoryDrawer: () =>
@@ -134,7 +127,7 @@ export const useEditorStore = create<EditorState>()(
 
       setError: (error) => set({ error }),
     }),
-    { name: "editor-store" },
+    { name: 'editor-store' },
   ),
 );
 
@@ -142,26 +135,20 @@ export const useEditorStore = create<EditorState>()(
 // 选择器 Hooks（性能优化）
 // ============================================
 
-export const useSelectedId = () =>
-  useSelectionStore((state) => state.selectedId);
+export const useSelectedId = () => useSelectionStore((state) => state.selectedId);
 
 export const useHoverId = () => useSelectionStore((state) => state.hoverId);
 
-export const useSelectedIds = () =>
-  useSelectionStore((state) => state.selectedIds);
+export const useSelectedIds = () => useSelectionStore((state) => state.selectedIds);
 
-export const useCurrentSessionId = () =>
-  useEditorStore((state) => state.currentSessionId);
+export const useCurrentSessionId = () => useEditorStore((state) => state.currentSessionId);
 
 export const useSessions = () => useEditorStore((state) => state.sessions);
 
-export const useFloatingIslandState = () =>
-  useEditorStore((state) => state.isFloatingIslandOpen);
+export const useFloatingIslandState = () => useEditorStore((state) => state.isFloatingIslandOpen);
 
-export const useHistoryDrawerState = () =>
-  useEditorStore((state) => state.isHistoryDrawerOpen);
+export const useHistoryDrawerState = () => useEditorStore((state) => state.isHistoryDrawerOpen);
 
-export const useEditorLoading = () =>
-  useEditorStore((state) => state.isLoading);
+export const useEditorLoading = () => useEditorStore((state) => state.isLoading);
 
 export const useEditorError = () => useEditorStore((state) => state.error);

@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useMemo } from "react";
-import type { A2UISchema, Action, ActionList } from "../../../types";
-import { EventFlowEditor } from "./EventFlowEditor";
-import { ActionSelectorModal } from "./ActionSelectorModal";
-import { TriggerSelectorModal } from "./TriggerSelectorModal";
-import { NoSelectionEmptyState } from "../EmptyState";
-import styles from "./PropertyPanel.module.scss";
+import React, { useState, useCallback, useMemo } from 'react';
+import type { A2UISchema, Action, ActionList } from '../../../types';
+import { EventFlowEditor } from './EventFlowEditor';
+import { ActionSelectorModal } from './ActionSelectorModal';
+import { TriggerSelectorModal } from './TriggerSelectorModal';
+import { NoSelectionEmptyState } from '../EmptyState';
+import styles from './PropertyPanel.module.scss';
 
 interface EventTriggerItem {
   trigger: string;
@@ -66,7 +66,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       onSchemaChange(newSchema);
       setIsTriggerModalOpen(false);
     },
-    [schema, selectedId, events, onSchemaChange]
+    [schema, selectedId, events, onSchemaChange],
   );
 
   // 删除事件流
@@ -89,7 +89,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       };
       onSchemaChange(newSchema);
     },
-    [schema, selectedId, events, onSchemaChange]
+    [schema, selectedId, events, onSchemaChange],
   );
 
   // 打开动作选择器
@@ -105,47 +105,47 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
 
       // 创建默认动作
       const newAction: Action = {
-        type: actionType as Action["type"],
+        type: actionType as Action['type'],
         // 根据类型设置默认值
-        ...(actionType === "setValue" && {
-          field: "targetField",
-          value: "defaultValue",
+        ...(actionType === 'setValue' && {
+          field: 'targetField',
+          value: 'defaultValue',
         }),
-        ...(actionType === "feedback" && {
-          kind: "message",
-          content: "操作成功",
-          level: "success" as const,
+        ...(actionType === 'feedback' && {
+          kind: 'message',
+          content: '操作成功',
+          level: 'success' as const,
         }),
-        ...(actionType === "apiCall" && {
-          url: "/api/endpoint",
-          method: "GET" as const,
+        ...(actionType === 'apiCall' && {
+          url: '/api/endpoint',
+          method: 'GET' as const,
         }),
-        ...(actionType === "navigate" && {
-          to: "/new-page",
+        ...(actionType === 'navigate' && {
+          to: '/new-page',
         }),
-        ...(actionType === "dialog" && {
-          kind: "modal" as const,
-          title: "弹窗标题",
-          content: "弹窗内容",
+        ...(actionType === 'dialog' && {
+          kind: 'modal' as const,
+          title: '弹窗标题',
+          content: '弹窗内容',
         }),
-        ...(actionType === "if" && {
-          condition: { type: "literal", value: true },
+        ...(actionType === 'if' && {
+          condition: { type: 'literal', value: true },
           then: [],
         }),
-        ...(actionType === "loop" && {
-          over: { type: "literal", value: [] },
-          itemVar: "item",
+        ...(actionType === 'loop' && {
+          over: { type: 'literal', value: [] },
+          itemVar: 'item',
           actions: [],
         }),
-        ...(actionType === "delay" && {
+        ...(actionType === 'delay' && {
           ms: 1000,
         }),
-        ...(actionType === "log" && {
-          value: { type: "literal", value: "Debug log" },
-          level: "info" as const,
+        ...(actionType === 'log' && {
+          value: { type: 'literal', value: 'Debug log' },
+          level: 'info' as const,
         }),
-        ...(actionType === "customScript" && {
-          code: "// 输入自定义 JavaScript 代码",
+        ...(actionType === 'customScript' && {
+          code: '// 输入自定义 JavaScript 代码',
         }),
       } as Action;
 
@@ -167,7 +167,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       onSchemaChange(newSchema);
       setIsModalOpen(false);
     },
-    [schema, selectedId, activeTrigger, events, onSchemaChange]
+    [schema, selectedId, activeTrigger, events, onSchemaChange],
   );
 
   // 删除动作
@@ -193,7 +193,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       };
       onSchemaChange(newSchema);
     },
-    [schema, selectedId, events, onSchemaChange]
+    [schema, selectedId, events, onSchemaChange],
   );
 
   // 空状态
@@ -242,10 +242,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
 
       {/* 动作选择器弹窗 */}
       {isModalOpen && (
-        <ActionSelectorModal
-          onClose={() => setIsModalOpen(false)}
-          onSelect={handleAddAction}
-        />
+        <ActionSelectorModal onClose={() => setIsModalOpen(false)} onSelect={handleAddAction} />
       )}
 
       {/* 触发器选择器弹窗 */}

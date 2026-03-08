@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
-import { useFloatingIslandHotkey } from "../useFloatingIslandHotkey";
-import { useEditorStore } from "../../store/editor-store";
+import { describe, it, expect, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { useFloatingIslandHotkey } from '../useFloatingIslandHotkey';
+import { useEditorStore } from '../../store/editor-store';
 
-describe("useFloatingIslandHotkey", () => {
+describe('useFloatingIslandHotkey', () => {
   beforeEach(() => {
     // Reset store state
     useEditorStore.setState({
@@ -12,11 +12,11 @@ describe("useFloatingIslandHotkey", () => {
     });
   });
 
-  it("should toggle floating island on Cmd+K", () => {
+  it('should toggle floating island on Cmd+K', () => {
     renderHook(() => useFloatingIslandHotkey());
 
-    const event = new KeyboardEvent("keydown", {
-      key: "k",
+    const event = new KeyboardEvent('keydown', {
+      key: 'k',
       metaKey: true,
     });
 
@@ -27,11 +27,11 @@ describe("useFloatingIslandHotkey", () => {
     expect(useEditorStore.getState().isFloatingIslandOpen).toBe(true);
   });
 
-  it("should toggle floating island on Ctrl+K", () => {
+  it('should toggle floating island on Ctrl+K', () => {
     renderHook(() => useFloatingIslandHotkey());
 
-    const event = new KeyboardEvent("keydown", {
-      key: "k",
+    const event = new KeyboardEvent('keydown', {
+      key: 'k',
       ctrlKey: true,
     });
 
@@ -42,13 +42,13 @@ describe("useFloatingIslandHotkey", () => {
     expect(useEditorStore.getState().isFloatingIslandOpen).toBe(true);
   });
 
-  it("should close floating island on Escape", () => {
+  it('should close floating island on Escape', () => {
     useEditorStore.getState().setFloatingIslandOpen(true);
 
     renderHook(() => useFloatingIslandHotkey());
 
-    const event = new KeyboardEvent("keydown", {
-      key: "Escape",
+    const event = new KeyboardEvent('keydown', {
+      key: 'Escape',
     });
 
     act(() => {
@@ -58,11 +58,11 @@ describe("useFloatingIslandHotkey", () => {
     expect(useEditorStore.getState().isFloatingIslandOpen).toBe(false);
   });
 
-  it("should not close floating island on Escape when closed", () => {
+  it('should not close floating island on Escape when closed', () => {
     renderHook(() => useFloatingIslandHotkey());
 
-    const event = new KeyboardEvent("keydown", {
-      key: "Escape",
+    const event = new KeyboardEvent('keydown', {
+      key: 'Escape',
     });
 
     act(() => {
@@ -73,11 +73,11 @@ describe("useFloatingIslandHotkey", () => {
     expect(useEditorStore.getState().isFloatingIslandOpen).toBe(false);
   });
 
-  it("should toggle history drawer on Alt+H", () => {
+  it('should toggle history drawer on Alt+H', () => {
     renderHook(() => useFloatingIslandHotkey());
 
-    const event = new KeyboardEvent("keydown", {
-      key: "h",
+    const event = new KeyboardEvent('keydown', {
+      key: 'h',
       altKey: true,
     });
 
@@ -88,11 +88,11 @@ describe("useFloatingIslandHotkey", () => {
     expect(useEditorStore.getState().isHistoryDrawerOpen).toBe(true);
   });
 
-  it("should return state and actions", () => {
+  it('should return state and actions', () => {
     const { result } = renderHook(() => useFloatingIslandHotkey());
 
     expect(result.current.isFloatingIslandOpen).toBe(false);
-    expect(typeof result.current.toggleFloatingIsland).toBe("function");
-    expect(typeof result.current.setFloatingIslandOpen).toBe("function");
+    expect(typeof result.current.toggleFloatingIsland).toBe('function');
+    expect(typeof result.current.setFloatingIslandOpen).toBe('function');
   });
 });

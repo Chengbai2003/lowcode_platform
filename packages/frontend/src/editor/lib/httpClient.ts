@@ -16,7 +16,10 @@ export class HttpClient {
   private apiSecret: string;
   private baseURL: string;
 
-  constructor(baseURL: string = '', defaultSecret: string = 'dev-secret-token-change-in-production') {
+  constructor(
+    baseURL: string = '',
+    defaultSecret: string = 'dev-secret-token-change-in-production',
+  ) {
     this.baseURL = baseURL;
     this.apiSecret = defaultSecret;
   }

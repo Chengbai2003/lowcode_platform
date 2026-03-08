@@ -3,14 +3,14 @@
  * setValue - 统一的值设置
  */
 
-import type { ActionHandler } from "../../../types";
-import { resolveValue } from "../parser";
+import type { ActionHandler } from '../../../types';
+import { resolveValue } from '../parser';
 
 /**
  * 检查键名是否安全，防止原型污染
  */
 function isSafeKey(key: string): boolean {
-  const unsafeKeys = ["__proto__", "constructor", "prototype"];
+  const unsafeKeys = ['__proto__', 'constructor', 'prototype'];
   return !unsafeKeys.includes(key);
 }
 
@@ -29,7 +29,7 @@ export const setValue: ActionHandler = async (action, context) => {
   const resolvedValue = resolveValue(value, context);
 
   // 解析路径
-  const keys = field.split(".");
+  const keys = field.split('.');
   const lastKey = keys.pop();
 
   if (!lastKey) {
@@ -40,10 +40,10 @@ export const setValue: ActionHandler = async (action, context) => {
   let target: any = context.data;
 
   // 特殊路径处理
-  if (keys[0] === "state") {
+  if (keys[0] === 'state') {
     target = context.state;
     keys.shift(); // 移除 "state" 前缀
-  } else if (keys[0] === "formData") {
+  } else if (keys[0] === 'formData') {
     target = context.formData;
     keys.shift();
   }
@@ -52,11 +52,9 @@ export const setValue: ActionHandler = async (action, context) => {
   for (const key of keys) {
     // 原型污染防护：跳过危险键名
     if (!isSafeKey(key)) {
-      throw new Error(
-        `setValue: forbidden key "${key}" - potential prototype pollution`,
-      );
+      throw new Error(`setValue: forbidden key "${key}" - potential prototype pollution`);
     }
-    if (target[key] == null || typeof target[key] !== "object") {
+    if (target[key] == null || typeof target[key] !== 'object') {
       target[key] = {};
     }
     target = target[key];
@@ -64,12 +62,10 @@ export const setValue: ActionHandler = async (action, context) => {
 
   // 设置值（安全检查 lastKey）
   if (!isSafeKey(lastKey)) {
-    throw new Error(
-      `setValue: forbidden key "${lastKey}" - potential prototype pollution`,
-    );
+    throw new Error(`setValue: forbidden key "${lastKey}" - potential prototype pollution`);
   }
 
-  if (merge && typeof resolvedValue === "object" && resolvedValue !== null) {
+  if (merge && typeof resolvedValue === 'object' && resolvedValue !== null) {
     // 合并模式：过滤危险键名后浅合并
     const safeValue: Record<string, any> = {};
     for (const [k, v] of Object.entries(resolvedValue)) {
@@ -77,7 +73,7 @@ export const setValue: ActionHandler = async (action, context) => {
         safeValue[k] = v;
       }
     }
-    if (typeof target[lastKey] !== "object" || target[lastKey] === null) {
+    if (typeof target[lastKey] !== 'object' || target[lastKey] === null) {
       target[lastKey] = {};
     }
     Object.assign(target[lastKey], safeValue);
@@ -89,7 +85,7 @@ export const setValue: ActionHandler = async (action, context) => {
   // 触发 dispatch（如果存在）
   if (context.dispatch) {
     context.dispatch({
-      type: "SET_FIELD",
+      type: 'SET_FIELD',
       payload: { field, value: resolvedValue, merge },
     });
   }

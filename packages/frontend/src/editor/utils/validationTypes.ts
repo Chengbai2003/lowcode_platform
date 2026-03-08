@@ -6,13 +6,13 @@
  * 校验错误类型
  */
 export type ValidationErrorType =
-  | "type" // 类型不匹配
-  | "required" // 必填属性缺失
-  | "format" // 格式错误
-  | "constraint" // 约束违反
-  | "reference" // 引用无效
-  | "unknown" // 未知组件类型
-  | "security"; // 安全风险
+  | 'type' // 类型不匹配
+  | 'required' // 必填属性缺失
+  | 'format' // 格式错误
+  | 'constraint' // 约束违反
+  | 'reference' // 引用无效
+  | 'unknown' // 未知组件类型
+  | 'security'; // 安全风险
 
 /**
  * 校验错误
@@ -31,7 +31,7 @@ export interface ValidationError {
 export interface ValidationWarning {
   path: string;
   message: string;
-  type: "deprecated" | "performance" | "compatibility" | "best_practice";
+  type: 'deprecated' | 'performance' | 'compatibility' | 'best_practice';
   value?: unknown;
 }
 
@@ -135,7 +135,7 @@ export interface ComponentPropertyMeta {
  */
 export interface PropertyDefinition {
   key: string;
-  type: "string" | "number" | "boolean" | "object" | "array" | "expression";
+  type: 'string' | 'number' | 'boolean' | 'object' | 'array' | 'expression';
   required?: boolean;
   defaultValue?: unknown;
   enum?: unknown[];

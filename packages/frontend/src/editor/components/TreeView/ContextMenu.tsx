@@ -1,20 +1,11 @@
-import React, { useEffect, useRef } from "react";
-import { Modal, Tree, message } from "antd";
-import type { TreeDataNode } from "antd";
-import { Copy, ArrowUp, ArrowDown, FolderOpen, Trash2 } from "lucide-react";
-import type {
-  ContextMenuProps,
-  ContextMenuAction,
-  TreeNodeData,
-} from "./treeTypes";
-import type { A2UISchema } from "../../../types";
-import {
-  deleteComponent,
-  copyComponent,
-  moveComponent,
-  canMove,
-} from "./schemaToTree";
-import styles from "./ComponentTree.module.scss";
+import React, { useEffect, useRef } from 'react';
+import { Modal, Tree, message } from 'antd';
+import type { TreeDataNode } from 'antd';
+import { Copy, ArrowUp, ArrowDown, FolderOpen, Trash2 } from 'lucide-react';
+import type { ContextMenuProps, ContextMenuAction, TreeNodeData } from './treeTypes';
+import type { A2UISchema } from '../../../types';
+import { deleteComponent, copyComponent, moveComponent, canMove } from './schemaToTree';
+import styles from './ComponentTree.module.scss';
 
 /**
  * 右键菜单组件
@@ -38,19 +29,19 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     };
 
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         onClose();
       }
     };
 
     if (visible) {
-      document.addEventListener("mousedown", handleClickOutside);
-      document.addEventListener("keydown", handleEscape);
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
     }
 
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEscape);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
     };
   }, [visible, onClose]);
 
@@ -64,34 +55,34 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
   const menuItems = [
     {
-      key: "copy" as ContextMenuAction,
-      label: "复制",
+      key: 'copy' as ContextMenuAction,
+      label: '复制',
       icon: <Copy size={14} />,
       disabled: isRoot,
     },
-    { type: "divider" as const },
+    { type: 'divider' as const },
     {
-      key: "moveUp" as ContextMenuAction,
-      label: "上移",
+      key: 'moveUp' as ContextMenuAction,
+      label: '上移',
       icon: <ArrowUp size={14} />,
       disabled: !moveStatus.up || isRoot,
     },
     {
-      key: "moveDown" as ContextMenuAction,
-      label: "下移",
+      key: 'moveDown' as ContextMenuAction,
+      label: '下移',
       icon: <ArrowDown size={14} />,
       disabled: !moveStatus.down || isRoot,
     },
     {
-      key: "moveTo" as ContextMenuAction,
-      label: "移动到...",
+      key: 'moveTo' as ContextMenuAction,
+      label: '移动到...',
       icon: <FolderOpen size={14} />,
       disabled: isRoot,
     },
-    { type: "divider" as const },
+    { type: 'divider' as const },
     {
-      key: "delete" as ContextMenuAction,
-      label: "删除",
+      key: 'delete' as ContextMenuAction,
+      label: '删除',
       icon: <Trash2 size={14} />,
       danger: true,
       disabled: isRoot,
@@ -112,16 +103,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   return (
     <div ref={menuRef} className={styles.contextMenu} style={adjustedStyle}>
       {menuItems.map((item, index) => {
-        if (item.type === "divider") {
-          return (
-            <div key={`divider-${index}`} className={styles.menuDivider} />
-          );
+        if (item.type === 'divider') {
+          return <div key={`divider-${index}`} className={styles.menuDivider} />;
         }
 
         return (
           <div
             key={item.key}
-            className={`${styles.menuItem} ${item.disabled ? styles.disabled : ""} ${item.danger ? styles.danger : ""}`}
+            className={`${styles.menuItem} ${item.disabled ? styles.disabled : ''} ${item.danger ? styles.danger : ''}`}
             onClick={() => !item.disabled && handleMenuClick(item.key)}
           >
             <span className={styles.menuIcon}>{item.icon}</span>
@@ -161,9 +150,7 @@ export const MoveTargetSelector: React.FC<{
       const childrenIds = component.childrenIds || [];
       const children: TreeDataNode[] = childrenIds
         .map((childId: string) => buildNode(childId))
-        .filter(
-          (node: TreeDataNode | null): node is TreeDataNode => node !== null,
-        );
+        .filter((node: TreeDataNode | null): node is TreeDataNode => node !== null);
 
       return {
         key: id,
@@ -217,14 +204,14 @@ export function handleContextMenuAction(
   onShowMoveTarget: () => void,
 ): void {
   switch (action) {
-    case "delete": {
+    case 'delete': {
       const newSchema = deleteComponent(schema, node.id);
       onSchemaChange(newSchema);
       message.success(`已删除 ${node.type}`);
       break;
     }
 
-    case "copy": {
+    case 'copy': {
       const newSchema = copyComponent(schema, node.id);
       if (newSchema) {
         onSchemaChange(newSchema);
@@ -233,23 +220,23 @@ export function handleContextMenuAction(
       break;
     }
 
-    case "moveUp": {
-      const newSchema = moveComponent(schema, node.id, "up");
+    case 'moveUp': {
+      const newSchema = moveComponent(schema, node.id, 'up');
       if (newSchema) {
         onSchemaChange(newSchema);
       }
       break;
     }
 
-    case "moveDown": {
-      const newSchema = moveComponent(schema, node.id, "down");
+    case 'moveDown': {
+      const newSchema = moveComponent(schema, node.id, 'down');
       if (newSchema) {
         onSchemaChange(newSchema);
       }
       break;
     }
 
-    case "moveTo": {
+    case 'moveTo': {
       onShowMoveTarget();
       break;
     }

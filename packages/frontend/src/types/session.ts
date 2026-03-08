@@ -1,5 +1,5 @@
 // AI 角色类型
-export type AIRole = "user" | "assistant" | "system";
+export type AIRole = 'user' | 'assistant' | 'system';
 
 // AI 消息上下文 - 用户发送消息时的状态快照
 export interface AIMessageContext {
@@ -17,11 +17,7 @@ export interface ComponentUpdate {
 
 // AI 消息执行结果
 export interface AIMessageActionResult {
-  type:
-    | "component_update"
-    | "component_add"
-    | "component_delete"
-    | "batch_update";
+  type: 'component_update' | 'component_add' | 'component_delete' | 'batch_update';
   updates?: ComponentUpdate[];
   componentId?: string;
   props?: Record<string, unknown>;
@@ -77,14 +73,14 @@ export interface AISessionRepository {
 
 // 工具函数
 export function generateMessageId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `msg_${crypto.randomUUID()}`;
   }
   return `msg_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }
 
 export function generateSessionId(): string {
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return `session_${crypto.randomUUID()}`;
   }
   return `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -93,9 +89,7 @@ export function generateSessionId(): string {
 export function generateSessionTitle(content: string): string {
   const trimmedContent = content.trim();
   if (trimmedContent.length === 0) {
-    return "新会话";
+    return '新会话';
   }
-  return trimmedContent.length > 30
-    ? trimmedContent.substring(0, 30) + "..."
-    : trimmedContent;
+  return trimmedContent.length > 30 ? trimmedContent.substring(0, 30) + '...' : trimmedContent;
 }

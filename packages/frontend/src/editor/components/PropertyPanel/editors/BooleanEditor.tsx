@@ -1,6 +1,6 @@
-import React, { useCallback } from "react";
-import { Switch } from "antd";
-import styles from "../PropertyPanel.module.scss";
+import React, { useCallback } from 'react';
+import { Switch } from 'antd';
+import styles from '../PropertyPanel.module.scss';
 
 interface BooleanEditorProps {
   label: string;
@@ -28,10 +28,8 @@ export const BooleanEditor: React.FC<BooleanEditorProps> = ({
     <div className={styles.propertyItem}>
       <label className={styles.propertyLabel}>
         <span>{label}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {description && (
-            <span className={styles.description}>{description}</span>
-          )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {description && <span className={styles.description}>{description}</span>}
           <Switch size="small" checked={boolValue} onChange={handleChange} />
         </div>
       </label>

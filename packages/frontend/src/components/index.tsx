@@ -6,104 +6,87 @@
  */
 
 // 导出所有组件
-export { default as Container } from "./components/Container";
-export { default as Button } from "./components/Button";
-export { default as Input, TextArea } from "./components/Input";
-export { default as InputNumber } from "./components/InputNumber";
-export { default as Select } from "./components/Select";
-export { default as Checkbox, CheckboxGroup } from "./components/Checkbox";
-export { default as Radio, RadioGroup, RadioButton } from "./components/Radio";
-export { default as Switch } from "./components/Switch";
-export { default as Slider } from "./components/Slider";
-export { default as Form, FormItem } from "./components/Form";
-export { default as DatePicker, RangePicker } from "./components/DatePicker";
-export { default as Table } from "./components/Table";
-export { default as Card } from "./components/Card";
-export { default as List, ListItem } from "./components/List";
-export { default as Tabs, TabPane } from "./components/Tabs";
-export { default as Collapse, CollapsePanel } from "./components/Collapse";
-export { default as Modal } from "./components/Modal";
-export { default as Popover } from "./components/Popover";
-export { default as Tooltip } from "./components/Tooltip";
-export { default as Space } from "./components/Space";
-export { default as Divider } from "./components/Divider";
-export { default as Row, Col } from "./components/Grid";
-export {
-  default as Layout,
-  Header,
-  Content,
-  Footer,
-  Sider,
-} from "./components/Layout";
-export {
-  default as Typography,
-  Text,
-  Title,
-  Paragraph,
-} from "./components/Typography";
-export { default as Tag } from "./components/Tag";
-export { default as Badge } from "./components/Badge";
-export { default as Alert } from "./components/Alert";
-export { default as Steps, Step } from "./components/Steps";
-export { default as Progress } from "./components/Progress";
-export { default as Spin } from "./components/Spin";
-export { default as Skeleton } from "./components/Skeleton";
+export { default as Container } from './components/Container';
+export { default as Button } from './components/Button';
+export { default as Input, TextArea } from './components/Input';
+export { default as InputNumber } from './components/InputNumber';
+export { default as Select } from './components/Select';
+export { default as Checkbox, CheckboxGroup } from './components/Checkbox';
+export { default as Radio, RadioGroup, RadioButton } from './components/Radio';
+export { default as Switch } from './components/Switch';
+export { default as Slider } from './components/Slider';
+export { default as Form, FormItem } from './components/Form';
+export { default as DatePicker, RangePicker } from './components/DatePicker';
+export { default as Table } from './components/Table';
+export { default as Card } from './components/Card';
+export { default as List, ListItem } from './components/List';
+export { default as Tabs, TabPane } from './components/Tabs';
+export { default as Collapse, CollapsePanel } from './components/Collapse';
+export { default as Modal } from './components/Modal';
+export { default as Popover } from './components/Popover';
+export { default as Tooltip } from './components/Tooltip';
+export { default as Space } from './components/Space';
+export { default as Divider } from './components/Divider';
+export { default as Row, Col } from './components/Grid';
+export { default as Layout, Header, Content, Footer, Sider } from './components/Layout';
+export { default as Typography, Text, Title, Paragraph } from './components/Typography';
+export { default as Tag } from './components/Tag';
+export { default as Badge } from './components/Badge';
+export { default as Alert } from './components/Alert';
+export { default as Steps, Step } from './components/Steps';
+export { default as Progress } from './components/Progress';
+export { default as Spin } from './components/Spin';
+export { default as Skeleton } from './components/Skeleton';
 
 // Export icons
-export * from "@ant-design/icons";
+export * from '@ant-design/icons';
 
 // 导入所有组件用于注册表
-import Container from "./components/Container";
-import Button from "./components/Button";
-import Input, { TextArea } from "./components/Input";
-import InputNumber from "./components/InputNumber";
-import Select from "./components/Select";
-import Checkbox, { CheckboxGroup } from "./components/Checkbox";
-import Radio, { RadioGroup, RadioButton } from "./components/Radio";
-import Switch from "./components/Switch";
-import Slider from "./components/Slider";
-import Form, { FormItem } from "./components/Form";
-import DatePicker, { RangePicker } from "./components/DatePicker";
-import Table from "./components/Table";
-import Card from "./components/Card";
-import List, { ListItem } from "./components/List";
-import Tabs, { TabPane } from "./components/Tabs";
-import Collapse, { CollapsePanel } from "./components/Collapse";
-import Modal from "./components/Modal";
-import Popover from "./components/Popover";
-import Tooltip from "./components/Tooltip";
-import Space from "./components/Space";
-import Divider from "./components/Divider";
-import { Row, Col } from "./components/Grid";
-import {
-  Layout,
-  Header,
-  Content,
-  Footer,
-  Sider as AntSider,
-} from "./components/Layout";
-import Typography, { Text, Title, Paragraph } from "./components/Typography";
-import Tag from "./components/Tag";
-import Badge from "./components/Badge";
-import Alert from "./components/Alert";
-import Steps, { Step } from "./components/Steps";
-import Progress from "./components/Progress";
-import Spin from "./components/Spin";
-import Skeleton from "./components/Skeleton";
+import Container from './components/Container';
+import Button from './components/Button';
+import Input, { TextArea } from './components/Input';
+import InputNumber from './components/InputNumber';
+import Select from './components/Select';
+import Checkbox, { CheckboxGroup } from './components/Checkbox';
+import Radio, { RadioGroup, RadioButton } from './components/Radio';
+import Switch from './components/Switch';
+import Slider from './components/Slider';
+import Form, { FormItem } from './components/Form';
+import DatePicker, { RangePicker } from './components/DatePicker';
+import Table from './components/Table';
+import Card from './components/Card';
+import List, { ListItem } from './components/List';
+import Tabs, { TabPane } from './components/Tabs';
+import Collapse, { CollapsePanel } from './components/Collapse';
+import Modal from './components/Modal';
+import Popover from './components/Popover';
+import Tooltip from './components/Tooltip';
+import Space from './components/Space';
+import Divider from './components/Divider';
+import { Row, Col } from './components/Grid';
+import { Layout, Header, Content, Footer, Sider as AntSider } from './components/Layout';
+import Typography, { Text, Title, Paragraph } from './components/Typography';
+import Tag from './components/Tag';
+import Badge from './components/Badge';
+import Alert from './components/Alert';
+import Steps, { Step } from './components/Steps';
+import Progress from './components/Progress';
+import Spin from './components/Spin';
+import Skeleton from './components/Skeleton';
 
 // 导入组件元数据
-import { ButtonMeta } from "./components/Button.meta";
-import { InputMeta } from "./components/Input.meta";
-import { SelectMeta } from "./components/Select.meta";
-import { CardMeta } from "./components/Card.meta";
-import { ContainerMeta } from "./components/Container.meta";
-import { SpaceMeta } from "./components/Space.meta";
-import { DividerMeta } from "./components/Divider.meta";
-import { TextMeta } from "./components/Text.meta";
-import { TitleMeta } from "./components/Title.meta";
-import { TypographyMeta } from "./components/Typography.meta";
+import { ButtonMeta } from './components/Button.meta';
+import { InputMeta } from './components/Input.meta';
+import { SelectMeta } from './components/Select.meta';
+import { CardMeta } from './components/Card.meta';
+import { ContainerMeta } from './components/Container.meta';
+import { SpaceMeta } from './components/Space.meta';
+import { DividerMeta } from './components/Divider.meta';
+import { TextMeta } from './components/Text.meta';
+import { TitleMeta } from './components/Title.meta';
+import { TypographyMeta } from './components/Typography.meta';
 
-import type { ComponentPanelConfig } from "../types";
+import type { ComponentPanelConfig } from '../types';
 
 interface ComponentRegistryEntry {
   component: React.ComponentType<any>;
@@ -186,9 +169,7 @@ export const componentRegistry: Record<string, ComponentRegistryEntry> = {
 /**
  * 获取组件的元数据配置
  */
-export function getComponentMeta(
-  type: string,
-): ComponentPanelConfig | undefined {
+export function getComponentMeta(type: string): ComponentPanelConfig | undefined {
   return componentRegistry[type]?.meta;
 }
 

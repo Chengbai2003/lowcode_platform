@@ -1,5 +1,5 @@
-import React from "react";
-import type { A2UIComponent, A2UISchema } from "./schema";
+import React from 'react';
+import type { A2UIComponent, A2UISchema } from './schema';
 
 /**
  * 组件注册表类型

@@ -9,8 +9,5 @@ export {
   createUpdatePropsCommand,
   MacroCommand,
   createMacroCommand,
-} from "./schemaCommands";
-export type {
-  SchemaChangeCallback,
-  ComponentOperation,
-} from "./schemaCommands";
+} from './schemaCommands';
+export type { SchemaChangeCallback, ComponentOperation } from './schemaCommands';

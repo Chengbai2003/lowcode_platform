@@ -1,4 +1,4 @@
-import type { ActionList } from "./dsl";
+import type { ActionList } from './dsl';
 
 /**
  * 事件配置类型

@@ -1,6 +1,6 @@
-import React from "react";
-import { X, MousePointerClick } from "lucide-react";
-import styles from "./PropertyPanel.module.scss";
+import React from 'react';
+import { X, MousePointerClick } from 'lucide-react';
+import styles from './PropertyPanel.module.scss';
 
 interface TriggerSelectorModalProps {
   onClose: () => void;
@@ -8,16 +8,16 @@ interface TriggerSelectorModalProps {
 }
 
 const TRIGGER_OPTIONS = [
-  { value: "onClick", label: "onClick", desc: "点击时触发" },
-  { value: "onDoubleClick", label: "onDoubleClick", desc: "双击时触发" },
-  { value: "onMouseEnter", label: "onMouseEnter", desc: "鼠标移入时触发" },
-  { value: "onMouseLeave", label: "onMouseLeave", desc: "鼠标移出时触发" },
-  { value: "onChange", label: "onChange", desc: "值改变时触发" },
-  { value: "onSubmit", label: "onSubmit", desc: "提交时触发" },
-  { value: "onFocus", label: "onFocus", desc: "获得焦点时触发" },
-  { value: "onBlur", label: "onBlur", desc: "失去焦点时触发" },
-  { value: "onKeyDown", label: "onKeyDown", desc: "按键按下时触发" },
-  { value: "onScroll", label: "onScroll", desc: "滚动时触发" },
+  { value: 'onClick', label: 'onClick', desc: '点击时触发' },
+  { value: 'onDoubleClick', label: 'onDoubleClick', desc: '双击时触发' },
+  { value: 'onMouseEnter', label: 'onMouseEnter', desc: '鼠标移入时触发' },
+  { value: 'onMouseLeave', label: 'onMouseLeave', desc: '鼠标移出时触发' },
+  { value: 'onChange', label: 'onChange', desc: '值改变时触发' },
+  { value: 'onSubmit', label: 'onSubmit', desc: '提交时触发' },
+  { value: 'onFocus', label: 'onFocus', desc: '获得焦点时触发' },
+  { value: 'onBlur', label: 'onBlur', desc: '失去焦点时触发' },
+  { value: 'onKeyDown', label: 'onKeyDown', desc: '按键按下时触发' },
+  { value: 'onScroll', label: 'onScroll', desc: '滚动时触发' },
 ];
 
 export const TriggerSelectorModal: React.FC<TriggerSelectorModalProps> = ({
@@ -26,10 +26,7 @@ export const TriggerSelectorModal: React.FC<TriggerSelectorModalProps> = ({
 }) => {
   return (
     <div className={styles.modalBackdrop} onClick={onClose}>
-      <div
-        className={styles.actionSelectorModal}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={styles.actionSelectorModal} onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className={styles.modalHeader}>
           <div>

@@ -1,19 +1,11 @@
-import React, { useState, useCallback, useMemo } from "react";
-import type {
-  ComponentTreeProps,
-  TreeNodeData,
-  ContextMenuPosition,
-} from "./treeTypes";
-import type { ContextMenuAction } from "./treeTypes";
-import { TreeNode } from "./TreeNode";
-import {
-  ContextMenu,
-  MoveTargetSelector,
-  handleContextMenuAction,
-} from "./ContextMenu";
-import { schemaToTree, moveComponentTo } from "./schemaToTree";
-import { NoComponentsEmptyState } from "../EmptyState";
-import styles from "./ComponentTree.module.scss";
+import React, { useState, useCallback, useMemo } from 'react';
+import type { ComponentTreeProps, TreeNodeData, ContextMenuPosition } from './treeTypes';
+import type { ContextMenuAction } from './treeTypes';
+import { TreeNode } from './TreeNode';
+import { ContextMenu, MoveTargetSelector, handleContextMenuAction } from './ContextMenu';
+import { schemaToTree, moveComponentTo } from './schemaToTree';
+import { NoComponentsEmptyState } from '../EmptyState';
+import styles from './ComponentTree.module.scss';
 
 /**
  * 组件树主组件
@@ -41,15 +33,10 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
 
   // 移动目标选择器状态
   const [moveTargetVisible, setMoveTargetVisible] = useState(false);
-  const [moveSourceNode, setMoveSourceNode] = useState<TreeNodeData | null>(
-    null,
-  );
+  const [moveSourceNode, setMoveSourceNode] = useState<TreeNodeData | null>(null);
 
   // 将 Schema 转换为树形数据
-  const treeData = useMemo(
-    () => schemaToTree(schema, expandedKeys),
-    [schema, expandedKeys],
-  );
+  const treeData = useMemo(() => schemaToTree(schema, expandedKeys), [schema, expandedKeys]);
 
   // 切换节点展开状态
   const handleToggleExpand = useCallback((id: string) => {
@@ -65,17 +52,14 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
   }, []);
 
   // 处理右键菜单
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, node: TreeNodeData) => {
-      e.preventDefault();
-      setContextMenu({
-        visible: true,
-        position: { x: e.clientX, y: e.clientY },
-        node,
-      });
-    },
-    [],
-  );
+  const handleContextMenu = useCallback((e: React.MouseEvent, node: TreeNodeData) => {
+    e.preventDefault();
+    setContextMenu({
+      visible: true,
+      position: { x: e.clientX, y: e.clientY },
+      node,
+    });
+  }, []);
 
   // 关闭右键菜单
   const closeContextMenu = useCallback(() => {
@@ -87,16 +71,10 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
     (action: string, node: TreeNodeData) => {
       if (!schema) return;
 
-      handleContextMenuAction(
-        action as ContextMenuAction,
-        node,
-        schema,
-        onSchemaChange,
-        () => {
-          setMoveSourceNode(node);
-          setMoveTargetVisible(true);
-        },
-      );
+      handleContextMenuAction(action as ContextMenuAction, node, schema, onSchemaChange, () => {
+        setMoveSourceNode(node);
+        setMoveTargetVisible(true);
+      });
     },
     [schema, onSchemaChange],
   );
@@ -106,11 +84,7 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
     (targetParentId: string) => {
       if (!schema || !moveSourceNode) return;
 
-      const newSchema = moveComponentTo(
-        schema,
-        moveSourceNode.id,
-        targetParentId,
-      );
+      const newSchema = moveComponentTo(schema, moveSourceNode.id, targetParentId);
       if (newSchema) {
         onSchemaChange(newSchema);
       }
@@ -171,7 +145,7 @@ export const ComponentTree: React.FC<ComponentTreeProps> = ({
       <MoveTargetSelector
         visible={moveTargetVisible}
         schema={schema}
-        sourceId={moveSourceNode?.id || ""}
+        sourceId={moveSourceNode?.id || ''}
         onConfirm={handleMoveToTarget}
         onCancel={() => {
           setMoveTargetVisible(false);

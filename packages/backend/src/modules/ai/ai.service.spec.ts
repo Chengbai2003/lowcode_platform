@@ -67,9 +67,18 @@ describe('AIService', () => {
         name: 'openai',
         isAvailable: true,
         chat: jest.fn().mockResolvedValue({
-          id: '1', object: 'chat.completion', created: 123, model: 'gpt-4',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'Hello world' }, finish_reason: 'stop' }],
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 }
+          id: '1',
+          object: 'chat.completion',
+          created: 123,
+          model: 'gpt-4',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'Hello world' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
         }),
       };
       providerFactory.getProvider.mockReturnValue(mockProvider as IAIProvider);
@@ -110,10 +119,19 @@ describe('AIService', () => {
         name: 'custom-model',
         isAvailable: true,
         chat: jest.fn().mockResolvedValue({
-          id: '2', object: 'chat', created: 123, model: 'custom',
-          choices: [{ index: 0, message: { role: 'assistant', content: 'Custom Hello' }, finish_reason: 'stop' }],
-          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 }
-        })
+          id: '2',
+          object: 'chat',
+          created: 123,
+          model: 'custom',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: 'Custom Hello' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        }),
       };
       providerFactory.createProviderInstance.mockReturnValue(mockProviderInstance as any);
 
@@ -125,7 +143,10 @@ describe('AIService', () => {
       const result = await service.chat(dto);
 
       expect(modelConfigService.getModel).toHaveBeenCalledWith('custom-model');
-      expect(providerFactory.createProviderInstance).toHaveBeenCalledWith('openai', mockModelConfig);
+      expect(providerFactory.createProviderInstance).toHaveBeenCalledWith(
+        'openai',
+        mockModelConfig,
+      );
       expect(result.choices[0].message.content).toBe('Custom Hello');
     });
   });
@@ -136,9 +157,18 @@ describe('AIService', () => {
         name: 'anthropic',
         isAvailable: true,
         chat: jest.fn().mockResolvedValue({
-          id: '3', object: 'chat', created: 123, model: 'anthropic',
-          choices: [{ index: 0, message: { role: 'assistant', content: '{"rootId": "1"}' }, finish_reason: 'stop' }],
-          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 }
+          id: '3',
+          object: 'chat',
+          created: 123,
+          model: 'anthropic',
+          choices: [
+            {
+              index: 0,
+              message: { role: 'assistant', content: '{"rootId": "1"}' },
+              finish_reason: 'stop',
+            },
+          ],
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
         }),
       };
       providerFactory.getProvider.mockReturnValue(mockProvider as IAIProvider);
@@ -150,13 +180,15 @@ describe('AIService', () => {
 
       const result = await service.generateSchema(dto);
 
-      expect(mockProvider.chat).toHaveBeenCalledWith(expect.objectContaining({
-        messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'system' }),
-          { role: 'user', content: 'Generate a UI schema for: A login form' }
-        ]),
-        temperature: 0.2
-      }));
+      expect(mockProvider.chat).toHaveBeenCalledWith(
+        expect.objectContaining({
+          messages: expect.arrayContaining([
+            expect.objectContaining({ role: 'system' }),
+            { role: 'user', content: 'Generate a UI schema for: A login form' },
+          ]),
+          temperature: 0.2,
+        }),
+      );
       expect(result.choices[0].message.content).toContain('rootId');
     });
   });

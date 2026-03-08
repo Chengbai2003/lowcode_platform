@@ -1,7 +1,7 @@
 /**
  * 表达式类型
  */
-export type ExpressionType = "literal" | "variable" | "template" | "complex";
+export type ExpressionType = 'literal' | 'variable' | 'template' | 'complex';
 
 /**
  * 解析后的表达式

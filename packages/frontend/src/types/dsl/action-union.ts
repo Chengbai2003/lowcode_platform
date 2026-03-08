@@ -2,13 +2,13 @@
 // Action 类型定义 (8种精简方案)
 // ============================================================================
 
-import type { SetValueAction } from "./actions/data";
-import type { FeedbackAction, DialogAction } from "./actions/ui";
-import type { NavigateAction } from "./actions/navigation";
-import type { ApiCallAction, DelayAction } from "./actions/async";
-import type { IfAction, LoopAction } from "./actions/flow";
-import type { LogAction } from "./actions/debug";
-import type { CustomScriptAction } from "./actions/extension";
+import type { SetValueAction } from './actions/data';
+import type { FeedbackAction, DialogAction } from './actions/ui';
+import type { NavigateAction } from './actions/navigation';
+import type { ApiCallAction, DelayAction } from './actions/async';
+import type { IfAction, LoopAction } from './actions/flow';
+import type { LogAction } from './actions/debug';
+import type { CustomScriptAction } from './actions/extension';
 
 // ============================================================================
 // 类型定义
@@ -66,28 +66,28 @@ export type EventsMap = Record<string, EventDefinition>;
  */
 export const ACTION_TYPES = [
   // 数据
-  "setValue",
+  'setValue',
   // 网络
-  "apiCall",
+  'apiCall',
   // 路由
-  "navigate",
+  'navigate',
   // 交互
-  "feedback",
+  'feedback',
   // 弹窗
-  "dialog",
+  'dialog',
   // 控制
-  "if",
-  "loop",
+  'if',
+  'loop',
   // 工具
-  "delay",
-  "log",
+  'delay',
+  'log',
   // 逃生舱
-  "customScript",
+  'customScript',
 ] as const;
 
 /**
  * Action 类型守卫
  */
-export function isActionType(type: string): type is Action["type"] {
+export function isActionType(type: string): type is Action['type'] {
   return ACTION_TYPES.includes(type as any);
 }

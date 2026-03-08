@@ -3,35 +3,31 @@
  * 将 A2UI Flat Schema 编译为 React 组件代码字符串
  */
 
-import * as babelTypes from "@babel/types";
-import generate from "@babel/generator";
-import * as prettier from "prettier";
-import { CompileOptions, FieldInfo, toCamelCase } from "./ast/utils";
-import { buildImports } from "./ast/importBuilder";
-import { buildJSXTree } from "./ast/jsxBuilder";
+import * as babelTypes from '@babel/types';
+import generate from '@babel/generator';
+import * as prettier from 'prettier';
+import { CompileOptions, FieldInfo, toCamelCase } from './ast/utils';
+import { buildImports } from './ast/importBuilder';
+import { buildJSXTree } from './ast/jsxBuilder';
 
-export { isExpression, toCamelCase, escapeJSX } from "./ast/utils";
+export { isExpression, toCamelCase, escapeJSX } from './ast/utils';
 
 /**
  * 将 A2UI Flat Schema 编译为 React 组件代码字符串 (AST 驱动版)
  */
-export function compileToCode(
-  schema: Record<string, any>,
-  options?: CompileOptions,
-): string {
+export function compileToCode(schema: Record<string, any>, options?: CompileOptions): string {
   const optionsConfig = {
     componentSources: options?.componentSources || {},
-    defaultLibrary: options?.defaultLibrary || "antd",
+    defaultLibrary: options?.defaultLibrary || 'antd',
   };
 
   const importsBySource: Record<string, Set<string>> = {
-    react: new Set(["useState"]),
-    [optionsConfig.defaultLibrary]: new Set(["message"]),
+    react: new Set(['useState']),
+    [optionsConfig.defaultLibrary]: new Set(['message']),
   };
 
   function addImport(component: string) {
-    const source =
-      optionsConfig.componentSources[component] || optionsConfig.defaultLibrary;
+    const source = optionsConfig.componentSources[component] || optionsConfig.defaultLibrary;
     if (!importsBySource[source]) {
       importsBySource[source] = new Set();
     }
@@ -56,7 +52,7 @@ export function compileToCode(
       fields.push({
         name: fieldName,
         setterName: `set${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)}`,
-        initialValue: node.props.defaultValue ?? node.props.value ?? "",
+        initialValue: node.props.defaultValue ?? node.props.value ?? '',
       });
     }
   });
@@ -68,14 +64,14 @@ export function compileToCode(
 
   // 2. 生成 State Hooks 语句
   const stateHooks: babelTypes.Statement[] = fields.map((field) => {
-    return babelTypes.variableDeclaration("const", [
+    return babelTypes.variableDeclaration('const', [
       babelTypes.variableDeclarator(
         babelTypes.arrayPattern([
           babelTypes.identifier(field.name),
           babelTypes.identifier(field.setterName),
         ]),
-        babelTypes.callExpression(babelTypes.identifier("useState"), [
-          typeof field.initialValue === "string"
+        babelTypes.callExpression(babelTypes.identifier('useState'), [
+          typeof field.initialValue === 'string'
             ? babelTypes.stringLiteral(field.initialValue)
             : babelTypes.identifier(String(field.initialValue || '""')),
         ]),
@@ -87,17 +83,10 @@ export function compileToCode(
   const jsxTree = buildJSXTree(schema, fields);
 
   // 4. 组装组件主体
-  const funcBody = babelTypes.blockStatement([
-    ...stateHooks,
-    babelTypes.returnStatement(jsxTree),
-  ]);
+  const funcBody = babelTypes.blockStatement([...stateHooks, babelTypes.returnStatement(jsxTree)]);
 
   const componentDecl = babelTypes.exportDefaultDeclaration(
-    babelTypes.functionDeclaration(
-      babelTypes.identifier("GeneratedPage"),
-      [],
-      funcBody,
-    ),
+    babelTypes.functionDeclaration(babelTypes.identifier('GeneratedPage'), [], funcBody),
   );
 
   // 5. 生成完整文件 Program
@@ -120,10 +109,10 @@ export function compileToCode(
 export async function formatCode(code: string): Promise<string> {
   try {
     return await prettier.format(code, {
-      parser: "babel",
+      parser: 'babel',
       semi: true,
       singleQuote: false,
-      trailingComma: "es5",
+      trailingComma: 'es5',
       printWidth: 100,
       tabWidth: 2,
     });

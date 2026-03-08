@@ -55,9 +55,18 @@ describe('AIController', () => {
     it('should call aiService.chat and return the result', async () => {
       const dto: ChatRequestDto = { messages: [{ role: MessageRole.USER, content: 'test' }] };
       const expectedResult = {
-        id: '123', object: 'chat.completion', created: Date.now(), model: 'test',
-        choices: [{ index: 0, message: { role: 'assistant' as const, content: 'response' }, finish_reason: 'stop' }],
-        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 }
+        id: '123',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: 'test',
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant' as const, content: 'response' },
+            finish_reason: 'stop',
+          },
+        ],
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
       };
 
       aiService.chat.mockResolvedValue(expectedResult);
@@ -89,7 +98,9 @@ describe('AIController', () => {
       expect(mockResponse.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
 
       // Verification that it writes to stream
-      expect(mockResponse.write).toHaveBeenCalledWith(`data: ${JSON.stringify(mockStreamChunk)}\n\n`);
+      expect(mockResponse.write).toHaveBeenCalledWith(
+        `data: ${JSON.stringify(mockStreamChunk)}\n\n`,
+      );
       expect(mockResponse.write).toHaveBeenCalledWith('data: [DONE]\n\n');
       expect(mockResponse.end).toHaveBeenCalled();
     });

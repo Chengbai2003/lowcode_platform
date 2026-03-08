@@ -1,6 +1,1 @@
-export type {
-  A2UIComponent,
-  A2UISchema,
-  ComponentRegistry,
-  RendererProps,
-} from "../types";
+export type { A2UIComponent, A2UISchema, ComponentRegistry, RendererProps } from '../types';

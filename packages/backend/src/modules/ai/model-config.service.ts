@@ -33,10 +33,14 @@ export class ModelConfigService implements OnModuleInit {
         if (Array.isArray(data)) {
           this.models.clear();
           data.forEach((model) => this.models.set(model.id, model));
-          this.logger.log(`Loaded ${this.models.size} custom AI models from ${this.configFilePath}`);
+          this.logger.log(
+            `Loaded ${this.models.size} custom AI models from ${this.configFilePath}`,
+          );
         }
       } else {
-        this.logger.log(`No custom model config file found at ${this.configFilePath}, created empty.`);
+        this.logger.log(
+          `No custom model config file found at ${this.configFilePath}, created empty.`,
+        );
         this.saveToFile();
       }
     } catch (error) {

@@ -1,1 +1,1 @@
-export { FloatingIsland } from "./FloatingIsland";
+export { FloatingIsland } from './FloatingIsland';

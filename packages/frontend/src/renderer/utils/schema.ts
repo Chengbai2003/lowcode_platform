@@ -1,4 +1,4 @@
-import type { A2UISchema, A2UIComponent } from "../../types";
+import type { A2UISchema, A2UIComponent } from '../../types';
 
 /**
  * 遍历 Flat A2UI Schema，提取所有组件的初始值
@@ -19,10 +19,7 @@ export function flattenSchemaValues(schema: A2UISchema): Record<string, any> {
         values[node.id] = node.props.initialValue;
       }
       // 2. Form 组件特殊处理: initialValues
-      else if (
-        node.type === "Form" &&
-        node.props?.initialValues !== undefined
-      ) {
+      else if (node.type === 'Form' && node.props?.initialValues !== undefined) {
         values[node.id] = node.props.initialValues;
       }
       // 3. 兼容旧属性 (可选，视需要决定是否保留)

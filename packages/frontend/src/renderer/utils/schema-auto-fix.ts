@@ -1,4 +1,4 @@
-import type { A2UISchema } from "../../types";
+import type { A2UISchema } from '../../types';
 
 /**
  * 常见 AI 幻觉的组件类型映射表
@@ -6,41 +6,41 @@ import type { A2UISchema } from "../../types";
  */
 const COMPONENT_TYPE_FIX_MAP: Record<string, string> = {
   // Layout
-  Btn: "Button",
-  btn: "Button",
-  Box: "Container",
-  Flex: "Space",
-  FlexBox: "Space",
-  Grid: "Row",
-  Panel: "Card",
-  Section: "Container",
-  Div: "Container",
+  Btn: 'Button',
+  btn: 'Button',
+  Box: 'Container',
+  Flex: 'Space',
+  FlexBox: 'Space',
+  Grid: 'Row',
+  Panel: 'Card',
+  Section: 'Container',
+  Div: 'Container',
 
   // Form
-  TextInput: "Input",
-  TextField: "Input",
-  Textarea: "TextArea",
-  textarea: "TextArea",
-  SelectBox: "Select",
-  Dropdown: "Select",
-  NumInput: "InputNumber",
-  Toggle: "Switch",
+  TextInput: 'Input',
+  TextField: 'Input',
+  Textarea: 'TextArea',
+  textarea: 'TextArea',
+  SelectBox: 'Select',
+  Dropdown: 'Select',
+  NumInput: 'InputNumber',
+  Toggle: 'Switch',
 
   // Typography
-  Heading: "Title",
-  H1: "Title",
-  H2: "Title",
-  H3: "Title",
-  Label: "Text",
-  Span: "Text",
-  Paragraph: "Text",
-  P: "Paragraph",
+  Heading: 'Title',
+  H1: 'Title',
+  H2: 'Title',
+  H3: 'Title',
+  Label: 'Text',
+  Span: 'Text',
+  Paragraph: 'Text',
+  P: 'Paragraph',
 
   // Media / Other
-  Image: "Container", // A2UI 目前使用 Container 配合背景或自定义渲染
-  Img: "Container",
-  Loading: "Spin",
-  Progressbar: "Progress",
+  Image: 'Container', // A2UI 目前使用 Container 配合背景或自定义渲染
+  Img: 'Container',
+  Loading: 'Spin',
+  Progressbar: 'Progress',
 };
 
 /**
@@ -65,12 +65,12 @@ export function autoFixSchema(
   // 2. 基础结构校验与初始化
   if (!schema.version) {
     schema.version = 1;
-    fixes.push("添加默认版本号: 1");
+    fixes.push('添加默认版本号: 1');
   }
 
-  if (!schema.components || typeof schema.components !== "object") {
+  if (!schema.components || typeof schema.components !== 'object') {
     schema.components = {};
-    fixes.push("初始化缺失的 components 对象");
+    fixes.push('初始化缺失的 components 对象');
   }
 
   // 3. 处理每个组件
@@ -130,29 +130,27 @@ export function autoFixSchema(
   if (!schema.rootId || !schema.components[schema.rootId]) {
     const oldRootId = schema.rootId;
     // 策略：优先寻找 Page 或 Container，否则取第一个组件
-    const firstPage = Object.entries(schema.components).find(
-      ([_, c]) => c.type === "Page",
-    )?.[0];
+    const firstPage = Object.entries(schema.components).find(([_, c]) => c.type === 'Page')?.[0];
     const firstContainer = Object.entries(schema.components).find(
-      ([_, c]) => c.type === "Container",
+      ([_, c]) => c.type === 'Container',
     )?.[0];
     const firstComp = Object.keys(schema.components)[0];
 
-    const newRootId = firstPage || firstContainer || firstComp || "root";
+    const newRootId = firstPage || firstContainer || firstComp || 'root';
 
     // 如果没有任何组件，则创建一个默认 Page
     if (!schema.components[newRootId]) {
       schema.components[newRootId] = {
         id: newRootId,
-        type: "Page",
-        props: { title: "New Page" },
+        type: 'Page',
+        props: { title: 'New Page' },
         childrenIds: [],
       };
-      fixes.push("创建缺失的根组件 (Page)");
+      fixes.push('创建缺失的根组件 (Page)');
     }
 
     schema.rootId = newRootId;
-    fixes.push(`修正 rootId (${oldRootId || "null"} -> ${newRootId})`);
+    fixes.push(`修正 rootId (${oldRootId || 'null'} -> ${newRootId})`);
   }
 
   return { fixed: schema, fixes };

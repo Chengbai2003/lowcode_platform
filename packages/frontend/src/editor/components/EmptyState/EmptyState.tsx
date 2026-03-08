@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   FileQuestion,
   Layers,
@@ -6,21 +6,21 @@ import {
   FolderTree,
   Search,
   type LucideIcon,
-} from "lucide-react";
-import styles from "./EmptyState.module.scss";
+} from 'lucide-react';
+import styles from './EmptyState.module.scss';
 
 export type EmptyStateVariant =
-  | "default"
-  | "no-schema"
-  | "no-selection"
-  | "no-components"
-  | "no-results"
-  | "error";
+  | 'default'
+  | 'no-schema'
+  | 'no-selection'
+  | 'no-components'
+  | 'no-results'
+  | 'error';
 
 export interface EmptyStateAction {
   label: string;
   onClick: () => void;
-  variant?: "primary" | "secondary";
+  variant?: 'primary' | 'secondary';
   icon?: LucideIcon;
 }
 
@@ -64,33 +64,33 @@ const PRESET_CONFIG: Record<
 > = {
   default: {
     icon: FileQuestion,
-    title: "暂无内容",
-    description: "这里还没有任何内容",
+    title: '暂无内容',
+    description: '这里还没有任何内容',
   },
-  "no-schema": {
+  'no-schema': {
     icon: Layers,
-    title: "暂无 Schema",
-    description: "请在左侧编辑器输入或粘贴 Schema 数据",
+    title: '暂无 Schema',
+    description: '请在左侧编辑器输入或粘贴 Schema 数据',
   },
-  "no-selection": {
+  'no-selection': {
     icon: MousePointerClick,
-    title: "未选中组件",
-    description: "请在画布中点击选择一个组件以编辑其属性",
+    title: '未选中组件',
+    description: '请在画布中点击选择一个组件以编辑其属性',
   },
-  "no-components": {
+  'no-components': {
     icon: FolderTree,
-    title: "组件树为空",
-    description: "Schema 中还没有任何组件",
+    title: '组件树为空',
+    description: 'Schema 中还没有任何组件',
   },
-  "no-results": {
+  'no-results': {
     icon: Search,
-    title: "未找到结果",
-    description: "没有找到匹配的内容",
+    title: '未找到结果',
+    description: '没有找到匹配的内容',
   },
   error: {
     icon: FileQuestion,
-    title: "加载失败",
-    description: "内容加载出错，请稍后重试",
+    title: '加载失败',
+    description: '内容加载出错，请稍后重试',
   },
 };
 
@@ -99,7 +99,7 @@ const PRESET_CONFIG: Record<
  * 用于显示无数据、无选中、无结果等空状态
  */
 export const EmptyState: React.FC<EmptyStateProps> = ({
-  variant = "default",
+  variant = 'default',
   icon: customIcon,
   title: customTitle,
   description: customDescription,
@@ -113,9 +113,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   const description = customDescription || preset.description;
 
   return (
-    <div
-      className={`${styles.emptyState} ${compact ? styles.compact : ""} ${className || ""}`}
-    >
+    <div className={`${styles.emptyState} ${compact ? styles.compact : ''} ${className || ''}`}>
       <div className={styles.iconWrapper}>
         <Icon size={compact ? 32 : 48} strokeWidth={1.5} />
       </div>
@@ -128,7 +126,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             return (
               <button
                 key={index}
-                className={`${styles.actionButton} ${styles[`action-${action.variant || "secondary"}`]}`}
+                className={`${styles.actionButton} ${styles[`action-${action.variant || 'secondary'}`]}`}
                 onClick={action.onClick}
               >
                 {ActionIcon && <ActionIcon size={14} />}
@@ -151,16 +149,12 @@ export const NoSchemaEmptyState: React.FC<{
   <EmptyState
     variant="no-schema"
     actions={
-      onImport
-        ? [{ label: "导入 Schema", onClick: onImport, variant: "primary" }]
-        : undefined
+      onImport ? [{ label: '导入 Schema', onClick: onImport, variant: 'primary' }] : undefined
     }
   />
 );
 
-export const NoSelectionEmptyState: React.FC = () => (
-  <EmptyState variant="no-selection" compact />
-);
+export const NoSelectionEmptyState: React.FC = () => <EmptyState variant="no-selection" compact />;
 
 export const NoComponentsEmptyState: React.FC = () => (
   <EmptyState variant="no-components" compact />
@@ -171,7 +165,7 @@ export const NoResultsEmptyState: React.FC<{
 }> = ({ onClear }) => (
   <EmptyState
     variant="no-results"
-    actions={onClear ? [{ label: "清除筛选", onClick: onClear }] : undefined}
+    actions={onClear ? [{ label: '清除筛选', onClick: onClear }] : undefined}
   />
 );
 
@@ -180,10 +174,6 @@ export const ErrorEmptyState: React.FC<{
 }> = ({ onRetry }) => (
   <EmptyState
     variant="error"
-    actions={
-      onRetry
-        ? [{ label: "重试", onClick: onRetry, variant: "primary" }]
-        : undefined
-    }
+    actions={onRetry ? [{ label: '重试', onClick: onRetry, variant: 'primary' }] : undefined}
   />
 );

@@ -3,7 +3,7 @@
  * 定义组件类型白名单、属性范围、危险模式等安全策略
  */
 
-import type { AISafetyConfig } from "../utils/validationTypes";
+import type { AISafetyConfig } from '../utils/validationTypes';
 
 /**
  * 组件类型白名单
@@ -11,71 +11,71 @@ import type { AISafetyConfig } from "../utils/validationTypes";
  */
 export const ALLOWED_COMPONENT_TYPES: string[] = [
   // 布局组件
-  "Container",
-  "Div",
-  "Space",
-  "Divider",
-  "Row",
-  "Col",
-  "Layout",
-  "Header",
-  "Content",
-  "Footer",
-  "Sider",
+  'Container',
+  'Div',
+  'Space',
+  'Divider',
+  'Row',
+  'Col',
+  'Layout',
+  'Header',
+  'Content',
+  'Footer',
+  'Sider',
 
   // 基础组件
-  "Button",
-  "Input",
-  "TextArea",
-  "InputNumber",
-  "Select",
-  "Checkbox",
-  "CheckboxGroup",
-  "Radio",
-  "RadioGroup",
-  "RadioButton",
-  "Switch",
-  "Slider",
+  'Button',
+  'Input',
+  'TextArea',
+  'InputNumber',
+  'Select',
+  'Checkbox',
+  'CheckboxGroup',
+  'Radio',
+  'RadioGroup',
+  'RadioButton',
+  'Switch',
+  'Slider',
 
   // 表单
-  "Form",
-  "FormItem",
+  'Form',
+  'FormItem',
 
   // 数据展示
-  "Table",
-  "Card",
-  "List",
-  "ListItem",
-  "Tabs",
-  "TabPane",
-  "Collapse",
-  "CollapsePanel",
+  'Table',
+  'Card',
+  'List',
+  'ListItem',
+  'Tabs',
+  'TabPane',
+  'Collapse',
+  'CollapsePanel',
 
   // 反馈
-  "Modal",
-  "Popover",
-  "Tooltip",
-  "Alert",
-  "Progress",
-  "Spin",
-  "Skeleton",
+  'Modal',
+  'Popover',
+  'Tooltip',
+  'Alert',
+  'Progress',
+  'Spin',
+  'Skeleton',
 
   // 排版
-  "Typography",
-  "Text",
-  "Title",
-  "Paragraph",
+  'Typography',
+  'Text',
+  'Title',
+  'Paragraph',
 
   // 其他
-  "Tag",
-  "Badge",
-  "Steps",
-  "Step",
-  "DatePicker",
-  "RangePicker",
+  'Tag',
+  'Badge',
+  'Steps',
+  'Step',
+  'DatePicker',
+  'RangePicker',
 
   // 特殊
-  "Page", // 页面根组件
+  'Page', // 页面根组件
 ];
 
 /**
@@ -83,42 +83,42 @@ export const ALLOWED_COMPONENT_TYPES: string[] = [
  */
 export const COMPONENT_TYPE_ALIASES: Record<string, string> = {
   // Layout aliases
-  Btn: "Button",
-  btn: "Button",
-  Box: "Container",
-  Flex: "Space",
-  FlexBox: "Space",
-  Grid: "Row",
-  Panel: "Card",
-  Section: "Container",
-  Div: "Container",
+  Btn: 'Button',
+  btn: 'Button',
+  Box: 'Container',
+  Flex: 'Space',
+  FlexBox: 'Space',
+  Grid: 'Row',
+  Panel: 'Card',
+  Section: 'Container',
+  Div: 'Container',
 
   // Form aliases
-  TextInput: "Input",
-  TextField: "Input",
-  Textarea: "TextArea",
-  textarea: "TextArea",
-  SelectBox: "Select",
-  Dropdown: "Select",
-  NumInput: "InputNumber",
-  Toggle: "Switch",
-  CheckBox: "Checkbox",
+  TextInput: 'Input',
+  TextField: 'Input',
+  Textarea: 'TextArea',
+  textarea: 'TextArea',
+  SelectBox: 'Select',
+  Dropdown: 'Select',
+  NumInput: 'InputNumber',
+  Toggle: 'Switch',
+  CheckBox: 'Checkbox',
 
   // Typography aliases
-  Heading: "Title",
-  H1: "Title",
-  H2: "Title",
-  H3: "Title",
-  Label: "Text",
-  Span: "Text",
-  Paragraph: "Text",
-  P: "Paragraph",
+  Heading: 'Title',
+  H1: 'Title',
+  H2: 'Title',
+  H3: 'Title',
+  Label: 'Text',
+  Span: 'Text',
+  Paragraph: 'Text',
+  P: 'Paragraph',
 
   // Media aliases
-  Image: "Container",
-  Img: "Container",
-  Loading: "Spin",
-  Progressbar: "Progress",
+  Image: 'Container',
+  Img: 'Container',
+  Loading: 'Spin',
+  Progressbar: 'Progress',
 };
 
 /**
@@ -127,160 +127,122 @@ export const COMPONENT_TYPE_ALIASES: Record<string, string> = {
  */
 export const ALLOWED_PROPERTIES: Record<string, string[]> = {
   // 通用属性（所有组件都有）
-  _common: ["id", "className", "style", "children", "key"],
+  _common: ['id', 'className', 'style', 'children', 'key'],
 
   // 布局组件
-  Container: ["className", "style", "children"],
-  Space: ["size", "direction", "align", "wrap", "split"],
-  Divider: ["type", "orientation", "dashed", "plain", "children"],
+  Container: ['className', 'style', 'children'],
+  Space: ['size', 'direction', 'align', 'wrap', 'split'],
+  Divider: ['type', 'orientation', 'dashed', 'plain', 'children'],
 
   // 基础组件
   Button: [
-    "type",
-    "children",
-    "disabled",
-    "loading",
-    "size",
-    "block",
-    "danger",
-    "icon",
-    "href",
-    "target",
+    'type',
+    'children',
+    'disabled',
+    'loading',
+    'size',
+    'block',
+    'danger',
+    'icon',
+    'href',
+    'target',
   ],
   Input: [
-    "value",
-    "defaultValue",
-    "placeholder",
-    "disabled",
-    "size",
-    "prefix",
-    "suffix",
-    "allowClear",
-    "maxLength",
-    "type",
+    'value',
+    'defaultValue',
+    'placeholder',
+    'disabled',
+    'size',
+    'prefix',
+    'suffix',
+    'allowClear',
+    'maxLength',
+    'type',
   ],
   TextArea: [
-    "value",
-    "defaultValue",
-    "placeholder",
-    "disabled",
-    "rows",
-    "maxLength",
-    "allowClear",
-    "showCount",
+    'value',
+    'defaultValue',
+    'placeholder',
+    'disabled',
+    'rows',
+    'maxLength',
+    'allowClear',
+    'showCount',
   ],
   InputNumber: [
-    "value",
-    "defaultValue",
-    "placeholder",
-    "disabled",
-    "min",
-    "max",
-    "step",
-    "precision",
-    "size",
+    'value',
+    'defaultValue',
+    'placeholder',
+    'disabled',
+    'min',
+    'max',
+    'step',
+    'precision',
+    'size',
   ],
   Select: [
-    "value",
-    "defaultValue",
-    "placeholder",
-    "disabled",
-    "size",
-    "mode",
-    "allowClear",
-    "showSearch",
-    "options",
+    'value',
+    'defaultValue',
+    'placeholder',
+    'disabled',
+    'size',
+    'mode',
+    'allowClear',
+    'showSearch',
+    'options',
   ],
-  Switch: ["checked", "defaultChecked", "disabled", "size", "loading"],
-  Checkbox: [
-    "checked",
-    "defaultChecked",
-    "disabled",
-    "indeterminate",
-    "children",
-  ],
-  Radio: ["checked", "defaultChecked", "disabled", "value"],
+  Switch: ['checked', 'defaultChecked', 'disabled', 'size', 'loading'],
+  Checkbox: ['checked', 'defaultChecked', 'disabled', 'indeterminate', 'children'],
+  Radio: ['checked', 'defaultChecked', 'disabled', 'value'],
 
   // 数据展示
-  Card: [
-    "title",
-    "extra",
-    "bordered",
-    "loading",
-    "size",
-    "hoverable",
-    "children",
-  ],
-  Table: [
-    "columns",
-    "dataSource",
-    "rowKey",
-    "pagination",
-    "loading",
-    "size",
-    "bordered",
-  ],
-  List: ["dataSource", "renderItem", "loading", "size", "bordered", "split"],
-  Tabs: [
-    "activeKey",
-    "defaultActiveKey",
-    "type",
-    "size",
-    "tabPosition",
-    "items",
-  ],
-  TabPane: ["tab", "key", "disabled", "forceRender"],
+  Card: ['title', 'extra', 'bordered', 'loading', 'size', 'hoverable', 'children'],
+  Table: ['columns', 'dataSource', 'rowKey', 'pagination', 'loading', 'size', 'bordered'],
+  List: ['dataSource', 'renderItem', 'loading', 'size', 'bordered', 'split'],
+  Tabs: ['activeKey', 'defaultActiveKey', 'type', 'size', 'tabPosition', 'items'],
+  TabPane: ['tab', 'key', 'disabled', 'forceRender'],
 
   // 反馈组件
-  Alert: ["message", "description", "type", "closable", "showIcon", "banner"],
-  Modal: [
-    "open",
-    "title",
-    "children",
-    "footer",
-    "closable",
-    "maskClosable",
-    "width",
-    "centered",
-  ],
-  Progress: ["percent", "type", "size", "status", "strokeWidth", "showInfo"],
-  Spin: ["spinning", "size", "tip", "delay"],
-  Tooltip: ["title", "placement", "trigger", "open"],
+  Alert: ['message', 'description', 'type', 'closable', 'showIcon', 'banner'],
+  Modal: ['open', 'title', 'children', 'footer', 'closable', 'maskClosable', 'width', 'centered'],
+  Progress: ['percent', 'type', 'size', 'status', 'strokeWidth', 'showInfo'],
+  Spin: ['spinning', 'size', 'tip', 'delay'],
+  Tooltip: ['title', 'placement', 'trigger', 'open'],
 
   // 排版
-  Typography: ["children"],
+  Typography: ['children'],
   Text: [
-    "children",
-    "type",
-    "disabled",
-    "mark",
-    "code",
-    "copyable",
-    "delete",
-    "underline",
-    "strong",
-    "italic",
+    'children',
+    'type',
+    'disabled',
+    'mark',
+    'code',
+    'copyable',
+    'delete',
+    'underline',
+    'strong',
+    'italic',
   ],
-  Title: ["children", "level", "type"],
-  Paragraph: ["children", "ellipsis", "copyable"],
+  Title: ['children', 'level', 'type'],
+  Paragraph: ['children', 'ellipsis', 'copyable'],
 
   // 其他
-  Tag: ["children", "color", "closable", "bordered"],
-  Badge: ["count", "dot", "size", "color", "overflowCount", "showZero"],
-  Steps: ["current", "items", "size", "direction", "status"],
-  Form: ["layout", "size", "labelAlign", "labelCol", "wrapperCol"],
-  FormItem: ["label", "name", "required", "rules", "valuePropName"],
+  Tag: ['children', 'color', 'closable', 'bordered'],
+  Badge: ['count', 'dot', 'size', 'color', 'overflowCount', 'showZero'],
+  Steps: ['current', 'items', 'size', 'direction', 'status'],
+  Form: ['layout', 'size', 'labelAlign', 'labelCol', 'wrapperCol'],
+  FormItem: ['label', 'name', 'required', 'rules', 'valuePropName'],
 };
 
 /**
  * 必填属性（按组件类型）
  */
 export const REQUIRED_PROPERTIES: Record<string, string[]> = {
-  Button: ["children"],
+  Button: ['children'],
   Input: [],
-  Select: ["options"],
-  Alert: ["message"],
-  Progress: ["percent"],
+  Select: ['options'],
+  Alert: ['message'],
+  Progress: ['percent'],
 };
 
 /**
@@ -288,14 +250,14 @@ export const REQUIRED_PROPERTIES: Record<string, string[]> = {
  * 这些属性可能被用于注入攻击
  */
 export const DANGEROUS_PROPERTY_PATTERNS: string[] = [
-  "dangerouslySetInnerHTML",
-  "__html",
-  "innerHTML",
-  "outerHTML",
-  "document\\.",
-  "window\\.",
-  "eval",
-  "Function",
+  'dangerouslySetInnerHTML',
+  '__html',
+  'innerHTML',
+  'outerHTML',
+  'document\\.',
+  'window\\.',
+  'eval',
+  'Function',
 ];
 
 /**
@@ -304,43 +266,43 @@ export const DANGEROUS_PROPERTY_PATTERNS: string[] = [
  */
 export const DANGEROUS_VALUE_PATTERNS: string[] = [
   // JavaScript 代码注入
-  "javascript:",
-  "data:text/html",
-  "vbscript:",
+  'javascript:',
+  'data:text/html',
+  'vbscript:',
 
   // XSS 相关
-  "<script",
-  "</script>",
-  "onerror=",
-  "onload=",
-  "onclick=",
-  "onmouseover=",
-  "onfocus=",
-  "onblur=",
+  '<script',
+  '</script>',
+  'onerror=',
+  'onload=',
+  'onclick=',
+  'onmouseover=',
+  'onfocus=',
+  'onblur=',
 
   // 表达式注入
-  "\\$\\{[^}]*\\}", // 模板字符串注入
-  "\\{\\{[^}]*\\}\\}", // 模板语法注入
+  '\\$\\{[^}]*\\}', // 模板字符串注入
+  '\\{\\{[^}]*\\}\\}', // 模板语法注入
 
   // eval 相关
-  "eval(",
-  "setTimeout(",
-  "setInterval(",
-  "new Function(",
+  'eval(',
+  'setTimeout(',
+  'setInterval(',
+  'new Function(',
 
   // DOM 操作
-  "document\\.cookie",
-  "document\\.write",
-  "document\\.writeln",
-  "\\.innerHTML\\s*=",
-  "\\.outerHTML\\s*=",
+  'document\\.cookie',
+  'document\\.write',
+  'document\\.writeln',
+  '\\.innerHTML\\s*=',
+  '\\.outerHTML\\s*=',
 
   // 敏感信息
-  "password",
-  "secret",
-  "apikey",
-  "api_key",
-  "access_token",
+  'password',
+  'secret',
+  'apikey',
+  'api_key',
+  'access_token',
 ];
 
 /**
@@ -349,13 +311,13 @@ export const DANGEROUS_VALUE_PATTERNS: string[] = [
  */
 export const BLOCKED_EVENT_PATTERNS: string[] = [
   // 可能执行任意代码的事件
-  "onLoad.*eval",
-  "onError.*eval",
-  "onMessage.*eval",
+  'onLoad.*eval',
+  'onError.*eval',
+  'onMessage.*eval',
 
   // 危险 DOM 操作
-  ".*document\\.cookie.*",
-  ".*document\\.write.*",
+  '.*document\\.cookie.*',
+  '.*document\\.write.*',
 ];
 
 /**
@@ -363,12 +325,12 @@ export const BLOCKED_EVENT_PATTERNS: string[] = [
  * 这些动作类型可能执行任意代码
  */
 export const DANGEROUS_ACTION_TYPES: string[] = [
-  "eval",
-  "execute",
-  "runCode",
-  "exec",
-  "runScript",
-  "evaluate",
+  'eval',
+  'execute',
+  'runCode',
+  'exec',
+  'runScript',
+  'evaluate',
 ];
 
 /**
@@ -408,29 +370,19 @@ export function normalizeComponentType(type: string): string {
 /**
  * 检查组件类型是否在白名单中
  */
-export function isComponentTypeAllowed(
-  type: string,
-  customWhitelist?: string[],
-): boolean {
+export function isComponentTypeAllowed(type: string, customWhitelist?: string[]): boolean {
   const whitelist = customWhitelist || ALLOWED_COMPONENT_TYPES;
-  return (
-    whitelist.includes(type) || whitelist.includes(normalizeComponentType(type))
-  );
+  return whitelist.includes(type) || whitelist.includes(normalizeComponentType(type));
 }
 
 /**
  * 检查属性是否允许
  */
-export function isPropertyAllowed(
-  componentType: string,
-  propertyKey: string,
-): boolean {
-  const commonProps = ALLOWED_PROPERTIES["_common"] || [];
+export function isPropertyAllowed(componentType: string, propertyKey: string): boolean {
+  const commonProps = ALLOWED_PROPERTIES['_common'] || [];
   const componentProps = ALLOWED_PROPERTIES[componentType] || [];
 
-  return (
-    commonProps.includes(propertyKey) || componentProps.includes(propertyKey)
-  );
+  return commonProps.includes(propertyKey) || componentProps.includes(propertyKey);
 }
 
 /**
@@ -440,13 +392,13 @@ export function containsDangerousPattern(value: unknown): {
   dangerous: boolean;
   pattern?: string;
 } {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return { dangerous: false };
   }
 
   for (const pattern of DANGEROUS_VALUE_PATTERNS) {
     try {
-      const regex = new RegExp(pattern, "gi");
+      const regex = new RegExp(pattern, 'gi');
       if (regex.test(value)) {
         return { dangerous: true, pattern };
       }

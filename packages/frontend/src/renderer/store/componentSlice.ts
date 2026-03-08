@@ -10,7 +10,7 @@ export interface ComponentState {
    * Value: Component Value
    */
   data: Record<string, any>;
-  
+
   /**
    * 配置数据 (Props/Config)
    * Key: Component ID

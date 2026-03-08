@@ -1,11 +1,7 @@
 // 组件树模块
-export { ComponentTree } from "./ComponentTree";
-export { TreeNode } from "./TreeNode";
-export {
-  ContextMenu,
-  MoveTargetSelector,
-  handleContextMenuAction,
-} from "./ContextMenu";
+export { ComponentTree } from './ComponentTree';
+export { TreeNode } from './TreeNode';
+export { ContextMenu, MoveTargetSelector, handleContextMenuAction } from './ContextMenu';
 
 // 工具函数
 export {
@@ -17,7 +13,7 @@ export {
   findParentId,
   canMove,
   getComponentIndex,
-} from "./schemaToTree";
+} from './schemaToTree';
 
 // 类型导出
 export type {
@@ -29,4 +25,4 @@ export type {
   TreeNodeProps,
   ContextMenuProps,
   MoveTargetSelectorProps,
-} from "./treeTypes";
+} from './treeTypes';

@@ -1,4 +1,4 @@
-import type { Value } from "../context";
+import type { Value } from '../context';
 
 /**
  * 调试 Actions
@@ -8,9 +8,9 @@ import type { Value } from "../context";
  * 日志 Action
  */
 export type LogAction = {
-  type: "log";
+  type: 'log';
   /** 要输出的值 */
   value: Value;
   /** 日志级别 */
-  level?: "log" | "info" | "warn" | "error";
+  level?: 'log' | 'info' | 'warn' | 'error';
 };

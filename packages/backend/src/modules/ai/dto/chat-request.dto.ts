@@ -13,15 +13,15 @@ import {
   Allow,
   Min,
   Max,
-} from "class-validator";
-import { Type, Exclude, Expose } from "class-transformer";
+} from 'class-validator';
+import { Type, Exclude, Expose } from 'class-transformer';
 
 export enum MessageRole {
-  SYSTEM = "system",
-  USER = "user",
-  ASSISTANT = "assistant",
-  DATA = "data",
-  TOOL = "tool",
+  SYSTEM = 'system',
+  USER = 'user',
+  ASSISTANT = 'assistant',
+  DATA = 'data',
+  TOOL = 'tool',
 }
 
 /**

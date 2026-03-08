@@ -1,11 +1,11 @@
-import React, { memo } from "react";
-import type { ComponentPosition } from "./useComponentPosition";
-import styles from "./PreviewPane.module.scss";
+import React, { memo } from 'react';
+import type { ComponentPosition } from './useComponentPosition';
+import styles from './PreviewPane.module.scss';
 
 interface SelectionHighlightProps {
   position: ComponentPosition | null;
   componentName?: string;
-  variant: "selected" | "hover";
+  variant: 'selected' | 'hover';
 }
 
 /**
@@ -19,31 +19,29 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = memo(
     const { top, left, width, height } = position;
 
     const highlightStyle: React.CSSProperties = {
-      position: "absolute",
+      position: 'absolute',
       top,
       left,
       width,
       height,
-      pointerEvents: "none",
+      pointerEvents: 'none',
       zIndex: 1000,
-      boxSizing: "border-box",
+      boxSizing: 'border-box',
     };
 
-    if (variant === "selected") {
+    if (variant === 'selected') {
       // 选中状态：蓝色实线边框 + 名称标签
       return (
         <div
           style={{
             ...highlightStyle,
-            border: "2px solid #1890ff",
-            borderRadius: "2px",
-            backgroundColor: "rgba(24, 144, 255, 0.05)",
+            border: '2px solid #1890ff',
+            borderRadius: '2px',
+            backgroundColor: 'rgba(24, 144, 255, 0.05)',
           }}
           className={styles.selectionHighlight}
         >
-          {componentName && (
-            <div className={styles.componentLabel}>{componentName}</div>
-          )}
+          {componentName && <div className={styles.componentLabel}>{componentName}</div>}
         </div>
       );
     }
@@ -53,9 +51,9 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = memo(
       <div
         style={{
           ...highlightStyle,
-          border: "1px dashed #1890ff",
-          borderRadius: "2px",
-          backgroundColor: "transparent",
+          border: '1px dashed #1890ff',
+          borderRadius: '2px',
+          backgroundColor: 'transparent',
         }}
         className={styles.hoverHighlight}
       />
@@ -63,4 +61,4 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = memo(
   },
 );
 
-SelectionHighlight.displayName = "SelectionHighlight";
+SelectionHighlight.displayName = 'SelectionHighlight';

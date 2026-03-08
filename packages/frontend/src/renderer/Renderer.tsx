@@ -2,7 +2,11 @@
 import React, { useMemo, useEffect, memo } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
-import { setComponentData, setComponentConfig, setMultipleComponentData } from './store/componentSlice';
+import {
+  setComponentData,
+  setComponentConfig,
+  setMultipleComponentData,
+} from './store/componentSlice';
 import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
 import { deepEqual } from './utils/compare';
@@ -14,22 +18,22 @@ import type { ActionList, ExecutionContext } from '../types';
  * 事件派发中心
  * 负责解析和执行 DSL Action 序列
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export class EventDispatcher {
   private context: Record<string, any>;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private dispatch: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private getState: any;
   private dslExecutor: DSLExecutor;
   private executionContext: ExecutionContext;
 
   constructor(
     context: Record<string, any> = {},
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     dispatch: any,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    getState: any
+
+    getState: any,
   ) {
     this.context = context;
     this.dispatch = dispatch;
@@ -50,8 +54,8 @@ export class EventDispatcher {
     this.executionContext = DSLExecutor.createContext({
       dispatch: this.dispatch,
       getState: this.getState,
-      data: {},  // 组件数据
-      formData: {},  // 表单数据
+      data: {}, // 组件数据
+      formData: {}, // 表单数据
       setComponentData: (id: string, value: any) => {
         this.dispatch(setComponentData({ id, value }));
       },
@@ -67,7 +71,7 @@ export class EventDispatcher {
    */
   setContext(key: string, value: any) {
     this.context[key] = value;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (this.executionContext as any)[key] = value;
   }
 
@@ -104,7 +108,7 @@ export class EventDispatcher {
   createHandler(actions: ActionList) {
     return (event: any) => {
       // 异步执行，不等待结果
-      this.execute(actions, event).catch(error => {
+      this.execute(actions, event).catch((error) => {
         console.error('[EventDispatcher] Handler execution failed:', error);
       });
     };
@@ -133,13 +137,19 @@ const builtInComponents: ComponentRegistry = {
   Div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
   Span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
   Container: ({ children, style, ...props }: any) => (
-    <div style={{ ...style, padding: '16px' }} {...props}>{children}</div>
+    <div style={{ ...style, padding: '16px' }} {...props}>
+      {children}
+    </div>
   ),
   Row: ({ children, style, ...props }: any) => (
-    <div style={{ ...style, display: 'flex', flexDirection: 'row' }} {...props}>{children}</div>
+    <div style={{ ...style, display: 'flex', flexDirection: 'row' }} {...props}>
+      {children}
+    </div>
   ),
   Col: ({ children, style, ...props }: any) => (
-    <div style={{ ...style, flex: 1 }} {...props}>{children}</div>
+    <div style={{ ...style, flex: 1 }} {...props}>
+      {children}
+    </div>
   ),
   Text: ({ children, ...props }: any) => <span {...props}>{children}</span>,
   Title: ({ children, level = 1, ...props }: any) => {
@@ -151,7 +161,11 @@ const builtInComponents: ComponentRegistry = {
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   TextArea: (props: any) => <textarea {...props} />,
   Image: ({ src, alt, ...props }: any) => <img src={src} alt={alt} {...props} />,
-  Link: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
+  Link: ({ children, href, ...props }: any) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 };
 
 const FormSyncWrapper = ({
@@ -159,7 +173,7 @@ const FormSyncWrapper = ({
   mergedProps,
   childrenElements,
   id,
-  componentValue
+  componentValue,
 }: {
   Component: any;
   mergedProps: any;
@@ -185,177 +199,208 @@ const FormSyncWrapper = ({
   );
 };
 
-const BaseComponent = memo(({
-  Component,
-  mergedProps,
-  childrenElements,
-  id
-}: {
-  Component: React.ComponentType<any>;
-  mergedProps: any;
-  childrenElements: React.ReactNode;
-  id?: string;
-}) => {
-  return (
-    <Component {...mergedProps} id={id}>
-      {childrenElements}
-    </Component>
-  );
-}, (prevProps, nextProps) => {
-  if (prevProps.Component !== nextProps.Component) return false;
-  if (prevProps.id !== nextProps.id) return false;
-  if (prevProps.childrenElements !== nextProps.childrenElements) return false;
-  if (!shallowEqual(prevProps.mergedProps, nextProps.mergedProps)) return false;
-  return true;
-});
-
-const ComponentRenderer = memo(({
-  onComponentClick,
-  components,
-  eventDispatcher,
-  nodeId,
-  flatComponents,
-  ...restProps
-}: {
-  nodeId: string;
-  flatComponents: Record<string, A2UIComponent>;
-  components: ComponentRegistry;
-  eventDispatcher?: EventDispatcher;
-  onComponentClick?: (node: A2UIComponent) => void;
-  [key: string]: any;
-}) => {
-  const node = flatComponents[nodeId];
-  if (!node) return null;
-
-  const { type: componentName, props = {}, childrenIds, events = {}, id } = node;
-
-  if (!componentName) return null;
-
-  const dispatch = useAppDispatch();
-  const componentValue = useAppSelector(state =>
-    id ? state.components.data[id] : undefined
-  );
-
-  const Component = components[componentName] || builtInComponents[componentName];
-
-  const eventHandlers = useMemo(() => {
-    return buildEventHandlers(events, eventDispatcher);
-  }, [events, eventDispatcher]);
-
-  const childrenElements = useMemo(() => {
-    return renderChildren(childrenIds, components, flatComponents, eventDispatcher, onComponentClick);
-  }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
-
-  if (!Component) {
-    console.warn(`Component "${componentName}" not found in registry, rendering as div`);
+const BaseComponent = memo(
+  ({
+    Component,
+    mergedProps,
+    childrenElements,
+    id,
+  }: {
+    Component: React.ComponentType<any>;
+    mergedProps: any;
+    childrenElements: React.ReactNode;
+    id?: string;
+  }) => {
     return (
-      <div {...props} {...eventHandlers} {...restProps} data-fallback-component={componentName}>
+      <Component {...mergedProps} id={id}>
         {childrenElements}
-      </div>
+      </Component>
     );
-  }
+  },
+  (prevProps, nextProps) => {
+    if (prevProps.Component !== nextProps.Component) return false;
+    if (prevProps.id !== nextProps.id) return false;
+    if (prevProps.childrenElements !== nextProps.childrenElements) return false;
+    if (!shallowEqual(prevProps.mergedProps, nextProps.mergedProps)) return false;
+    return true;
+  },
+);
 
-  const mergedProps = useMemo(() => {
-    const p: any = { ...props, ...restProps, ...eventHandlers };
+const ComponentRenderer = memo(
+  ({
+    onComponentClick,
+    components,
+    eventDispatcher,
+    nodeId,
+    flatComponents,
+    ...restProps
+  }: {
+    nodeId: string;
+    flatComponents: Record<string, A2UIComponent>;
+    components: ComponentRegistry;
+    eventDispatcher?: EventDispatcher;
+    onComponentClick?: (node: A2UIComponent) => void;
+    [key: string]: any;
+  }) => {
+    const node = flatComponents[nodeId];
+    if (!node) return null;
 
-    if (componentValue !== undefined) {
-      p.value = componentValue;
+    const { type: componentName, props = {}, childrenIds, events = {}, id } = node;
+
+    if (!componentName) return null;
+
+    const dispatch = useAppDispatch();
+    const componentValue = useAppSelector((state) => (id ? state.components.data[id] : undefined));
+
+    const Component = components[componentName] || builtInComponents[componentName];
+
+    const eventHandlers = useMemo(() => {
+      return buildEventHandlers(events, eventDispatcher);
+    }, [events, eventDispatcher]);
+
+    const childrenElements = useMemo(() => {
+      return renderChildren(
+        childrenIds,
+        components,
+        flatComponents,
+        eventDispatcher,
+        onComponentClick,
+      );
+    }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
+
+    if (!Component) {
+      console.warn(`Component "${componentName}" not found in registry, rendering as div`);
+      return (
+        <div {...props} {...eventHandlers} {...restProps} data-fallback-component={componentName}>
+          {childrenElements}
+        </div>
+      );
     }
 
-    const isContainer = ['Form', 'Page', 'Div', 'Container', 'Card', 'Row', 'Col', 'Layout', 'Header', 'Content', 'Footer', 'Sider'].includes(componentName);
+    const mergedProps = useMemo(() => {
+      const p: any = { ...props, ...restProps, ...eventHandlers };
 
-    if (id) {
-      if (componentName === 'Form') {
-        const originalOnValuesChange = p.onValuesChange;
-        p.onValuesChange = (changedValues: any, allValues: any, ...args: any[]) => {
-          const newValue = { ...(componentValue || {}), ...allValues };
-          dispatch(setComponentData({ id, value: newValue }));
+      if (componentValue !== undefined) {
+        p.value = componentValue;
+      }
 
-          // 更新到EventDispatcher的执行上下文
-          if (eventDispatcher) {
-            eventDispatcher.updateComponentData(id, newValue);
+      const isContainer = [
+        'Form',
+        'Page',
+        'Div',
+        'Container',
+        'Card',
+        'Row',
+        'Col',
+        'Layout',
+        'Header',
+        'Content',
+        'Footer',
+        'Sider',
+      ].includes(componentName);
+
+      if (id) {
+        if (componentName === 'Form') {
+          const originalOnValuesChange = p.onValuesChange;
+          p.onValuesChange = (changedValues: any, allValues: any, ...args: any[]) => {
+            const newValue = { ...(componentValue || {}), ...allValues };
+            dispatch(setComponentData({ id, value: newValue }));
+
+            // 更新到EventDispatcher的执行上下文
+            if (eventDispatcher) {
+              eventDispatcher.updateComponentData(id, newValue);
+            }
+
+            if (originalOnValuesChange) {
+              originalOnValuesChange(changedValues, allValues, ...args);
+            }
+          };
+
+          if (componentValue !== undefined) {
+            p.initialValues = componentValue;
           }
+        } else if (!isContainer) {
+          const originalOnChange = p.onChange;
 
-          if (originalOnValuesChange) {
-            originalOnValuesChange(changedValues, allValues, ...args);
-          }
-        };
+          p.onChange = (e: any, ...args: any[]) => {
+            let value = e;
+            if (e && e.target && 'value' in e.target) {
+              value = e.target.value;
+            } else if (e && e.target && 'checked' in e.target) {
+              value = e.target.checked;
+            }
 
-        if (componentValue !== undefined) {
-          p.initialValues = componentValue;
+            dispatch(setComponentData({ id, value }));
+
+            // 更新到EventDispatcher的执行上下文
+            if (eventDispatcher) {
+              eventDispatcher.updateComponentData(id, value);
+            }
+
+            if (restProps.onChange) {
+              restProps.onChange(e, ...args);
+            }
+
+            if (originalOnChange && originalOnChange !== restProps.onChange) {
+              originalOnChange(e, ...args);
+            }
+          };
         }
       }
-      else if (!isContainer) {
-        const originalOnChange = p.onChange;
 
-        p.onChange = (e: any, ...args: any[]) => {
-          let value = e;
-          if (e && e.target && 'value' in e.target) {
-            value = e.target.value;
-          } else if (e && e.target && 'checked' in e.target) {
-            value = e.target.checked;
-          }
-
-          dispatch(setComponentData({ id, value }));
-
-          // 更新到EventDispatcher的执行上下文
-          if (eventDispatcher) {
-            eventDispatcher.updateComponentData(id, value);
-          }
-
-          if (restProps.onChange) {
-            restProps.onChange(e, ...args);
-          }
-
-          if (originalOnChange && originalOnChange !== restProps.onChange) {
-            originalOnChange(e, ...args);
-          }
-        };
+      if (Reflect.has(p, 'initialValue')) {
+        Reflect.deleteProperty(p, 'initialValue');
       }
+
+      return p;
+    }, [
+      props,
+      restProps,
+      eventHandlers,
+      componentValue,
+      id,
+      dispatch,
+      componentName,
+      eventDispatcher,
+    ]);
+
+    const content =
+      componentName === 'Form' && (Component as any).useForm ? (
+        <FormSyncWrapper
+          Component={Component}
+          mergedProps={mergedProps}
+          childrenElements={childrenElements}
+          id={id}
+          componentValue={componentValue}
+        />
+      ) : (
+        <BaseComponent
+          Component={Component}
+          mergedProps={mergedProps}
+          childrenElements={childrenElements}
+          id={id}
+        />
+      );
+
+    if (onComponentClick) {
+      return (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onComponentClick(node);
+          }}
+          style={{ cursor: 'pointer', position: 'relative' }}
+          data-component-id={id}
+          className="lowcode-component-wrapper"
+        >
+          {content}
+        </div>
+      );
     }
 
-    if (Reflect.has(p, 'initialValue')) {
-      Reflect.deleteProperty(p, 'initialValue');
-    }
-
-    return p;
-  }, [props, restProps, eventHandlers, componentValue, id, dispatch, componentName, eventDispatcher]);
-
-  const content = (componentName === 'Form' && (Component as any).useForm) ? (
-    <FormSyncWrapper
-      Component={Component}
-      mergedProps={mergedProps}
-      childrenElements={childrenElements}
-      id={id}
-      componentValue={componentValue}
-    />
-  ) : (
-    <BaseComponent
-      Component={Component}
-      mergedProps={mergedProps}
-      childrenElements={childrenElements}
-      id={id}
-    />
-  );
-
-  if (onComponentClick) {
-    return (
-      <div
-        onClick={(e) => {
-          e.stopPropagation();
-          onComponentClick(node);
-        }}
-        style={{ cursor: 'pointer', position: 'relative' }}
-        data-component-id={id}
-        className="lowcode-component-wrapper"
-      >
-        {content}
-      </div>
-    );
-  }
-
-  return content;
-});
+    return content;
+  },
+);
 
 function renderChildren(
   childrenIds: string[] | undefined,
@@ -385,7 +430,7 @@ function renderChildren(
 
 function buildEventHandlers(
   events: Record<string, ActionList>,
-  eventDispatcher?: EventDispatcher
+  eventDispatcher?: EventDispatcher,
 ): Record<string, (...args: any[]) => any> {
   if (!eventDispatcher || Object.keys(events).length === 0) {
     return {};
@@ -407,7 +452,7 @@ export function Renderer({
   schema,
   components = {},
   onComponentClick,
-  eventContext = {}
+  eventContext = {},
 }: RendererProps): React.ReactElement {
   const dispatch = useAppDispatch();
 

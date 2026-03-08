@@ -1,15 +1,15 @@
-import React, { useMemo, useCallback, useState } from "react";
-import { Collapse } from "antd";
-import type { A2UISchema, PropertyMeta } from "../../../types";
-import { getComponentMeta } from "../../../components";
-import { StringEditor } from "./editors/StringEditor";
-import { NumberEditor } from "./editors/NumberEditor";
-import { BooleanEditor } from "./editors/BooleanEditor";
-import { SelectEditor } from "./editors/SelectEditor";
-import { ColorEditor } from "./editors/ColorEditor";
-import { NoSelectionEmptyState } from "../EmptyState";
-import { EventConfigPanel } from "./EventConfigPanel";
-import styles from "./PropertyPanel.module.scss";
+import React, { useMemo, useCallback, useState } from 'react';
+import { Collapse } from 'antd';
+import type { A2UISchema, PropertyMeta } from '../../../types';
+import { getComponentMeta } from '../../../components';
+import { StringEditor } from './editors/StringEditor';
+import { NumberEditor } from './editors/NumberEditor';
+import { BooleanEditor } from './editors/BooleanEditor';
+import { SelectEditor } from './editors/SelectEditor';
+import { ColorEditor } from './editors/ColorEditor';
+import { NoSelectionEmptyState } from '../EmptyState';
+import { EventConfigPanel } from './EventConfigPanel';
+import styles from './PropertyPanel.module.scss';
 
 interface PropertyPanelProps {
   schema: A2UISchema | null;
@@ -26,7 +26,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   selectedId,
   onSchemaChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<"props" | "events">("props");
+  const [activeTab, setActiveTab] = useState<'props' | 'events'>('props');
   // 获取选中组件的配置
   const componentConfig = useMemo(() => {
     if (!schema || !selectedId) return null;
@@ -47,16 +47,14 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       高级: [],
     };
     meta.properties.forEach((prop) => {
-      const group = prop.group || "基础";
+      const group = prop.group || '基础';
       if (!groups[group]) {
         groups[group] = [];
       }
       groups[group].push(prop);
     });
     // 移除空分组
-    return Object.fromEntries(
-      Object.entries(groups).filter(([, props]) => props.length > 0),
-    );
+    return Object.fromEntries(Object.entries(groups).filter(([, props]) => props.length > 0));
   }, [componentConfig]);
 
   // 处理属性变更
@@ -100,23 +98,23 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       };
 
       switch (prop.editor) {
-        case "string":
+        case 'string':
           return <StringEditor {...commonProps} />;
-        case "number":
+        case 'number':
           return <NumberEditor {...commonProps} />;
-        case "boolean":
+        case 'boolean':
           return <BooleanEditor {...commonProps} />;
-        case "select":
+        case 'select':
           return <SelectEditor {...commonProps} options={prop.options || []} />;
-        case "color":
+        case 'color':
           return <ColorEditor {...commonProps} />;
-        case "json":
+        case 'json':
           // JSON 编辑器暂用字符串编辑器
           return <StringEditor {...commonProps} multiline />;
-        case "expression":
+        case 'expression':
           // 表达式编辑器暂用字符串编辑器
           return <StringEditor {...commonProps} placeholder="输入表达式..." />;
-        case "slot":
+        case 'slot':
           // 插槽编辑器暂不支持
           return null;
         default:
@@ -147,20 +145,20 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       {/* Tab 切换 */}
       <div className={styles.tabBar}>
         <button
-          className={`${styles.tabButton} ${activeTab === "props" ? styles.active : ""}`}
-          onClick={() => setActiveTab("props")}
+          className={`${styles.tabButton} ${activeTab === 'props' ? styles.active : ''}`}
+          onClick={() => setActiveTab('props')}
         >
           属性
         </button>
         <button
-          className={`${styles.tabButton} ${activeTab === "events" ? styles.active : ""}`}
-          onClick={() => setActiveTab("events")}
+          className={`${styles.tabButton} ${activeTab === 'events' ? styles.active : ''}`}
+          onClick={() => setActiveTab('events')}
         >
           事件
         </button>
       </div>
 
-      {activeTab === "props" ? (
+      {activeTab === 'props' ? (
         <>
           <div className={styles.panelHeader}>
             <span className={styles.panelTitle}>{meta.displayName}</span>
@@ -188,11 +186,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           </div>
         </>
       ) : (
-        <EventConfigPanel
-          schema={schema}
-          selectedId={selectedId}
-          onSchemaChange={onSchemaChange}
-        />
+        <EventConfigPanel schema={schema} selectedId={selectedId} onSchemaChange={onSchemaChange} />
       )}
     </div>
   );

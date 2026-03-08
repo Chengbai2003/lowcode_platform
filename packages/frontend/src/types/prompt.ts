@@ -2,7 +2,7 @@
  * AI Prompt Builder Types
  */
 
-export type PromptLanguage = "en" | "zh";
+export type PromptLanguage = 'en' | 'zh';
 
 export interface PromptConfig {
   language?: PromptLanguage;

@@ -1,28 +1,18 @@
-import React, { useCallback } from "react";
-import {
-  Zap,
-  Edit2,
-  Save,
-  Undo,
-  Redo,
-  Play,
-  History,
-  Moon,
-  HelpCircle,
-} from "lucide-react";
-import styles from "./Header.module.scss";
+import React, { useCallback } from 'react';
+import { Zap, Edit2, Save, Undo, Redo, Play, History, Moon, HelpCircle } from 'lucide-react';
+import styles from './Header.module.scss';
 
 interface EditorHeaderProps {
-  previewTheme: "light" | "dark";
-  onThemeChange: (theme: "light" | "dark") => void;
+  previewTheme: 'light' | 'dark';
+  onThemeChange: (theme: 'light' | 'dark') => void;
   onCompile: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
   canRedo?: boolean;
   historySize?: number;
-  mode: "edit" | "preview";
-  onModeChange: (mode: "edit" | "preview") => void;
+  mode: 'edit' | 'preview';
+  onModeChange: (mode: 'edit' | 'preview') => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -38,7 +28,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onModeChange,
 }) => {
   const handleThemeToggle = useCallback(() => {
-    onThemeChange(previewTheme === "light" ? "dark" : "light");
+    onThemeChange(previewTheme === 'light' ? 'dark' : 'light');
   }, [onThemeChange, previewTheme]);
 
   return (
@@ -66,11 +56,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         </button>
         <div className={styles.divider}></div>
         <div className={styles.historyControls}>
-          <button
-            onClick={onUndo}
-            disabled={!canUndo}
-            title={`撤销 (${historySize})`}
-          >
+          <button onClick={onUndo} disabled={!canUndo} title={`撤销 (${historySize})`}>
             <Undo size={18} />
           </button>
           <button onClick={onRedo} disabled={!canRedo} title="重做">
@@ -88,14 +74,14 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       <div className={styles.rightSection}>
         <div className={styles.modeToggle}>
           <button
-            className={mode === "edit" ? styles.active : ""}
-            onClick={() => onModeChange("edit")}
+            className={mode === 'edit' ? styles.active : ''}
+            onClick={() => onModeChange('edit')}
           >
             编辑
           </button>
           <button
-            className={mode === "preview" ? styles.active : ""}
-            onClick={() => onModeChange("preview")}
+            className={mode === 'preview' ? styles.active : ''}
+            onClick={() => onModeChange('preview')}
           >
             预览
           </button>

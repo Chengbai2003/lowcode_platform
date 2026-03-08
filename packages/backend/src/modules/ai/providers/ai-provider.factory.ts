@@ -3,17 +3,14 @@
  * 根据配置动态创建 AI SDK LanguageModel 实例
  */
 
-import { Injectable, Logger } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import type { LanguageModel } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { ollama } from "ollama-ai-provider";
-import { ProviderConfig, ProviderType } from "./ai-provider.interface";
-import {
-  ModelConfigService,
-  AIModelConfigEntity,
-} from "../model-config.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { LanguageModel } from 'ai';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createAnthropic } from '@ai-sdk/anthropic';
+import { ollama } from 'ollama-ai-provider';
+import { ProviderConfig, ProviderType } from './ai-provider.interface';
+import { ModelConfigService, AIModelConfigEntity } from '../model-config.service';
 
 @Injectable()
 export class AIProviderFactory {
@@ -22,29 +19,26 @@ export class AIProviderFactory {
   constructor(
     private readonly configService: ConfigService,
     private readonly modelConfigService: ModelConfigService,
-  ) { }
+  ) {}
 
   /**
    * 根据 providerType + config 创建 LanguageModel 实例
    */
-  createLanguageModel(
-    type: ProviderType,
-    config: ProviderConfig,
-  ): LanguageModel {
+  createLanguageModel(type: ProviderType, config: ProviderConfig): LanguageModel {
     switch (type) {
-      case "anthropic": {
+      case 'anthropic': {
         const anthropic = createAnthropic({
           apiKey: config.apiKey,
           baseURL: config.baseURL || undefined,
         });
         return anthropic(config.model);
       }
-      case "ollama": {
+      case 'ollama': {
         return ollama(config.model, {
           // ollama-ai-provider 使用 simulateStreaming
         }) as any;
       }
-      case "openai":
+      case 'openai':
       default: {
         // OpenAI 兼容（也支持 DeepSeek、GLM、SiliconFlow 等）
         const openai = createOpenAI({
@@ -93,9 +87,7 @@ export class AIProviderFactory {
     }
 
     // 2. 使用 providerName 或默认 Provider
-    const name =
-      providerName ||
-      this.configService.get<string>("ai.defaultProvider", "openai");
+    const name = providerName || this.configService.get<string>('ai.defaultProvider', 'openai');
     const envConfig = this.getEnvProviderConfig(name);
     if (!envConfig) {
       throw new Error(`Provider '${name}' not configured`);
@@ -116,8 +108,8 @@ export class AIProviderFactory {
     if (!config || !config.model) return null;
 
     return {
-      apiKey: config.apiKey || "",
-      baseURL: config.baseURL || "",
+      apiKey: config.apiKey || '',
+      baseURL: config.baseURL || '',
       model: config.model,
       temperature: config.temperature ?? 0.7,
       maxTokens: config.maxTokens ?? 4096,
@@ -132,12 +124,12 @@ export class AIProviderFactory {
     available: boolean;
     config: ProviderConfig | undefined;
   }> {
-    const providers = ["openai", "anthropic", "ollama"];
+    const providers = ['openai', 'anthropic', 'ollama'];
     return providers.map((name) => {
       const config = this.getEnvProviderConfig(name);
       return {
         name,
-        available: !!config?.apiKey || name === "ollama", // ollama 不需要 apiKey
+        available: !!config?.apiKey || name === 'ollama', // ollama 不需要 apiKey
         config: config || undefined,
       };
     });

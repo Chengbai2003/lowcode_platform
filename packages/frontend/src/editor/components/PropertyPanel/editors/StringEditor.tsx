@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import styles from "../PropertyPanel.module.scss";
+import React, { useCallback } from 'react';
+import styles from '../PropertyPanel.module.scss';
 
 interface StringEditorProps {
   label: string;
@@ -25,23 +25,17 @@ export const StringEditor: React.FC<StringEditorProps> = ({
     [onChange],
   );
 
-  const stringValue = value?.toString() ?? "";
+  const stringValue = value?.toString() ?? '';
 
   return (
     <div className={styles.propertyItem}>
       <label className={styles.propertyLabel}>
         <span>{label}</span>
-        {description && (
-          <span className={styles.description}>{description}</span>
-        )}
+        {description && <span className={styles.description}>{description}</span>}
       </label>
       <div className={styles.propertyInput}>
         {multiline ? (
-          <textarea
-            value={stringValue}
-            onChange={handleChange}
-            placeholder={placeholder}
-          />
+          <textarea value={stringValue} onChange={handleChange} placeholder={placeholder} />
         ) : (
           <input
             type="text"

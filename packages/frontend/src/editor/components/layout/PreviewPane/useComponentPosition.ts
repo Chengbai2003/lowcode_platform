@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface ComponentPosition {
   id: string;
@@ -21,9 +21,7 @@ export function useComponentPosition(
   hoverPosition: ComponentPosition | null;
   refreshPositions: () => void;
 } {
-  const [positions, setPositions] = useState<Map<string, ComponentPosition>>(
-    new Map(),
-  );
+  const [positions, setPositions] = useState<Map<string, ComponentPosition>>(new Map());
   const positionsRef = useRef(positions);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
   const mutationObserverRef = useRef<MutationObserver | null>(null);
@@ -36,10 +34,7 @@ export function useComponentPosition(
 
   // Calculate position for a single element
   const calculatePosition = useCallback(
-    (
-      element: HTMLElement,
-      container: HTMLElement,
-    ): ComponentPosition | null => {
+    (element: HTMLElement, container: HTMLElement): ComponentPosition | null => {
       const containerRect = container.getBoundingClientRect();
       const elementRect = element.getBoundingClientRect();
 
@@ -49,7 +44,7 @@ export function useComponentPosition(
       }
 
       return {
-        id: element.getAttribute("data-component-id") || "",
+        id: element.getAttribute('data-component-id') || '',
         top: elementRect.top - containerRect.top,
         left: elementRect.left - containerRect.left,
         width: elementRect.width,
@@ -73,7 +68,7 @@ export function useComponentPosition(
       if (!containerRef.current) return;
 
       const container = containerRef.current;
-      const components = container.querySelectorAll("[data-component-id]");
+      const components = container.querySelectorAll('[data-component-id]');
       const newPositions = new Map<string, ComponentPosition>();
 
       components.forEach((el) => {
@@ -105,7 +100,7 @@ export function useComponentPosition(
       resizeObserverRef.current.disconnect();
       resizeObserverRef.current.observe(container);
 
-      const components = container.querySelectorAll("[data-component-id]");
+      const components = container.querySelectorAll('[data-component-id]');
       components.forEach((el) => {
         resizeObserverRef.current?.observe(el);
       });
@@ -116,7 +111,7 @@ export function useComponentPosition(
       let shouldUpdate = false;
 
       for (const mutation of mutations) {
-        if (mutation.type === "childList" || mutation.type === "attributes") {
+        if (mutation.type === 'childList' || mutation.type === 'attributes') {
           shouldUpdate = true;
           break;
         }
@@ -132,7 +127,7 @@ export function useComponentPosition(
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["style", "class", "data-component-id"],
+      attributeFilter: ['style', 'class', 'data-component-id'],
     });
 
     // Initial update
@@ -143,8 +138,8 @@ export function useComponentPosition(
     const handleScroll = () => updatePositions();
     const handleResize = () => updatePositions();
 
-    window.addEventListener("scroll", handleScroll, true);
-    window.addEventListener("resize", handleResize);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
 
     return () => {
       if (rafRef.current) {
@@ -152,17 +147,14 @@ export function useComponentPosition(
       }
       resizeObserverRef.current?.disconnect();
       mutationObserverRef.current?.disconnect();
-      window.removeEventListener("scroll", handleScroll, true);
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
     };
   }, [containerRef, updatePositions]);
 
   // Get selected and hover positions
-  const selectedPosition = selectedId
-    ? positions.get(selectedId) || null
-    : null;
-  const hoverPosition =
-    hoverId && hoverId !== selectedId ? positions.get(hoverId) || null : null;
+  const selectedPosition = selectedId ? positions.get(selectedId) || null : null;
+  const hoverPosition = hoverId && hoverId !== selectedId ? positions.get(hoverId) || null : null;
 
   return {
     selectedPosition,

@@ -1,10 +1,10 @@
-import type { Value } from "../context";
+import type { Value } from '../context';
 
 /**
  * 导航 Actions
  */
 export type NavigateAction = {
-  type: "navigate";
+  type: 'navigate';
   /** 目标路径 */
   to: Value;
   /** 路径参数 */

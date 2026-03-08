@@ -6,89 +6,89 @@
 // 静态值映射：直接映射到 Tailwind 类名
 const STATIC_MAP: Record<string, Record<string, string>> = {
   display: {
-    flex: "flex",
-    block: "block",
-    inline: "inline",
-    "inline-block": "inline-block",
-    none: "hidden",
-    grid: "grid",
+    flex: 'flex',
+    block: 'block',
+    inline: 'inline',
+    'inline-block': 'inline-block',
+    none: 'hidden',
+    grid: 'grid',
   },
   flexDirection: {
-    row: "flex-row",
-    column: "flex-col",
-    "row-reverse": "flex-row-reverse",
-    "column-reverse": "flex-col-reverse",
+    row: 'flex-row',
+    column: 'flex-col',
+    'row-reverse': 'flex-row-reverse',
+    'column-reverse': 'flex-col-reverse',
   },
   justifyContent: {
-    "flex-start": "justify-start",
-    "flex-end": "justify-end",
-    center: "justify-center",
-    "space-between": "justify-between",
-    "space-around": "justify-around",
-    "space-evenly": "justify-evenly",
+    'flex-start': 'justify-start',
+    'flex-end': 'justify-end',
+    center: 'justify-center',
+    'space-between': 'justify-between',
+    'space-around': 'justify-around',
+    'space-evenly': 'justify-evenly',
   },
   alignItems: {
-    "flex-start": "items-start",
-    "flex-end": "items-end",
-    center: "items-center",
-    baseline: "items-baseline",
-    stretch: "items-stretch",
+    'flex-start': 'items-start',
+    'flex-end': 'items-end',
+    center: 'items-center',
+    baseline: 'items-baseline',
+    stretch: 'items-stretch',
   },
   textAlign: {
-    left: "text-left",
-    center: "text-center",
-    right: "text-right",
-    justify: "text-justify",
+    left: 'text-left',
+    center: 'text-center',
+    right: 'text-right',
+    justify: 'text-justify',
   },
   position: {
-    static: "static",
-    fixed: "fixed",
-    absolute: "absolute",
-    relative: "relative",
-    sticky: "sticky",
+    static: 'static',
+    fixed: 'fixed',
+    absolute: 'absolute',
+    relative: 'relative',
+    sticky: 'sticky',
   },
   cursor: {
-    pointer: "cursor-pointer",
-    default: "cursor-default",
-    text: "cursor-text",
-    move: "cursor-move",
-    "not-allowed": "cursor-not-allowed",
+    pointer: 'cursor-pointer',
+    default: 'cursor-default',
+    text: 'cursor-text',
+    move: 'cursor-move',
+    'not-allowed': 'cursor-not-allowed',
   },
 };
 
 // 前缀映射：需要处理数值或颜色
 const PREFIX_MAP: Record<string, string> = {
-  width: "w",
-  height: "h",
-  minWidth: "min-w",
-  maxWidth: "max-w",
-  minHeight: "min-h",
-  maxHeight: "max-h",
-  margin: "m",
-  marginTop: "mt",
-  marginBottom: "mb",
-  marginLeft: "ml",
-  marginRight: "mr",
-  padding: "p",
-  paddingTop: "pt",
-  paddingBottom: "pb",
-  paddingLeft: "pl",
-  paddingRight: "pr",
-  backgroundColor: "bg",
-  color: "text",
-  fontSize: "text",
-  fontWeight: "font",
-  borderRadius: "rounded",
-  border: "border",
-  borderWidth: "border",
-  borderColor: "border",
-  zIndex: "z",
-  opacity: "opacity",
-  boxShadow: "shadow",
-  gap: "gap",
-  flex: "flex",
-  flexGrow: "grow",
-  flexShrink: "shrink",
+  width: 'w',
+  height: 'h',
+  minWidth: 'min-w',
+  maxWidth: 'max-w',
+  minHeight: 'min-h',
+  maxHeight: 'max-h',
+  margin: 'm',
+  marginTop: 'mt',
+  marginBottom: 'mb',
+  marginLeft: 'ml',
+  marginRight: 'mr',
+  padding: 'p',
+  paddingTop: 'pt',
+  paddingBottom: 'pb',
+  paddingLeft: 'pl',
+  paddingRight: 'pr',
+  backgroundColor: 'bg',
+  color: 'text',
+  fontSize: 'text',
+  fontWeight: 'font',
+  borderRadius: 'rounded',
+  border: 'border',
+  borderWidth: 'border',
+  borderColor: 'border',
+  zIndex: 'z',
+  opacity: 'opacity',
+  boxShadow: 'shadow',
+  gap: 'gap',
+  flex: 'flex',
+  flexGrow: 'grow',
+  flexShrink: 'shrink',
 };
 
 export interface CompiledStyle {
@@ -99,11 +99,9 @@ export interface CompiledStyle {
 /**
  * 编译样式对象
  */
-export function compileStyle(
-  style: Record<string, any> | undefined,
-): CompiledStyle {
+export function compileStyle(style: Record<string, any> | undefined): CompiledStyle {
   if (!style) {
-    return { className: "", styleObj: {} };
+    return { className: '', styleObj: {} };
   }
 
   const classList: string[] = [];
@@ -111,7 +109,7 @@ export function compileStyle(
 
   Object.entries(style).forEach(([key, value]) => {
     // 忽略空值
-    if (value === undefined || value === null || value === "") {
+    if (value === undefined || value === null || value === '') {
       return;
     }
 
@@ -127,13 +125,13 @@ export function compileStyle(
     const prefix = PREFIX_MAP[key];
     if (prefix) {
       // 特殊值处理：100% 或 full
-      if (strValue === "100%" || strValue === "full") {
+      if (strValue === '100%' || strValue === 'full') {
         classList.push(`${prefix}-full`);
         return;
       }
 
       // 特殊处理：auto
-      if (strValue === "auto") {
+      if (strValue === 'auto') {
         classList.push(`${prefix}-auto`);
         return;
       }
@@ -145,7 +143,7 @@ export function compileStyle(
         // 复杂值保留为内联样式
         styleObj[key] = value;
       } else {
-        const jitValue = strValue.replace(/\s+/g, "_");
+        const jitValue = strValue.replace(/\s+/g, '_');
         classList.push(`${prefix}-[${jitValue}]`);
       }
       return;
@@ -156,7 +154,7 @@ export function compileStyle(
   });
 
   return {
-    className: classList.join(" "),
+    className: classList.join(' '),
     styleObj,
   };
 }
@@ -166,9 +164,9 @@ export function compileStyle(
  */
 function isComplexValue(value: string): boolean {
   return (
-    value.includes("calc(") ||
-    value.includes("var(") ||
-    value.includes("url(") ||
+    value.includes('calc(') ||
+    value.includes('var(') ||
+    value.includes('url(') ||
     value.includes('"') ||
     value.includes("'")
   );

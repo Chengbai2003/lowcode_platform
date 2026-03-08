@@ -1,15 +1,11 @@
-import React, { useRef, useCallback, memo } from "react";
-import { Renderer, LowcodeProvider } from "../../../../renderer";
-import type {
-  A2UISchema,
-  ComponentRegistry,
-  A2UIComponent,
-} from "../../../../types";
-import { useSelectionStore } from "../../../store/editor-store";
-import { SelectionHighlight } from "./SelectionHighlight";
-import { useComponentPosition } from "./useComponentPosition";
-import { NoSchemaEmptyState } from "../../EmptyState";
-import styles from "./PreviewPane.module.scss";
+import React, { useRef, useCallback, memo } from 'react';
+import { Renderer, LowcodeProvider } from '../../../../renderer';
+import type { A2UISchema, ComponentRegistry, A2UIComponent } from '../../../../types';
+import { useSelectionStore } from '../../../store/editor-store';
+import { SelectionHighlight } from './SelectionHighlight';
+import { useComponentPosition } from './useComponentPosition';
+import { NoSchemaEmptyState } from '../../EmptyState';
+import styles from './PreviewPane.module.scss';
 
 interface SelectableCanvasProps {
   schema: A2UISchema | null;
@@ -84,10 +80,10 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
       (e: React.MouseEvent) => {
         // Find the closest component element
         const target = e.target as HTMLElement;
-        const componentEl = target.closest("[data-component-id]");
+        const componentEl = target.closest('[data-component-id]');
 
         if (componentEl) {
-          const id = componentEl.getAttribute("data-component-id");
+          const id = componentEl.getAttribute('data-component-id');
           if (id && id !== hoverId) {
             setHover(id);
           }
@@ -137,4 +133,4 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
   },
 );
 
-SelectableCanvas.displayName = "SelectableCanvas";
+SelectableCanvas.displayName = 'SelectableCanvas';

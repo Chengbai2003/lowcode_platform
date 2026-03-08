@@ -1,4 +1,4 @@
-import type { Value } from "../context";
+import type { Value } from '../context';
 
 /**
  * 数据操作 Action
@@ -10,7 +10,7 @@ import type { Value } from "../context";
  * - 清除值：{ type: "setValue", field: "temp", value: null }
  */
 export type SetValueAction = {
-  type: "setValue";
+  type: 'setValue';
   /** 字段名，支持路径如 'user.name', 'state.loading' */
   field: string;
   /** 要设置的值 */

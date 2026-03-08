@@ -13,7 +13,7 @@ export const Input: React.FC<InputProps> = (props) => {
   }
   if (props.type === 'textArea') {
     const { type, ...restProps } = props;
-    return <AntInput.TextArea {...restProps as any} />
+    return <AntInput.TextArea {...(restProps as any)} />;
   }
   if (props.type === 'search') {
     const { type, ...restProps } = props;

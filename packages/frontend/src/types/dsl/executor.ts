@@ -1,5 +1,5 @@
-import type { Action } from "./action-union";
-import type { ExecutionContext, ActionRegistry } from "./context";
+import type { Action } from './action-union';
+import type { ExecutionContext, ActionRegistry } from './context';
 
 /**
  * DSL执行器配置

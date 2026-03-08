@@ -1,5 +1,5 @@
-import type { A2UISchema } from "../../types";
-import type { Command, CommandOptions } from "../store/history";
+import type { A2UISchema } from '../../types';
+import type { Command, CommandOptions } from '../store/history';
 
 // ============================================
 // Schema 变更命令
@@ -60,7 +60,7 @@ export function createUpdateSchemaCommand(
   oldSchema: A2UISchema,
   newSchema: A2UISchema,
   onChange: SchemaChangeCallback,
-  description: string = "更新 Schema",
+  description: string = '更新 Schema',
 ): UpdateSchemaCommand {
   const id = `schema_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   return new UpdateSchemaCommand(oldSchema, newSchema, onChange, {
@@ -79,19 +79,19 @@ export function createUpdateSchemaCommand(
  */
 export type ComponentOperation =
   | {
-      type: "add";
-      component: A2UISchema["components"][string];
+      type: 'add';
+      component: A2UISchema['components'][string];
       parentId: string;
     }
   | {
-      type: "delete";
+      type: 'delete';
       componentId: string;
-      component: A2UISchema["components"][string];
+      component: A2UISchema['components'][string];
       parentId: string;
       index: number;
     }
   | {
-      type: "move";
+      type: 'move';
       componentId: string;
       oldParentId: string;
       newParentId: string;
@@ -99,7 +99,7 @@ export type ComponentOperation =
       newIndex: number;
     }
   | {
-      type: "update";
+      type: 'update';
       componentId: string;
       oldProps: Record<string, unknown>;
       newProps: Record<string, unknown>;
@@ -152,21 +152,18 @@ export class ComponentCommand implements Command {
     const components = { ...schema.components };
 
     switch (this.operation.type) {
-      case "add": {
+      case 'add': {
         const { component, parentId } = this.operation;
         components[component.id] = component;
         if (parentId && components[parentId]) {
           components[parentId] = {
             ...components[parentId],
-            childrenIds: [
-              ...(components[parentId].childrenIds || []),
-              component.id,
-            ],
+            childrenIds: [...(components[parentId].childrenIds || []), component.id],
           };
         }
         break;
       }
-      case "delete": {
+      case 'delete': {
         const { componentId, parentId } = this.operation;
         delete components[componentId];
         if (parentId && components[parentId]) {
@@ -179,9 +176,8 @@ export class ComponentCommand implements Command {
         }
         break;
       }
-      case "move": {
-        const { componentId, oldParentId, newParentId, newIndex } =
-          this.operation;
+      case 'move': {
+        const { componentId, oldParentId, newParentId, newIndex } = this.operation;
         if (components[oldParentId]) {
           components[oldParentId] = {
             ...components[oldParentId],
@@ -200,7 +196,7 @@ export class ComponentCommand implements Command {
         }
         break;
       }
-      case "update": {
+      case 'update': {
         const { componentId, newProps } = this.operation;
         if (components[componentId]) {
           components[componentId] = {
@@ -219,7 +215,7 @@ export class ComponentCommand implements Command {
     const components = { ...schema.components };
 
     switch (this.operation.type) {
-      case "add": {
+      case 'add': {
         const { component, parentId } = this.operation;
         delete components[component.id];
         if (parentId && components[parentId]) {
@@ -232,7 +228,7 @@ export class ComponentCommand implements Command {
         }
         break;
       }
-      case "delete": {
+      case 'delete': {
         const { component, parentId, index } = this.operation;
         components[component.id] = component;
         if (parentId && components[parentId]) {
@@ -245,9 +241,8 @@ export class ComponentCommand implements Command {
         }
         break;
       }
-      case "move": {
-        const { componentId, oldParentId, newParentId, oldIndex } =
-          this.operation;
+      case 'move': {
+        const { componentId, oldParentId, newParentId, oldIndex } = this.operation;
         if (components[newParentId]) {
           components[newParentId] = {
             ...components[newParentId],
@@ -266,7 +261,7 @@ export class ComponentCommand implements Command {
         }
         break;
       }
-      case "update": {
+      case 'update': {
         const { componentId, oldProps } = this.operation;
         if (components[componentId]) {
           const currentProps = { ...components[componentId].props };
@@ -294,22 +289,17 @@ export class ComponentCommand implements Command {
  * 创建添加组件命令
  */
 export function createAddComponentCommand(
-  component: A2UISchema["components"][string],
+  component: A2UISchema['components'][string],
   parentId: string,
   getSchema: () => A2UISchema,
   setSchema: SchemaChangeCallback,
   description?: string,
 ): ComponentCommand {
-  return new ComponentCommand(
-    { type: "add", component, parentId },
-    getSchema,
-    setSchema,
-    {
-      description: description || `添加组件 ${component.type}`,
-      id: `add_${component.id}_${Date.now()}`,
-      timestamp: Date.now(),
-    },
-  );
+  return new ComponentCommand({ type: 'add', component, parentId }, getSchema, setSchema, {
+    description: description || `添加组件 ${component.type}`,
+    id: `add_${component.id}_${Date.now()}`,
+    timestamp: Date.now(),
+  });
 }
 
 /**
@@ -317,7 +307,7 @@ export function createAddComponentCommand(
  */
 export function createDeleteComponentCommand(
   componentId: string,
-  component: A2UISchema["components"][string],
+  component: A2UISchema['components'][string],
   parentId: string,
   index: number,
   getSchema: () => A2UISchema,
@@ -325,7 +315,7 @@ export function createDeleteComponentCommand(
   description?: string,
 ): ComponentCommand {
   return new ComponentCommand(
-    { type: "delete", componentId, component, parentId, index },
+    { type: 'delete', componentId, component, parentId, index },
     getSchema,
     setSchema,
     {
@@ -350,7 +340,7 @@ export function createMoveComponentCommand(
   description?: string,
 ): ComponentCommand {
   return new ComponentCommand(
-    { type: "move", componentId, oldParentId, newParentId, oldIndex, newIndex },
+    { type: 'move', componentId, oldParentId, newParentId, oldIndex, newIndex },
     getSchema,
     setSchema,
     {
@@ -373,7 +363,7 @@ export function createUpdatePropsCommand(
   description?: string,
 ): ComponentCommand {
   return new ComponentCommand(
-    { type: "update", componentId, oldProps, newProps },
+    { type: 'update', componentId, oldProps, newProps },
     getSchema,
     setSchema,
     {
@@ -398,10 +388,7 @@ export class MacroCommand implements Command {
   readonly description: string;
   private commands: Command[];
 
-  constructor(
-    commands: Command[],
-    options: CommandOptions & { timestamp: number; id: string },
-  ) {
+  constructor(commands: Command[], options: CommandOptions & { timestamp: number; id: string }) {
     this.commands = commands;
     this.description = options.description;
     this.timestamp = options.timestamp;
@@ -427,7 +414,7 @@ export class MacroCommand implements Command {
  */
 export function createMacroCommand(
   commands: Command[],
-  description: string = "批量操作",
+  description: string = '批量操作',
 ): MacroCommand {
   return new MacroCommand(commands, {
     description,

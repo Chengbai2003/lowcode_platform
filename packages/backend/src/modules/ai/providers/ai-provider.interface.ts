@@ -3,7 +3,7 @@
  * 保留用于 ModelConfigService 和动态 Provider 创建
  */
 
-export type ProviderType = "openai" | "anthropic" | "ollama" | string;
+export type ProviderType = 'openai' | 'anthropic' | 'ollama' | string;
 
 /**
  * Provider 配置

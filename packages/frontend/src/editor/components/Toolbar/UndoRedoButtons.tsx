@@ -1,9 +1,9 @@
-import React, { useCallback } from "react";
-import { Button, Tooltip, Dropdown } from "antd";
-import { UndoOutlined, RedoOutlined } from "@ant-design/icons";
-import type { MenuProps } from "antd";
-import { useHistoryStore, useCanUndo, useCanRedo } from "../../store/history";
-import styles from "./UndoRedoButtons.module.scss";
+import React, { useCallback } from 'react';
+import { Button, Tooltip, Dropdown } from 'antd';
+import { UndoOutlined, RedoOutlined } from '@ant-design/icons';
+import type { MenuProps } from 'antd';
+import { useHistoryStore, useCanUndo, useCanRedo } from '../../store/history';
+import styles from './UndoRedoButtons.module.scss';
 
 interface UndoRedoButtonsProps {
   /** 自定义撤销按钮类名 */
@@ -51,7 +51,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
         undo();
         onUndo?.();
       } catch (error) {
-        console.error("Undo failed:", error);
+        console.error('Undo failed:', error);
       }
     }
   }, [isUndoDisabled, undo, onUndo]);
@@ -63,7 +63,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
         redo();
         onRedo?.();
       } catch (error) {
-        console.error("Redo failed:", error);
+        console.error('Redo failed:', error);
       }
     }
   }, [isRedoDisabled, redo, onRedo]);
@@ -117,7 +117,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
   );
 
   // 获取撤销历史菜单项
-  const getUndoMenuItems = useCallback((): MenuProps["items"] => {
+  const getUndoMenuItems = useCallback((): MenuProps['items'] => {
     if (!showHistoryMenu) return [];
 
     const history = getUndoHistory(10);
@@ -131,7 +131,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
   }, [showHistoryMenu, getUndoHistory, performMultipleUndo]);
 
   // 获取重做历史菜单项
-  const getRedoMenuItems = useCallback((): MenuProps["items"] => {
+  const getRedoMenuItems = useCallback((): MenuProps['items'] => {
     if (!showHistoryMenu) return [];
 
     const history = getRedoHistory(10);
@@ -151,7 +151,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
         icon={<UndoOutlined />}
         onClick={handleUndo}
         disabled={isUndoDisabled}
-        className={`${styles.button} ${isUndoDisabled ? styles.disabled : ""} ${undoClassName || ""}`}
+        className={`${styles.button} ${isUndoDisabled ? styles.disabled : ''} ${undoClassName || ''}`}
         aria-label="撤销"
       />
     </Tooltip>
@@ -164,7 +164,7 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
         icon={<RedoOutlined />}
         onClick={handleRedo}
         disabled={isRedoDisabled}
-        className={`${styles.button} ${isRedoDisabled ? styles.disabled : ""} ${redoClassName || ""}`}
+        className={`${styles.button} ${isRedoDisabled ? styles.disabled : ''} ${redoClassName || ''}`}
         aria-label="重做"
       />
     </Tooltip>
@@ -174,16 +174,10 @@ export const UndoRedoButtons: React.FC<UndoRedoButtonsProps> = ({
     <div className={styles.container}>
       {showHistoryMenu ? (
         <>
-          <Dropdown
-            menu={{ items: getUndoMenuItems() }}
-            trigger={["contextMenu"]}
-          >
+          <Dropdown menu={{ items: getUndoMenuItems() }} trigger={['contextMenu']}>
             {undoButton}
           </Dropdown>
-          <Dropdown
-            menu={{ items: getRedoMenuItems() }}
-            trigger={["contextMenu"]}
-          >
+          <Dropdown menu={{ items: getRedoMenuItems() }} trigger={['contextMenu']}>
             {redoButton}
           </Dropdown>
         </>
@@ -220,12 +214,12 @@ export const useUndoRedoShortcuts = (
     const handleKeyDown = (e: KeyboardEvent) => {
       // 使用更现代的平台检测方法
       const isMac =
-        typeof navigator !== "undefined" &&
-        (navigator.platform.toUpperCase().includes("MAC") ||
-          navigator.userAgent.toUpperCase().includes("MAC"));
+        typeof navigator !== 'undefined' &&
+        (navigator.platform.toUpperCase().includes('MAC') ||
+          navigator.userAgent.toUpperCase().includes('MAC'));
       const modKey = isMac ? e.metaKey : e.ctrlKey;
 
-      if (modKey && e.key === "z") {
+      if (modKey && e.key === 'z') {
         e.preventDefault();
 
         if (e.shiftKey) {
@@ -235,7 +229,7 @@ export const useUndoRedoShortcuts = (
               redo();
               onRedo?.();
             } catch (error) {
-              console.error("Redo shortcut failed:", error);
+              console.error('Redo shortcut failed:', error);
             }
           }
         } else {
@@ -245,11 +239,11 @@ export const useUndoRedoShortcuts = (
               undo();
               onUndo?.();
             } catch (error) {
-              console.error("Undo shortcut failed:", error);
+              console.error('Undo shortcut failed:', error);
             }
           }
         }
-      } else if (modKey && e.key === "y") {
+      } else if (modKey && e.key === 'y') {
         // Ctrl/Cmd + Y = Redo (Windows style)
         e.preventDefault();
         if (canRedo) {
@@ -257,14 +251,14 @@ export const useUndoRedoShortcuts = (
             redo();
             onRedo?.();
           } catch (error) {
-            console.error("Redo shortcut failed:", error);
+            console.error('Redo shortcut failed:', error);
           }
         }
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [enabled, undo, redo, canUndo, canRedo, onUndo, onRedo]);
 
   return {

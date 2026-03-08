@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   ChevronDown,
   LayoutTemplate,
@@ -6,9 +6,9 @@ import {
   Type,
   TextCursorInput,
   RectangleHorizontal,
-} from "lucide-react";
-import type { TreeNodeData } from "./treeTypes";
-import styles from "./ComponentTree.module.scss";
+} from 'lucide-react';
+import type { TreeNodeData } from './treeTypes';
+import styles from './ComponentTree.module.scss';
 
 /**
  * 组件类型到图标的映射
@@ -17,20 +17,20 @@ const getComponentIcon = (type: string) => {
   const iconProps = { size: 16, className: styles.icon };
 
   switch (type) {
-    case "Page":
+    case 'Page':
       return <LayoutTemplate {...iconProps} />;
-    case "Container":
-    case "Card":
+    case 'Container':
+    case 'Card':
       return <Square {...iconProps} />;
-    case "Input":
-    case "TextArea":
-    case "InputNumber":
+    case 'Input':
+    case 'TextArea':
+    case 'InputNumber':
       return <TextCursorInput {...iconProps} />;
-    case "Button":
+    case 'Button':
       return <RectangleHorizontal {...iconProps} />;
-    case "Typography":
-    case "Text":
-    case "Title":
+    case 'Typography':
+    case 'Text':
+    case 'Title':
       return <Type {...iconProps} />;
     default:
       return <Square {...iconProps} />;
@@ -77,22 +77,20 @@ export const TreeNode: React.FC<TreeNodeProps> = ({
   return (
     <div className={styles.treeNode}>
       <div
-        className={`${styles.treeNodeContent} ${isSelected ? styles.selected : ""}`}
+        className={`${styles.treeNodeContent} ${isSelected ? styles.selected : ''}`}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
       >
         {/* 展开/折叠图标 */}
         <span
-          className={`${styles.expandIcon} ${hasChildren ? styles.visible : ""} ${isExpanded ? styles.expanded : ""}`}
+          className={`${styles.expandIcon} ${hasChildren ? styles.visible : ''} ${isExpanded ? styles.expanded : ''}`}
           onClick={handleToggleExpand}
         >
           {hasChildren && <ChevronDown size={16} />}
         </span>
 
         {/* 组件图标 */}
-        <span className={styles.componentIcon}>
-          {getComponentIcon(node.type)}
-        </span>
+        <span className={styles.componentIcon}>{getComponentIcon(node.type)}</span>
 
         {/* 组件名称 */}
         <span className={styles.componentName}>{node.label || node.type}</span>

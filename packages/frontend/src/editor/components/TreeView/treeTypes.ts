@@ -1,4 +1,4 @@
-import type { A2UISchema } from "../../../types";
+import type { A2UISchema } from '../../../types';
 
 /**
  * 树节点数据结构（用于 TreeView 渲染）
@@ -14,12 +14,7 @@ export interface TreeNodeData {
 /**
  * 右键菜单操作类型
  */
-export type ContextMenuAction =
-  | "delete"
-  | "copy"
-  | "moveUp"
-  | "moveDown"
-  | "moveTo";
+export type ContextMenuAction = 'delete' | 'copy' | 'moveUp' | 'moveDown' | 'moveTo';
 
 /**
  * 右键菜单项

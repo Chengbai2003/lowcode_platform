@@ -1,5 +1,5 @@
-import type { A2UISchema } from "./schema";
-import type { AISession, AISessionMeta } from "./session";
+import type { A2UISchema } from './schema';
+import type { AISession, AISessionMeta } from './session';
 
 /**
  * 项目元数据
@@ -27,7 +27,7 @@ export interface ProjectMeta {
  */
 export interface ChatMessage {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   timestamp: string;
   /** 该消息生成或对应的 Schema 快照 */

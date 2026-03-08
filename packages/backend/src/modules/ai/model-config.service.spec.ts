@@ -24,7 +24,17 @@ describe('ModelConfigService', () => {
   describe('onModuleInit', () => {
     it('should load models from file if it exists', () => {
       const mockData: AIModelConfigEntity[] = [
-        { id: '1', name: 'Test Model', provider: 'openai', model: 'gpt-3.5', baseURL: '', temperature: 0.7, maxTokens: 1000, createdAt: 123, updatedAt: 123 }
+        {
+          id: '1',
+          name: 'Test Model',
+          provider: 'openai',
+          model: 'gpt-3.5',
+          baseURL: '',
+          temperature: 0.7,
+          maxTokens: 1000,
+          createdAt: 123,
+          updatedAt: 123,
+        },
       ];
       (fs.existsSync as jest.Mock).mockReturnValue(true);
       (fs.readFileSync as jest.Mock).mockReturnValue(JSON.stringify(mockData));
@@ -66,7 +76,15 @@ describe('ModelConfigService', () => {
     });
 
     it('should save a new model', () => {
-      const newConfig = { id: 'test-1', name: 'GPT 4', provider: 'openai', model: 'gpt-4', baseURL: '', temperature: 0.5, maxTokens: 2000 };
+      const newConfig = {
+        id: 'test-1',
+        name: 'GPT 4',
+        provider: 'openai',
+        model: 'gpt-4',
+        baseURL: '',
+        temperature: 0.5,
+        maxTokens: 2000,
+      };
 
       const result = service.saveModel(newConfig);
 
@@ -80,7 +98,15 @@ describe('ModelConfigService', () => {
     });
 
     it('should update an existing model', () => {
-      const initialConfig = { id: 'test-2', name: 'Old Name', provider: 'openai', model: 'gpt-3.5', baseURL: '', temperature: 0.5, maxTokens: 2000 };
+      const initialConfig = {
+        id: 'test-2',
+        name: 'Old Name',
+        provider: 'openai',
+        model: 'gpt-3.5',
+        baseURL: '',
+        temperature: 0.5,
+        maxTokens: 2000,
+      };
       service.saveModel(initialConfig);
 
       const createdAt = service.getModel('test-2')!.createdAt;
@@ -97,8 +123,25 @@ describe('ModelConfigService', () => {
     });
 
     it('should handle isDefault logic', () => {
-      service.saveModel({ id: 'm1', name: 'Model 1', provider: 'openai', model: 'model-1', baseURL: '', temperature: 0.5, maxTokens: 2000, isDefault: true });
-      service.saveModel({ id: 'm2', name: 'Model 2', provider: 'openai', model: 'model-2', baseURL: '', temperature: 0.5, maxTokens: 2000 });
+      service.saveModel({
+        id: 'm1',
+        name: 'Model 1',
+        provider: 'openai',
+        model: 'model-1',
+        baseURL: '',
+        temperature: 0.5,
+        maxTokens: 2000,
+        isDefault: true,
+      });
+      service.saveModel({
+        id: 'm2',
+        name: 'Model 2',
+        provider: 'openai',
+        model: 'model-2',
+        baseURL: '',
+        temperature: 0.5,
+        maxTokens: 2000,
+      });
 
       expect(service.getModel('m1')!.isDefault).toBe(true);
       expect(service.getModel('m2')!.isDefault).toBeFalsy();
@@ -111,7 +154,15 @@ describe('ModelConfigService', () => {
     });
 
     it('should delete a model', () => {
-      service.saveModel({ id: 'to-delete', name: 'Delete Me', provider: 'openai', model: 'model', baseURL: '', temperature: 0.5, maxTokens: 2000 });
+      service.saveModel({
+        id: 'to-delete',
+        name: 'Delete Me',
+        provider: 'openai',
+        model: 'model',
+        baseURL: '',
+        temperature: 0.5,
+        maxTokens: 2000,
+      });
       expect(service.getAllModels()).toHaveLength(1);
 
       const result = service.deleteModel('to-delete');

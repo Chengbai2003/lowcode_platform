@@ -1,5 +1,5 @@
-import type { Action } from "../action-union";
-import type { Value } from "../context";
+import type { Action } from '../action-union';
+import type { Value } from '../context';
 
 /**
  * 异步操作 Actions
@@ -9,11 +9,11 @@ import type { Value } from "../context";
  * API 调用 Action
  */
 export type ApiCallAction = {
-  type: "apiCall";
+  type: 'apiCall';
   /** 请求 URL */
   url: Value;
   /** 请求方法 */
-  method?: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   /** 请求体 */
   body?: Value;
   /** 请求头 */
@@ -34,7 +34,7 @@ export type ApiCallAction = {
  * 延迟 Action
  */
 export type DelayAction = {
-  type: "delay";
+  type: 'delay';
   /** 延迟时间(ms) */
   ms: number;
 };

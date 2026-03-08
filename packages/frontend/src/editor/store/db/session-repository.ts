@@ -1,11 +1,7 @@
-import { set, get, del } from "idb-keyval";
-import type {
-  AISession,
-  AISessionMeta,
-  AISessionRepository,
-} from "../../../types";
+import { set, get, del } from 'idb-keyval';
+import type { AISession, AISessionMeta, AISessionRepository } from '../../../types';
 
-const SESSION_META_KEY = "session_metas";
+const SESSION_META_KEY = 'session_metas';
 
 /**
  * IndexedDB 会话仓库实现
@@ -24,7 +20,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
       metas.unshift(meta);
       await set(SESSION_META_KEY, metas);
     } catch (error) {
-      console.error("Failed to create session:", error);
+      console.error('Failed to create session:', error);
       throw error;
     }
   }
@@ -36,7 +32,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
     try {
       return (await get(`session_${sessionId}`)) || null;
     } catch (error) {
-      console.error("Failed to get session:", error);
+      console.error('Failed to get session:', error);
       return null;
     }
   }
@@ -59,7 +55,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
 
       return sessions.sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (error) {
-      console.error("Failed to get sessions by project:", error);
+      console.error('Failed to get sessions by project:', error);
       return [];
     }
   }
@@ -67,10 +63,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
   /**
    * 添加消息到会话
    */
-  async addMessage(
-    sessionId: string,
-    message: AISession["messages"][0],
-  ): Promise<void> {
+  async addMessage(sessionId: string, message: AISession['messages'][0]): Promise<void> {
     try {
       const session = await this.getSession(sessionId);
       if (!session) {
@@ -102,7 +95,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
         await set(SESSION_META_KEY, metas);
       }
     } catch (error) {
-      console.error("Failed to add message:", error);
+      console.error('Failed to add message:', error);
       throw error;
     }
   }
@@ -110,9 +103,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
   /**
    * 更新会话
    */
-  async updateSession(
-    update: Partial<AISession> & { id: string },
-  ): Promise<void> {
+  async updateSession(update: Partial<AISession> & { id: string }): Promise<void> {
     try {
       const session = await this.getSession(update.id);
       if (!session) {
@@ -131,7 +122,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
         await set(SESSION_META_KEY, metas);
       }
     } catch (error) {
-      console.error("Failed to update session:", error);
+      console.error('Failed to update session:', error);
       throw error;
     }
   }
@@ -147,7 +138,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
       metas = metas.filter((m) => m.id !== sessionId);
       await set(SESSION_META_KEY, metas);
     } catch (error) {
-      console.error("Failed to delete session:", error);
+      console.error('Failed to delete session:', error);
       throw error;
     }
   }
@@ -165,7 +156,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
 
       return metas.sort((a, b) => b.updatedAt - a.updatedAt);
     } catch (error) {
-      console.error("Failed to list sessions:", error);
+      console.error('Failed to list sessions:', error);
       return [];
     }
   }
@@ -187,7 +178,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
       metas = metas.filter((m) => m.updatedAt >= cutoffTime);
       await set(SESSION_META_KEY, metas);
     } catch (error) {
-      console.error("Failed to clear old sessions:", error);
+      console.error('Failed to clear old sessions:', error);
       throw error;
     }
   }

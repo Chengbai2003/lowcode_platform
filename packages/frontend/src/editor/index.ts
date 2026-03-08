@@ -10,7 +10,7 @@
  * - Bearer Token 认证
  */
 
-import { fetchApp } from "./lib/httpClient";
+import { fetchApp } from './lib/httpClient';
 
 // ============================================
 // 认证初始化
@@ -18,8 +18,7 @@ import { fetchApp } from "./lib/httpClient";
 
 // 默认 API Secret（使用环境变量或默认值）
 const DEFAULT_API_SECRET =
-  (import.meta.env?.VITE_API_SECRET as string) ||
-  "dev-secret-token-change-in-production";
+  (import.meta.env?.VITE_API_SECRET as string) || 'dev-secret-token-change-in-production';
 
 // 初始化时设置默认 Token
 fetchApp.setApiSecret(DEFAULT_API_SECRET);
@@ -49,11 +48,11 @@ export function getApiSecret(): string {
 }
 
 // 导出样式
-import "./styles/globals.css";
+import './styles/globals.css';
 
-export { LowcodeEditor } from "./LowcodeEditor";
-export type { LowcodeEditorProps } from "./types";
-export { AIAssistant } from "./components/ai-assistant/AIAssistant/AIAssistant";
+export { LowcodeEditor } from './LowcodeEditor';
+export type { LowcodeEditorProps } from './types';
+export { AIAssistant } from './components/ai-assistant/AIAssistant/AIAssistant';
 
 // Export stores
 export {
@@ -68,8 +67,8 @@ export {
   createCommandOptions,
   useSelectionStore,
   useEditorStore,
-} from "./store";
-export type { Command, CommandOptions, CommandFactory } from "./store";
+} from './store';
+export type { Command, CommandOptions, CommandFactory } from './store';
 
 // Export commands
 export {
@@ -82,8 +81,8 @@ export {
   createUpdatePropsCommand,
   MacroCommand,
   createMacroCommand,
-} from "./commands";
-export type { SchemaChangeCallback, ComponentOperation } from "./commands";
+} from './commands';
+export type { SchemaChangeCallback, ComponentOperation } from './commands';
 
 // Export hooks
 export {
@@ -92,8 +91,8 @@ export {
   useSchemaCommands,
   useFloatingIslandHotkey,
   useDraftStorage,
-} from "./hooks";
-export type { SchemaHistoryOptions } from "./hooks";
+} from './hooks';
+export type { SchemaHistoryOptions } from './hooks';
 
 // Export components
-export { UndoRedoButtons, useUndoRedoShortcuts } from "./components/Toolbar";
+export { UndoRedoButtons, useUndoRedoShortcuts } from './components/Toolbar';

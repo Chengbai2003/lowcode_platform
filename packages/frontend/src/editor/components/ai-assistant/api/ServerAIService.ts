@@ -1,12 +1,7 @@
-import {
-  AIService,
-  AIRequest,
-  AIResponse,
-  AIServiceError,
-} from "../types/ai-types";
+import { AIService, AIRequest, AIResponse, AIServiceError } from '../types/ai-types';
 
 class ServerAIService implements AIService {
-  name = "ServerAIService";
+  name = 'ServerAIService';
 
   async isAvailable(): Promise<boolean> {
     // Check if server-side AI service is available
@@ -21,10 +16,10 @@ class ServerAIService implements AIService {
   async generateResponse(request: AIRequest): Promise<AIResponse> {
     try {
       // Call backend AI service
-      const response = await fetch("/api/v1/ai/generate", {
-        method: "POST",
+      const response = await fetch('/api/v1/ai/generate', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(request),
       });
@@ -32,7 +27,7 @@ class ServerAIService implements AIService {
       if (!response.ok) {
         throw new AIServiceError(
           `AI service responded with status ${response.status}`,
-          "NETWORK_ERROR",
+          'NETWORK_ERROR',
           { status: response.status },
         );
       }
@@ -44,8 +39,8 @@ class ServerAIService implements AIService {
         throw error;
       }
       throw new AIServiceError(
-        error instanceof Error ? error.message : "Unknown error occurred",
-        "NETWORK_ERROR",
+        error instanceof Error ? error.message : 'Unknown error occurred',
+        'NETWORK_ERROR',
         error,
       );
     }
@@ -57,10 +52,10 @@ class ServerAIService implements AIService {
     onError?: (error: any) => void,
   ): Promise<void> {
     try {
-      const response = await fetch("/api/v1/ai/stream", {
-        method: "POST",
+      const response = await fetch('/api/v1/ai/stream', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(request),
       });
@@ -68,7 +63,7 @@ class ServerAIService implements AIService {
       if (!response.ok || !response.body) {
         throw new AIServiceError(
           `AI service responded with status ${response.status}`,
-          "NETWORK_ERROR",
+          'NETWORK_ERROR',
           { status: response.status },
         );
       }

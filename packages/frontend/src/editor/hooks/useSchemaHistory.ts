@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback } from 'react';
 
 export interface SchemaHistoryState {
   past: string[];
@@ -6,10 +6,7 @@ export interface SchemaHistoryState {
   future: string[];
 }
 
-export const useSchemaHistory = (
-  initialState: string,
-  capacity: number = 50,
-) => {
+export const useSchemaHistory = (initialState: string, capacity: number = 50) => {
   const [history, setHistory] = useState<SchemaHistoryState>({
     past: [],
     present: initialState,

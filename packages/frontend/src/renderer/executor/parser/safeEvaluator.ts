@@ -64,7 +64,11 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       }
 
       // 安全检查：阻止访问原型链和构造函数
-      if (propertyName === '__proto__' || propertyName === 'prototype' || propertyName === 'constructor') {
+      if (
+        propertyName === '__proto__' ||
+        propertyName === 'prototype' ||
+        propertyName === 'constructor'
+      ) {
         return undefined;
       }
 
@@ -77,22 +81,38 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       const right = evaluateNode(binaryNode.right, context);
 
       switch (binaryNode.operator) {
-        case '+': return left + right;
-        case '-': return left - right;
-        case '*': return left * right;
-        case '/': return left / right;
-        case '%': return left % right;
-        case '==': return left == right;
-        case '===': return left === right;
-        case '!=': return left != right;
-        case '!==': return left !== right;
-        case '<': return left < right;
-        case '>': return left > right;
-        case '<=': return left <= right;
-        case '>=': return left >= right;
-        case '&&': return left && right;
-        case '||': return left || right;
-        default: return undefined;
+        case '+':
+          return left + right;
+        case '-':
+          return left - right;
+        case '*':
+          return left * right;
+        case '/':
+          return left / right;
+        case '%':
+          return left % right;
+        case '==':
+          return left == right;
+        case '===':
+          return left === right;
+        case '!=':
+          return left != right;
+        case '!==':
+          return left !== right;
+        case '<':
+          return left < right;
+        case '>':
+          return left > right;
+        case '<=':
+          return left <= right;
+        case '>=':
+          return left >= right;
+        case '&&':
+          return left && right;
+        case '||':
+          return left || right;
+        default:
+          return undefined;
       }
     }
 
@@ -134,17 +154,23 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       const arg = evaluateNode(unaryNode.argument, context);
 
       switch (unaryNode.operator) {
-        case '!': return !arg;
-        case '-': return -arg;
-        case '+': return +arg;
-        default: return undefined;
+        case '!':
+          return !arg;
+        case '-':
+          return -arg;
+        case '+':
+          return +arg;
+        default:
+          return undefined;
       }
     }
 
     case 'ConditionalExpression': {
       const condNode = node as jsep.ConditionalExpression;
       const test = evaluateNode(condNode.test, context);
-      return test ? evaluateNode(condNode.consequent, context) : evaluateNode(condNode.alternate, context);
+      return test
+        ? evaluateNode(condNode.consequent, context)
+        : evaluateNode(condNode.alternate, context);
     }
 
     case 'CallExpression': {
@@ -170,7 +196,19 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         }
 
         // 安全拦截
-        if (funcName === '__proto__' || funcName === 'prototype' || funcName === 'constructor' || ['assign', 'defineProperty', 'setPrototypeOf', 'freeze', 'seal', 'preventExtensions'].includes(funcName)) {
+        if (
+          funcName === '__proto__' ||
+          funcName === 'prototype' ||
+          funcName === 'constructor' ||
+          [
+            'assign',
+            'defineProperty',
+            'setPrototypeOf',
+            'freeze',
+            'seal',
+            'preventExtensions',
+          ].includes(funcName)
+        ) {
           return undefined;
         }
 
@@ -192,7 +230,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       }
 
       // 计算参数
-      const args = callNode.arguments.map(arg => evaluateNode(arg, context));
+      const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
 
       try {
         return func.apply(targetObj, args);
@@ -220,7 +258,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         return undefined; // 不是一个安全或允许的构造函数
       }
 
-      const args = newNode.arguments.map(arg => evaluateNode(arg, context));
+      const args = newNode.arguments.map((arg) => evaluateNode(arg, context));
 
       try {
         return new Cls(...args);
@@ -231,7 +269,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'ArrayExpression': {
       const arrNode = node as jsep.ArrayExpression;
-      return arrNode.elements.map(elem => elem ? evaluateNode(elem, context) : undefined);
+      return arrNode.elements.map((elem) => (elem ? evaluateNode(elem, context) : undefined));
     }
 
     case 'Compound': {
@@ -254,7 +292,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 /**
  * 安全评估表达式
  * 使用 jsep 解析 AST，并在白名单控制下求值
- * 
+ *
  * @param expression 要计算的表达式字符串
  * @param context 上下文数据
  * @returns 表达式求值结果

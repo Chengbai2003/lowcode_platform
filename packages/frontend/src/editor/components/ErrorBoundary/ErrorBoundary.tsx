@@ -1,6 +1,6 @@
-import React, { Component, ErrorInfo, ReactNode } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
-import styles from "./ErrorBoundary.module.scss";
+import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import styles from './ErrorBoundary.module.scss';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -22,8 +22,8 @@ interface ErrorBoundaryState {
  */
 const isDevelopment = (): boolean => {
   return (
-    process.env.NODE_ENV === "development" ||
-    (typeof window !== "undefined" && window.location?.hostname === "localhost")
+    process.env.NODE_ENV === 'development' ||
+    (typeof window !== 'undefined' && window.location?.hostname === 'localhost')
   );
 };
 
@@ -31,10 +31,7 @@ const isDevelopment = (): boolean => {
  * ErrorBoundary - React 错误边界组件
  * 捕获子组件树中的 JavaScript 错误，显示友好的错误界面
  */
-export class ErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
@@ -53,7 +50,7 @@ export class ErrorBoundary extends Component<
     this.props.onError?.(error, errorInfo);
     // 仅在开发环境输出错误到控制台
     if (isDevelopment()) {
-      console.error("ErrorBoundary caught an error:", error, errorInfo);
+      console.error('ErrorBoundary caught an error:', error, errorInfo);
     }
   }
 
@@ -81,9 +78,7 @@ export class ErrorBoundary extends Component<
               <AlertTriangle size={48} strokeWidth={1.5} />
             </div>
             <h2 className={styles.title}>出现了一些问题</h2>
-            <p className={styles.description}>
-              页面遇到了错误，请尝试刷新或联系技术支持。
-            </p>
+            <p className={styles.description}>页面遇到了错误，请尝试刷新或联系技术支持。</p>
             {error && shouldShowDetails && (
               <div className={styles.errorDetails}>
                 <details>
@@ -92,7 +87,7 @@ export class ErrorBoundary extends Component<
                     {error.toString()}
                     {errorInfo?.componentStack && (
                       <>
-                        {"\n\n组件堆栈:"}
+                        {'\n\n组件堆栈:'}
                         {errorInfo.componentStack}
                       </>
                     )}
@@ -105,10 +100,7 @@ export class ErrorBoundary extends Component<
                 <RefreshCw size={16} />
                 重试
               </button>
-              <button
-                className={styles.reloadButton}
-                onClick={() => window.location.reload()}
-              >
+              <button className={styles.reloadButton} onClick={() => window.location.reload()}>
                 刷新页面
               </button>
             </div>
@@ -126,10 +118,9 @@ export class ErrorBoundary extends Component<
  */
 export function withErrorBoundary<P extends object>(
   WrappedComponent: React.ComponentType<P>,
-  errorBoundaryProps?: Omit<ErrorBoundaryProps, "children">,
+  errorBoundaryProps?: Omit<ErrorBoundaryProps, 'children'>,
 ): React.FC<P> {
-  const displayName =
-    WrappedComponent.displayName || WrappedComponent.name || "Component";
+  const displayName = WrappedComponent.displayName || WrappedComponent.name || 'Component';
 
   const ComponentWithErrorBoundary: React.FC<P> = (props) => (
     <ErrorBoundary {...errorBoundaryProps}>

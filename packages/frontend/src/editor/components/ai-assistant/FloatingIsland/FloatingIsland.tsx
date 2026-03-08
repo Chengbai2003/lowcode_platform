@@ -76,13 +76,10 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0, opacity: 0 }}
-          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 20 }}
           className={styles.floatingButtonWrapper}
         >
-          <button
-            className={styles.floatingButton}
-            onClick={toggleFloatingIsland}
-          >
+          <button className={styles.floatingButton} onClick={toggleFloatingIsland}>
             <Sparkles size={28} />
           </button>
         </motion.div>
@@ -105,10 +102,7 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         className={styles.floatingIsland}
       >
         {/* 头部 */}
-        <div
-          className={styles.header}
-          onPointerDown={(e) => dragControls.start(e)}
-        >
+        <div className={styles.header} onPointerDown={(e) => dragControls.start(e)}>
           <div className={styles.headerLeft}>
             <Bot size={18} />
             <span className={styles.headerTitle}>A2UI 助手</span>
@@ -141,11 +135,7 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         {/* 输入区域 */}
         <div className={styles.inputArea}>
           <div className={styles.inputRow}>
-            <button
-              className={styles.historyToggle}
-              title="历史记录"
-              onClick={handleHistoryClick}
-            >
+            <button className={styles.historyToggle} title="历史记录" onClick={handleHistoryClick}>
               <History size={16} />
             </button>
             <div className={styles.inputWrapper}>
@@ -170,7 +160,14 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
               >
                 {isLoading ? (
                   <span className={styles.spin} style={{ display: 'inline-block' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
                     </svg>
                   </span>

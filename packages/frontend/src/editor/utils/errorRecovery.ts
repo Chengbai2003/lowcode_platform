@@ -3,18 +3,15 @@
  * 提供降级策略、错误修复建议和失败记录
  */
 
-import type { A2UISchema, A2UIComponent } from "../../types";
+import type { A2UISchema, A2UIComponent } from '../../types';
 import type {
   ValidationError,
   ValidationWarning,
   AIOutputValidationResult,
-} from "./validationTypes";
-import { validateSchema } from "./schemaValidator";
-import {
-  validateAIOutput,
-  extractAndValidateSchema,
-} from "./aiOutputValidator";
-import { normalizeComponentType } from "../constants/aiSafetyConfig";
+} from './validationTypes';
+import { validateSchema } from './schemaValidator';
+import { validateAIOutput, extractAndValidateSchema } from './aiOutputValidator';
+import { normalizeComponentType } from '../constants/aiSafetyConfig';
 
 /**
  * 校验失败记录
@@ -36,11 +33,11 @@ export interface ValidationFailureRecord {
  * 恢复策略类型
  */
 export type RecoveryStrategy =
-  | "auto_fix" // 自动修复
-  | "partial_apply" // 部分应用
-  | "fallback_default" // 使用默认值
-  | "reject" // 拒绝应用
-  | "manual_review"; // 需要人工审核
+  | 'auto_fix' // 自动修复
+  | 'partial_apply' // 部分应用
+  | 'fallback_default' // 使用默认值
+  | 'reject' // 拒绝应用
+  | 'manual_review'; // 需要人工审核
 
 /**
  * 恢复结果
@@ -88,10 +85,7 @@ export class ErrorRecoveryManager {
   /**
    * 处理校验失败
    */
-  handleValidationFailure(
-    content: string,
-    result: AIOutputValidationResult,
-  ): RecoveryResult {
+  handleValidationFailure(content: string, result: AIOutputValidationResult): RecoveryResult {
     const recordId = this.generateRecordId();
     const timestamp = Date.now();
 
@@ -123,46 +117,44 @@ export class ErrorRecoveryManager {
   /**
    * 确定恢复策略
    */
-  private determineRecoveryStrategy(
-    result: AIOutputValidationResult,
-  ): RecoveryStrategy {
+  private determineRecoveryStrategy(result: AIOutputValidationResult): RecoveryStrategy {
     const errors = result.errors;
 
     // 如果没有错误，直接接受
     if (errors.length === 0) {
-      return "auto_fix";
+      return 'auto_fix';
     }
 
     // 检查错误类型分布
     const errorTypes = new Set(errors.map((e) => e.type));
 
     // 只有未知组件类型错误 -> 自动修复
-    if (errorTypes.size === 1 && errorTypes.has("unknown")) {
-      return "auto_fix";
+    if (errorTypes.size === 1 && errorTypes.has('unknown')) {
+      return 'auto_fix';
     }
 
     // 只有引用错误 -> 自动修复
-    if (errorTypes.size === 1 && errorTypes.has("reference")) {
-      return "auto_fix";
+    if (errorTypes.size === 1 && errorTypes.has('reference')) {
+      return 'auto_fix';
     }
 
     // 只有格式错误 -> 尝试自动修复
-    if (errorTypes.size === 1 && errorTypes.has("format")) {
-      return "auto_fix";
+    if (errorTypes.size === 1 && errorTypes.has('format')) {
+      return 'auto_fix';
     }
 
     // 包含安全错误 -> 拒绝
-    if (errorTypes.has("security")) {
-      return "reject";
+    if (errorTypes.has('security')) {
+      return 'reject';
     }
 
     // 错误数量过多 -> 需要人工审核
     if (errors.length > 10) {
-      return "manual_review";
+      return 'manual_review';
     }
 
     // 其他情况 -> 部分应用
-    return "partial_apply";
+    return 'partial_apply';
   }
 
   /**
@@ -174,47 +166,47 @@ export class ErrorRecoveryManager {
     strategy: RecoveryStrategy,
   ): RecoveryResult {
     switch (strategy) {
-      case "reject":
+      case 'reject':
         return {
           success: false,
           schema: null,
           strategy,
           fixes: [],
-          warnings: ["Schema 包含安全风险，已被拒绝"],
+          warnings: ['Schema 包含安全风险，已被拒绝'],
           originalErrors: result.errors,
         };
 
-      case "fallback_default":
+      case 'fallback_default':
         return {
           success: true,
           schema: this.defaultSchema,
           strategy,
-          fixes: ["使用默认 Schema"],
-          warnings: ["AI 生成的 Schema 无效，已使用默认 Schema"],
+          fixes: ['使用默认 Schema'],
+          warnings: ['AI 生成的 Schema 无效，已使用默认 Schema'],
           originalErrors: result.errors,
         };
 
-      case "manual_review":
+      case 'manual_review':
         return {
           success: false,
           schema: null,
           strategy,
           fixes: [],
-          warnings: ["Schema 需要人工审核"],
+          warnings: ['Schema 需要人工审核'],
           originalErrors: result.errors,
         };
 
-      case "auto_fix":
-      case "partial_apply":
+      case 'auto_fix':
+      case 'partial_apply':
         return this.attemptAutoFix(content, result, strategy);
 
       default:
         return {
           success: false,
           schema: null,
-          strategy: "reject",
+          strategy: 'reject',
           fixes: [],
-          warnings: ["未知的恢复策略"],
+          warnings: ['未知的恢复策略'],
           originalErrors: result.errors,
         };
     }
@@ -252,12 +244,9 @@ export class ErrorRecoveryManager {
       // 修复后仍有错误
       fixes.push(...(result.fixes || []));
 
-      if (strategy === "partial_apply") {
+      if (strategy === 'partial_apply') {
         // 尝试部分应用：移除有问题的组件
-        const partialResult = this.applyPartialFix(
-          schema,
-          revalidateResult.errors,
-        );
+        const partialResult = this.applyPartialFix(schema, revalidateResult.errors);
         if (partialResult.schema) {
           return {
             success: true,
@@ -278,7 +267,7 @@ export class ErrorRecoveryManager {
         success: true,
         schema: extractResult.schema,
         strategy,
-        fixes: ["重新提取并修复 Schema"],
+        fixes: ['重新提取并修复 Schema'],
         warnings: extractResult.result.warnings?.map((w) => w.message) || [],
         originalErrors: result.errors,
       };
@@ -290,7 +279,7 @@ export class ErrorRecoveryManager {
       schema: null,
       strategy,
       fixes,
-      warnings: ["无法自动修复 Schema"],
+      warnings: ['无法自动修复 Schema'],
       originalErrors: result.errors,
     };
   }
@@ -349,7 +338,7 @@ export class ErrorRecoveryManager {
         newRootId = remainingKeys[0];
         fixes.push(`更新 rootId 为 ${newRootId}`);
       } else {
-        warnings.push("所有组件都有问题，无法部分应用");
+        warnings.push('所有组件都有问题，无法部分应用');
         return { schema: null, fixes, warnings };
       }
     }
@@ -363,7 +352,7 @@ export class ErrorRecoveryManager {
     // 验证新 Schema
     const validateResult = validateSchema(newSchema);
     if (!validateResult.valid) {
-      warnings.push("部分修复后的 Schema 仍然无效");
+      warnings.push('部分修复后的 Schema 仍然无效');
       return { schema: null, fixes, warnings };
     }
 
@@ -378,12 +367,12 @@ export class ErrorRecoveryManager {
   private createDefaultSchema(): A2UISchema {
     return {
       version: 1,
-      rootId: "root",
+      rootId: 'root',
       components: {
         root: {
-          id: "root",
-          type: "Page",
-          props: { title: "新页面" },
+          id: 'root',
+          type: 'Page',
+          props: { title: '新页面' },
           childrenIds: [],
         },
       },
@@ -443,8 +432,7 @@ export class ErrorRecoveryManager {
     const errorTypeDistribution: Record<string, number> = {};
     for (const record of records) {
       for (const error of record.errors) {
-        errorTypeDistribution[error.type] =
-          (errorTypeDistribution[error.type] || 0) + 1;
+        errorTypeDistribution[error.type] = (errorTypeDistribution[error.type] || 0) + 1;
       }
     }
 
@@ -479,9 +467,7 @@ export class ErrorRecoveryManager {
 /**
  * 生成错误修复建议
  */
-export function generateFixSuggestions(
-  errors: ValidationError[],
-): ErrorFixSuggestion[] {
+export function generateFixSuggestions(errors: ValidationError[]): ErrorFixSuggestion[] {
   return errors.map((error) => {
     const suggestion: ErrorFixSuggestion = {
       error,
@@ -490,7 +476,7 @@ export function generateFixSuggestions(
     };
 
     switch (error.type) {
-      case "unknown":
+      case 'unknown':
         suggestion.suggestions = [
           `使用已注册的组件类型替代 "${error.value}"`,
           `检查组件类型名称是否拼写正确`,
@@ -499,43 +485,38 @@ export function generateFixSuggestions(
         suggestion.fixCommand = `component.type = "${normalizeComponentType(String(error.value))}"`;
         break;
 
-      case "required":
-        suggestion.suggestions = [
-          `为属性 "${error.path.split(".").pop()}" 提供值`,
-        ];
+      case 'required':
+        suggestion.suggestions = [`为属性 "${error.path.split('.').pop()}" 提供值`];
         suggestion.autoFixable = false;
         break;
 
-      case "type":
+      case 'type':
         suggestion.suggestions = [`检查属性类型是否正确`, `确保值是期望的类型`];
         suggestion.autoFixable = false;
         break;
 
-      case "reference":
+      case 'reference':
         suggestion.suggestions = [`确保引用的组件存在`, `检查 ID 是否正确`];
         suggestion.autoFixable = true;
         break;
 
-      case "format":
+      case 'format':
         suggestion.suggestions = [`检查 JSON 格式是否正确`, `确保没有语法错误`];
         suggestion.autoFixable = false;
         break;
 
-      case "security":
-        suggestion.suggestions = [
-          `移除或替换危险的内容`,
-          `使用安全的方式实现功能`,
-        ];
+      case 'security':
+        suggestion.suggestions = [`移除或替换危险的内容`, `使用安全的方式实现功能`];
         suggestion.autoFixable = true;
         break;
 
-      case "constraint":
+      case 'constraint':
         suggestion.suggestions = [`确保值在允许的范围内`, `检查约束条件`];
         suggestion.autoFixable = false;
         break;
 
       default:
-        suggestion.suggestions = ["检查并修复该问题"];
+        suggestion.suggestions = ['检查并修复该问题'];
         suggestion.autoFixable = false;
     }
 
@@ -580,7 +561,7 @@ export function validateAndRecover(
     return {
       success: true,
       schema: result.sanitizedData as A2UISchema,
-      strategy: "auto_fix",
+      strategy: 'auto_fix',
       fixes: result.fixes || [],
       warnings: result.warnings?.map((w) => w.message) || [],
       originalErrors: [],

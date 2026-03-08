@@ -5,7 +5,7 @@
  */
 
 // 假设你的类型定义路径
-import type { ActionHandler, ExecutionContext } from "../../../types";
+import type { ActionHandler, ExecutionContext } from '../../../types';
 
 /**
  * 自定义脚本 Action Handler
@@ -13,8 +13,8 @@ import type { ActionHandler, ExecutionContext } from "../../../types";
 export const customScript: ActionHandler = async (action, context) => {
   const { code, timeout = 10000 } = action;
 
-  if (!code || typeof code !== "string") {
-    throw new Error("customScript: code is required and must be a string");
+  if (!code || typeof code !== 'string') {
+    throw new Error('customScript: code is required and must be a string');
   }
 
   try {
@@ -37,16 +37,16 @@ export const customScript: ActionHandler = async (action, context) => {
  */
 function createSandboxContext(context: ExecutionContext): Record<string, any> {
   const safeProps = [
-    "data",
-    "formData",
-    "user",
-    "route",
-    "state",
-    "dispatch",
-    "getState",
-    "utils",
-    "navigate",
-    "back",
+    'data',
+    'formData',
+    'user',
+    'route',
+    'state',
+    'dispatch',
+    'getState',
+    'utils',
+    'navigate',
+    'back',
   ];
 
   const sandbox: Record<string, any> = {};
@@ -70,9 +70,9 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
   sandbox.Date = Date;
   sandbox.JSON = JSON;
   sandbox.console = {
-    log: (...args: any[]) => console.log("[Sandbox Log]:", ...args),
-    warn: (...args: any[]) => console.warn("[Sandbox Warn]:", ...args),
-    error: (...args: any[]) => console.error("[Sandbox Error]:", ...args),
+    log: (...args: any[]) => console.log('[Sandbox Log]:', ...args),
+    warn: (...args: any[]) => console.warn('[Sandbox Warn]:', ...args),
+    error: (...args: any[]) => console.error('[Sandbox Error]:', ...args),
   };
 
   return sandbox;
@@ -88,11 +88,7 @@ function executeInSandbox(
 ): Promise<any> {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
-      reject(
-        new Error(
-          `Execution timeout (${timeout}ms) - Note: Only stops async hangs.`,
-        ),
-      );
+      reject(new Error(`Execution timeout (${timeout}ms) - Note: Only stops async hangs.`));
     }, timeout);
 
     // 1. 创建 Proxy 拦截器
@@ -108,24 +104,16 @@ function executeInSandbox(
         if (key === Symbol.unscopables) return undefined;
 
         // 防御 2：死守核心全局变量和危险构造器
-        if (
-          ["window", "document", "globalThis", "eval", "Function"].includes(
-            key as string,
-          )
-        ) {
+        if (['window', 'document', 'globalThis', 'eval', 'Function'].includes(key as string)) {
           return undefined;
         }
 
         // 防御 3：防止通过对象的 constructor 向上攀爬获取 Function (例如: {}.constructor('return window')() )
         const value = Reflect.get(target, key, receiver);
-        if (typeof value === "function" && value === Function) {
+        if (typeof value === 'function' && value === Function) {
           return undefined;
         }
-        if (
-          key === "__proto__" ||
-          key === "prototype" ||
-          key === "constructor"
-        ) {
+        if (key === '__proto__' || key === 'prototype' || key === 'constructor') {
           return undefined;
         }
 
@@ -145,7 +133,7 @@ function executeInSandbox(
       `;
 
       // 3. 创建执行环境
-      const asyncFn = new Function("sandboxProxy", wrappedCode);
+      const asyncFn = new Function('sandboxProxy', wrappedCode);
 
       // 4. 执行代码：利用 call 改变 this 指向，防止 this 指向全局 window
       // 将 proxy 作为 this 传入，同时也作为 sandboxProxy 参数传入
@@ -161,9 +149,7 @@ function executeInSandbox(
         });
     } catch (error) {
       clearTimeout(timeoutId);
-      reject(
-        new Error(`Syntax Error in Custom Script: ${(error as Error).message}`),
-      );
+      reject(new Error(`Syntax Error in Custom Script: ${(error as Error).message}`));
     }
   });
 }

@@ -5,31 +5,26 @@
  * 将 JSON Schema 渲染为 React 组件
  */
 
-import React from "react";
-import { Provider } from "react-redux";
-import { Renderer } from "./Renderer";
-import { store } from "./store";
+import React from 'react';
+import { Provider } from 'react-redux';
+import { Renderer } from './Renderer';
+import { store } from './store';
 
-export { Renderer } from "./Renderer";
-export { EventDispatcher } from "./Renderer";
-export type {
-  RendererProps,
-  ComponentRegistry,
-  A2UIComponent,
-  A2UISchema,
-} from "./types";
-export { builtInComponents } from "./Renderer";
+export { Renderer } from './Renderer';
+export { EventDispatcher } from './Renderer';
+export type { RendererProps, ComponentRegistry, A2UIComponent, A2UISchema } from './types';
+export { builtInComponents } from './Renderer';
 
 // 导出 Redux 相关
-export { store } from "./store";
-export { useAppDispatch, useAppSelector } from "./store/hooks";
+export { store } from './store';
+export { useAppDispatch, useAppSelector } from './store/hooks';
 export {
   setComponentData,
   setMultipleComponentData,
   clearComponentData,
   setComponentConfig,
   resetAllData,
-} from "./store/componentSlice";
+} from './store/componentSlice';
 
 // 导出表单验证相关
 export {
@@ -37,17 +32,13 @@ export {
   safeValidateSchema,
   validateSchemaWithWhitelist,
   validateAndAutoFix,
-} from "./utils/schema-validator";
-export { autoFixSchema } from "./utils/schema-auto-fix";
+} from './utils/schema-validator';
+export { autoFixSchema } from './utils/schema-auto-fix';
 
 /**
  * Redux Provider 包装组件
  */
-export const LowcodeProvider = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
+export const LowcodeProvider = ({ children }: { children: React.ReactNode }) => {
   return <Provider store={store}>{children}</Provider>;
 };
 

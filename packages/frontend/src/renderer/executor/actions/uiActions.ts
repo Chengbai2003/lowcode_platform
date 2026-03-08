@@ -3,8 +3,8 @@
  * feedback (消息/通知), dialog (弹窗/确认框)
  */
 
-import type { ActionHandler } from "../../../types";
-import { resolveValue } from "../parser";
+import type { ActionHandler } from '../../../types';
+import { resolveValue } from '../parser';
 
 /**
  * 反馈提示
@@ -20,41 +20,37 @@ import { resolveValue } from "../parser";
  */
 export const feedback: ActionHandler = async (action, context) => {
   const {
-    kind = "message",
+    kind = 'message',
     content,
     title,
-    level = "info",
-    placement = "topRight",
-    duration = kind === "message" ? 3 : 4.5,
+    level = 'info',
+    placement = 'topRight',
+    duration = kind === 'message' ? 3 : 4.5,
   } = action;
 
   const resolvedContent = resolveValue(content, context);
   const resolvedTitle = title ? resolveValue(title, context) : undefined;
 
-  if (kind === "notification") {
+  if (kind === 'notification') {
     // 通知卡片
     if (context.ui?.notification) {
-      const notifyFn =
-        context.ui.notification[level as keyof typeof context.ui.notification];
-      if (typeof notifyFn === "function") {
+      const notifyFn = context.ui.notification[level as keyof typeof context.ui.notification];
+      if (typeof notifyFn === 'function') {
         notifyFn({
-          message: resolvedTitle ? String(resolvedTitle) : "通知",
+          message: resolvedTitle ? String(resolvedTitle) : '通知',
           description: String(resolvedContent),
           duration,
           placement,
         });
       }
     } else {
-      console.log(
-        `[${level.toUpperCase()}] ${resolvedTitle || "通知"}: ${resolvedContent}`,
-      );
+      console.log(`[${level.toUpperCase()}] ${resolvedTitle || '通知'}: ${resolvedContent}`);
     }
   } else {
     // 轻量消息
     if (context.ui?.message) {
-      const messageFn =
-        context.ui.message[level as keyof typeof context.ui.message];
-      if (typeof messageFn === "function") {
+      const messageFn = context.ui.message[level as keyof typeof context.ui.message];
+      if (typeof messageFn === 'function') {
         messageFn(String(resolvedContent));
       }
     } else {
@@ -79,35 +75,31 @@ export const feedback: ActionHandler = async (action, context) => {
 export const dialog: ActionHandler = async (action, context, executor) => {
   const { kind, title, content, onOk, onCancel } = action;
 
-  const resolvedTitle = title
-    ? resolveValue(title, context)
-    : kind === "confirm"
-      ? "确认"
-      : "提示";
+  const resolvedTitle = title ? resolveValue(title, context) : kind === 'confirm' ? '确认' : '提示';
   const resolvedContent = resolveValue(content, context);
 
   let confirmed: boolean;
 
   if (context.ui?.modal) {
     // 使用 UI 组件库
-    if (kind === "confirm") {
+    if (kind === 'confirm') {
       confirmed = await context.ui.modal.confirm({
         title: String(resolvedTitle),
         content: String(resolvedContent),
-        okText: "确定",
-        cancelText: "取消",
+        okText: '确定',
+        cancelText: '取消',
       });
     } else {
       await context.ui.modal.info({
         title: String(resolvedTitle),
         content: String(resolvedContent),
-        okText: "确定",
+        okText: '确定',
       });
       confirmed = true;
     }
   } else {
     // 降级到原生
-    if (kind === "confirm") {
+    if (kind === 'confirm') {
       confirmed = window.confirm(`${resolvedTitle}\n\n${resolvedContent}`);
     } else {
       window.alert(`${resolvedTitle}\n\n${resolvedContent}`);

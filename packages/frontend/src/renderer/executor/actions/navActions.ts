@@ -3,8 +3,8 @@
  * navigate - 页面跳转
  */
 
-import type { ActionHandler } from "../../../types";
-import { resolveValue, resolveValues } from "../parser";
+import type { ActionHandler } from '../../../types';
+import { resolveValue, resolveValues } from '../parser';
 
 /**
  * 页面跳转
@@ -15,18 +15,16 @@ export const navigate: ActionHandler = async (action, context) => {
   const resolvedTo = resolveValue(to, context);
   const resolvedParams = params ? resolveValues(params, context) : undefined;
 
-  if (context.navigate && typeof context.navigate === "function") {
+  if (context.navigate && typeof context.navigate === 'function') {
     context.navigate(resolvedTo, resolvedParams);
-  } else if (typeof window !== "undefined" && window.location) {
+  } else if (typeof window !== 'undefined' && window.location) {
     // 降级到原生跳转
     let url = resolvedTo;
     if (resolvedParams) {
-      const searchParams = new URLSearchParams(
-        resolvedParams as Record<string, string>,
-      );
+      const searchParams = new URLSearchParams(resolvedParams as Record<string, string>);
       const queryString = searchParams.toString();
       if (queryString) {
-        url += (url.includes("?") ? "&" : "?") + queryString;
+        url += (url.includes('?') ? '&' : '?') + queryString;
       }
     }
 
@@ -36,7 +34,7 @@ export const navigate: ActionHandler = async (action, context) => {
       window.location.href = url;
     }
   } else {
-    console.warn("No navigation method available");
+    console.warn('No navigation method available');
   }
 
   return { to: resolvedTo, params: resolvedParams };

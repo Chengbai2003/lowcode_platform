@@ -3,7 +3,7 @@
  * 支持解析和执行 {{ }} 语法表达式
  */
 
-import type { ParsedExpression } from "../../../types";
+import type { ParsedExpression } from '../../../types';
 import { safeEvaluate, SAFE_GLOBALS } from './safeEvaluator';
 
 /**
@@ -55,7 +55,7 @@ export function parseExpression(str: string): ParsedExpression {
   // 情况1：字面量（不是表达式）
   if (!isExpressionString(trimmed)) {
     return {
-      type: "literal",
+      type: 'literal',
       raw: str,
       value: parseLiteral(str), // 传递原始字符串而不是trim后的
     };
@@ -74,7 +74,7 @@ export function parseExpression(str: string): ParsedExpression {
       }
     }
     return {
-      type: "template",
+      type: 'template',
       raw: str,
       variables,
     };
@@ -87,7 +87,7 @@ export function parseExpression(str: string): ParsedExpression {
 
     if (isSimpleVariable(expr)) {
       return {
-        type: "variable",
+        type: 'variable',
         raw: str,
         variables: [expr],
       };
@@ -95,7 +95,7 @@ export function parseExpression(str: string): ParsedExpression {
 
     // 情况4：复杂表达式（如 "{{formData.age > 18}}"）
     return {
-      type: "complex",
+      type: 'complex',
       raw: str,
       expression: expr,
       variables: extractVariables(expr),
@@ -103,7 +103,7 @@ export function parseExpression(str: string): ParsedExpression {
   }
 
   return {
-    type: "literal",
+    type: 'literal',
     raw: str,
     value: str,
   };
@@ -121,11 +121,34 @@ function extractVariables(expr: string): string[] {
   ];
 
   const BLACKLIST = [
-    "true", "false", "null", "undefined",
-    "if", "else", "for", "while", "return", "switch", "case", "default",
-    "typeof", "new", "this", "class", "extends", "let", "const", "var",
-    "function", "import", "export", "void", "delete", "in", "instanceof",
-    ...Object.keys(SAFE_GLOBALS)
+    'true',
+    'false',
+    'null',
+    'undefined',
+    'if',
+    'else',
+    'for',
+    'while',
+    'return',
+    'switch',
+    'case',
+    'default',
+    'typeof',
+    'new',
+    'this',
+    'class',
+    'extends',
+    'let',
+    'const',
+    'var',
+    'function',
+    'import',
+    'export',
+    'void',
+    'delete',
+    'in',
+    'instanceof',
+    ...Object.keys(SAFE_GLOBALS),
   ];
 
   for (const pattern of patterns) {
@@ -159,17 +182,17 @@ function parseLiteral(str: string): any {
   }
 
   // 布尔值
-  if (trimmed === "true") return true;
-  if (trimmed === "false") return false;
+  if (trimmed === 'true') return true;
+  if (trimmed === 'false') return false;
 
   // null和undefined
-  if (trimmed === "null") return null;
-  if (trimmed === "undefined") return undefined;
+  if (trimmed === 'null') return null;
+  if (trimmed === 'undefined') return undefined;
 
   // JSON对象/数组
   if (
-    (trimmed.startsWith("{") && trimmed.endsWith("}")) ||
-    (trimmed.startsWith("[") && trimmed.endsWith("]"))
+    (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+    (trimmed.startsWith('[') && trimmed.endsWith(']'))
   ) {
     try {
       return JSON.parse(trimmed);
@@ -192,28 +215,25 @@ function parseLiteral(str: string): any {
 /**
  * 执行表达式
  */
-export function evaluateExpression(
-  expr: ParsedExpression,
-  context: Record<string, any>,
-): any {
+export function evaluateExpression(expr: ParsedExpression, context: Record<string, any>): any {
   switch (expr.type) {
-    case "literal":
+    case 'literal':
       return expr.value;
 
-    case "variable":
+    case 'variable':
       if (expr.variables && expr.variables.length > 0) {
         const varName = expr.variables[0];
         return getNestedValue(context, varName);
       }
       return undefined;
 
-    case "complex":
+    case 'complex':
       if (expr.expression) {
         return executeComplexExpression(expr.expression, context);
       }
       return undefined;
 
-    case "template":
+    case 'template':
       if (expr.raw) {
         return interpolateTemplate(expr.raw, context);
       }
@@ -228,11 +248,11 @@ export function evaluateExpression(
  * 获取嵌套对象的值（如 "formData.user.name"）
  */
 function getNestedValue(obj: any, path: string): any {
-  const keys = path.split(".");
+  const keys = path.split('.');
   let current = obj;
 
   for (const key of keys) {
-    if (current == null || typeof current !== "object") {
+    if (current == null || typeof current !== 'object') {
       return undefined;
     }
     current = current[key];
@@ -241,14 +261,10 @@ function getNestedValue(obj: any, path: string): any {
   return current;
 }
 
-
 /**
  * 执行复杂表达式（新版：使用 jsep AST + 白名单沙箱求值）
  */
-function executeComplexExpression(
-  expr: string,
-  context: Record<string, any>,
-): any {
+function executeComplexExpression(expr: string, context: Record<string, any>): any {
   try {
     return safeEvaluate(expr, context);
   } catch (error) {
@@ -262,10 +278,7 @@ function executeComplexExpression(
 /**
  * 插值模板字符串
  */
-export function interpolateTemplate(
-  template: string,
-  context: Record<string, any>,
-): string {
+export function interpolateTemplate(template: string, context: Record<string, any>): string {
   // replace all occurrences
   return template.replace(getExpressionRegex(), (_match, expr) => {
     const trimmed = expr.trim();
@@ -274,11 +287,11 @@ export function interpolateTemplate(
 
     // 处理undefined和null
     if (value === undefined || value === null) {
-      return "";
+      return '';
     }
 
     // 处理对象和数组
-    if (typeof value === "object") {
+    if (typeof value === 'object') {
       return JSON.stringify(value);
     }
 
@@ -289,12 +302,9 @@ export function interpolateTemplate(
 /**
  * 快捷方法：直接解析并执行表达式
  */
-export function parseAndEvaluate(
-  str: any,
-  context: { [key: string]: any },
-): any {
+export function parseAndEvaluate(str: any, context: { [key: string]: any }): any {
   // 非字符串直接返回
-  if (typeof str !== "string") {
+  if (typeof str !== 'string') {
     return str;
   }
 
@@ -306,12 +316,12 @@ export function parseAndEvaluate(
  * 判断是否是表达式
  */
 export function isExpression(value: any): boolean {
-  if (typeof value !== "string") {
+  if (typeof value !== 'string') {
     return false;
   }
   const trimmed = value.trim();
   // 纯表达式格式：{{expression}}
-  if (trimmed.startsWith("{{") && trimmed.endsWith("}}")) {
+  if (trimmed.startsWith('{{') && trimmed.endsWith('}}')) {
     return getExpressionRegex().test(trimmed);
   }
   // 包含表达式的模板字符串：text {{expression}} more text

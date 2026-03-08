@@ -1,10 +1,7 @@
-import { useCallback, useRef, useEffect } from "react";
-import type { A2UISchema } from "../../types";
-import { useHistoryStore } from "../store/history";
-import {
-  UpdateSchemaCommand,
-  createUpdateSchemaCommand,
-} from "../commands/schemaCommands";
+import { useCallback, useRef, useEffect } from 'react';
+import type { A2UISchema } from '../../types';
+import { useHistoryStore } from '../store/history';
+import { UpdateSchemaCommand, createUpdateSchemaCommand } from '../commands/schemaCommands';
 
 /**
  * SchemaHistoryOptions - Schema 历史记录配置选项
@@ -27,11 +24,7 @@ export function useSchemaHistoryStore(
   onChange: (schema: A2UISchema) => void,
   options: SchemaHistoryOptions = {},
 ) {
-  const {
-    maxHistorySize = 50,
-    enableMerge = true,
-    mergeWindow = 500,
-  } = options;
+  const { maxHistorySize = 50, enableMerge = true, mergeWindow = 500 } = options;
 
   // 引用上一次的 schema 用于撤销
   const lastSchemaRef = useRef<A2UISchema | null>(schema);
@@ -67,7 +60,7 @@ export function useSchemaHistoryStore(
    * 支持自动合并连续的快速操作
    */
   const updateSchema = useCallback(
-    (newSchema: A2UISchema, description: string = "更新 Schema") => {
+    (newSchema: A2UISchema, description: string = '更新 Schema') => {
       if (!schema) return;
 
       const oldSchema = lastSchemaRef.current || schema;
@@ -78,12 +71,7 @@ export function useSchemaHistoryStore(
         clearTimeout(mergeTimerRef.current);
 
         // 创建新命令并执行
-        const command = createUpdateSchemaCommand(
-          oldSchema,
-          newSchema,
-          onChange,
-          description,
-        );
+        const command = createUpdateSchemaCommand(oldSchema, newSchema, onChange, description);
         pendingCommandRef.current = command;
 
         // 设置新的合并计时器
@@ -95,12 +83,7 @@ export function useSchemaHistoryStore(
         }, mergeWindow);
       } else {
         // 直接创建并执行命令
-        const command = createUpdateSchemaCommand(
-          oldSchema,
-          newSchema,
-          onChange,
-          description,
-        );
+        const command = createUpdateSchemaCommand(oldSchema, newSchema, onChange, description);
 
         if (enableMerge) {
           // 设置合并计时器
@@ -126,7 +109,7 @@ export function useSchemaHistoryStore(
    * 强制立即更新（跳过合并）
    */
   const forceUpdateSchema = useCallback(
-    (newSchema: A2UISchema, description: string = "更新 Schema") => {
+    (newSchema: A2UISchema, description: string = '更新 Schema') => {
       if (!schema) return;
 
       const oldSchema = lastSchemaRef.current || schema;
@@ -144,12 +127,7 @@ export function useSchemaHistoryStore(
       }
 
       // 创建并执行新命令
-      const command = createUpdateSchemaCommand(
-        oldSchema,
-        newSchema,
-        onChange,
-        description,
-      );
+      const command = createUpdateSchemaCommand(oldSchema, newSchema, onChange, description);
       executeCommand(command);
 
       // 更新引用
@@ -236,12 +214,7 @@ export function useSchemaCommands(
    */
   const executeSchemaUpdate = useCallback(
     (oldSchema: A2UISchema, newSchema: A2UISchema, description?: string) => {
-      const command = createUpdateSchemaCommand(
-        oldSchema,
-        newSchema,
-        setSchema,
-        description,
-      );
+      const command = createUpdateSchemaCommand(oldSchema, newSchema, setSchema, description);
       executeCommand(command);
     },
     [setSchema, executeCommand],

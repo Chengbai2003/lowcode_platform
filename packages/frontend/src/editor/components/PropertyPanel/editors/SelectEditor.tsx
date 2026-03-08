@@ -1,6 +1,6 @@
-import React, { useCallback } from "react";
-import { Select } from "antd";
-import styles from "../PropertyPanel.module.scss";
+import React, { useCallback } from 'react';
+import { Select } from 'antd';
+import styles from '../PropertyPanel.module.scss';
 
 interface SelectEditorProps {
   label: string;
@@ -28,9 +28,7 @@ export const SelectEditor: React.FC<SelectEditorProps> = ({
     <div className={styles.propertyItem}>
       <label className={styles.propertyLabel}>
         <span>{label}</span>
-        {description && (
-          <span className={styles.description}>{description}</span>
-        )}
+        {description && <span className={styles.description}>{description}</span>}
       </label>
       <div className={styles.propertyInput}>
         <Select
@@ -38,7 +36,7 @@ export const SelectEditor: React.FC<SelectEditorProps> = ({
           value={value as string | number}
           onChange={handleChange}
           options={options}
-          style={{ width: "100%" }}
+          style={{ width: '100%' }}
         />
       </div>
     </div>

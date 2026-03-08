@@ -1,6 +1,6 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback } from 'react';
 
-const DRAFT_PREFIX = "lowcode_draft_";
+const DRAFT_PREFIX = 'lowcode_draft_';
 
 interface DraftData {
   json: string;
@@ -35,7 +35,7 @@ export function useDraftStorage(key: string, debounceMs = 1000) {
             }, 0);
           });
         } catch (error) {
-          console.error("Failed to save draft:", error);
+          console.error('Failed to save draft:', error);
         } finally {
           saveInProgressRef.current = false;
         }
@@ -59,7 +59,7 @@ export function useDraftStorage(key: string, debounceMs = 1000) {
     try {
       localStorage.removeItem(storageKey);
     } catch (error) {
-      console.error("Failed to clear draft:", error);
+      console.error('Failed to clear draft:', error);
     }
   }, [storageKey]);
 

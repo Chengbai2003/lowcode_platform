@@ -1,9 +1,4 @@
-import type {
-  A2UISchema,
-  ComponentRegistry,
-  A2UIComponent,
-  PropertyMeta,
-} from "../types";
+import type { A2UISchema, ComponentRegistry, A2UIComponent, PropertyMeta } from '../types';
 
 // Re-export types for convenience
 export type { A2UISchema, ComponentRegistry, A2UIComponent, PropertyMeta };
@@ -47,5 +42,5 @@ export interface LowcodeEditorProps {
   /**
    * 主题
    */
-  theme?: "light" | "dark" | "vs-dark";
+  theme?: 'light' | 'dark' | 'vs-dark';
 }

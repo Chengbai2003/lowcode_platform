@@ -3,19 +3,16 @@
  * 校验 AI 返回的内容，防止幻觉和无效数据
  */
 
-import type { A2UISchema } from "../../types";
+import type { A2UISchema } from '../../types';
 import type {
   AIOutputValidationResult,
   ValidationError,
   ValidationWarning,
   ValidationOptions,
   ValidationResult,
-} from "./validationTypes";
-import { SchemaValidator } from "./schemaValidator";
-import {
-  ALLOWED_COMPONENT_TYPES,
-  normalizeComponentType,
-} from "../constants/aiSafetyConfig";
+} from './validationTypes';
+import { SchemaValidator } from './schemaValidator';
+import { ALLOWED_COMPONENT_TYPES, normalizeComponentType } from '../constants/aiSafetyConfig';
 
 /**
  * 默认 AI 输出校验选项
@@ -64,11 +61,11 @@ export class AIOutputValidator {
     const warnings: ValidationWarning[] = [];
 
     // 1. 空内容检查
-    if (!content || typeof content !== "string") {
+    if (!content || typeof content !== 'string') {
       return {
         valid: false,
         parseSuccess: false,
-        errors: [{ path: "", message: "AI 输出内容为空", type: "required" }],
+        errors: [{ path: '', message: 'AI 输出内容为空', type: 'required' }],
         warnings: [],
         originalContent: content,
       };
@@ -82,11 +79,11 @@ export class AIOutputValidator {
         parseSuccess: false,
         errors: [
           {
-            path: "",
-            message: "无法从 AI 输出中提取有效的 JSON Schema",
-            type: "format",
+            path: '',
+            message: '无法从 AI 输出中提取有效的 JSON Schema',
+            type: 'format',
             value: content.slice(0, 200),
-            suggestion: "请确保 AI 返回包含 A2UI Schema 的 JSON 格式数据",
+            suggestion: '请确保 AI 返回包含 A2UI Schema 的 JSON 格式数据',
           },
         ],
         warnings: [],
@@ -99,17 +96,17 @@ export class AIOutputValidator {
     try {
       parsedData = JSON.parse(extractionResult.json);
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : "Unknown error";
+      const errorMessage = e instanceof Error ? e.message : 'Unknown error';
       return {
         valid: false,
         parseSuccess: false,
         errors: [
           {
-            path: "",
+            path: '',
             message: `JSON 解析失败: ${errorMessage}`,
-            type: "format",
+            type: 'format',
             value: extractionResult.json.slice(0, 200),
-            suggestion: "检查 JSON 语法，确保没有尾随逗号、缺少引号等问题",
+            suggestion: '检查 JSON 语法，确保没有尾随逗号、缺少引号等问题',
           },
         ],
         warnings: [],
@@ -161,7 +158,7 @@ export class AIOutputValidator {
       }
     }
 
-    return { json: null, pattern: "" };
+    return { json: null, pattern: '' };
   }
 
   /**
@@ -171,16 +168,16 @@ export class AIOutputValidator {
     return (
       jsonStr
         // 移除尾随逗号
-        .replace(/,\s*([}\]])/g, "$1")
+        .replace(/,\s*([}\]])/g, '$1')
         // 移除单行注释
-        .replace(/\/\/.*$/gm, "")
+        .replace(/\/\/.*$/gm, '')
         // 移除多行注释
-        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\*[\s\S]*?\*\//g, '')
         // 修复单引号（尝试转换为双引号）
         .replace(/'/g, '"')
         // 移除不可见字符（控制字符是故意用于清理不可见字符）
         // eslint-disable-next-line no-control-regex
-        .replace(/[\u0000-\u001F\u007F-\u009F]/g, "")
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, '')
         // 修复多余的空白
         .trim()
     );
@@ -194,8 +191,7 @@ export class AIOutputValidator {
     normalized?: string;
     suggestion?: string;
   } {
-    const whitelist =
-      this.options.allowedComponentTypes || ALLOWED_COMPONENT_TYPES;
+    const whitelist = this.options.allowedComponentTypes || ALLOWED_COMPONENT_TYPES;
 
     if (whitelist.includes(type)) {
       return { valid: true, normalized: type };
@@ -216,7 +212,7 @@ export class AIOutputValidator {
       valid: false,
       suggestion:
         similarTypes.length > 0
-          ? `未找到组件类型 "${type}"，您是否想使用: ${similarTypes.join(", ")}?`
+          ? `未找到组件类型 "${type}"，您是否想使用: ${similarTypes.join(', ')}?`
           : `组件类型 "${type}" 未注册，请使用有效的组件类型`,
     };
   }
@@ -225,8 +221,7 @@ export class AIOutputValidator {
    * 寻找相似的组件类型
    */
   private findSimilarComponentTypes(type: string): string[] {
-    const whitelist =
-      this.options.allowedComponentTypes || ALLOWED_COMPONENT_TYPES;
+    const whitelist = this.options.allowedComponentTypes || ALLOWED_COMPONENT_TYPES;
     const lowerType = type.toLowerCase();
 
     return whitelist
@@ -303,10 +298,7 @@ export function extractAndValidateSchema(
 /**
  * 快速检查 AI 输出是否包含有效的 Schema
  */
-export function hasValidSchema(
-  content: string,
-  options?: Partial<ValidationOptions>,
-): boolean {
+export function hasValidSchema(content: string, options?: Partial<ValidationOptions>): boolean {
   const result = validateAIOutput(content, options);
   return result.valid && result.parseSuccess;
 }
@@ -321,16 +313,16 @@ export function safeParseAIJSON<T = unknown>(
   const validator = new AIOutputValidator(options);
 
   // 尝试提取 JSON
-  const extractionResult = validator["extractJSON"](content);
+  const extractionResult = validator['extractJSON'](content);
 
   if (!extractionResult.json) {
     return {
       data: null,
       errors: [
         {
-          path: "",
-          message: "无法从内容中提取 JSON",
-          type: "format",
+          path: '',
+          message: '无法从内容中提取 JSON',
+          type: 'format',
         },
       ],
     };
@@ -340,14 +332,14 @@ export function safeParseAIJSON<T = unknown>(
     const data = JSON.parse(extractionResult.json) as T;
     return { data, errors: [] };
   } catch (e) {
-    const errorMessage = e instanceof Error ? e.message : "Unknown error";
+    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
     return {
       data: null,
       errors: [
         {
-          path: "",
+          path: '',
           message: `JSON 解析失败: ${errorMessage}`,
-          type: "format",
+          type: 'format',
         },
       ],
     };

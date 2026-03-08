@@ -1,10 +1,10 @@
-import { componentRegistry } from "./index";
+import { componentRegistry } from './index';
 
 /**
  * 获取注册表中所有支持的组件类型名称
  */
 export function getSupportedComponentTypes(): string[] {
-  return Object.keys(componentRegistry).filter((type) => type !== "Div"); // 排除原始 HTML 标签
+  return Object.keys(componentRegistry).filter((type) => type !== 'Div'); // 排除原始 HTML 标签
 }
 
 /**
@@ -12,5 +12,5 @@ export function getSupportedComponentTypes(): string[] {
  */
 export function getComponentListString(): string {
   const types = getSupportedComponentTypes();
-  return types.join(", ");
+  return types.join(', ');
 }

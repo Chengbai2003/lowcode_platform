@@ -1,10 +1,10 @@
-import type { A2UISchema } from "../../../../types";
+import type { A2UISchema } from '../../../../types';
 
 // AI模型配置接口
 export interface AIModelConfig {
   id: string;
   name: string;
-  provider: "openai" | "anthropic" | "ollama" | "mock";
+  provider: 'openai' | 'anthropic' | 'ollama' | 'mock';
   apiKey?: string;
   baseURL?: string;
   model: string;
@@ -57,14 +57,14 @@ export class AIServiceError extends Error {
   constructor(
     message: string,
     public code:
-      | "API_KEY_MISSING"
-      | "MODEL_NOT_AVAILABLE"
-      | "RATE_LIMIT"
-      | "NETWORK_ERROR"
-      | "INVALID_RESPONSE",
+      | 'API_KEY_MISSING'
+      | 'MODEL_NOT_AVAILABLE'
+      | 'RATE_LIMIT'
+      | 'NETWORK_ERROR'
+      | 'INVALID_RESPONSE',
     public details?: any,
   ) {
     super(message);
-    this.name = "AIServiceError";
+    this.name = 'AIServiceError';
   }
 }

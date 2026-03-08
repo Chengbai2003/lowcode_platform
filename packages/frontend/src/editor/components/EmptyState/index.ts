@@ -5,9 +5,5 @@ export {
   NoComponentsEmptyState,
   NoResultsEmptyState,
   ErrorEmptyState,
-} from "./EmptyState";
-export type {
-  EmptyStateProps,
-  EmptyStateVariant,
-  EmptyStateAction,
-} from "./EmptyState";
+} from './EmptyState';
+export type { EmptyStateProps, EmptyStateVariant, EmptyStateAction } from './EmptyState';

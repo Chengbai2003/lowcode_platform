@@ -12,7 +12,7 @@
  * { type: "customScript", code: "return data.items.filter(x => x.active > 0)" }
  */
 export type CustomScriptAction = {
-  type: "customScript";
+  type: 'customScript';
   /** JavaScript 代码（表达式或语句块） */
   code: string;
   /** 执行超时时间(ms)，默认 10000 */

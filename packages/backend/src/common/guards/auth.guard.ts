@@ -16,14 +16,11 @@ export class AuthGuard implements CanActivate {
   constructor(private configService: ConfigService) {
     // 从环境变量读取 API_SECRET，提供默认值
     this.apiSecret =
-      this.configService.get<string>('API_SECRET') ||
-      'dev-secret-token-change-in-production';
+      this.configService.get<string>('API_SECRET') || 'dev-secret-token-change-in-production';
 
     // 开发环境下记录警告，提醒用户生产环境应修改 token
     if (this.apiSecret === 'dev-secret-token-change-in-production') {
-      this.logger.warn(
-        'Using default API_SECRET. Please change this in production for security.'
-      );
+      this.logger.warn('Using default API_SECRET. Please change this in production for security.');
     }
   }
 
@@ -34,7 +31,7 @@ export class AuthGuard implements CanActivate {
     if (!token) {
       this.logger.warn(`Missing Authorization header from ${request.ip}`);
       throw new UnauthorizedException(
-        'Authentication token is missing. Format: Authorization: Bearer <token>'
+        'Authentication token is missing. Format: Authorization: Bearer <token>',
       );
     }
 

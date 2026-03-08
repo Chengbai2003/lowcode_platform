@@ -1,6 +1,6 @@
-import { create } from "zustand";
-import { devtools } from "zustand/middleware";
-import React from "react";
+import { create } from 'zustand';
+import { devtools } from 'zustand/middleware';
+import React from 'react';
 
 // ============================================
 // Command Interface - 命令模式核心接口
@@ -36,10 +36,7 @@ export interface CommandOptions {
 /**
  * 命令工厂函数类型
  */
-export type CommandFactory<T = unknown> = (
-  params: T,
-  options: CommandOptions,
-) => Command;
+export type CommandFactory<T = unknown> = (params: T, options: CommandOptions) => Command;
 
 // ============================================
 // History Store - 历史记录管理
@@ -141,7 +138,7 @@ export const useHistoryStore = create<HistoryStore>()(
           });
         } catch (error) {
           set({ isExecuting: false });
-          console.error("Command execution failed:", error);
+          console.error('Command execution failed:', error);
           throw error;
         }
       },
@@ -171,7 +168,7 @@ export const useHistoryStore = create<HistoryStore>()(
           return command;
         } catch (error) {
           set({ isExecuting: false });
-          console.error("Command undo failed:", error);
+          console.error('Command undo failed:', error);
           throw error;
         }
       },
@@ -201,7 +198,7 @@ export const useHistoryStore = create<HistoryStore>()(
           return command;
         } catch (error) {
           set({ isExecuting: false });
-          console.error("Command redo failed:", error);
+          console.error('Command redo failed:', error);
           throw error;
         }
       },
@@ -240,7 +237,7 @@ export const useHistoryStore = create<HistoryStore>()(
         return count ? history.slice(0, count) : history;
       },
     }),
-    { name: "history-store" },
+    { name: 'history-store' },
   ),
 );
 
@@ -265,20 +262,17 @@ export const useCanRedo = () =>
 /**
  * 获取撤销栈大小
  */
-export const useUndoStackSize = () =>
-  useHistoryStore((state) => state.undoStack.length);
+export const useUndoStackSize = () => useHistoryStore((state) => state.undoStack.length);
 
 /**
  * 获取重做栈大小
  */
-export const useRedoStackSize = () =>
-  useHistoryStore((state) => state.redoStack.length);
+export const useRedoStackSize = () => useHistoryStore((state) => state.redoStack.length);
 
 /**
  * 获取执行状态
  */
-export const useIsExecuting = () =>
-  useHistoryStore((state) => state.isExecuting);
+export const useIsExecuting = () => useHistoryStore((state) => state.isExecuting);
 
 /**
  * 获取撤销历史（memoized）

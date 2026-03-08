@@ -28,7 +28,7 @@ export interface GenerateSchemaRequest {
   /** 可选的补充描述 */
   description?: string;
   /** 当前的 Schema 上下文（用于修改/优化） */
-  currentSchema?: import("./schema").A2UISchema;
+  currentSchema?: import('./schema').A2UISchema;
   /** 模型提供商 (OpenAI / Anthropic / Ollama) */
   provider?: string;
   /** 模型 ID */
@@ -38,7 +38,7 @@ export interface GenerateSchemaRequest {
 /** AI 生成 Schema 的响应数据 */
 export interface GenerateSchemaResponse {
   /** 生成的 A2UI Schema */
-  schema: import("./schema").A2UISchema;
+  schema: import('./schema').A2UISchema;
   /** AI 对生成内容的说明 */
   explanation?: string;
   /** 优化建议 */
@@ -62,8 +62,8 @@ export interface AIModelInfo {
 export interface SaveProjectRequest {
   name: string;
   description?: string;
-  schema: import("./schema").A2UISchema;
-  chatHistory?: import("./repository").ChatMessage[];
+  schema: import('./schema').A2UISchema;
+  chatHistory?: import('./repository').ChatMessage[];
 }
 
 /** 项目列表项（简略信息） */

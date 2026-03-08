@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
-import { renderHook, act } from "@testing-library/react";
-import { useSelectionStore, useEditorStore } from "../editor-store";
+import { describe, it, expect, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
+import { useSelectionStore, useEditorStore } from '../editor-store';
 
-describe("useSelectionStore", () => {
+describe('useSelectionStore', () => {
   beforeEach(() => {
     // Reset store state
     useSelectionStore.setState({
@@ -12,7 +12,7 @@ describe("useSelectionStore", () => {
     });
   });
 
-  it("should have initial state", () => {
+  it('should have initial state', () => {
     const { result } = renderHook(() => useSelectionStore());
 
     expect(result.current.selectedId).toBeNull();
@@ -20,25 +20,25 @@ describe("useSelectionStore", () => {
     expect(result.current.selectedIds).toEqual([]);
   });
 
-  it("should select component", () => {
+  it('should select component', () => {
     const { result } = renderHook(() => useSelectionStore());
 
     act(() => {
-      result.current.selectComponent("button-1");
+      result.current.selectComponent('button-1');
     });
 
-    expect(result.current.selectedId).toBe("button-1");
-    expect(result.current.selectedIds).toEqual(["button-1"]);
+    expect(result.current.selectedId).toBe('button-1');
+    expect(result.current.selectedIds).toEqual(['button-1']);
   });
 
-  it("should clear selection", () => {
+  it('should clear selection', () => {
     const { result } = renderHook(() => useSelectionStore());
 
     act(() => {
-      result.current.selectComponent("button-1");
+      result.current.selectComponent('button-1');
     });
 
-    expect(result.current.selectedId).toBe("button-1");
+    expect(result.current.selectedId).toBe('button-1');
 
     act(() => {
       result.current.clearSelection();
@@ -48,41 +48,41 @@ describe("useSelectionStore", () => {
     expect(result.current.selectedIds).toEqual([]);
   });
 
-  it("should set hover", () => {
+  it('should set hover', () => {
     const { result } = renderHook(() => useSelectionStore());
 
     act(() => {
-      result.current.setHover("container-1");
+      result.current.setHover('container-1');
     });
 
-    expect(result.current.hoverId).toBe("container-1");
+    expect(result.current.hoverId).toBe('container-1');
   });
 
-  it("should add to selection", () => {
+  it('should add to selection', () => {
     const { result } = renderHook(() => useSelectionStore());
 
     act(() => {
-      result.current.selectComponent("button-1");
-      result.current.addToSelection("button-2");
+      result.current.selectComponent('button-1');
+      result.current.addToSelection('button-2');
     });
 
-    expect(result.current.selectedIds).toEqual(["button-1", "button-2"]);
+    expect(result.current.selectedIds).toEqual(['button-1', 'button-2']);
   });
 
-  it("should remove from selection", () => {
+  it('should remove from selection', () => {
     const { result } = renderHook(() => useSelectionStore());
 
     act(() => {
-      result.current.selectComponent("button-1");
-      result.current.addToSelection("button-2");
-      result.current.removeFromSelection("button-1");
+      result.current.selectComponent('button-1');
+      result.current.addToSelection('button-2');
+      result.current.removeFromSelection('button-1');
     });
 
-    expect(result.current.selectedIds).toEqual(["button-2"]);
+    expect(result.current.selectedIds).toEqual(['button-2']);
   });
 });
 
-describe("useEditorStore", () => {
+describe('useEditorStore', () => {
   beforeEach(() => {
     // Reset store state
     useEditorStore.setState({
@@ -95,7 +95,7 @@ describe("useEditorStore", () => {
     });
   });
 
-  it("should have initial state", () => {
+  it('should have initial state', () => {
     const { result } = renderHook(() => useEditorStore());
 
     expect(result.current.currentSessionId).toBeNull();
@@ -104,7 +104,7 @@ describe("useEditorStore", () => {
     expect(result.current.isFloatingIslandOpen).toBe(false);
   });
 
-  it("should toggle floating island", () => {
+  it('should toggle floating island', () => {
     const { result } = renderHook(() => useEditorStore());
 
     expect(result.current.isFloatingIslandOpen).toBe(false);
@@ -122,7 +122,7 @@ describe("useEditorStore", () => {
     expect(result.current.isFloatingIslandOpen).toBe(false);
   });
 
-  it("should set floating island open", () => {
+  it('should set floating island open', () => {
     const { result } = renderHook(() => useEditorStore());
 
     act(() => {
@@ -132,7 +132,7 @@ describe("useEditorStore", () => {
     expect(result.current.isFloatingIslandOpen).toBe(true);
   });
 
-  it("should toggle history drawer", () => {
+  it('should toggle history drawer', () => {
     const { result } = renderHook(() => useEditorStore());
 
     expect(result.current.isHistoryDrawerOpen).toBe(false);
@@ -144,7 +144,7 @@ describe("useEditorStore", () => {
     expect(result.current.isHistoryDrawerOpen).toBe(true);
   });
 
-  it("should set loading state", () => {
+  it('should set loading state', () => {
     const { result } = renderHook(() => useEditorStore());
 
     act(() => {
@@ -154,26 +154,26 @@ describe("useEditorStore", () => {
     expect(result.current.isLoading).toBe(true);
   });
 
-  it("should set error state", () => {
+  it('should set error state', () => {
     const { result } = renderHook(() => useEditorStore());
 
     act(() => {
-      result.current.setError("Test error");
+      result.current.setError('Test error');
     });
 
-    expect(result.current.error).toBe("Test error");
+    expect(result.current.error).toBe('Test error');
   });
 
-  it("should add session", () => {
+  it('should add session', () => {
     const { result } = renderHook(() => useEditorStore());
 
     const session = {
-      id: "session-1",
-      title: "Test Session",
+      id: 'session-1',
+      title: 'Test Session',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messageCount: 0,
-      lastMessageContent: "",
+      lastMessageContent: '',
       lastMessageTimestamp: 0,
     };
 
@@ -182,19 +182,19 @@ describe("useEditorStore", () => {
     });
 
     expect(result.current.sessions).toHaveLength(1);
-    expect(result.current.sessions[0].title).toBe("Test Session");
+    expect(result.current.sessions[0].title).toBe('Test Session');
   });
 
-  it("should remove session", () => {
+  it('should remove session', () => {
     const { result } = renderHook(() => useEditorStore());
 
     const session = {
-      id: "session-1",
-      title: "Test Session",
+      id: 'session-1',
+      title: 'Test Session',
       createdAt: Date.now(),
       updatedAt: Date.now(),
       messageCount: 0,
-      lastMessageContent: "",
+      lastMessageContent: '',
       lastMessageTimestamp: 0,
     };
 
@@ -205,7 +205,7 @@ describe("useEditorStore", () => {
     expect(result.current.sessions).toHaveLength(1);
 
     act(() => {
-      result.current.removeSession("session-1");
+      result.current.removeSession('session-1');
     });
 
     expect(result.current.sessions).toHaveLength(0);

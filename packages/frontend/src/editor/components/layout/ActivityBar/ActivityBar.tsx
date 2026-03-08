@@ -1,23 +1,20 @@
-import React from "react";
-import { Layout } from "antd";
-import styles from "./ActivityBar.module.scss";
+import React from 'react';
+import { Layout } from 'antd';
+import styles from './ActivityBar.module.scss';
 
 const { Sider } = Layout;
 
 interface ActivityBarProps {
-  activeTab: "json" | "visual" | "code";
-  setActiveTab: (tab: "json" | "visual" | "code") => void;
+  activeTab: 'json' | 'visual' | 'code';
+  setActiveTab: (tab: 'json' | 'visual' | 'code') => void;
 }
 
-export const ActivityBar: React.FC<ActivityBarProps> = ({
-  activeTab,
-  setActiveTab,
-}) => {
+export const ActivityBar: React.FC<ActivityBarProps> = ({ activeTab, setActiveTab }) => {
   return (
     <Sider width={48} className={styles.activityBar}>
       <div
-        className={`${styles.tabItem} ${activeTab === "json" ? styles.active : ""}`}
-        onClick={() => setActiveTab("json")}
+        className={`${styles.tabItem} ${activeTab === 'json' ? styles.active : ''}`}
+        onClick={() => setActiveTab('json')}
         title="Schema 编辑"
       >
         {/* JSON Icon */}
@@ -33,8 +30,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
       </div>
 
       <div
-        className={`${styles.tabItem} ${activeTab === "visual" ? styles.active : ""}`}
-        onClick={() => setActiveTab("visual")}
+        className={`${styles.tabItem} ${activeTab === 'visual' ? styles.active : ''}`}
+        onClick={() => setActiveTab('visual')}
         title="可视化编辑"
       >
         {/* Visual Icon (Dashboard/Layout) */}
@@ -50,8 +47,8 @@ export const ActivityBar: React.FC<ActivityBarProps> = ({
       </div>
 
       <div
-        className={`${styles.tabItem} ${activeTab === "code" ? styles.active : ""}`}
-        onClick={() => setActiveTab("code")}
+        className={`${styles.tabItem} ${activeTab === 'code' ? styles.active : ''}`}
+        onClick={() => setActiveTab('code')}
         title="查看生成代码"
       >
         {/* Code Icon (React/Tag) */}

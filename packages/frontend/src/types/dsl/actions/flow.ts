@@ -1,5 +1,5 @@
-import type { Action } from "../action-union";
-import type { Value } from "../context";
+import type { Action } from '../action-union';
+import type { Value } from '../context';
 
 /**
  * 流程控制 Actions
@@ -9,7 +9,7 @@ import type { Value } from "../context";
  * 条件分支 Action
  */
 export type IfAction = {
-  type: "if";
+  type: 'if';
   /** 条件表达式 */
   condition: Value;
   /** 条件为真时执行 */
@@ -25,7 +25,7 @@ export type IfAction = {
  * { type: "loop", over: "{{items}}", itemVar: "item", actions: [...] }
  */
 export type LoopAction = {
-  type: "loop";
+  type: 'loop';
   /** 要遍历的数组 */
   over: Value;
   /** 当前元素变量名 */

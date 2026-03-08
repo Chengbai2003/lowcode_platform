@@ -1,14 +1,14 @@
-import React from "react";
-import { Layout } from "antd";
-import Editor from "@monaco-editor/react";
-import { ComponentTree } from "../TreeView/ComponentTree";
-import type { A2UISchema } from "../../types";
-import styles from "./EditorPane.module.scss";
+import React from 'react';
+import { Layout } from 'antd';
+import Editor from '@monaco-editor/react';
+import { ComponentTree } from '../TreeView/ComponentTree';
+import type { A2UISchema } from '../../types';
+import styles from './EditorPane.module.scss';
 
 const { Sider } = Layout;
 
 interface EditorPaneProps {
-  activeTab: "json" | "visual" | "code";
+  activeTab: 'json' | 'visual' | 'code';
   width: number | string;
   json: string;
   schema: A2UISchema | null;
@@ -41,16 +41,16 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
       <div className={styles.editorPaneContent}>
         <div className={styles.editorHeader}>
           <span>
-            {activeTab === "json"
-              ? "JSON SCHEMA"
-              : activeTab === "code"
-                ? "REACT CODE"
-                : "VISUAL EDITOR"}
+            {activeTab === 'json'
+              ? 'JSON SCHEMA'
+              : activeTab === 'code'
+                ? 'REACT CODE'
+                : 'VISUAL EDITOR'}
           </span>
         </div>
 
         <div className={styles.editorBody}>
-          {activeTab === "json" ? (
+          {activeTab === 'json' ? (
             <Editor
               key="json"
               height="100%"
@@ -61,8 +61,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
               options={{
                 minimap: { enabled: false },
                 fontSize: 14,
-                lineNumbers: showLineNumbers ? "on" : "off",
-                wordWrap: wordWrap ? "on" : "off",
+                lineNumbers: showLineNumbers ? 'on' : 'off',
+                wordWrap: wordWrap ? 'on' : 'off',
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
                 tabSize: 2,
@@ -70,7 +70,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 formatOnType: true,
               }}
             />
-          ) : activeTab === "code" ? (
+          ) : activeTab === 'code' ? (
             <Editor
               key="code"
               height="100%"
@@ -81,14 +81,14 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
                 readOnly: true,
                 minimap: { enabled: false },
                 fontSize: 14,
-                lineNumbers: showLineNumbers ? "on" : "off",
-                wordWrap: wordWrap ? "on" : "off",
+                lineNumbers: showLineNumbers ? 'on' : 'off',
+                wordWrap: wordWrap ? 'on' : 'off',
                 scrollBeyondLastLine: false,
                 automaticLayout: true,
                 tabSize: 2,
               }}
             />
-          ) : activeTab === "visual" ? (
+          ) : activeTab === 'visual' ? (
             <div className={styles.visualEditorContainer}>
               <ComponentTree
                 schema={schema}

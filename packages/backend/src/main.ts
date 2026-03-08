@@ -3,32 +3,32 @@
  * NestJS + AI Provider 架构
  */
 
-import { NestFactory } from "@nestjs/core";
-import { ValidationPipe } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { AppModule } from "./app.module";
-import { HttpExceptionFilter } from "./common/filters/http-exception.filter";
-import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
-import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
 
   // 获取配置
-  const port = configService.get<number>("app.port", 3000);
-  const env = configService.get<string>("app.env", "development");
-  const corsEnabled = configService.get<boolean>("app.cors", true);
+  const port = configService.get<number>('app.port', 3000);
+  const env = configService.get<string>('app.env', 'development');
+  const corsEnabled = configService.get<boolean>('app.cors', true);
 
   // 启用CORS
   if (corsEnabled) {
-    const origin = configService.get("app.corsOrigin");
-    if (!origin && env === "production") {
-      console.warn("⚠️  CORS_ORIGIN 未配置，生产环境将拒绝所有跨域请求！");
+    const origin = configService.get('app.corsOrigin');
+    if (!origin && env === 'production') {
+      console.warn('⚠️  CORS_ORIGIN 未配置，生产环境将拒绝所有跨域请求！');
     }
     app.enableCors({
       origin: origin || false, // false = 禁止跨域
-      methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+      methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
       credentials: true,
     });
   }
@@ -55,7 +55,7 @@ async function bootstrap() {
   );
 
   // 设置全局前缀
-  app.setGlobalPrefix("api/v1");
+  app.setGlobalPrefix('api/v1');
 
   // 启动服务
   await app.listen(port);
@@ -66,13 +66,13 @@ async function bootstrap() {
   ╠════════════════════════════════════════════════════════════╣
   ║  环境: ${env.padEnd(47)}║
   ║  端口: ${port.toString().padEnd(47)}║
-  ║  API地址: http://localhost:${port}/api/v1${"".padEnd(26)}║
+  ║  API地址: http://localhost:${port}/api/v1${''.padEnd(26)}║
   ╚════════════════════════════════════════════════════════════╝
   `);
 }
 
 // 启动应用
 bootstrap().catch((error) => {
-  console.error("启动失败:", error);
+  console.error('启动失败:', error);
   process.exit(1);
 });

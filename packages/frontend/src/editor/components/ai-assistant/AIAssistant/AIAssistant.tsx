@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Button, Input, Divider, Tag, Tooltip, message, Popover } from "antd";
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Button, Input, Divider, Tag, Tooltip, message, Popover } from 'antd';
 import {
   SendOutlined,
   BulbOutlined,
@@ -7,24 +7,24 @@ import {
   CheckCircleOutlined,
   SettingOutlined,
   DatabaseOutlined,
-} from "@ant-design/icons";
-import type { A2UISchema } from "../../../../types";
-import { validateAndAutoFix } from "../../../../renderer";
-import { componentRegistry } from "../../../../components";
-import { aiApi } from "../api/ai-api";
-import { serverAIService } from "../api/ServerAIService";
-import { AIConfig } from "../AIConfig/AIConfig";
-import type { AIModelConfig } from "../types/ai-types";
-import styles from "./AIAssistant.module.scss";
+} from '@ant-design/icons';
+import type { A2UISchema } from '../../../../types';
+import { validateAndAutoFix } from '../../../../renderer';
+import { componentRegistry } from '../../../../components';
+import { aiApi } from '../api/ai-api';
+import { serverAIService } from '../api/ServerAIService';
+import { AIConfig } from '../AIConfig/AIConfig';
+import type { AIModelConfig } from '../types/ai-types';
+import styles from './AIAssistant.module.scss';
 
 interface AIMessage {
   id: string;
-  type: "user" | "ai" | "system";
+  type: 'user' | 'ai' | 'system';
   content: string;
   timestamp: Date;
   schema?: A2UISchema;
   suggestions?: string[];
-  status?: "loading" | "success" | "error";
+  status?: 'loading' | 'success' | 'error';
   modelUsed?: string;
 }
 
@@ -40,10 +40,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   onError,
 }) => {
   const [messages, setMessages] = useState<AIMessage[]>([]);
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [configVisible, setConfigVisible] = useState(false);
-  const [currentModel, setCurrentModel] = useState<string>("mock");
+  const [currentModel, setCurrentModel] = useState<string>('mock');
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentModelRef = useRef(currentModel);
@@ -61,7 +61,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
       // 设置当前选中模型
       const currentModelValue = currentModelRef.current; // 使用 ref 获取最新值
-      if (currentModelValue === "mock") {
+      if (currentModelValue === 'mock') {
         // 仅当当前未选择有效模型时才自动选择
         const defaultModel =
           allModels.find((m: AIModelConfig) => m.isDefault && m.isAvailable) ||
@@ -71,13 +71,13 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         }
       }
     } catch (error) {
-      console.error("Failed to load models:", error);
+      console.error('Failed to load models:', error);
     }
   }, []);
 
   // 滚动到最新消息
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
@@ -89,10 +89,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     loadModels();
     setMessages([
       {
-        id: "welcome",
-        type: "system",
+        id: 'welcome',
+        type: 'system',
         content:
-          "🤖 AI助手已就绪！\n\n我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量",
+          '🤖 AI助手已就绪！\n\n我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量',
         timestamp: new Date(),
       },
     ]);
@@ -113,30 +113,30 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       try {
         await loadModels();
       } catch (error) {
-        message.error("加载模型列表失败，请重试");
+        message.error('加载模型列表失败，请重试');
         return;
       }
     }
 
     const userMessage: AIMessage = {
       id: Date.now().toString(),
-      type: "user",
+      type: 'user',
       content: inputValue,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInputValue("");
+    setInputValue('');
     setLoading(true);
 
     // 添加 AI 消息占位符
     const aiMessageId = `ai-${Date.now()}`;
     const aiMessage: AIMessage = {
       id: aiMessageId,
-      type: "ai",
-      content: "",
+      type: 'ai',
+      content: '',
       timestamp: new Date(),
-      status: "loading",
+      status: 'loading',
       modelUsed: currentModel,
     };
 
@@ -144,7 +144,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
     try {
       const aiService = serverAIService;
-      let fullContent = "";
+      let fullContent = '';
 
       // 准备 Prompt
       let prompt = inputValue;
@@ -152,9 +152,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       const lowerInput = inputValue.toLowerCase();
 
       if (
-        lowerInput.includes("分析") ||
-        lowerInput.includes("analyze") ||
-        lowerInput.includes("检查")
+        lowerInput.includes('分析') ||
+        lowerInput.includes('analyze') ||
+        lowerInput.includes('检查')
       ) {
         if (currentSchema) {
           prompt = `请分析以下页面结构并提供改进建议：\n\`\`\`json\n${JSON.stringify(currentSchema, null, 2)}\n\`\`\`\n\n用户关注点：${inputValue}`;
@@ -162,9 +162,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           // 没有 schema 时直接回答
         }
       } else if (
-        lowerInput.includes("优化") ||
-        lowerInput.includes("optimize") ||
-        lowerInput.includes("改进")
+        lowerInput.includes('优化') ||
+        lowerInput.includes('optimize') ||
+        lowerInput.includes('改进')
       ) {
         if (currentSchema) {
           prompt = `请优化以下页面结构，并返回优化后的 Schema（JSON格式）。\n\`\`\`json\n${JSON.stringify(currentSchema, null, 2)}\n\`\`\`\n\n优化需求：${inputValue}`;
@@ -187,7 +187,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                   return {
                     ...msg,
                     content: fullContent,
-                    status: "success", // 收到数据就开始标记为成功/进行中
+                    status: 'success', // 收到数据就开始标记为成功/进行中
                   };
                 }
                 return msg;
@@ -208,9 +208,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         fullContent = response.content;
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.id === aiMessageId
-              ? { ...msg, content: fullContent, status: "success" }
-              : msg,
+            msg.id === aiMessageId ? { ...msg, content: fullContent, status: 'success' } : msg,
           ),
         );
       }
@@ -219,8 +217,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       let aiSchema: A2UISchema | undefined;
       try {
         const jsonMatch =
-          fullContent.match(/```json\n([\s\S]*?)\n```/) ||
-          fullContent.match(/\{[\s\S]*\}/);
+          fullContent.match(/```json\n([\s\S]*?)\n```/) || fullContent.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const jsonStr = jsonMatch[1] || jsonMatch[0];
           aiSchema = JSON.parse(jsonStr);
@@ -236,7 +233,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
             return {
               ...msg,
               schema: aiSchema,
-              status: "success",
+              status: 'success',
             };
           }
           return msg;
@@ -244,7 +241,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       );
 
       if (aiSchema) {
-        message.success("Schema 生成完毕！");
+        message.success('Schema 生成完毕！');
       }
     } catch (error: any) {
       setMessages((prev) =>
@@ -252,26 +249,18 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           if (msg.id === aiMessageId) {
             return {
               ...msg,
-              content:
-                msg.content + `\n\n[ERROR: ${error.message || "请求失败"}]`,
-              status: "error",
+              content: msg.content + `\n\n[ERROR: ${error.message || '请求失败'}]`,
+              status: 'error',
             };
           }
           return msg;
         }),
       );
-      onError?.(error.message || "AI服务暂时不可用");
+      onError?.(error.message || 'AI服务暂时不可用');
     } finally {
       setLoading(false);
     }
-  }, [
-    inputValue,
-    loading,
-    currentSchema,
-    onSchemaUpdate,
-    onError,
-    currentModel,
-  ]);
+  }, [inputValue, loading, currentSchema, onSchemaUpdate, onError, currentModel]);
 
   const applySchema = useCallback(
     (schema: A2UISchema) => {
@@ -279,19 +268,19 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       const result = validateAndAutoFix(schema, whitelist);
 
       if (result.fixes.length > 0) {
-        console.log("AI Schema Auto-fixed:", result.fixes);
+        console.log('AI Schema Auto-fixed:', result.fixes);
         message.info(`已自动修复 ${result.fixes.length} 处 AI 生成错误`);
       }
 
       if (!result.success) {
         message.error(
-          `AI 生成的 Schema 不合法: ${result.error?.issues?.[0]?.message || "结构体错误"}`,
+          `AI 生成的 Schema 不合法: ${result.error?.issues?.[0]?.message || '结构体错误'}`,
         );
         return;
       }
       if (result.data) {
         onSchemaUpdate?.(result.data);
-        message.success("Schema已应用到编辑器！");
+        message.success('Schema已应用到编辑器！');
       }
     },
     [onSchemaUpdate],
@@ -299,7 +288,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
   const getCurrentModelName = () => {
     const model = models.find((m) => m.id === currentModel);
-    return model?.name || "Unknown";
+    return model?.name || 'Unknown';
   };
 
   // 模型选择下拉框内容
@@ -309,7 +298,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       {models.map((model) => (
         <div
           key={model.id}
-          className={`${styles.modelItem} ${currentModel === model.id ? styles.selectedModel : ""}`}
+          className={`${styles.modelItem} ${currentModel === model.id ? styles.selectedModel : ''}`}
           onClick={() => {
             setCurrentModel(model.id);
             // Removed setDefaultModel call as it was local specific
@@ -317,12 +306,8 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         >
           <span className={styles.modelName}>{model.name}</span>
           <div className={styles.modelStatus}>
-            {model.isAvailable && (
-              <span className={styles.availableIndicator}>✓</span>
-            )}
-            {model.isDefault && (
-              <span className={styles.defaultLabel}>默认</span>
-            )}
+            {model.isAvailable && <span className={styles.availableIndicator}>✓</span>}
+            {model.isDefault && <span className={styles.defaultLabel}>默认</span>}
           </div>
         </div>
       ))}
@@ -352,21 +337,17 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
               key={message.id}
               className={`${styles.message} ${styles[`message${message.type.charAt(0).toUpperCase() + message.type.slice(1)}`]}`}
             >
-              {message.status === "loading" ? (
+              {message.status === 'loading' ? (
                 <LoadingOutlined className={styles.loadingIcon} />
-              ) : message.status === "error" ? (
-                <span className={styles.errorMessage}>
-                  ❌ {message.content}
-                </span>
+              ) : message.status === 'error' ? (
+                <span className={styles.errorMessage}>❌ {message.content}</span>
               ) : (
                 <div className={styles.messageContent}>
                   <div className={styles.messageText}>{message.content}</div>
 
                   {message.modelUsed && (
                     <div className={styles.modelIndicator}>
-                      <span className={styles.modelLabel}>
-                        模型: {message.modelUsed}
-                      </span>
+                      <span className={styles.modelLabel}>模型: {message.modelUsed}</span>
                     </div>
                   )}
 
@@ -395,9 +376,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
                   )}
                 </div>
               )}
-              <div className={styles.messageTime}>
-                {message.timestamp.toLocaleTimeString()}
-              </div>
+              <div className={styles.messageTime}>{message.timestamp.toLocaleTimeString()}</div>
             </div>
           ))}
           <div ref={messagesEndRef} />
@@ -408,9 +387,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         <div className={styles.inputArea}>
           <Input.TextArea
             value={inputValue}
-            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-              setInputValue(e.target.value)
-            }
+            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}
             placeholder={`使用 ${getCurrentModelName()} 生成UI... 描述你想要的页面或让AI优化现有设计`}
             autoSize={{ minRows: 2, maxRows: 4 }}
             onPressEnter={(e: React.KeyboardEvent<HTMLTextAreaElement>) => {

@@ -3,8 +3,8 @@
  * if, loop
  */
 
-import type { ActionHandler, ExecutionContext } from "../../../types";
-import { resolveValue } from "../parser";
+import type { ActionHandler, ExecutionContext } from '../../../types';
+import { resolveValue } from '../parser';
 
 /**
  * 条件分支
@@ -25,7 +25,7 @@ export const ifAction: ActionHandler = async (action, context, executor) => {
     }
   }
 
-  return { condition: resolvedCondition, branch: isTrue ? "then" : "else" };
+  return { condition: resolvedCondition, branch: isTrue ? 'then' : 'else' };
 };
 
 /**
@@ -37,9 +37,7 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
   const resolvedOver = resolveValue(over, context);
 
   if (!Array.isArray(resolvedOver)) {
-    throw new Error(
-      `loop: 'over' must be an array, got ${typeof resolvedOver}`,
-    );
+    throw new Error(`loop: 'over' must be an array, got ${typeof resolvedOver}`);
   }
 
   if (!actions || actions.length === 0) {

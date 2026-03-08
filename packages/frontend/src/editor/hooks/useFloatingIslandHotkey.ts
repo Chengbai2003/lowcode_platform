@@ -1,5 +1,5 @@
-import { useEffect, useCallback } from "react";
-import { useEditorStore } from "../store";
+import { useEffect, useCallback } from 'react';
+import { useEditorStore } from '../store';
 
 export interface HotkeyConfig {
   key: string;
@@ -16,18 +16,10 @@ export interface HotkeyConfig {
  * 处理 CMD+K/Ctrl+K 打开浮动岛，ESC 关闭，Alt+H 打开历史抽屉
  */
 export const useFloatingIslandHotkey = () => {
-  const isFloatingIslandOpen = useEditorStore(
-    (state) => state.isFloatingIslandOpen,
-  );
-  const toggleFloatingIsland = useEditorStore(
-    (state) => state.toggleFloatingIsland,
-  );
-  const setFloatingIslandOpen = useEditorStore(
-    (state) => state.setFloatingIslandOpen,
-  );
-  const toggleHistoryDrawer = useEditorStore(
-    (state) => state.toggleHistoryDrawer,
-  );
+  const isFloatingIslandOpen = useEditorStore((state) => state.isFloatingIslandOpen);
+  const toggleFloatingIsland = useEditorStore((state) => state.toggleFloatingIsland);
+  const setFloatingIslandOpen = useEditorStore((state) => state.setFloatingIslandOpen);
+  const toggleHistoryDrawer = useEditorStore((state) => state.toggleHistoryDrawer);
 
   // 处理键盘事件
   const handleKeyDown = useCallback(
@@ -35,42 +27,35 @@ export const useFloatingIslandHotkey = () => {
       // 检查是否在输入框中
       const target = e.target as HTMLElement;
       const isInputting =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
+        target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
 
       // CMD+K / Ctrl+K - 打开/关闭浮动岛
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         toggleFloatingIsland();
         return;
       }
 
       // ESC - 关闭浮动岛
-      if (e.key === "Escape" && isFloatingIslandOpen) {
+      if (e.key === 'Escape' && isFloatingIslandOpen) {
         e.preventDefault();
         setFloatingIslandOpen(false);
         return;
       }
 
       // Alt+H - 打开/关闭历史抽屉
-      if (e.altKey && e.key === "h" && !isInputting) {
+      if (e.altKey && e.key === 'h' && !isInputting) {
         e.preventDefault();
         toggleHistoryDrawer();
         return;
       }
     },
-    [
-      isFloatingIslandOpen,
-      toggleFloatingIsland,
-      setFloatingIslandOpen,
-      toggleHistoryDrawer,
-    ],
+    [isFloatingIslandOpen, toggleFloatingIsland, setFloatingIslandOpen, toggleHistoryDrawer],
   );
 
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
   return {
@@ -113,8 +98,8 @@ export const useHotkeys = (hotkeys: HotkeyConfig[]) => {
       }
     };
 
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotkeysKey]);
 };

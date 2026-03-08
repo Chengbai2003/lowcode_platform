@@ -13,14 +13,14 @@ import type {
   ExecutorOptions,
   ActionResult,
   BatchActionResult,
-} from "../../types";
-import dataActions from "./actions/dataActions";
-import uiActions from "./actions/uiActions";
-import navActions from "./actions/navActions";
-import flowActions from "./actions/flowActions";
-import asyncActions from "./actions/asyncActions";
-import debugActions from "./actions/debugActions";
-import extensionActions from "./actions/extensionActions";
+} from '../../types';
+import dataActions from './actions/dataActions';
+import uiActions from './actions/uiActions';
+import navActions from './actions/navActions';
+import flowActions from './actions/flowActions';
+import asyncActions from './actions/asyncActions';
+import debugActions from './actions/debugActions';
+import extensionActions from './actions/extensionActions';
 
 /**
  * 内置Action处理器 (8种精简方案)
@@ -83,11 +83,7 @@ export class DSLExecutor {
       onLog:
         options.onLog ??
         ((level, message, data) => {
-          (console as any)[level](
-            `[DSL ${level.toUpperCase()}]`,
-            message,
-            data ?? "",
-          );
+          (console as any)[level](`[DSL ${level.toUpperCase()}]`, message, data ?? '');
         }),
     };
 
@@ -101,10 +97,7 @@ export class DSLExecutor {
   /**
    * 执行Action列表
    */
-  async execute(
-    actions: ActionList,
-    context: ExecutionContext,
-  ): Promise<BatchActionResult> {
+  async execute(actions: ActionList, context: ExecutionContext): Promise<BatchActionResult> {
     const startTime = Date.now();
 
     // 将 onLog 方法注入到上下文中
@@ -114,10 +107,7 @@ export class DSLExecutor {
     };
     const id = ++this.executionId;
 
-    this.log(
-      "info",
-      `Starting execution #${id} with ${actions.length} actions`,
-    );
+    this.log('info', `Starting execution #${id} with ${actions.length} actions`);
 
     const results: ActionResult[] = [];
     let successCount = 0;
@@ -140,16 +130,11 @@ export class DSLExecutor {
         successCount++;
 
         if (this.options.debug) {
-          this.log(
-            "info",
-            `Action ${i + 1}/${actions.length} executed in ${duration}ms`,
-            action,
-          );
+          this.log('info', `Action ${i + 1}/${actions.length} executed in ${duration}ms`, action);
         }
       } catch (error) {
         const duration = Date.now() - actionStart;
-        const errorObj =
-          error instanceof Error ? error : new Error(String(error));
+        const errorObj = error instanceof Error ? error : new Error(String(error));
 
         results.push({
           success: false,
@@ -161,21 +146,17 @@ export class DSLExecutor {
 
         this.options.onError(errorObj, action, contextWithLog);
 
-        this.log(
-          "error",
-          `Action ${i + 1}/${actions.length} failed: ${errorObj.message}`,
-          {
-            action,
-            error: errorObj,
-          },
-        );
+        this.log('error', `Action ${i + 1}/${actions.length} failed: ${errorObj.message}`, {
+          action,
+          error: errorObj,
+        });
       }
     }
 
     const duration = Date.now() - startTime;
 
     this.log(
-      "info",
+      'info',
       `Execution #${id} completed: ${successCount} success, ${failedCount} failed, ${duration}ms total`,
     );
 
@@ -196,11 +177,7 @@ export class DSLExecutor {
     if (this.options.maxExecutionTime > 0) {
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
-          reject(
-            new Error(
-              `Action execution timeout (${this.options.maxExecutionTime}ms)`,
-            ),
-          );
+          reject(new Error(`Action execution timeout (${this.options.maxExecutionTime}ms)`));
         }, this.options.maxExecutionTime);
       });
 
@@ -215,10 +192,7 @@ export class DSLExecutor {
   /**
    * 内部Action执行逻辑
    */
-  private async _executeAction(
-    action: Action,
-    context: ExecutionContext,
-  ): Promise<any> {
+  private async _executeAction(action: Action, context: ExecutionContext): Promise<any> {
     const actionType = action.type;
     const handler = this.handlers[actionType];
 
@@ -234,7 +208,7 @@ export class DSLExecutor {
    */
   registerHandler(type: string, handler: ActionHandler): void {
     this.handlers[type] = handler;
-    this.log("info", `Registered custom handler: ${type}`);
+    this.log('info', `Registered custom handler: ${type}`);
   }
 
   /**
@@ -242,10 +216,7 @@ export class DSLExecutor {
    */
   registerHandlers(handlers: ActionRegistry): void {
     Object.assign(this.handlers, handlers);
-    this.log(
-      "info",
-      `Registered ${Object.keys(handlers).length} custom handlers`,
-    );
+    this.log('info', `Registered ${Object.keys(handlers).length} custom handlers`);
   }
 
   /**
@@ -265,12 +236,8 @@ export class DSLExecutor {
   /**
    * 日志输出
    */
-  private log(
-    level: "log" | "info" | "warn" | "error",
-    message: string,
-    data?: any,
-  ): void {
-    if (this.options.debug || level === "error") {
+  private log(level: 'log' | 'info' | 'warn' | 'error', message: string, data?: any): void {
+    if (this.options.debug || level === 'error') {
       this.options.onLog(level, message, data);
     }
   }
@@ -278,54 +245,43 @@ export class DSLExecutor {
   /**
    * 创建一个新的执行上下文
    */
-  static createContext(
-    baseContext: Partial<ExecutionContext> = {},
-  ): ExecutionContext {
+  static createContext(baseContext: Partial<ExecutionContext> = {}): ExecutionContext {
     return {
       data: {},
       formData: {},
-      user: { id: "", name: "", roles: [], permissions: [] },
-      route: { path: "", query: {}, params: {} },
+      user: { id: '', name: '', roles: [], permissions: [] },
+      route: { path: '', query: {}, params: {} },
       state: {},
       dispatch: () => {},
       getState: () => ({}),
       utils: {
-        formatDate: (date: Date | string, _format = "YYYY-MM-DD") => {
+        formatDate: (date: Date | string, _format = 'YYYY-MM-DD') => {
           // TODO: 实现日期格式化
           return String(date);
         },
         uuid: () => {
           // 使用 crypto.randomUUID()（如果可用），否则降级到 Math.random()
-          if (typeof crypto !== "undefined" && crypto.randomUUID) {
+          if (typeof crypto !== 'undefined' && crypto.randomUUID) {
             return crypto.randomUUID();
           }
           // 降级方案（非加密安全，仅用于不重要的场景）
-          return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
-            /[xy]/g,
-            (c) => {
-              const r = (Math.random() * 16) | 0;
-              const v = c === "x" ? r : (r & 0x3) | 0x8;
-              return v.toString(16);
-            },
-          );
+          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = (Math.random() * 16) | 0;
+            const v = c === 'x' ? r : (r & 0x3) | 0x8;
+            return v.toString(16);
+          });
         },
         clone: <T>(obj: T): T => {
           return JSON.parse(JSON.stringify(obj));
         },
-        debounce: <T extends (...args: any[]) => any>(
-          fn: T,
-          delay: number,
-        ): T => {
+        debounce: <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
           let timeout: any;
           return ((...args: any[]) => {
             clearTimeout(timeout);
             timeout = setTimeout(() => fn(...args), delay);
           }) as T;
         },
-        throttle: <T extends (...args: any[]) => any>(
-          fn: T,
-          delay: number,
-        ): T => {
+        throttle: <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
           let lastCall = 0;
           return ((...args: any[]) => {
             const now = Date.now();
