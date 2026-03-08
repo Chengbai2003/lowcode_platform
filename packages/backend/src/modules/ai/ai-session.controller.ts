@@ -5,15 +5,38 @@ import {
   Put,
   Delete,
   Body,
-  Param,
   Query,
+  Param,
   HttpStatus,
   HttpCode,
   Logger,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../../common/guards/auth.guard';
-import { AISession, AISessionMeta } from '@lowcode-platform/frontend/types';
+
+// 本地类型定义（避免跨包依赖）
+interface AISession {
+  id: string;
+  projectId?: string;
+  messages: Array<{
+    role: 'user' | 'assistant';
+    content: string;
+    timestamp: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface AISessionMeta {
+  id: string;
+  projectId?: string;
+  title?: string;
+  preview?: string;
+  tokenCount?: number;
+  messageCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 @Controller('ai/sessions')
 @UseGuards(AuthGuard)
@@ -40,7 +63,9 @@ export class AISessionController {
       }
 
       // 按更新时间倒序排列
-      sessionArray.sort((a, b) => b.updatedAt - a.updatedAt);
+      sessionArray.sort(
+        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
 
       this.logger.log(
         `[getSessions] Returning ${sessionArray.length} sessions, projectId: ${projectId || 'all'}`,

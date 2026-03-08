@@ -4,7 +4,7 @@ import { List as AntList } from 'antd';
 /**
  * 列表组件
  */
-export interface ListProps extends React.ComponentProps<typeof AntList> {}
+export type ListProps = React.ComponentProps<typeof AntList>;
 
 export const List: React.FC<ListProps> = (props) => {
   return <AntList {...props} />;

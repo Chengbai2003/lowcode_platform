@@ -5,14 +5,7 @@ import type { Template } from '../types';
 import type { A2UISchema } from '../../../types/schema';
 
 const schema: A2UISchema = {
-  version: '1.0',
-  metadata: {
-    id: 'template-list-table',
-    name: 'Data Table List',
-    description: 'Data table with search and filters',
-    createdAt: '2026-03-08T00:00:00.000Z',
-    updatedAt: '2026-03-08T00:00:00.000Z',
-  },
+  version: 1,
   rootId: 'page-1',
   components: {
     'page-1': {

@@ -4,7 +4,7 @@ import { Collapse as AntCollapse } from 'antd';
 /**
  * 折叠面板组件
  */
-export interface CollapseProps extends React.ComponentProps<typeof AntCollapse> {}
+export type CollapseProps = React.ComponentProps<typeof AntCollapse>;
 
 export const Collapse: React.FC<CollapseProps> = (props) => {
   return <AntCollapse {...props} />;

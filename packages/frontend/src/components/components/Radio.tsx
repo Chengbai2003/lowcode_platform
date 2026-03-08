@@ -4,7 +4,7 @@ import { Radio as AntRadio } from 'antd';
 /**
  * 单选框组件
  */
-export interface RadioProps extends React.ComponentProps<typeof AntRadio> {}
+export type RadioProps = React.ComponentProps<typeof AntRadio>;
 
 export const Radio: React.FC<RadioProps> = (props) => {
   return <AntRadio {...props} />;

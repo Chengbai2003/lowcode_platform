@@ -179,9 +179,9 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       // 我们只支持对象方法的调用 (如 Math.max)，或者 context 里提供的安全函数
       // 不支持直接全局函数调用（比如未在 context 或白名单声明的 alert()）
 
-      let funcName = '';
-      let targetObj: any = null;
-      let func: any = null;
+      let funcName: string;
+      let targetObj: any;
+      let func: any;
 
       if (callNode.callee.type === 'MemberExpression') {
         const memberNode = callNode.callee as jsep.MemberExpression;
@@ -243,8 +243,8 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       // 类似 CallExpression，但用于初始化对象
       const newNode = node as jsep.CallExpression; // JSEP 将 NewExpression 的结构定义得和 CallExpression 类似
 
-      let className = '';
-      let Cls: any = null;
+      let className: string;
+      let Cls: any;
 
       if (newNode.callee.type === 'Identifier') {
         className = (newNode.callee as jsep.Identifier).name;

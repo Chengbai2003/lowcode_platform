@@ -4,7 +4,7 @@ import { Alert as AntAlert } from 'antd';
 /**
  * 警告提示组件
  */
-export interface AlertProps extends React.ComponentProps<typeof AntAlert> {}
+export type AlertProps = React.ComponentProps<typeof AntAlert>;
 
 export const Alert: React.FC<AlertProps> = (props) => {
   return <AntAlert {...props} />;

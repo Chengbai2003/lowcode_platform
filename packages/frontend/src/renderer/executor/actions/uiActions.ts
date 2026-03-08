@@ -4,6 +4,7 @@
  */
 
 import type { ActionHandler } from '../../../types';
+import type { FeedbackAction, DialogAction } from '../../../types/dsl/actions/ui';
 import { resolveValue } from '../parser';
 
 /**
@@ -19,6 +20,7 @@ import { resolveValue } from '../parser';
  * }
  */
 export const feedback: ActionHandler = async (action, context) => {
+  const feedbackAction = action as FeedbackAction;
   const {
     kind = 'message',
     content,
@@ -26,7 +28,7 @@ export const feedback: ActionHandler = async (action, context) => {
     level = 'info',
     placement = 'topRight',
     duration = kind === 'message' ? 3 : 4.5,
-  } = action;
+  } = feedbackAction;
 
   const resolvedContent = resolveValue(content, context);
   const resolvedTitle = title ? resolveValue(title, context) : undefined;
@@ -73,7 +75,8 @@ export const feedback: ActionHandler = async (action, context) => {
  * }
  */
 export const dialog: ActionHandler = async (action, context, executor) => {
-  const { kind, title, content, onOk, onCancel } = action;
+  const dialogAction = action as DialogAction;
+  const { kind, title, content, onOk, onCancel } = dialogAction;
 
   const resolvedTitle = title ? resolveValue(title, context) : kind === 'confirm' ? '确认' : '提示';
   const resolvedContent = resolveValue(content, context);
@@ -109,9 +112,9 @@ export const dialog: ActionHandler = async (action, context, executor) => {
 
   // 执行回调
   if (confirmed && onOk && executor) {
-    await executor.execute(onOk, context);
+    await (executor as any).execute(onOk, context);
   } else if (!confirmed && onCancel && executor) {
-    await executor.execute(onCancel, context);
+    await (executor as any).execute(onCancel, context);
   }
 
   return { kind, confirmed };

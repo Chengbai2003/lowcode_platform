@@ -4,7 +4,7 @@ import { Divider as AntDivider } from 'antd';
 /**
  * 分割线组件
  */
-export interface DividerProps extends React.ComponentProps<typeof AntDivider> {}
+export type DividerProps = React.ComponentProps<typeof AntDivider>;
 
 export const Divider: React.FC<DividerProps> = (props) => {
   return <AntDivider {...props} />;

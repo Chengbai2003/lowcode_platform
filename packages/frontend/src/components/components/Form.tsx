@@ -4,7 +4,7 @@ import { Form as AntForm } from 'antd';
 /**
  * 表单组件
  */
-export interface FormProps extends React.ComponentProps<typeof AntForm> {}
+export type FormProps = React.ComponentProps<typeof AntForm>;
 
 export const Form: React.FC<FormProps> = (props) => {
   return <AntForm {...props} />;

@@ -4,7 +4,7 @@ import { Switch as AntSwitch } from 'antd';
 /**
  * 开关组件
  */
-export interface SwitchProps extends React.ComponentProps<typeof AntSwitch> {}
+export type SwitchProps = React.ComponentProps<typeof AntSwitch>;
 
 export const Switch: React.FC<SwitchProps> = (props) => {
   return <AntSwitch {...props} />;

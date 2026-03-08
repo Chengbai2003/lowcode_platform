@@ -4,7 +4,7 @@ import { Input as AntInput } from 'antd';
 /**
  * 输入框组件
  */
-export interface InputProps extends React.ComponentProps<typeof AntInput> {}
+export type InputProps = React.ComponentProps<typeof AntInput>;
 
 export const Input: React.FC<InputProps> = (props) => {
   if (props.type === 'password') {

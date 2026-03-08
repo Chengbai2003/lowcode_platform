@@ -4,6 +4,7 @@
  */
 
 import type { ActionHandler, ExecutionContext } from '../../../types';
+import type { IfAction, LoopAction } from '../../../types/dsl/actions/flow';
 import { resolveValue } from '../parser';
 
 /**
@@ -11,17 +12,18 @@ import { resolveValue } from '../parser';
  * Action: { type: 'if'; condition: Value; then: Action[]; else?: Action[]; }
  */
 export const ifAction: ActionHandler = async (action, context, executor) => {
-  const { condition, then: thenActions, else: elseActions } = action;
+  const ifActionTyped = action as IfAction;
+  const { condition, then: thenActions, else: elseActions } = ifActionTyped;
   const resolvedCondition = resolveValue(condition, context);
   const isTrue = Boolean(resolvedCondition);
 
   if (isTrue && thenActions && executor) {
     for (const act of thenActions) {
-      await executor.executeSingle(act, context);
+      await (executor as any).executeSingle(act, context);
     }
   } else if (!isTrue && elseActions && executor) {
     for (const act of elseActions) {
-      await executor.executeSingle(act, context);
+      await (executor as any).executeSingle(act, context);
     }
   }
 
@@ -33,7 +35,8 @@ export const ifAction: ActionHandler = async (action, context, executor) => {
  * Action: { type: 'loop'; over: Value; itemVar: string; indexVar?: string; actions: Action[]; }
  */
 export const loopAction: ActionHandler = async (action, context, executor) => {
-  const { over, itemVar, indexVar, actions } = action;
+  const loopActionTyped = action as LoopAction;
+  const { over, itemVar, indexVar, actions } = loopActionTyped;
   const resolvedOver = resolveValue(over, context);
 
   if (!Array.isArray(resolvedOver)) {
@@ -57,7 +60,7 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
     } as ExecutionContext;
 
     // 执行循环体
-    const result = await executor.execute(actions, loopContext);
+    const result = await (executor as any).execute(actions, loopContext);
     results.push(result);
   }
 

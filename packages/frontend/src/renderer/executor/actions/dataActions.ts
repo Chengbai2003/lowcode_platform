@@ -4,6 +4,7 @@
  */
 
 import type { ActionHandler } from '../../../types';
+import type { SetValueAction } from '../../../types/dsl/actions/data';
 import { resolveValue } from '../parser';
 
 /**
@@ -25,7 +26,8 @@ function isSafeKey(key: string): boolean {
  * - 清除值：{ type: "setValue", field: "temp", value: null }
  */
 export const setValue: ActionHandler = async (action, context) => {
-  const { field, value, merge = false } = action;
+  const setValueAction = action as SetValueAction;
+  const { field, value, merge = false } = setValueAction;
   const resolvedValue = resolveValue(value, context);
 
   // 解析路径
@@ -37,7 +39,7 @@ export const setValue: ActionHandler = async (action, context) => {
   }
 
   // 获取目标对象
-  let target: any = context.data;
+  let target: Record<string, unknown> = context.data || {};
 
   // 特殊路径处理
   if (keys[0] === 'state') {
@@ -57,7 +59,7 @@ export const setValue: ActionHandler = async (action, context) => {
     if (target[key] == null || typeof target[key] !== 'object') {
       target[key] = {};
     }
-    target = target[key];
+    target = target[key] as Record<string, unknown>;
   }
 
   // 设置值（安全检查 lastKey）
@@ -67,7 +69,7 @@ export const setValue: ActionHandler = async (action, context) => {
 
   if (merge && typeof resolvedValue === 'object' && resolvedValue !== null) {
     // 合并模式：过滤危险键名后浅合并
-    const safeValue: Record<string, any> = {};
+    const safeValue: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(resolvedValue)) {
       if (isSafeKey(k)) {
         safeValue[k] = v;
@@ -76,7 +78,7 @@ export const setValue: ActionHandler = async (action, context) => {
     if (typeof target[lastKey] !== 'object' || target[lastKey] === null) {
       target[lastKey] = {};
     }
-    Object.assign(target[lastKey], safeValue);
+    Object.assign(target[lastKey] as Record<string, unknown>, safeValue);
   } else {
     // 直接设置
     target[lastKey] = resolvedValue;

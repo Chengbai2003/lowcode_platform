@@ -12,7 +12,7 @@ import {
   LayoutGrid,
 } from 'lucide-react';
 import { TemplateGallery } from '../../TemplateGallery/TemplateGallery';
-import type { Template } from '../../templates/types';
+import type { Template } from '../../../templates/types';
 import styles from './Header.module.scss';
 
 /**

@@ -6,12 +6,14 @@
 
 // 假设你的类型定义路径
 import type { ActionHandler, ExecutionContext } from '../../../types';
+import type { CustomScriptAction } from '../../../types/dsl/actions/extension';
 
 /**
  * 自定义脚本 Action Handler
  */
 export const customScript: ActionHandler = async (action, context) => {
-  const { code, timeout = 10000 } = action;
+  const scriptAction = action as CustomScriptAction;
+  const { code, timeout = 10000 } = scriptAction;
 
   if (!code || typeof code !== 'string') {
     throw new Error('customScript: code is required and must be a string');
@@ -26,9 +28,9 @@ export const customScript: ActionHandler = async (action, context) => {
     return result;
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
-    throw new Error(`Custom script execution failed: ${errorObj.message}`, {
-      cause: errorObj,
-    });
+    const wrappedError = new Error(`Custom script execution failed: ${errorObj.message}`);
+    (wrappedError as any).cause = errorObj;
+    throw wrappedError;
   }
 };
 

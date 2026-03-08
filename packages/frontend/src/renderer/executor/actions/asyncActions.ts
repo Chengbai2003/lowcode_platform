@@ -4,6 +4,8 @@
  */
 
 import type { ActionHandler } from '../../../types';
+import type { ApiCallAction, DelayAction } from '../../../types/dsl/actions/async';
+import type { Action } from '../../../types/dsl/action-union';
 import { resolveValue, resolveValues } from '../parser';
 
 /**
@@ -62,6 +64,7 @@ function isSafeUrl(url: string): boolean {
  * }
  */
 export const apiCall: ActionHandler = async (action, context, executor) => {
+  const apiAction = action as ApiCallAction;
   const {
     url,
     method = 'GET',
@@ -72,7 +75,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     onSuccess,
     onError,
     showError = true,
-  } = action;
+  } = apiAction;
 
   const resolvedUrl = resolveValue(url, context);
   const resolvedMethod = String(resolveValue(method, context)).toUpperCase();
@@ -89,7 +92,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
   try {
     // 构建 URL
-    let fullUrl = resolvedUrl;
+    let fullUrl = resolvedUrl as string;
     if (resolvedParams) {
       const searchParams = new URLSearchParams();
       for (const [key, value] of Object.entries(resolvedParams)) {
@@ -108,7 +111,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       method: resolvedMethod,
       headers: {
         'Content-Type': 'application/json',
-        ...(resolvedHeaders as Record<string, string>),
+        ...resolvedHeaders,
       },
     };
 
@@ -116,18 +119,18 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       config.body = JSON.stringify(resolvedBody);
     }
 
-    let response: any;
+    let response: unknown;
 
     // 使用 context.api 或 fetch
     if (context.api) {
       const apiMethod = resolvedMethod.toLowerCase() as keyof typeof context.api;
       if (typeof context.api[apiMethod] === 'function') {
-        const apiFn = context.api[apiMethod] as any;
+        const apiFn = context.api[apiMethod] as (url: string, body?: unknown) => Promise<unknown>;
         response = await (['GET', 'DELETE'].includes(resolvedMethod)
           ? apiFn(fullUrl)
           : apiFn(fullUrl, resolvedBody));
       } else if (typeof context.api.request === 'function') {
-        response = await context.api.request(config);
+        response = await context.api.request(config as any);
       }
     } else {
       const fetchResponse = await fetch(fullUrl, config);
@@ -143,10 +146,10 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       const keys = resultTo.split('.');
       const lastKey = keys.pop();
       if (lastKey) {
-        let target = context.data;
+        let target: Record<string, unknown> = context.data;
         for (const key of keys) {
           if (target[key] == null) target[key] = {};
-          target = target[key];
+          target = target[key] as Record<string, unknown>;
         }
         target[lastKey] = response;
       }
@@ -154,7 +157,10 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // 成功回调
     if (onSuccess && executor) {
-      await executor.execute(onSuccess, { ...context, response });
+      const typedExecutor = executor as {
+        execute: (actions: Action[], ctx: unknown) => Promise<void>;
+      };
+      await typedExecutor.execute(onSuccess, { ...context, response });
     }
 
     return { success: true, response, resultTo };
@@ -171,7 +177,10 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // 错误回调
     if (onError && executor) {
-      await executor.execute(onError, {
+      const typedExecutor = executor as {
+        execute: (actions: Action[], ctx: unknown) => Promise<void>;
+      };
+      await typedExecutor.execute(onError, {
         ...context,
         error: errorObj.message,
         errorObject: errorObj,
@@ -187,7 +196,8 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
  * Action: { type: 'delay'; ms: number; }
  */
 export const delay: ActionHandler = async (action) => {
-  const { ms } = action;
+  const delayAction = action as DelayAction;
+  const { ms } = delayAction;
 
   if (typeof ms !== 'number' || ms < 0) {
     throw new Error('delay: ms must be a positive number');

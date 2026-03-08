@@ -4,7 +4,7 @@ import { Table as AntTable } from 'antd';
 /**
  * 表格组件
  */
-export interface TableProps extends React.ComponentProps<typeof AntTable> {}
+export type TableProps = React.ComponentProps<typeof AntTable>;
 
 export const Table: React.FC<TableProps> = (props) => {
   return <AntTable {...props} />;

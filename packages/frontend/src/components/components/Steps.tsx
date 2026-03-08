@@ -4,7 +4,7 @@ import { Steps as AntSteps } from 'antd';
 /**
  * 步骤条组件
  */
-export interface StepsProps extends React.ComponentProps<typeof AntSteps> {}
+export type StepsProps = React.ComponentProps<typeof AntSteps>;
 
 export const Steps: React.FC<StepsProps> = ({ current = 0, ...props }) => {
   return <AntSteps current={current} {...props} />;

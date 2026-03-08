@@ -4,6 +4,7 @@
  */
 
 import type { ActionHandler } from '../../../types';
+import type { NavigateAction } from '../../../types/dsl/actions/navigation';
 import { resolveValue, resolveValues } from '../parser';
 
 /**
@@ -11,8 +12,9 @@ import { resolveValue, resolveValues } from '../parser';
  * Action: { type: 'navigate'; to: Value; params?: Record<string, Value>; replace?: boolean; }
  */
 export const navigate: ActionHandler = async (action, context) => {
-  const { to, params, replace = false } = action;
-  const resolvedTo = resolveValue(to, context);
+  const navAction = action as NavigateAction;
+  const { to, params, replace = false } = navAction;
+  const resolvedTo = resolveValue(to, context) as string;
   const resolvedParams = params ? resolveValues(params, context) : undefined;
 
   if (context.navigate && typeof context.navigate === 'function') {

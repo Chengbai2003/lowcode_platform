@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import Editor, { useMonaco, type OnMount } from '@monaco-editor/react';
-import type { ComponentRegistry, A2UISchema, A2UIComponent } from '../../../../types';
+import Editor, { type OnMount } from '@monaco-editor/react';
+import type { ComponentRegistry, A2UISchema } from '../../../../types';
 import { SelectableCanvas } from './SelectableCanvas';
 import { NoSchemaEmptyState } from '../../EmptyState';
 import styles from './PreviewPane.module.scss';
@@ -103,7 +103,6 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   const [activeTab, setActiveTab] = useState<ActiveTab>('preview');
   const [editedJson, setEditedJson] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const monaco = useMonaco();
   const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const editedJsonRef = useRef<string>('');
   const hasUnsavedChangesRef = useRef(false);
@@ -139,22 +138,6 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
       hasUnsavedChangesRef.current = true;
     }
   }, []);
-
-  // 保存 JSON (Ctrl/Cmd + S)
-  const handleSaveJson = useCallback(() => {
-    // 使用 ref 获取最新值，避免闭包陷阱
-    if (!hasUnsavedChangesRef.current) {
-      return;
-    }
-    try {
-      const parsed = parseAndValidateSchema(editedJsonRef.current);
-      onSchemaChange?.(parsed);
-      setHasUnsavedChanges(false);
-    } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'JSON 格式错误';
-      alert(`保存失败：${errorMessage}`);
-    }
-  }, [onSchemaChange]);
 
   // Editor 挂载时注册 Ctrl/Cmd + S 快捷键
   const handleEditorMount: OnMount = useCallback(

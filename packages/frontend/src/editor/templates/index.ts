@@ -67,23 +67,17 @@ export function getTemplateSchema(id: string): A2UISchema | undefined {
  */
 export function createProjectFromTemplate(
   templateId: string,
-  projectName: string,
+
+  _projectName: string,
 ): A2UISchema | null {
   const schema = getTemplateSchema(templateId);
   if (!schema) {
     return null;
   }
 
-  // 创建新 Schema，保留模板结构但更新项目名称
-  return {
-    ...schema,
-    metadata: {
-      ...schema.metadata,
-      name: projectName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    },
-  };
+  // 创建新 Schema，保留模板结构
+  // 注意：version 和 rootId 保持不变
+  return { ...schema };
 }
 
 /**

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useEffect, memo } from 'react';
+import React, { useMemo, useEffect, memo, useCallback } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import {
@@ -412,24 +412,6 @@ const ComponentRenderer = memo(
       'Slider',
       'DatePicker',
       'RangePicker',
-    ].includes(componentName);
-
-    // 判断组件是否是容器组件（支持 childrenIds 渲染子组件）
-    const isContainerComponent = [
-      'Form',
-      'Page',
-      'Div',
-      'Container',
-      'Card',
-      'Row',
-      'Col',
-      'Layout',
-      'Header',
-      'Content',
-      'Footer',
-      'Sider',
-      'Space',
-      'FormItem',
     ].includes(componentName);
 
     // 对于表单输入类组件，忽略 childrenIds（它们不支持子组件）

@@ -41,8 +41,6 @@ Respond ONLY with valid JSON. Do not include markdown formatting or explanations
       model: model as any,
       messages: dto.messages as any,
       temperature: dto.temperature,
-      // @ts-ignore
-      maxTokens: dto.maxTokens,
       topP: dto.topP,
       frequencyPenalty: dto.frequencyPenalty,
       presencePenalty: dto.presencePenalty,
@@ -71,8 +69,6 @@ Respond ONLY with valid JSON. Do not include markdown formatting or explanations
       model: model as any,
       messages: dto.messages as any,
       temperature: dto.temperature,
-      // @ts-ignore
-      maxTokens: dto.maxTokens,
       topP: dto.topP,
       frequencyPenalty: dto.frequencyPenalty,
       presencePenalty: dto.presencePenalty,
@@ -102,8 +98,6 @@ Respond ONLY with valid JSON. Do not include markdown formatting or explanations
       model: model as any,
       messages: messages as any,
       temperature: dto.temperature ?? 0.2,
-      // @ts-ignore
-      maxTokens: this.configService.get<number>('ai.codegen.maxTokens', 8192),
     });
 
     return {
@@ -139,8 +133,6 @@ Respond ONLY with valid JSON. Do not include markdown formatting or explanations
       model: model as any,
       messages: messages as any,
       temperature: dto.temperature ?? 0.2,
-      // @ts-ignore
-      maxTokens: this.configService.get<number>('ai.codegen.maxTokens', 8192),
     });
   }
 

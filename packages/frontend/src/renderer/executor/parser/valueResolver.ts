@@ -10,7 +10,7 @@ import type { Value, ExecutionContext } from '../../../types';
  * 解析Value类型
  * 根据值的类型自动解析表达式或返回原值
  */
-export function resolveValue(value: Value, context: ExecutionContext): any {
+export function resolveValue(value: Value, context: ExecutionContext): unknown {
   // null和undefined直接返回
   if (value === null || value === undefined) {
     return value;
@@ -31,14 +31,14 @@ export function resolveValue(value: Value, context: ExecutionContext): any {
 
   // 数组：递归解析每个元素
   if (Array.isArray(value)) {
-    return value.map((item) => resolveValue(item, context));
+    return value.map((item) => resolveValue(item as Value, context));
   }
 
   // 对象：递归解析每个属性值
   if (typeof value === 'object') {
-    const resolved: Record<string, any> = {};
+    const resolved: Record<string, unknown> = {};
     for (const [key, val] of Object.entries(value)) {
-      resolved[key] = resolveValue(val, context);
+      resolved[key] = resolveValue(val as Value, context);
     }
     return resolved;
   }

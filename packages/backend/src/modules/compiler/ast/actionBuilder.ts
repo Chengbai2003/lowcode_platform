@@ -8,15 +8,39 @@ import { FieldInfo, toCamelCase, buildValueAST } from './utils';
 
 /**
  * URL 白名单配置
+ * 注意：为了安全，不允许 localhost 和内网地址（与前端 runtime 保持一致）
  */
 const ALLOWED_PROTOCOLS = ['http:', 'https:', ''];
 const ALLOWED_HOSTS: string[] = [
-  'localhost',
-  '127.0.0.1',
   // 生产环境域名示例，可根据需要配置
   // 'example.com',
   // 'www.example.com',
 ];
+
+/**
+ * 阻止内网地址（与前端 isSafeUrl 逻辑保持一致）
+ */
+function isInternalHost(hostname: string): boolean {
+  const lowerHost = hostname.toLowerCase();
+  const blockedPatterns = [
+    /^localhost$/i,
+    /^127\./,
+    /^10\./,
+    /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
+    /^192\.168\./,
+    /^0\.0\.0\.0$/,
+    /^::1$/,
+    /^fc00:/i, // IPv6 内网
+    /^fe80:/i, // IPv6 链路本地
+  ];
+
+  for (const pattern of blockedPatterns) {
+    if (pattern.test(lowerHost)) {
+      return true;
+    }
+  }
+  return false;
+}
 
 /**
  * URL 安全 sanitize - 只允许相对路径或白名单域名
@@ -50,6 +74,11 @@ function sanitizeUrl(url: string): string {
       return '/';
     }
     const hostname = urlObj.hostname.toLowerCase();
+    // 阻止内网地址
+    if (isInternalHost(hostname)) {
+      console.warn(`[Security] Blocked internal host: ${hostname}`);
+      return '/';
+    }
     if (
       ALLOWED_HOSTS.length > 0 &&
       !ALLOWED_HOSTS.some((a) => hostname === a || hostname.endsWith(`.${a}`))
@@ -174,6 +203,7 @@ export function buildActionListAST(
               ),
               [], // 空的 catch 回调，不打印错误
             ),
+            babelTypes.identifier('then'),
           ),
           [],
         );
@@ -196,13 +226,18 @@ export function buildActionListAST(
             babelTypes.identifier('data'),
           );
 
-          // 带参数的 then 回调
-          fetchCall.callee.arguments = [
-            babelTypes.arrowFunctionExpression(
-              [babelTypes.identifier('response')],
-              babelTypes.blockStatement([babelTypes.expressionStatement(assignResult)]),
-            ),
-          ];
+          // 带参数的 then 回调 - 直接构建新的 callExpression
+          const thenCall = babelTypes.callExpression(
+            babelTypes.memberExpression(fetchCall, babelTypes.identifier('then')),
+            [
+              babelTypes.arrowFunctionExpression(
+                [babelTypes.identifier('response')],
+                babelTypes.blockStatement([babelTypes.expressionStatement(assignResult)]),
+              ),
+            ],
+          );
+
+          return babelTypes.expressionStatement(thenCall);
         }
 
         return babelTypes.expressionStatement(fetchCall);

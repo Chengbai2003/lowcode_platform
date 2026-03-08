@@ -11,6 +11,7 @@ import {
   FileText,
   Equal,
   RotateCcw,
+  type LucideProps,
 } from 'lucide-react';
 import styles from './PropertyPanel.module.scss';
 
@@ -21,7 +22,7 @@ interface ActionSelectorModalProps {
 
 const ACTION_TYPES: {
   type: string;
-  icon: React.FC<React.SVGProps<SVGSVGElement>>;
+  icon: React.FC<LucideProps>;
   color: string;
   bg: string;
   title: string;

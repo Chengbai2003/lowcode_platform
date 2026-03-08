@@ -69,6 +69,7 @@ describe('AIController', () => {
         usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
       };
 
+      // @ts-expect-error 方法返回类型尚未完全匹配
       aiService.chat.mockResolvedValue(expectedResult);
 
       const result = await controller.chat(dto);
