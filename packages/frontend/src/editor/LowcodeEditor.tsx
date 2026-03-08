@@ -126,6 +126,16 @@ function LowcodeEditorInner({
     [onChange],
   );
 
+  // 处理模板应用
+  const handleApplyTemplate = useCallback(
+    (templateSchema: A2UISchema) => {
+      setSchema(templateSchema);
+      onChange?.(templateSchema);
+      message.success('模板已应用！');
+    },
+    [onChange],
+  );
+
   // 处理历史回滚
   const handleRollback = useCallback(
     (actionResult: unknown) => {
@@ -175,6 +185,7 @@ function LowcodeEditorInner({
                 canUndo={false}
                 canRedo={false}
                 historySize={0}
+                onApplyTemplate={handleApplyTemplate}
               />
             </motion.div>
           )}
@@ -211,6 +222,7 @@ function LowcodeEditorInner({
               previewTheme={previewTheme}
               isPreviewMode={isPreviewMode}
               compiledCode={compiledCode}
+              onSchemaChange={handleSchemaChange}
             />
           </main>
 

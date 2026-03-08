@@ -211,9 +211,34 @@ const BaseComponent = memo(
     childrenElements: React.ReactNode;
     id?: string;
   }) => {
+    // 合并 props.children 和 childrenElements
+    // 场景 1: childrenElements 有值（从 childrenIds 渲染）→ 优先使用
+    // 场景 2: childrenElements 为空，但 props.children 有值 → 使用 props.children
+    // 场景 3: 两者都有 → 合并（例如 Button 既有文本又有 Icon）
+    const propsChildren = mergedProps.children;
+
+    let finalChildren: React.ReactNode;
+    if (childrenElements) {
+      // childrenElements 有值（子组件数组或单个子组件）
+      if (propsChildren != null && propsChildren !== '') {
+        // 如果 props.children 也有值，合并两者
+        finalChildren = (
+          <>
+            {propsChildren}
+            {childrenElements}
+          </>
+        );
+      } else {
+        finalChildren = childrenElements;
+      }
+    } else {
+      // childrenElements 为空，使用 props.children
+      finalChildren = propsChildren;
+    }
+
     return (
       <Component {...mergedProps} id={id}>
-        {childrenElements}
+        {finalChildren}
       </Component>
     );
   },
@@ -267,6 +292,15 @@ const ComponentRenderer = memo(
         onComponentClick,
       );
     }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
+
+    // 缓存点击事件处理器，避免每次渲染都创建新函数
+    const handleClick = useCallback(
+      (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onComponentClick?.(node);
+      },
+      [onComponentClick, node],
+    );
 
     if (!Component) {
       console.warn(`Component "${componentName}" not found in registry, rendering as div`);
@@ -364,6 +398,47 @@ const ComponentRenderer = memo(
       eventDispatcher,
     ]);
 
+    // 判断组件是否是"表单输入类"叶子组件（不支持 children，但可能有 props.children 文本）
+    // 注意：Button、Title、Text、Tag 等组件支持 props.children 显示文本
+    const isInputLeafComponent = [
+      'Input',
+      'InputPassword',
+      'TextArea',
+      'InputNumber',
+      'Select',
+      'Checkbox',
+      'Radio',
+      'Switch',
+      'Slider',
+      'DatePicker',
+      'RangePicker',
+    ].includes(componentName);
+
+    // 判断组件是否是容器组件（支持 childrenIds 渲染子组件）
+    const isContainerComponent = [
+      'Form',
+      'Page',
+      'Div',
+      'Container',
+      'Card',
+      'Row',
+      'Col',
+      'Layout',
+      'Header',
+      'Content',
+      'Footer',
+      'Sider',
+      'Space',
+      'FormItem',
+    ].includes(componentName);
+
+    // 对于表单输入类组件，忽略 childrenIds（它们不支持子组件）
+    // 对于容器组件，使用 childrenElements
+    // 对于 Button、Title、Text 等组件，优先使用 props.children，但也支持 childrenIds
+    const finalChildrenElements = isInputLeafComponent
+      ? null // 表单输入组件不支持 children
+      : childrenElements;
+
     const content =
       componentName === 'Form' && (Component as any).useForm ? (
         <FormSyncWrapper
@@ -377,7 +452,7 @@ const ComponentRenderer = memo(
         <BaseComponent
           Component={Component}
           mergedProps={mergedProps}
-          childrenElements={childrenElements}
+          childrenElements={finalChildrenElements}
           id={id}
         />
       );
@@ -385,10 +460,7 @@ const ComponentRenderer = memo(
     if (onComponentClick) {
       return (
         <div
-          onClick={(e) => {
-            e.stopPropagation();
-            onComponentClick(node);
-          }}
+          onClick={handleClick}
           style={{ cursor: 'pointer', position: 'relative' }}
           data-component-id={id}
           className="lowcode-component-wrapper"

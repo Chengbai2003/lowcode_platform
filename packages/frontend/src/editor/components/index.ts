@@ -38,6 +38,9 @@ export { AIAssistant } from './ai-assistant/AIAssistant/AIAssistant';
 export { AIConfig } from './ai-assistant/AIConfig/AIConfig';
 export { HistoryDrawer } from './ai-assistant/HistoryDrawer';
 
+// TemplateGallery components
+export { TemplateGallery } from './TemplateGallery/TemplateGallery';
+
 // Export all AI types and services
 export type {
   AIModelConfig,

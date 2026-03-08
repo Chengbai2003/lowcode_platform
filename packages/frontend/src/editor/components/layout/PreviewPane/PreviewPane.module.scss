@@ -99,6 +99,54 @@
 .editorContainer {
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.jsonEditorHeader {
+  padding: $spacing-xs $spacing-md;
+  background: $bg-elevated;
+  border-bottom: 1px solid $border-base;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.saveHint {
+  font-size: $font-size-xs;
+  color: $text-muted;
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.unsaved {
+  color: $warning;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.saved {
+  color: $text-muted;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $warning;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 // JSON Viewer

@@ -89,5 +89,5 @@ export const ACTION_TYPES = [
  * Action 类型守卫
  */
 export function isActionType(type: string): type is Action['type'] {
-  return ACTION_TYPES.includes(type as any);
+  return ACTION_TYPES.includes(type as Action['type']);
 }

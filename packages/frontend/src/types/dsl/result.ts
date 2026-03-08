@@ -1,9 +1,9 @@
 /**
  * Action执行结果
  */
-export interface ActionResult {
+export interface ActionResult<T = unknown> {
   success: boolean;
-  value?: any;
+  value?: T;
   error?: Error;
   duration?: number;
 }

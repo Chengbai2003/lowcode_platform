@@ -1,6 +1,24 @@
-import React, { useCallback } from 'react';
-import { Zap, Edit2, Save, Undo, Redo, Play, History, Moon, HelpCircle } from 'lucide-react';
+import React, { useCallback, useState } from 'react';
+import {
+  Zap,
+  Edit2,
+  Save,
+  Undo,
+  Redo,
+  Play,
+  History,
+  Moon,
+  HelpCircle,
+  LayoutGrid,
+} from 'lucide-react';
+import { TemplateGallery } from '../../TemplateGallery/TemplateGallery';
+import type { Template } from '../../templates/types';
 import styles from './Header.module.scss';
+
+/**
+ * 默认项目名称常量
+ */
+const DEFAULT_PROJECT_NAME = '未命名项目 01';
 
 interface EditorHeaderProps {
   previewTheme: 'light' | 'dark';
@@ -13,6 +31,7 @@ interface EditorHeaderProps {
   historySize?: number;
   mode: 'edit' | 'preview';
   onModeChange: (mode: 'edit' | 'preview') => void;
+  onApplyTemplate?: (schema: Template['schema']) => void;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -26,10 +45,22 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   historySize = 0,
   mode,
   onModeChange,
+  onApplyTemplate,
 }) => {
+  const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
+
   const handleThemeToggle = useCallback(() => {
     onThemeChange(previewTheme === 'light' ? 'dark' : 'light');
   }, [onThemeChange, previewTheme]);
+
+  const handleApplyTemplate = useCallback(
+    (schema: Template['schema']) => {
+      if (onApplyTemplate) {
+        onApplyTemplate(schema);
+      }
+    },
+    [onApplyTemplate],
+  );
 
   return (
     <header className={styles.header}>
@@ -43,13 +74,22 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         </div>
         <div className={styles.divider}></div>
         <div className={styles.projectName}>
-          <span>未命名项目 01</span>
+          <span>{DEFAULT_PROJECT_NAME}</span>
           <Edit2 size={14} />
         </div>
       </div>
 
       {/* 中间：操作按钮 */}
       <div className={styles.centerSection}>
+        <button
+          className={styles.actionButton}
+          onClick={() => setTemplateGalleryOpen(true)}
+          title="选择模板"
+        >
+          <LayoutGrid size={18} />
+          <span>模板</span>
+        </button>
+        <div className={styles.divider}></div>
         <button className={styles.actionButton}>
           <Save size={18} />
           <span>保存</span>
@@ -99,6 +139,13 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         </div>
         <div className={styles.userAvatar}>JD</div>
       </div>
+
+      {/* 模板选择器 */}
+      <TemplateGallery
+        open={templateGalleryOpen}
+        onClose={() => setTemplateGalleryOpen(false)}
+        onApply={handleApplyTemplate}
+      />
     </header>
   );
 };

@@ -7,7 +7,7 @@ export type PromptLanguage = 'en' | 'zh';
 export interface PromptConfig {
   language?: PromptLanguage;
   supportedComponents?: string[];
-  schemaExample?: any;
+  schemaExample?: Record<string, unknown>;
   includeExplanation?: boolean;
   includeSuggestions?: boolean;
 }

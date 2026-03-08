@@ -9,7 +9,7 @@ export type ExpressionType = 'literal' | 'variable' | 'template' | 'complex';
 export interface ParsedExpression {
   type: ExpressionType;
   raw: string;
-  value?: any;
+  value?: unknown;
   variables?: string[];
   expression?: string;
 }
