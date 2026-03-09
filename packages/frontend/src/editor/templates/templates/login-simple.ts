@@ -83,8 +83,8 @@ const schema: A2UISchema = {
     },
     'input-pass': {
       id: 'input-pass',
-      type: 'InputPassword',
-      props: { placeholder: '请输入密码' },
+      type: 'Input',
+      props: { placeholder: '请输入密码', type: 'password' },
       childrenIds: [],
     },
     'row-options': {
