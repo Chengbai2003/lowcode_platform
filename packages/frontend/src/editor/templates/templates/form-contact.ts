@@ -5,155 +5,168 @@ import type { Template } from '../types';
 import type { A2UISchema } from '../../../types/schema';
 
 const schema: A2UISchema = {
-  version: 1,
-  rootId: 'page-1',
+  version: 1.0,
+  rootId: 'page-form',
   components: {
-    'page-1': {
-      id: 'page-1',
+    'page-form': {
+      id: 'page-form',
       type: 'Page',
       props: {
         style: {
-          padding: '40px',
-          maxWidth: '800px',
-          margin: '0 auto',
+          padding: '24px',
+          backgroundColor: '#f0f2f5',
+          minHeight: '100vh',
+          display: 'flex',
+          justifyContent: 'center',
         },
       },
-      childrenIds: ['form-header', 'contact-form'],
+      childrenIds: ['form-card'],
     },
-    'form-header': {
-      id: 'form-header',
-      type: 'Div',
+    'form-card': {
+      id: 'form-card',
+      type: 'Card',
       props: {
-        style: { marginBottom: '32px', textAlign: 'center' },
+        title: '联系我们',
+        bordered: false,
+        style: {
+          width: '800px',
+          borderRadius: '8px',
+          boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
+        },
       },
-      childrenIds: ['form-title', 'form-desc'],
+      childrenIds: ['main-form'],
     },
-    'form-title': {
-      id: 'form-title',
-      type: 'Title',
-      props: {
-        level: 2,
-        children: 'Contact Us',
-        style: { margin: 0 },
-      },
-    },
-    'form-desc': {
-      id: 'form-desc',
-      type: 'Text',
-      props: {
-        children: 'Have a question? We would love to hear from you.',
-        style: { color: '#666', marginTop: '8px' },
-      },
-    },
-    'contact-form': {
-      id: 'contact-form',
+    'main-form': {
+      id: 'main-form',
       type: 'Form',
-      props: {
-        layout: 'vertical',
+      props: { layout: 'vertical' },
+      events: {
+        onFinish: [{ type: 'apiCall', url: '/api/contact', method: 'POST' }],
       },
-      childrenIds: ['name-row', 'email-row', 'subject-row', 'message-row', 'submit-row'],
+      childrenIds: ['row-1', 'row-2', 'row-3', 'row-actions'],
     },
-    'name-row': {
-      id: 'name-row',
+    'row-1': {
+      id: 'row-1',
+      type: 'Row',
+      props: { gutter: 24 },
+      childrenIds: ['col-name', 'col-email'],
+    },
+    'col-name': {
+      id: 'col-name',
+      type: 'Col',
+      props: { span: 12 },
+      childrenIds: ['item-name'],
+    },
+    'item-name': {
+      id: 'item-name',
       type: 'FormItem',
-      props: {
-        label: 'Full Name',
-        name: 'name',
-        rules: [{ required: true, message: 'Please enter your name' }],
-      },
-      childrenIds: ['name-input'],
+      props: { name: 'name', label: '您的姓名', rules: [{ required: true }] },
+      childrenIds: ['input-name'],
     },
-    'name-input': {
-      id: 'name-input',
+    'input-name': {
+      id: 'input-name',
       type: 'Input',
-      props: {
-        placeholder: 'John Doe',
-        size: 'large',
-      },
+      props: { placeholder: '请输入姓名', size: 'large' },
+      childrenIds: [],
     },
-    'email-row': {
-      id: 'email-row',
+    'col-email': {
+      id: 'col-email',
+      type: 'Col',
+      props: { span: 12 },
+      childrenIds: ['item-email'],
+    },
+    'item-email': {
+      id: 'item-email',
       type: 'FormItem',
+      props: { name: 'email', label: '联系邮箱', rules: [{ required: true, type: 'email' }] },
+      childrenIds: ['input-email'],
+    },
+    'input-email': {
+      id: 'input-email',
+      type: 'Input',
+      props: { placeholder: 'example@company.com', size: 'large' },
+      childrenIds: [],
+    },
+    'row-2': {
+      id: 'row-2',
+      type: 'Row',
+      props: {},
+      childrenIds: ['col-subject'],
+    },
+    'col-subject': {
+      id: 'col-subject',
+      type: 'Col',
+      props: { span: 24 },
+      childrenIds: ['item-subject'],
+    },
+    'item-subject': {
+      id: 'item-subject',
+      type: 'FormItem',
+      props: { name: 'subject', label: '咨询主题', rules: [{ required: true }] },
+      childrenIds: ['select-subject'],
+    },
+    'select-subject': {
+      id: 'select-subject',
+      type: 'Select',
       props: {
-        label: 'Email Address',
-        name: 'email',
-        rules: [
-          { required: true, message: 'Please enter your email' },
-          { type: 'email', message: 'Please enter a valid email' },
+        placeholder: '请选择主题',
+        size: 'large',
+        style: { width: '100%' },
+        options: [
+          { label: '产品试用', value: 'trial' },
+          { label: '商务合作', value: 'business' },
+          { label: '技术支持', value: 'support' },
         ],
       },
-      childrenIds: ['email-input'],
+      childrenIds: [],
     },
-    'email-input': {
-      id: 'email-input',
-      type: 'Input',
-      props: {
-        placeholder: 'john@example.com',
-        size: 'large',
-      },
+    'row-3': {
+      id: 'row-3',
+      type: 'Row',
+      props: {},
+      childrenIds: ['col-message'],
     },
-    'subject-row': {
-      id: 'subject-row',
+    'col-message': {
+      id: 'col-message',
+      type: 'Col',
+      props: { span: 24 },
+      childrenIds: ['item-message'],
+    },
+    'item-message': {
+      id: 'item-message',
       type: 'FormItem',
-      props: {
-        label: 'Subject',
-        name: 'subject',
-        rules: [{ required: true, message: 'Please enter a subject' }],
-      },
-      childrenIds: ['subject-input'],
+      props: { name: 'message', label: '详细内容', rules: [{ required: true }] },
+      childrenIds: ['textarea-message'],
     },
-    'subject-input': {
-      id: 'subject-input',
-      type: 'Input',
-      props: {
-        placeholder: 'How can we help?',
-        size: 'large',
-      },
-    },
-    'message-row': {
-      id: 'message-row',
-      type: 'FormItem',
-      props: {
-        label: 'Message',
-        name: 'message',
-        rules: [{ required: true, message: 'Please enter your message' }],
-      },
-      childrenIds: ['message-input'],
-    },
-    'message-input': {
-      id: 'message-input',
+    'textarea-message': {
+      id: 'textarea-message',
       type: 'TextArea',
-      props: {
-        placeholder: 'Tell us more about your inquiry...',
-        rows: 6,
-      },
+      props: { placeholder: '请详细描述您的需求...', rows: 4 },
+      childrenIds: [],
     },
-    'submit-row': {
-      id: 'submit-row',
-      type: 'Div',
-      props: {
-        style: { marginTop: '24px' },
-      },
-      childrenIds: ['submit-btn', 'reset-btn'],
+    'row-actions': {
+      id: 'row-actions',
+      type: 'Row',
+      props: { justify: 'end', style: { marginTop: '16px' } },
+      childrenIds: ['col-actions'],
     },
-    'submit-btn': {
-      id: 'submit-btn',
+    'col-actions': {
+      id: 'col-actions',
+      type: 'Col',
+      props: { span: 24, style: { textAlign: 'right' } },
+      childrenIds: ['item-submit'],
+    },
+    'item-submit': {
+      id: 'item-submit',
+      type: 'FormItem',
+      props: { style: { margin: 0 } },
+      childrenIds: ['btn-submit'],
+    },
+    'btn-submit': {
+      id: 'btn-submit',
       type: 'Button',
-      props: {
-        type: 'primary',
-        htmlType: 'submit',
-        size: 'large',
-        children: 'Send Message',
-        style: { marginRight: '12px' },
-      },
-    },
-    'reset-btn': {
-      id: 'reset-btn',
-      type: 'Button',
-      props: {
-        size: 'large',
-        children: 'Reset',
-      },
+      props: { type: 'primary', htmlType: 'submit', size: 'large', children: '提交信息' },
+      childrenIds: [],
     },
   },
 };

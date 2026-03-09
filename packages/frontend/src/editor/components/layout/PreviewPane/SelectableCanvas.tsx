@@ -7,6 +7,8 @@ import { useComponentPosition } from './useComponentPosition';
 import { NoSchemaEmptyState } from '../../EmptyState';
 import styles from './PreviewPane.module.scss';
 
+const COMPONENT_ID_CLASS_PREFIX = 'lowcode-component-id-';
+
 interface SelectableCanvasProps {
   schema: A2UISchema | null;
   allComponents: ComponentRegistry;
@@ -45,6 +47,28 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
       [schema],
     );
 
+    // Resolve clicked/hovered component id by walking up DOM tree
+    const resolveComponentIdFromTarget = useCallback((target: EventTarget | null): string | null => {
+      if (!(target instanceof Element)) return null;
+
+      let current: Element | null = target;
+      while (current && current !== containerRef.current) {
+        const dataId = current.getAttribute('data-component-id');
+        if (dataId) return dataId;
+
+        const markerClass = Array.from(current.classList).find((cls) =>
+          cls.startsWith(COMPONENT_ID_CLASS_PREFIX),
+        );
+        if (markerClass) {
+          return markerClass.slice(COMPONENT_ID_CLASS_PREFIX.length) || null;
+        }
+
+        current = current.parentElement;
+      }
+
+      return null;
+    }, []);
+
     // Handle component click
     const handleComponentClick = useCallback(
       (node: A2UIComponent) => {
@@ -55,19 +79,21 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
       [selectComponent, isPreviewMode],
     );
 
-    // Handle container click (clear selection when clicking empty area)
-    const handleContainerClick = useCallback(
+    // Handle container click in capture phase so selection is based on real click target
+    const handleContainerClickCapture = useCallback(
       (e: React.MouseEvent) => {
         if (isPreviewMode) return;
-        // Only clear if clicking directly on the container (not on a component)
-        if (
-          e.target === containerRef.current ||
-          (e.target as HTMLElement).classList?.contains(styles.previewContent)
-        ) {
+        const clickedId = resolveComponentIdFromTarget(e.target);
+
+        if (clickedId) {
+          if (clickedId !== selectedId) {
+            selectComponent(clickedId);
+          }
+        } else {
           selectComponent(null);
         }
       },
-      [selectComponent, isPreviewMode],
+      [isPreviewMode, resolveComponentIdFromTarget, selectedId, selectComponent],
     );
 
     // Handle mouse leave from container
@@ -78,27 +104,22 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
     // Handle mouse move for hover detection
     const handleMouseMove = useCallback(
       (e: React.MouseEvent) => {
-        // Find the closest component element
-        const target = e.target as HTMLElement;
-        const componentEl = target.closest('[data-component-id]');
+        const id = resolveComponentIdFromTarget(e.target);
 
-        if (componentEl) {
-          const id = componentEl.getAttribute('data-component-id');
-          if (id && id !== hoverId) {
-            setHover(id);
-          }
+        if (id) {
+          if (id !== hoverId) setHover(id);
         } else if (hoverId !== null) {
           setHover(null);
         }
       },
-      [hoverId, setHover],
+      [hoverId, resolveComponentIdFromTarget, setHover],
     );
 
     return (
       <div
         ref={containerRef}
         className={styles.selectableCanvas}
-        onClick={handleContainerClick}
+        onClickCapture={handleContainerClickCapture}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >

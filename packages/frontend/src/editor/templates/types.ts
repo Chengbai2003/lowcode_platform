@@ -29,6 +29,7 @@ export type TemplateCategory =
   | 'login'
   | 'profile'
   | 'marketing'
+  | 'detail'
   | 'error'
   | 'other';
 
@@ -53,6 +54,7 @@ export const BUILTIN_TEMPLATE_IDS = [
   'form-contact',
   'list-table',
   'profile-user',
+  'business-detail',
 ] as const;
 
 export type BuiltinTemplateId = (typeof BUILTIN_TEMPLATE_IDS)[number];
