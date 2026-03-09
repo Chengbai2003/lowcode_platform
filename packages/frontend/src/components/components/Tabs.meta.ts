@@ -44,10 +44,17 @@ export const TabsMeta: ComponentPanelConfig = {
       editor: 'select',
       defaultValue: 'middle',
       options: [
-        { label: '默认', value: 'default' },
+        { label: '中', value: 'middle' },
         { label: '小', value: 'small' },
         { label: '大', value: 'large' },
       ],
+      group: '样式',
+    },
+    {
+      key: 'centered',
+      label: '标签居中',
+      editor: 'boolean',
+      defaultValue: false,
       group: '样式',
     },
   ],

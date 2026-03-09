@@ -7,6 +7,7 @@ import { NumberEditor } from './editors/NumberEditor';
 import { BooleanEditor } from './editors/BooleanEditor';
 import { SelectEditor } from './editors/SelectEditor';
 import { ColorEditor } from './editors/ColorEditor';
+import { JsonEditor } from './editors/JsonEditor';
 import { NoSelectionEmptyState } from '../EmptyState';
 import { EventConfigPanel } from './EventConfigPanel';
 import styles from './PropertyPanel.module.scss';
@@ -40,13 +41,29 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   // 按分组组织属性
   const groupedProperties = useMemo(() => {
     if (!componentConfig) return {};
-    const { meta } = componentConfig;
+    const { component, meta } = componentConfig;
     const groups: Record<string, PropertyMeta[]> = {
       基础: [],
       样式: [],
       高级: [],
     };
-    meta.properties.forEach((prop) => {
+
+    const resolvedProps = meta.properties.reduce<Record<string, unknown>>((acc, prop) => {
+      const currentValue = component.props?.[prop.key];
+      acc[prop.key] = currentValue ?? prop.defaultValue;
+      return acc;
+    }, {});
+
+    const visibleProperties = meta.properties.filter((prop) => {
+      if (!prop.visible) return true;
+      try {
+        return Boolean(prop.visible(resolvedProps));
+      } catch {
+        return false;
+      }
+    });
+
+    visibleProperties.forEach((prop) => {
       const group = prop.group || '基础';
       if (!groups[group]) {
         groups[group] = [];
@@ -63,6 +80,14 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       if (!schema || !selectedId) return;
       const component = schema.components[selectedId];
       if (!component) return;
+      const prevProps = component.props || {};
+      const nextProps = { ...prevProps };
+
+      if (value === undefined) {
+        delete nextProps[key];
+      } else {
+        nextProps[key] = value;
+      }
 
       const newSchema: A2UISchema = {
         ...schema,
@@ -70,10 +95,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           ...schema.components,
           [selectedId]: {
             ...component,
-            props: {
-              ...component.props,
-              [key]: value,
-            },
+            props: nextProps,
           },
         },
       };
@@ -109,14 +131,18 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         case 'color':
           return <ColorEditor {...commonProps} />;
         case 'json':
-          // JSON 编辑器暂用字符串编辑器
-          return <StringEditor {...commonProps} multiline />;
+          return <JsonEditor {...commonProps} />;
         case 'expression':
           // 表达式编辑器暂用字符串编辑器
           return <StringEditor {...commonProps} placeholder="输入表达式..." />;
         case 'slot':
-          // 插槽编辑器暂不支持
-          return null;
+          return (
+            <StringEditor
+              {...commonProps}
+              multiline
+              placeholder="插槽内容请通过组件树编辑"
+            />
+          );
         default:
           return null;
       }

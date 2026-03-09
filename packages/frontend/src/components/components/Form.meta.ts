@@ -7,6 +7,13 @@ export const FormMeta: ComponentPanelConfig = {
   icon: 'edit',
   properties: [
     {
+      key: 'initialValues',
+      label: '初始值',
+      editor: 'json',
+      defaultValue: {},
+      group: '基础',
+    },
+    {
       key: 'layout',
       label: '布局',
       editor: 'select',
@@ -54,6 +61,21 @@ export const FormMeta: ComponentPanelConfig = {
         { label: '大', value: 'large' },
       ],
       group: '样式',
+    },
+    {
+      key: 'disabled',
+      label: '整体禁用',
+      editor: 'boolean',
+      defaultValue: false,
+      group: '高级',
+    },
+    {
+      key: 'requiredMark',
+      label: '必填标记',
+      editor: 'json',
+      defaultValue: true,
+      group: '高级',
+      description: 'true / false / "optional"',
     },
     {
       key: 'colon',

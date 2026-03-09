@@ -13,12 +13,21 @@ export const SelectMeta: ComponentPanelConfig = {
       defaultValue: '请选择',
     },
     {
+      key: 'options',
+      label: '选项列表',
+      editor: 'json',
+      defaultValue: [
+        { label: '选项1', value: 'option1' },
+        { label: '选项2', value: 'option2' },
+      ],
+    },
+    {
       key: 'mode',
       label: '模式',
       editor: 'select',
-      defaultValue: 'default',
+      defaultValue: '',
       options: [
-        { label: '单选', value: 'default' },
+        { label: '单选', value: '' },
         { label: '多选', value: 'multiple' },
         { label: '标签', value: 'tags' },
       ],
@@ -41,7 +50,7 @@ export const SelectMeta: ComponentPanelConfig = {
       key: 'showSearch',
       label: '可搜索',
       editor: 'boolean',
-      defaultValue: false,
+      defaultValue: true,
       group: '功能',
     },
     {
