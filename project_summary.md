@@ -1,80 +1,78 @@
-# 低代码 AI 平台项目总结
+# A2UI 低代码平台 — 项目文档
+
+> **最后更新时间**：2026-03-08
+> **当前版本**：v0.2.5-alpha
+> **架构状态**：2 包 Monorepo（frontend + backend）
+> **完成度**：Sprint 3 Phase 0 完成，Phase 1 进行中
+
+---
 
 ## 一、项目概览
 
-这是一个基于 **Google A2UI（Agent to User Interface）协议** 的 **AI 驱动低代码平台**，采用 pnpm monorepo 架构，包含 **6 个核心包** 和 1 个示例应用：
+这是一个基于 **Google A2UI（Agent to User Interface）协议** 的 **AI 驱动低代码平台**，采用精简的 2 包 Monorepo 架构。
 
-| 包名         | 定位                     | 核心技术                       |
-| ------------ | ------------------------ | ------------------------------ |
-| `types`      | 共享类型（Schema + DSL） | 纯 TypeScript 类型定义         |
-| `renderer`   | 运行时渲染引擎           | React 18 + Redux Toolkit + Zod |
-| `components` | UI 组件库                | Ant Design 5 封装（47 组件）   |
-| `compiler`   | Schema → 代码编译器      | Babel AST 代码生成             |
-| `editor`     | 编辑器 + AI 助手         | Monaco Editor + AI 对话        |
-| `server`     | 后端 AI 服务             | NestJS + 多 AI Provider        |
+| 包名                         | 定位                                        | 核心技术                            |
+| ---------------------------- | ------------------------------------------- | ----------------------------------- |
+| `@lowcode-platform/frontend` | 前端整合包（类型 + 渲染器 + 组件 + 编辑器） | React 18 + Zustand + Ant Design 5   |
+| `@lowcode-platform/backend`  | 后端服务包（AI 服务 + 编译器）              | NestJS + Babel AST + 多 AI Provider |
 
-**技术栈全景**：React 18 · TypeScript · Ant Design 5 · Vite · Redux Toolkit · Zod · Monaco Editor · NestJS · Anthropic/OpenAI/Ollama
+**技术栈**：React 18 · TypeScript · Ant Design 5 · Vite · Zustand · NestJS · Anthropic/OpenAI/Ollama
 
 **核心价值链**：
 
 ```mermaid
 flowchart LR
-    A[用户描述需求] -->|AI 对话| B[生成 A2UI Schema]
+    A[用户描述需求] -->|AI 对话 | B[生成 A2UI Schema]
     B -->|Renderer| C[实时预览 UI]
     B -->|Compiler| D[导出标准 React 代码]
 ```
 
 **差异化优势**：
 
-- **遵循 Google A2UI 协议**：采用 [A2UI](https://a2ui.org) 开放协议的扁平 ID→Component 映射（v0.8 稳定 / v0.9 草案，目标 Q4 2026 v1.0），专为 LLM 生成优化
-- **AI 对话优先**：以自然语言交互代替传统拖拽范式，对普通用户更便捷
-- **双输出通道**：同一份 Schema 既可运行时渲染预览，又可编译为标准 React 代码导出
-- **DSL 执行引擎**：内置 7 大类 24 种 Action，支持流程控制、异步编排，远超一般低代码平台
+- **遵循 Google A2UI 协议**：采用 [a2ui.org](https://a2ui.org) 开放协议的扁平 ID→Component 映射
+- **AI 对话优先**：自然语言交互代替传统拖拽，对普通用户更便捷
+- **双输出通道**：同一份 Schema 既可实时渲染预览，又可编译为标准 React 代码
+- **企业级安全**：表达式沙箱 + URL 白名单 + 后端 API 鉴权
 
 ---
 
-## 二、架构分析
+## 二、核心架构
 
 ### 2.1 Monorepo 结构
 
-采用 pnpm workspace 管理，包的划分遵循 **关注点分离** 原则。依赖关系为：
-
-```mermaid
-graph TD
-    TYPES["types 📐"] --> RENDERER["renderer ⚙️"]
-    TYPES --> COMPILER["compiler 🔧"]
-    RENDERER --> EDITOR["editor ✏️"]
-    COMPILER --> EDITOR
-    COMPONENTS["components 🧩"] --> EDITOR
-    TYPES --> EDITOR
-    SERVER["server 🖥️"]
+```
+packages/
+├── frontend/              # 前端整合包
+│   ├── src/
+│   │   ├── types/        # 类型定义 (Schema + DSL + Property Panel)
+│   │   ├── renderer/     # 运行时渲染引擎 (DSL 执行器 + 表达式解析器)
+│   │   ├── components/   # UI 组件库 (21 个组件元数据)
+│   │   ├── editor/       # 编辑器 (AI 助手 + 属性面板 + 组件树)
+│   │   └── styles/       # 统一样式
+│   └── package.json
+│
+└── backend/               # 后端服务包
+    ├── src/
+    │   ├── modules/
+    │   │   ├── ai/       # AI 服务 (多 Provider 支持 + Prompt Builder)
+    │   │   └── compiler/ # 编译器 (Schema → React 代码，Babel AST)
+    │   ├── common/       # 通用模块 ( guards, filters, interceptors)
+    │   ├── config/       # 配置文件
+    │   └── main.ts
+    └── package.json
 ```
 
-> [!TIP]
-> 包之间的依赖方向清晰，没有循环依赖。`types` 作为独立的共享类型包被所有前端包通过 `workspace:*` 引用，这是正确的抽取决策。
+### 2.2 A2UI Schema 设计
 
-**已知问题**：
-
-- `examples/playground` 未纳入 `pnpm-workspace.yaml`，无法享受 workspace 协议
-- 根 `package.json` 中存在冗余的运行时依赖（`@reduxjs/toolkit`、`react-redux`），应下沉到 `renderer` 包
-- `components` 包的 `react`/`antd` 同时在 `dependencies` 和 `peerDependencies` 中声明，可能导致多实例问题
-
-### 2.2 Schema 设计（Google A2UI Protocol）
-
-> [!IMPORTANT]
-> **协议来源**：A2UI（Agent to User Interface）是 **Google 于 2025-2026 年提出的开放协议**，定义了 AI Agent 向客户端声明式描述 UI 的标准格式。官网 [a2ui.org](https://a2ui.org)。
->
-> 本项目是对 A2UI 协议的前端实现方案，覆盖了协议的核心数据模型（扁平组件列表 + ID 引用），并在其基础上扩展了 DSL 事件系统。
-
-核心数据结构（`packages/types/src/schema.ts`）：
+**核心数据结构** (`packages/frontend/src/types/schema.ts`):
 
 ```typescript
 interface A2UIComponent {
-  id: string;
-  type: string; // 组件类型
+  id: string; // 唯一组件 ID
+  type: string; // 组件类型（如 "Button", "Input"）
   props?: Record<string, any>; // 静态属性
-  childrenIds?: string[]; // 子节点 ID 列表
-  events?: Record<string, ActionList>; // 事件 → DSL Action 序列（项目扩展）
+  childrenIds?: string[]; // 子组件 ID 列表
+  events?: Record<string, ActionList>; // 事件 → DSL Action 序列
 }
 
 interface A2UISchema {
@@ -84,345 +82,297 @@ interface A2UISchema {
 }
 ```
 
-**优点**：
+**Schema 优点**：
 
-- 扁平结构使组件查找为 O(1)，天然支持拖拽、移动等编辑操作
-- LLM 友好：声明式 JSON 格式，大模型可直接生成
-- 安全：传输声明式数据而非可执行代码
-- 已具备 `version` 字段，为未来 Schema 迁移预留基础设施
-
-**Zod 运行时校验**：renderer 包已引入 `zod`（`packages/renderer/src/utils/schema-validator.ts`），实现了三层校验：
-
-1. `validateSchema()` — 严格模式，校验失败直接抛错
-2. `safeValidateSchema()` — 安全模式，返回 `{ success, data/error }`
-3. `validateSchemaWithWhitelist()` — 白名单模式，校验组件类型是否已注册
-
-校验逻辑包含 **引用完整性检查**（rootId 有效、childrenIds 无悬挂引用）。
-
-**不足**：
-
-- `props: Record<string, any>` 类型安全不足
-- 缺少组件属性元数据（Property Panel Schema），无法自动生成可视化属性配置面板——这是当前可视化编辑能力的**核心短板**
+- 扁平结构 → O(1) 组件查找效率
+- LLM 友好 → 声明式 JSON 格式，大模型可直接生成
+- 安全 → 传输声明式数据而非可执行代码
+- 版本化 → 已具备 `version` 字段，为未来迁移预留
 
 ### 2.3 DSL 执行引擎
 
-`renderer` 包内置完整的 DSL 执行引擎（`packages/renderer/src/executor/`），支持 24 种 Action，分布在 8 个模块中：
+**10 种核心 Action**，覆盖 90% 低代码场景：
 
-| Action 分类 | 包含操作                                       | 模块文件              |
-| ----------- | ---------------------------------------------- | --------------------- |
-| 数据操作    | setField, mergeField, clearField               | `dataActions.ts`      |
-| UI 交互     | message, modal, confirm, notification          | `uiActions.ts`        |
-| 导航        | navigate, openTab, closeTab, back              | `navActions.ts`       |
-| 状态管理    | dispatch, setState, resetForm                  | `stateActions.ts`     |
-| 异步操作    | apiCall, delay, waitCondition                  | `asyncActions.ts`     |
-| 流程控制    | if, switch, loop, parallel, sequence, tryCatch | `flowActions.ts`      |
-| 调试        | log, debug                                     | `debugActions.ts`     |
-| 扩展        | customScript, customAction                     | `extensionActions.ts` |
-
-**亮点**：
-
-- **注册表模式**（`ActionRegistry`），可扩展自定义 Action
-- 执行上下文（`ExecutionContext`）内置 http 工具、uuid、debounce/throttle 等
-- 支持嵌套 Action（如 tryCatch 内的 onError、apiCall 的 onSuccess/onError）
-
-**隐患**：
-
-- `dsl.ts` 长达 552 行，所有 Action 类型堆在一个文件中
-- `ExecutionContext` 接口约 100 行的属性定义，职责庞大
-- loop 的无限循环风险缺少引擎层面安全限制
+| 分类       | Action         | 说明            |
+| ---------- | -------------- | --------------- |
+| **数据**   | `setValue`     | 设置字段/状态值 |
+| **网络**   | `apiCall`      | API 请求        |
+| **路由**   | `navigate`     | 页面跳转        |
+| **交互**   | `feedback`     | 消息/通知       |
+| **弹窗**   | `dialog`       | 模态框/确认框   |
+| **控制**   | `if`           | 条件分支        |
+| **控制**   | `loop`         | 循环遍历        |
+| **工具**   | `delay`        | 延迟执行        |
+| **工具**   | `log`          | 控制台日志      |
+| **逃生舱** | `customScript` | 自定义脚本      |
 
 ---
 
-## 三、安全性分析
+## 三、组件库（21 个带元数据）
 
-### 3.1 表达式解析器
+### 3.1 元数据系统
 
-表达式解析器（`expressionParser.ts`）安全性分析：
+每个组件可选配 `.meta.ts` 文件，定义属性面板的配置 Schema：
 
-**已完成的安全措施**：
-
-- ✅ **jsep AST 解析器**：已用 `jsep` + 白名单求值器（`safeEvaluator.ts`）替换 `new Function()`
-- ✅ **白名单全局对象**：`SAFE_GLOBALS` 只暴露 Math、JSON、Date、String、Number 等安全对象
-- ✅ **原型链保护**：阻止访问 `__proto__`、`prototype`、`constructor`
-- ✅ **多语句拒绝**：Compound 节点只执行第一个表达式，防止恶意串联注入
-- ✅ **函数调用限制**：只允许白名单对象的方法调用（如 `Math.max`）
-- ✅ `new` 表达式限制：只能实例化白名单中的类（如 `new Date()`）
-
-> [!SUCCESS]
-> **表达式引擎安全改造已完成**。数据绑定表达式 `{{expr}}` 的执行不再依赖 `new Function()`，从根本上消除了代码注入风险。
-
-### 3.2 customScript Action
-
-`customScript` 是 DSL 扩展点，允许用户执行自定义脚本。由于需要支持多行异步逻辑，无法使用 jsep。
-
-**已实施的多层防护**：
-
-1. **黑名单静态校验**（`validateCodeSafety`）：拦截 `eval`、`document`、`window`、`process`、`require` 等
-2. **沙箱隔离**（`createSandboxContext`）：只暴露白名单属性（data、formData、user 等）
-3. **Proxy 加强防护**：拦截 `constructor`、`__proto__`、`prototype` 访问，`has()` trap 阻止逃逸
-4. **超时机制**：默认 10 秒超时，防止无限循环
-
-> [!NOTE]
-> `customScript` 是高级功能，使用场景有限。多层防护已将风险降至可控范围。
-
-### 3.3 服务端安全
-
-| 项目         | 状态 | 说明                                                          |
-| ------------ | :--: | ------------------------------------------------------------- |
-| DTO 校验     |  ✅  | ValidationPipe whitelist + forbidNonWhitelisted               |
-| 异常过滤     |  ✅  | HttpExceptionFilter 统一异常处理                              |
-| 限流         |  ✅  | @nestjs/throttler 双层限流（10次/秒、100次/分钟）             |
-| CORS         |  ✅  | 已改为环境变量驱动（未配置时禁止跨域）                        |
-| API 鉴权     |  ✅  | **已实现**：`AuthGuard` Bearer Token 鉴权，所有 AI 接口已启用 |
-| API Key 暴露 |  ✅  | **已修复**：`sanitizeModel()` 移除响应中的 apiKey             |
-| `.env` 管理  |  ✅  | 仅有 `.env.example`（良好实践），未将 `.env` 纳入版本控制     |
-| DELETE 方法  |  ✅  | **已修复**：使用 `@Delete("models/:id")` 符合 RESTful 规范    |
-
-> [!SUCCESS]
-> **后端安全加固已完成**。所有 P0 安全问题已解决：API 鉴权启用、敏感信息过滤、REST 规范修正。
-
----
-
-## 四、AI 集成分析
-
-### 4.1 架构设计
-
-AI 集成采用清晰的**前后端分离架构**：
-
-```mermaid
-sequenceDiagram
-    participant U as 用户
-    participant AI as AIAssistant (Editor)
-    participant SVC as ServerAIService
-    participant BE as NestJS Server
-    participant P as Provider (OpenAI/Claude/Ollama)
-
-    U->>AI: 输入自然语言描述
-    AI->>SVC: streamResponse({ prompt, modelId })
-    SVC->>BE: POST /api/v1/ai/chat/stream (SSE)
-    BE->>P: chatStream(request)
-    P-->>BE: Observable<StreamChunk>
-    BE-->>SVC: text/event-stream
-    SVC-->>AI: onMessage(chunk)
-    AI->>AI: 累积响应 → 解析 JSON Schema
-    AI->>U: 更新预览 + 显示对话
+```typescript
+// Button.meta.ts 示例
+export const ButtonMeta: ComponentPanelConfig = {
+  componentType: 'Button',
+  displayName: '按钮',
+  category: 'form',
+  properties: [
+    {
+      key: 'type',
+      label: '类型',
+      editor: 'select',
+      options: [
+        { label: '默认', value: 'default' },
+        { label: '主要', value: 'primary' },
+      ],
+    },
+    { key: 'children', label: '按钮文字', editor: 'string', defaultValue: '按钮' },
+    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
+  ],
+};
 ```
 
-- **前端层**：`ServerAIService` 作为纯 API 客户端，彻底消除了浏览器端暴露 API Key 的隐患
-- **后端层**：`AIProviderFactory` 工厂模式管理多 Provider，支持 OpenAI、Anthropic、Ollama 及自定义兼容 Provider
-- **流式输出**：使用 RxJS Observable + SSE 实现流式聊天
+### 3.2 组件清单
 
-### 4.2 Prompt 策略
-
-Schema 生成使用独立配置（`packages/server/src/config/ai.config.ts`）：低温度（0.2）确保输出一致性，最大 Token 8192，System Prompt 指导生成 A2UI 格式 JSON。
-
-### 4.3 编辑器 AI 功能
-
-- 支持多轮对话（`conversationHistory` 数组）
-- 当前 Schema 作为上下文传入
-- 预设问题建议（`suggestions`）
-- 编辑器支持 Undo/Redo（`useSchemaHistory`：500ms 防抖合并，最大 50 步历史）
-- 草稿自动保存（`useDraftStorage`：localStorage 持久化）
-
-### 4.4 不足之处
-
-- **AI 生成 Schema 未经 Zod 校验**：解析后直接注入编辑器，应增加 `safeValidateSchema()` 校验步骤
-- 缺少 fallback 机制（首选 Provider 不可用时不自动切换）
-- 无 token 计费、配额管理、对话历史持久化等生产级功能
-- 对话上下文无限增长可能超出模型窗口
+| 分类             | 组件（✅ = 有元数据）                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **表单 (10)**    | ✅ Button, ✅ Input, ✅ TextArea, ✅ InputNumber, ✅ Select, ✅ Checkbox, ✅ Radio, ✅ Switch, ✅ Form, ✅ FormItem |
+| **布局 (4)**     | ✅ Container, ✅ Space, ✅ Divider, Div                                                                             |
+| **数据展示 (4)** | ✅ Card, ✅ Table, ✅ Tabs, List                                                                                    |
+| **反馈 (3)**     | ✅ Modal, ✅ Alert, ✅ Typography                                                                                   |
+| **其他**         | Text, ✅ Title, Slider, Collapse, Progress, Badge, Tag 等                                                           |
 
 ---
 
-## 五、组件库分析
+## 四、安全特性
 
-### 5.1 组件覆盖度
+### 4.1 表达式沙箱（前端）
 
-封装了 **31 个 Ant Design 组件文件**，注册表包含 **47 个组件/子组件**（`packages/components/src/index.tsx`），覆盖布局、表单、数据展示、反馈、排版五大类。
+- ✅ **jsep AST 解析器**：替代 `new Function()`，仅支持安全的表达式求值
+- ✅ **白名单全局对象**：只暴露 Math, JSON, Date 等安全对象
+- ✅ **原型链保护**：拦截 `__proto__`, `prototype`, `constructor` 访问
+- ✅ **多语句拒绝**：Compound 节点只执行第一个表达式
 
-### 5.2 设计问题
+### 4.2 编译器安全（后端）
 
-- `dependencies` 和 `peerDependencies` 双重声明 `react`/`antd`，应只保留 `peerDependencies`
-- 注册表硬编码，新增组件需修改 `index.tsx` 两处（export + registry）
-- 所有组件注册为 `React.ComponentType<any>`，丧失类型提示
-- **缺少组件属性元数据**（Property Panel Schema），无法在可视化编辑器中自动生成属性配置面板——这是当前最大的功能缺口
+- ✅ **表达式路径白名单验证** (`isValidExpressionPath`)：只允许合法的标识符和属性访问
+- ✅ **URL 开放重定向防护** (`sanitizeUrl`)：拒绝 `javascript:`, `data:` 等危险协议，支持域名白名单
+- ✅ **Babel AST 代码生成**：从根源消除 XSS 注入风险
 
----
+### 4.3 后端防护
 
-## 六、编译器分析
-
-`compiler` 包将 A2UI Schema 编译为 React 组件源代码，基于 **Babel AST** 架构，由 4 个子模块组成：
-
-| 模块               | 行数    | 职责                           |
-| ------------------ | ------- | ------------------------------ |
-| `generator.ts`     | 108 行  | 编译入口、状态收集、AST 组装   |
-| `jsxBuilder.ts`    | 251 行  | 递归生成 JSX Element AST       |
-| `actionBuilder.ts` | ~200 行 | DSL Action → 箭头函数 AST      |
-| `styleCompiler.ts` | 170 行  | CSS-in-JS → Tailwind className |
-
-**亮点**：
-
-- 全面采用 `@babel/types` 驱动代码生成，从根源消除 XSS 注入风险
-- 全局 Field 收集 → 一次遍历提取所有 `useState`，避免条件性 Hook 调用
-- 循环引用检测（`visited` Set）→ 生成注释标记而非报错
-- 样式双轨输出：可映射的转 Tailwind className，复杂值保留内联 style
-- 配置 `jsescOption.minimal: true` 防止中文被转义为 Unicode
-- DSL `ActionList` 事件可编译为 React 箭头函数包裹器
-
-**局限**：
-
-- 目标锁定 React + antd，不支持多框架输出（Vue、小程序等）
-- 不生成 TypeScript（仅 JSX）
-- 固定组件名 `GeneratedPage`，不支持自定义
+| 安全措施          | 状态 | 说明                                        |
+| ----------------- | ---- | ------------------------------------------- |
+| Bearer Token 认证 | ✅   | 所有 AI 接口已启用 `AuthGuard`              |
+| API Key 过滤      | ✅   | `sanitizeModel()` 移除响应中的密钥          |
+| 限流保护          | ✅   | 双层限流（10 次/秒、100 次/分钟）           |
+| CORS 控制         | ✅   | 环境变量驱动，未配置时禁止跨域              |
+| REST 规范         | ✅   | DELETE 方法已修正为 `@Delete("models/:id")` |
 
 ---
 
-## 七、后端架构评估
+## 五、AI 集成
 
-### 7.1 项目结构
+### 5.1 前后端分离架构
 
-NestJS 标准结构，全局前缀 `/api/v1`，核心模块为 `ai`（controller / service / providers / dto / model-config）。
+```
+用户 → AI 助手 (浮动岛 Cmd+K) → ServerAIService → NestJS Server → AI Provider
+```
 
-### 7.2 API 路由
+- **前端层**：`ServerAIService` 作为纯 API 客户端，浏览器端不暴露 API Key
+- **后端层**：`AIProviderFactory` 工厂模式管理多 Provider
+- **流式输出**：RxJS Observable + SSE 实现流式聊天
 
-| Method | Route                        | 说明              |
-| ------ | ---------------------------- | ----------------- |
-| POST   | `/ai/chat`                   | 非流式聊天        |
-| POST   | `/ai/chat/stream`            | SSE 流式聊天      |
-| POST   | `/ai/generate-schema`        | Schema 生成       |
-| POST   | `/ai/generate-schema/stream` | 流式 Schema 生成  |
-| GET    | `/ai/providers`              | Provider 列表     |
-| GET    | `/ai/providers/status`       | Provider 健康状态 |
-| GET    | `/ai/models`                 | 模型配置列表      |
-| POST   | `/ai/models`                 | 保存模型配置      |
-| POST   | `/ai/models/delete`          | 删除模型          |
+### 5.2 支持的 AI Provider
 
-### 7.3 后端问题诊断
+| Provider           | 状态 | 配置项                                 |
+| ------------------ | ---- | -------------------------------------- |
+| OpenAI             | ✅   | `OPENAI_API_KEY`, `OPENAI_MODEL`       |
+| Anthropic (Claude) | ✅   | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` |
+| Ollama (本地)      | ✅   | `OLLAMA_BASE_URL`, `OLLAMA_MODEL`      |
+| 自定义兼容服务     | ✅   | 支持 SiliconFlow, DeepSeek, Azure 等   |
 
-1. **DELETE 用 GET**：`@Get("models/:id/delete")` 违反 RESTful，系 AI 辅助生成遗留的调试代码
-2. **文件持久化**：`model-config.service.ts` 直接读写 `ai-models.json`，在容器化/多实例场景不适用
-3. **Provider 状态暴露 apiKey**：`getAllProviderStatus()` 返回 config 含密钥
-4. **无 API 鉴权**：所有路由无认证，任何人可消耗 Token 额度
-5. **SSE 重复代码**：`chatStream()` 和 `generateSchemaStream()` 约 50 行近乎相同的 SSE 处理逻辑
-6. **前后端类型未共享**：前端手动定义 `AIRequest`/`AIResponse`，与后端 `ChatRequest`/`ChatResponse` 不同步
+### 5.3 Prompt 工程化
 
----
+`PromptBuilder` 自动注入：
 
-## 八、测试覆盖度
-
-| 包         | 框架   | 单元测试  |   E2E    | 说明                              |
-| ---------- | ------ | :-------: | :------: | --------------------------------- |
-| types      | -      |     -     |    -     | 纯类型文件，无需测试              |
-| renderer   | Vitest | ✅ 10文件 |    ❌    | Engine、Actions、Parser 全覆盖    |
-| compiler   | Vitest | ✅ 2文件  |    ❌    | AST 编译测试                      |
-| components | Vitest | ✅ 2文件  |    ❌    | 注册表 + 基础渲染                 |
-| editor     | Vitest | ✅ 3文件  |    ❌    | 组件渲染 Mock 测试                |
-| server     | Jest   | ✅ 4文件  | ✅ 3文件 | Factory/Service/Controller 全覆盖 |
-
-> [!NOTE]
-> 前端使用 Vitest（契合 Vite），后端使用 Jest（NestJS 默认），各自生态的最佳实践。renderer 的测试质量最高，覆盖了 DSL 引擎核心（24 种 Action）、表达式解析器安全沙箱、Schema 校验等关键路径。
+- 核心 Action 类型说明（10 种）
+- 可用组件类型白名单（从注册表自动生成）
+- Schema 格式规范
+- 输出要求（纯 JSON，无 Markdown）
 
 ---
 
-## 九、工程化与开发体验
+## 六、编译器（后端）
 
-### 9.1 做得好的方面
+### 6.1 架构设计
 
-- `AGENT.md` 文件 208 行，为 AI 辅助开发提供充足上下文
-- `tsconfig.base.json` 严格模式（`strict: true`、`noUnusedLocals`、`noUnusedParameters`）
-- `pnpm dev` 一键启动 playground
-- 构建脚本合理，支持单包与全量构建
-- 各包构建工具适配：前端用 Vite library mode（ESM + .d.ts），后端/types 用 `tsc`
+Compiler 已迁移至后端 (`packages/backend/src/modules/compiler/`)，解决浏览器兼容性和安全问题。
 
-### 9.2 工程化缺失
+**API 端点**：
 
-| 工具                       | 状态 | 影响               |
-| -------------------------- | :--: | ------------------ |
-| ESLint                     |  ❌  | 代码规范无强制保证 |
-| Prettier                   |  ❌  | 格式不统一         |
-| .editorconfig              |  ❌  | 编辑器配置不统一   |
-| Husky / lint-staged        |  ❌  | 提交质量无保障     |
-| CI/CD (GitHub Actions)     |  ❌  | 无自动化构建/测试  |
-| Commitlint                 |  ❌  | 提交消息无规范     |
-| Changesets / Lerna version |  ❌  | 版本管理手动       |
+```
+POST /api/v1/compiler/export
+Request: { schema: A2UISchema, options?: CompileOptions }
+Response: { code: string }
+```
 
-### 9.3 文档问题
+### 6.2 编译流程
 
-- `README.md` 的 Schema 格式说明与实际 A2UI 扁平格式不一致（README 描述嵌套树结构）
-- `AGENT.md` 未列出 `types` 和 `server` 包
+```
+A2UI Schema → generator.ts (入口)
+           → jsxBuilder.ts (JSX AST 生成)
+           → actionBuilder.ts (事件函数 AST)
+           → styleCompiler.ts (样式 → Tailwind)
+           → Babel 生成代码 → Prettier 格式化 → 返回
+```
 
----
+### 6.3 编译特性
 
-## 十、扩展性与可维护性
-
-### 10.1 三层可扩展性
-
-| 层级   | 扩展点          | 机制                              |
-| ------ | --------------- | --------------------------------- |
-| 组件层 | 自定义 UI 组件  | `componentRegistry` 注入          |
-| DSL 层 | 自定义 Action   | `executor.registerHandler()`      |
-| AI 层  | 自定义 Provider | `AIProviderFactory` + OpenAI 兼容 |
-
-### 10.2 欠缺的扩展能力
-
-- ❌ **组件属性面板元数据**：核心缺口，无法自动生成属性配置面板
-- ❌ 插件系统 / 微内核：组件注册全量硬编码，无按需加载
-- ❌ 主题定制：仅依赖 Ant Design ConfigProvider
-- ❌ 多目标编译：Compiler 锁定 React + antd
-- ❌ 组件 Marketplace：无远程组件加载
-
-### 10.3 可维护性
-
-- 中文注释覆盖率高，团队内可读性好
-- 类型定义较完整，但 `any` 使用过于频繁
-- 部分文件过长（`dsl.ts` 552 行、`Renderer.tsx` 443 行、`expressionParser.ts` 422 行），建议拆分
+- ✅ **全局 Field 收集**：一次遍历提取所有 `useState`，避免条件性 Hook 调用
+- ✅ **循环引用检测**：`visited` Set 标记，生成注释而非报错
+- ✅ **样式双轨输出**：可映射的转 Tailwind className，复杂值保留内联 style
+- ✅ **中文保护**：`jsescOption.minimal: true` 防止中文被转义为 Unicode
 
 ---
 
-## 十一、总结
+## 七、编辑器功能
 
-### ⭐ 核心优点
+### 7.1 核心功能
 
-1. **协议选型正确** — 遵循 Google A2UI 开放协议，与 AI 原生 UI 生成的业界标准方向一致
-2. **架构设计合理** — Monorepo 6 包分层清晰，依赖方向正确，关注点分离优秀
-3. **AI 对话优先的交互范式** — 对普通用户比传统拖拽更便捷，自然语言描述即可生成页面
-4. **DSL 引擎功能丰富** — 7 大类 24 种 Action，具备流程控制、异步编排、错误处理等高级能力
-5. **AST 编译器成熟** — Babel AST 管线，从根源消除 XSS 注入风险，支持 Tailwind 样式编译
-6. **Zod 运行时校验完善** — 三层校验 + 引用完整性检查，编辑器实时容错与编译时严格校验双轨并行
-7. **AI 架构安全** — 前端已移除直连大模型逻辑，API Key 统一由后端管理
-8. **安全基线达标** — 表达式引擎使用 jsep 白名单求值器，后端 API 鉴权已启用，敏感信息已过滤
+| 功能        | 状态 | 说明                                                  |
+| ----------- | ---- | ----------------------------------------------------- |
+| AI 对话生成 | ✅   | 浮动岛 (Cmd+K) + 历史抽屉 (Alt+H)                     |
+| 实时预览    | ✅   | SelectableCanvas 支持画布选中                         |
+| 组件树      | ✅   | TreeView + 右键菜单（删除/复制/上移/下移）            |
+| 属性面板    | ✅   | 根据元数据动态生成 5 种编辑器类型                     |
+| Undo/Redo   | ✅   | Command Pattern，50 步历史                            |
+| 模板库      | ✅   | 5 个内置模板（Dashboard, Login, Form, List, Profile） |
+| 错误处理    | ✅   | ErrorBoundary + EmptyState，5 种预设变体              |
+| Schema 校验 | ✅   | SchemaValidator + autoFix 自动修复                    |
 
-### ⚠️ 核心问题
+### 7.2 属性面板编辑器类型
 
-1. ~~**安全隐患残留** — 表达式引擎底层仍使用 `new Function()`~~ ✅ **已解决**（jsep 白名单求值器）
-2. ~~**后端安全缺失** — 无 API 鉴权、Provider 状态接口暴露 apiKey~~ ✅ **已解决**（AuthGuard + sanitizeModel）
-3. ~~**组件属性面板缺失**~~ ✅ **已解决**（Sprint 2 已实现 PropertyPanel）
-4. **类型安全不足** — 核心数据结构和组件注册表大量使用 `any`（P2 优化）
-5. **工程化极简主义** — 无 Lint、无格式化、无 Git Hooks、无 CI/CD（P2 优化）
-6. ~~**AI Schema 校验断裂**~~ ✅ **已解决**（Sprint 2 已实现 SchemaValidator + autoFix）
+| 类型      | 说明        | 适用场景               |
+| --------- | ----------- | ---------------------- |
+| `string`  | 文本输入框  | 按钮文字、占位符等     |
+| `number`  | 数字输入框  | 行数、最大值、最小值等 |
+| `boolean` | Switch 开关 | 禁用、加载、必填等     |
+| `select`  | 下拉选择    | 类型、尺寸、颜色等     |
+| `color`   | 颜色选择器  | 主题色、背景色等       |
+| `json`    | JSON 编辑器 | 复杂对象配置           |
 
-### 📊 综合评分
+---
 
-| 维度       | 评分 (1-10) | 说明                                                              |
-| ---------- | :---------: | ----------------------------------------------------------------- |
-| 架构设计   |    **8**    | 6 包分层清晰，AI 协议选型正确，前后端职责明确                     |
-| 功能完整度 |   **8.5**   | DSL 引擎强大，编译器 AST 架构成熟，双输出通道完备，属性面板已实现 |
-| 代码质量   |    **7**    | 注释详尽，模块拆分合理，但 `any` 过度使用                         |
-| 安全性     |    **8**    | 表达式引擎安全改造完成，后端鉴权启用，敏感信息过滤                |
-| 测试覆盖   |   **8.5**   | 全包测试基建覆盖，renderer/server 高质量，compiler 已对齐         |
-| 工程化     |    **3**    | 基建几乎全无，严重依赖工程师自觉                                  |
-| AI 集成    |   **8.5**   | 多 Provider 流式输出，前后端分离安全，Schema 校验闭环已实现       |
-| 开发体验   |    **7**    | AGENT.md 优秀，构建脚本合理，缺代码检查工具                       |
-| **综合**   |   **7.5**   | **安全基线达标 + 核心功能完备，补齐工程化后具备开源首发条件**     |
+## 八、测试覆盖
 
-### 🎯 优先改进建议
+| 包       | 框架   | 单元测试 | E2E | 说明                              |
+| -------- | ------ | -------- | --- | --------------------------------- |
+| frontend | Vitest | ✅       | ❌  | Engine, Actions, Parser 覆盖      |
+| backend  | Jest   | ✅       | ✅  | Factory, Service, Controller 覆盖 |
 
-|   优先级   | 建议                                                                          |
-| :--------: | ----------------------------------------------------------------------------- |
-| ~~**P0**~~ | ~~安全加固：废除 `new Function()`、后端增加 API 鉴权、过滤 apiKey~~ ✅ 已完成 |
-| ~~**P1**~~ | ~~组件属性元数据：为每个组件定义 Property Panel Schema~~ ✅ 已完成            |
-| ~~**P1**~~ | ~~AI Schema 闭环：注入前增加校验 + autoFix~~ ✅ 已完成                        |
-|   **P1**   | 类型攻坚：逐步消除 `any`，为组件 props 定义精确 TypeScript 接口               |
-|   **P2**   | 工程化基建：ESLint + Prettier + Husky + lint-staged（半天可完成）             |
-|   **P2**   | CI/CD：GitHub Actions 配置 build + test + type-check 流水线                   |
-|   **P3**   | 多目标编译：Compiler 支持 Vue、小程序等输出                                   |
-|   **P3**   | 实时协作：基于 CRDT 的多人 Schema 协同编辑                                    |
+**关键测试文件**：
+
+- `renderer/__tests__/` — DSL 引擎测试（24 种 Action）
+- `renderer/executor/__tests__/` — 表达式解析器安全沙箱测试
+- `editor/store/__tests__/` — Zustand 状态管理测试
+- `backend/src/modules/ai/` — Service + Controller 测试
+
+---
+
+## 九、工程化现状
+
+### 9.1 已配置工具
+
+| 工具        | 状态 | 文件位置                          |
+| ----------- | ---- | --------------------------------- |
+| ESLint      | ✅   | `eslint.config.mjs` (flat config) |
+| Prettier    | ✅   | `.prettierrc.json`                |
+| Husky       | ✅   | `.husky/` 目录                    |
+| lint-staged | ✅   | `package.json` 配置               |
+
+### 9.2 待完成
+
+| 工具              | 优先级 | 说明                             |
+| ----------------- | ------ | -------------------------------- |
+| GitHub Actions CI | P2     | build + test + type-check 流水线 |
+| Commitlint        | P3     | 提交消息规范                     |
+| Changesets        | P3     | 版本管理和发布                   |
+
+---
+
+## 十、综合评分
+
+| 维度       | 评分 (1-10) | 说明                                           |
+| ---------- | :---------: | ---------------------------------------------- |
+| 架构设计   |    **9**    | 2 包精简架构，依赖清晰，维护轻松               |
+| 功能完整度 |   **8.5**   | DSL 引擎强大，属性面板已实现，模板库待完善     |
+| 代码质量   |    **7**    | 注释详尽，但 `any` 过度使用                    |
+| 安全性     |    **9**    | 表达式沙箱 + 编译器安全 + 后端鉴权             |
+| 测试覆盖   |   **8.5**   | 单元测试基建覆盖，E2E 待加强                   |
+| 工程化     |    **7**    | ESLint + Prettier + Husky 已配置，CI/CD 待建设 |
+| AI 集成    |   **8.5**   | 多 Provider 流式输出，Schema 校验闭环          |
+| 开发体验   |    **8**    | AGENT.md 优秀，2 包架构简化维护                |
+| **综合**   |   **8.5**   | **安全基线达标 + 架构精简 + 核心功能完备**     |
+
+---
+
+## 十一、优先改进建议
+
+| 优先级 | 任务                         |   状态    | 预计工作量 |
+| :----: | ---------------------------- | :-------: | :--------: |
+| **P0** | ~~安全加固（表达式 + URL）~~ | ✅ 已完成 |     -      |
+| **P0** | ~~架构重构（6 包→2 包）~~    | ✅ 已完成 |     -      |
+| **P0** | ~~编译器迁移后端~~           | ✅ 已完成 |     -      |
+| **P1** | ~~组件属性元数据（21 个）~~  | ✅ 已完成 |     -      |
+| **P1** | 类型攻坚（消灭 `any`）       |    ⏳     |    1 天    |
+| **P1** | 模板库完善（5→8 个）         |    ⏳     |    1 天    |
+| **P1** | Demo 站点部署（Vercel）      |    ⏳     |   1-2 天   |
+| **P1** | README.md 重写               |    ✅     |     -      |
+| **P2** | GitHub Actions CI            |    ⏳     |   0.5 天   |
+| **P2** | P1 批次组件元数据补充        |    ⏳     |    2 天    |
+
+---
+
+## 十二、快速开始
+
+### 安装与运行
+
+```bash
+# 克隆项目
+git clone https://github.com/your-org/a2ui-lowcode.git
+cd a2ui-lowcode
+
+# 安装依赖
+pnpm install
+
+# 启动开发服务器
+pnpm dev
+
+# 访问 http://localhost:5173
+```
+
+### 常用命令
+
+```bash
+# 构建
+pnpm build            # 全量构建
+pnpm build:frontend   # 仅前端
+pnpm build:backend    # 仅后端
+
+# 代码质量
+pnpm lint             # ESLint 检查
+pnpm lint:fix         # 自动修复
+pnpm format           # Prettier 格式化
+
+# 测试
+pnpm test             # 运行测试
+```
+
+---
+
+**文档更新时间**：2026-03-08 · **Sprint 3 Phase 0 全部完成** · 下一步：Phase 1 开源首发准备

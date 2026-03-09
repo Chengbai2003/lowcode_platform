@@ -1,0 +1,354 @@
+@use '@styles/_variables.scss' as *;
+@use '@styles/_mixins.scss' as *;
+
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: $z-modal;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  display: flex;
+  width: 900px;
+  max-width: 90vw;
+  height: 600px;
+  max-height: 80vh;
+  background: $bg-base;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-xl;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+// 左侧列表面板
+.listPanel {
+  width: 320px;
+  border-right: 1px solid $border-base;
+  display: flex;
+  flex-direction: column;
+  background: $bg-elevated;
+}
+
+.listHeader {
+  padding: $spacing-lg;
+  border-bottom: 1px solid $border-base;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h2 {
+    font-size: $font-size-lg;
+    font-weight: $font-weight-semibold;
+    color: $text-primary;
+    margin: 0;
+  }
+
+  .count {
+    font-size: $font-size-xs;
+    color: $text-muted;
+    background: $bg-hover;
+    padding: 2px 8px;
+    border-radius: $radius-full;
+  }
+}
+
+.templateList {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-sm;
+}
+
+// 模板卡片
+.templateCard {
+  display: flex;
+  gap: $spacing-md;
+  padding: $spacing-md;
+  margin-bottom: $spacing-sm;
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    border-color: $primary;
+    box-shadow: $shadow-sm;
+  }
+
+  &.selected {
+    border-color: $primary;
+    background: rgba($primary, 0.05);
+  }
+}
+
+.cardIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: $radius-md;
+  background: $bg-elevated;
+  @include flex-center;
+  color: $primary;
+  flex-shrink: 0;
+}
+
+.cardContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  color: $text-primary;
+  margin-bottom: 4px;
+}
+
+.cardDesc {
+  font-size: $font-size-xs;
+  color: $text-muted;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardTags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.categoryTag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: $radius-sm;
+  background: $primary;
+  color: $text-inverse;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: $radius-sm;
+  background: $bg-hover;
+  color: $text-muted;
+}
+
+.selectedBadge {
+  width: 20px;
+  height: 20px;
+  border-radius: $radius-full;
+  background: $primary;
+  @include flex-center;
+  color: $text-inverse;
+  align-self: center;
+}
+
+// 右侧预览面板
+.previewPanel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: $bg-base;
+}
+
+.previewHeader {
+  padding: $spacing-lg;
+  border-bottom: 1px solid $border-base;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.previewTitle {
+  display: flex;
+  align-items: center;
+  gap: $spacing-sm;
+
+  h3 {
+    font-size: $font-size-lg;
+    font-weight: $font-weight-semibold;
+    color: $text-primary;
+    margin: 0;
+  }
+}
+
+.categoryIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: $radius-md;
+  background: $bg-elevated;
+  @include flex-center;
+  color: $primary;
+}
+
+.closeBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: $radius-md;
+  border: none;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  @include flex-center;
+  @include transition-all;
+
+  &:hover {
+    background: $bg-hover;
+    color: $text-primary;
+  }
+}
+
+// 示例 Prompt 区域
+.promptSection {
+  padding: $spacing-md $spacing-lg;
+  background: $bg-elevated;
+  border-bottom: 1px solid $border-base;
+}
+
+.promptLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-medium;
+  color: $text-muted;
+  margin-bottom: 8px;
+}
+
+.promptContent {
+  font-size: $font-size-sm;
+  color: $text-secondary;
+  line-height: 1.6;
+  padding: $spacing-sm $spacing-md;
+  background: $bg-base;
+  border-radius: $radius-md;
+  border: 1px solid $border-base;
+}
+
+// 预览内容
+.previewContent {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-lg;
+}
+
+.previewPlaceholder {
+  text-align: center;
+  color: $text-muted;
+
+  .previewIcon {
+    width: 80px;
+    height: 80px;
+    border-radius: $radius-lg;
+    background: $bg-elevated;
+    @include flex-center;
+    color: $primary;
+    margin: 0 auto $spacing-md;
+  }
+
+  p {
+    font-size: $font-size-base;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+    margin: 0 0 8px;
+  }
+
+  span {
+    font-size: $font-size-sm;
+    color: $text-muted;
+  }
+}
+
+// 操作按钮
+.actions {
+  padding: $spacing-lg;
+  border-top: 1px solid $border-base;
+  display: flex;
+  justify-content: flex-end;
+  gap: $spacing-sm;
+}
+
+.cancelBtn {
+  padding: 8px $spacing-lg;
+  border-radius: $radius-md;
+  border: 1px solid $border-base;
+  background: transparent;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  cursor: pointer;
+  @include transition-all;
+
+  &:hover {
+    background: $bg-hover;
+    border-color: $border-dark;
+  }
+}
+
+.applyBtn {
+  @include flex-center;
+  gap: 6px;
+  padding: 8px $spacing-lg;
+  border-radius: $radius-md;
+  border: none;
+  background: $primary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-semibold;
+  color: $text-inverse;
+  cursor: pointer;
+  @include transition-all;
+
+  &:hover {
+    background: $primary-hover;
+  }
+}
+
+// 空状态
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: $text-muted;
+
+  svg {
+    margin-bottom: $spacing-md;
+    opacity: 0.3;
+  }
+
+  p {
+    font-size: $font-size-sm;
+  }
+}

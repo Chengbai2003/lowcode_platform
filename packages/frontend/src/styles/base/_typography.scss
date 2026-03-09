@@ -1,0 +1,60 @@
+// ============================================
+// 字体排版
+// ============================================
+
+body {
+  font-family: $font-family;
+  font-size: $font-size-base;
+  line-height: $line-height-normal;
+  color: $text-primary;
+}
+
+// 标题样式
+h1 {
+  font-size: $font-size-2xl;
+  font-weight: $font-weight-bold;
+  line-height: $line-height-tight;
+}
+
+h2 {
+  font-size: $font-size-xl;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+}
+
+h3 {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  line-height: $line-height-tight;
+}
+
+h4 {
+  font-size: $font-size-md;
+  font-weight: $font-weight-medium;
+  line-height: $line-height-tight;
+}
+
+// 代码样式
+code {
+  font-family: $font-family-mono;
+  font-size: 0.9em;
+  padding: 2px 6px;
+  background: $bg-hover;
+  border-radius: $radius-sm;
+  color: $error;
+}
+
+pre {
+  font-family: $font-family-mono;
+  font-size: $font-size-sm;
+  padding: $spacing-md;
+  background: $bg-hover;
+  border-radius: $radius-md;
+  overflow-x: auto;
+
+  code {
+    padding: 0;
+    background: none;
+    color: inherit;
+  }
+}

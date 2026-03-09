@@ -1,0 +1,48 @@
+{
+  "name": "@lowcode-platform/frontend",
+  "version": "1.0.0",
+  "description": "A2UI Low-code Platform Frontend Application",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@ant-design/icons": "^5.2.6",
+    "@jsep-plugin/new": "^1.0.4",
+    "@monaco-editor/react": "^4.6.0",
+    "antd": "^5.0.0",
+    "framer-motion": "^12.35.1",
+    "idb-keyval": "^6.2.2",
+    "jsep": "^1.4.0",
+    "lucide-react": "^0.469.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "react-redux": "^9.0.0",
+    "redux": "^5.0.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^14.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "@vitest/ui": "^1.0.0",
+    "autoprefixer": "^10.4.21",
+    "jsdom": "^23.0.0",
+    "rimraf": "^5.0.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.8",
+    "vite-plugin-dts": "^3.7.0",
+    "vitest": "^1.0.0"
+  }
+}

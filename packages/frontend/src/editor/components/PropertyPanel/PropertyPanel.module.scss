@@ -1,0 +1,803 @@
+@use '@styles/_variables.scss' as *;
+@use '@styles/_mixins.scss' as *;
+
+.propertyPanel {
+  @include flex-column;
+  height: 100%;
+  width: 320px;
+  flex-shrink: 0;
+  background: $bg-elevated;
+  box-shadow: $shadow-md;
+}
+
+.tabsContainer {
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+  @include flex-center;
+  flex-shrink: 0;
+
+  .tabs {
+    @include pill-button-group;
+    width: 100%;
+    border: 1px solid $border-base;
+
+    button {
+      @include pill-button-item;
+      flex: 1;
+      padding: 6px $spacing-md;
+      font-size: $font-size-sm;
+      font-weight: $font-weight-medium;
+      border: none;
+      background: transparent;
+      color: $text-muted;
+      cursor: pointer;
+      @include transition-all;
+
+      &.active {
+        background: $bg-base;
+        color: $text-primary;
+        box-shadow: $shadow-sm;
+      }
+
+      &:hover:not(.active) {
+        color: $text-secondary;
+      }
+    }
+  }
+}
+
+.panelHeader {
+  @include flex-between;
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+  background: $bg-elevated;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+
+  h3 {
+    font-size: $font-size-sm;
+    font-weight: $font-weight-bold;
+    color: $text-primary;
+    margin: 0;
+  }
+
+  .componentId {
+    font-size: 10px;
+    font-family: $font-family-mono;
+    color: $text-muted;
+    background: $bg-hover;
+    padding: 2px 6px;
+    border-radius: $radius-sm;
+  }
+}
+
+.panelBody {
+  flex: 1;
+  overflow-y: auto;
+  @include scrollbar;
+}
+
+.propertiesSection {
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.sectionLabel {
+  @include label-uppercase;
+  margin-bottom: $spacing-md;
+  display: block;
+}
+
+.propertiesList {
+  @include flex-column;
+  gap: $spacing-md;
+}
+
+/* 编辑器通用样式 */
+.propertyItem {
+  @include flex-column;
+  gap: $spacing-sm;
+}
+
+.propertyLabel {
+  @include flex-between;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  font-weight: $font-weight-medium;
+
+  .description {
+    color: $text-tertiary;
+    font-weight: $font-weight-normal;
+    font-size: 11px;
+  }
+}
+
+.propertyInput {
+  width: 100%;
+
+  input,
+  textarea,
+  select {
+    @include input-base;
+    background: $bg-base;
+    font-size: $font-size-sm;
+    padding: $spacing-sm $spacing-md;
+    border-radius: $radius-md;
+
+    &:focus {
+      border-color: $accent;
+      box-shadow: 0 0 0 1px $accent;
+    }
+  }
+
+  textarea {
+    min-height: 60px;
+    resize: vertical;
+    font-family: $font-family-mono;
+    font-size: $font-size-xs;
+  }
+}
+
+/* 按钮组样式 */
+.buttonGroup {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: $spacing-xs;
+  background: $bg-base;
+  padding: $spacing-xs;
+  border-radius: $radius-md;
+  border: 1px solid $border-base;
+  box-shadow: $shadow-sm;
+
+  button {
+    padding: 6px $spacing-sm;
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    border-radius: $radius-sm;
+    border: none;
+    background: transparent;
+    color: $text-secondary;
+    cursor: pointer;
+    @include transition-all;
+
+    &.active {
+      background: $bg-hover;
+      color: $text-primary;
+    }
+
+    &:hover:not(.active) {
+      color: $text-primary;
+    }
+  }
+}
+
+/* 对齐按钮组 */
+.alignmentGroup {
+  display: flex;
+  gap: $spacing-sm;
+
+  .alignButtons {
+    flex: 1;
+    display: flex;
+    background: $bg-base;
+    border-radius: $radius-md;
+    border: 1px solid $border-base;
+    padding: $spacing-xs;
+    box-shadow: $shadow-sm;
+
+    button {
+      flex: 1;
+      padding: 6px;
+      border: none;
+      background: transparent;
+      color: $text-secondary;
+      cursor: pointer;
+      border-radius: $radius-sm;
+      @include flex-center;
+      @include transition-all;
+
+      &.active {
+        background: $accent-light;
+        color: $accent-hover;
+      }
+
+      &:hover:not(.active) {
+        background: $bg-hover;
+        color: $text-primary;
+      }
+
+      svg {
+        width: 16px;
+        height: 16px;
+      }
+    }
+  }
+}
+
+/* 间距输入组 */
+.spacingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: $spacing-sm;
+
+  .spacingInput {
+    @include flex-start;
+    background: $bg-base;
+    border: 1px solid $border-base;
+    border-radius: $radius-md;
+    overflow: hidden;
+    @include transition-all;
+
+    &:focus-within {
+      border-color: $accent;
+      box-shadow: 0 0 0 1px $accent;
+    }
+
+    .label {
+      font-size: 10px;
+      font-weight: $font-weight-medium;
+      color: $text-tertiary;
+      width: 28px;
+      text-align: center;
+      border-right: 1px solid $border-base;
+      background: $bg-hover;
+      @include flex-center;
+      height: 100%;
+      flex-shrink: 0;
+    }
+
+    input {
+      flex: 1;
+      border: none;
+      padding: $spacing-sm;
+      font-size: $font-size-xs;
+      color: $text-primary;
+      outline: none;
+      background: transparent;
+
+      &::-webkit-inner-spin-button,
+      &::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+    }
+  }
+}
+
+/* 颜色选择器 */
+.colorInputWrapper {
+  @include flex-between;
+  padding: 10px $spacing-md;
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  box-shadow: $shadow-sm;
+
+  .colorLabel {
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  .colorControls {
+    @include flex-start;
+    gap: $spacing-sm;
+
+    .colorValue {
+      font-size: $font-size-xs;
+      font-family: $font-family-mono;
+      color: $text-muted;
+    }
+
+    .colorSwatch {
+      width: 20px;
+      height: 20px;
+      border-radius: $radius-sm;
+      border: 1px solid $border-base;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+      cursor: pointer;
+    }
+  }
+}
+
+/* 滑块样式 */
+.sliderWrapper {
+  @include flex-between;
+  padding: 10px $spacing-md;
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  box-shadow: $shadow-sm;
+
+  .sliderLabel {
+    font-size: $font-size-xs;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+  }
+
+  input[type="range"] {
+    width: 96px;
+    accent-color: $accent;
+  }
+}
+
+/* 空状态 */
+.emptyState {
+  padding: $spacing-2xl;
+  text-align: center;
+  color: $text-tertiary;
+  font-size: $font-size-sm;
+}
+
+/* Tab 切换栏 */
+.tabBar {
+  display: flex;
+  padding: $spacing-md;
+  border-bottom: 1px solid $border-base;
+  background: $bg-elevated;
+  flex-shrink: 0;
+
+  .tabButton {
+    flex: 1;
+    padding: 8px $spacing-md;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    color: $text-secondary;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-xs;
+
+    &:hover {
+      color: $text-primary;
+    }
+
+    &.active {
+      color: $primary;
+      border-bottom-color: $primary;
+    }
+  }
+}
+
+/* 事件配置面板 */
+.eventConfigPanel {
+  @include flex-column;
+  height: 100%;
+  overflow-y: auto;
+  @include scrollbar;
+
+  .flowList {
+    flex: 1;
+    padding: $spacing-md;
+    display: flex;
+    flex-direction: column;
+    gap: $spacing-md;
+  }
+
+  .emptyState {
+    padding: $spacing-xl * 2;
+    text-align: center;
+    color: $text-tertiary;
+
+    .emptyText {
+      font-size: $font-size-sm;
+      margin-bottom: $spacing-sm;
+    }
+
+    .emptyHint {
+      font-size: $font-size-xs;
+      color: $text-disabled;
+    }
+  }
+
+  .addFlowButton {
+    margin: $spacing-md;
+    padding: $spacing-md;
+    background: $bg-base;
+    border: 2px dashed $border-base;
+    border-radius: $radius-lg;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+    font-weight: $font-weight-medium;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+
+    &:hover {
+      border-color: $primary;
+      color: $primary;
+      background: rgba($primary, 0.05);
+    }
+  }
+}
+
+/* 事件流编辑器 */
+.eventFlow {
+  background: $bg-base;
+  border: 1px solid $border-base;
+  border-radius: $radius-lg;
+  overflow: hidden;
+  box-shadow: $shadow-sm;
+
+  .flowHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $spacing-sm $spacing-md;
+    background: $bg-hover;
+    border-bottom: 1px solid $border-base;
+    gap: $spacing-md;
+  }
+
+  .flowTrigger {
+    display: flex;
+    align-items: center;
+    gap: $spacing-sm;
+    flex: 1;
+    min-width: 0;
+
+    .triggerIcon {
+      color: $primary;
+      flex-shrink: 0;
+    }
+
+    .triggerLabel {
+      flex: 1;
+      font-size: $font-size-sm;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+      font-family: $font-family-mono;
+      background: $bg-elevated;
+      padding: $spacing-xs $spacing-sm;
+      border-radius: $radius-sm;
+      border: 1px solid $border-base;
+    }
+  }
+
+  .flowActions {
+    display: flex;
+    gap: $spacing-xs;
+    flex-shrink: 0;
+
+    .flowActionBtn {
+      padding: 6px;
+      background: transparent;
+      border: none;
+      border-radius: $radius-sm;
+      color: $text-tertiary;
+      cursor: pointer;
+      transition: all $transition-base $transition-timing;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        background: $bg-hover;
+        color: $primary;
+      }
+
+      &.delete {
+        &:hover {
+          color: $error;
+          background: rgba($error, 0.1);
+        }
+      }
+    }
+  }
+
+  .actionChain {
+    padding: $spacing-md;
+    position: relative;
+
+    .emptyChain {
+      text-align: center;
+      padding: $spacing-lg;
+      color: $text-tertiary;
+
+      .emptyChainText {
+        font-size: $font-size-xs;
+        margin-bottom: $spacing-sm;
+      }
+
+      .addFirstActionBtn {
+        display: inline-flex;
+        align-items: center;
+        gap: $spacing-xs;
+        padding: $spacing-sm $spacing-md;
+        background: transparent;
+        border: 1px dashed $border-base;
+        border-radius: $radius-md;
+        color: $text-secondary;
+        font-size: $font-size-xs;
+        font-weight: $font-weight-medium;
+        cursor: pointer;
+        transition: all $transition-base $transition-timing;
+
+        &:hover {
+          border-color: $primary;
+          color: $primary;
+          background: rgba($primary, 0.05);
+        }
+      }
+    }
+
+    .actionNode {
+      position: relative;
+      padding-left: $spacing-lg;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: $border-base;
+      }
+
+      .actionDot {
+        position: absolute;
+        left: -4px;
+        top: 12px;
+        width: 10px;
+        height: 10px;
+        background: $bg-base;
+        border: 2px solid $primary;
+        border-radius: 50%;
+        z-index: 1;
+      }
+
+      .actionCard {
+        background: $bg-elevated;
+        border: 1px solid $border-base;
+        border-radius: $radius-md;
+        padding: $spacing-sm $spacing-md;
+        margin-bottom: $spacing-sm;
+        transition: all $transition-base $transition-timing;
+
+        &:hover {
+          border-color: $primary;
+          box-shadow: $shadow-sm;
+        }
+
+        .actionCardHeader {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: $spacing-xs;
+        }
+
+        .actionTitle {
+          display: flex;
+          align-items: center;
+          gap: $spacing-xs;
+          font-size: $font-size-xs;
+          font-weight: $font-weight-semibold;
+          color: $text-primary;
+        }
+
+        .actionSummary {
+          font-size: 10px;
+          font-family: $font-family-mono;
+          color: $text-secondary;
+          background: $bg-hover;
+          padding: $spacing-xs $spacing-sm;
+          border-radius: $radius-sm;
+          word-break: break-all;
+        }
+
+        .deleteActionBtn {
+          padding: 4px;
+          background: transparent;
+          border: none;
+          border-radius: $radius-sm;
+          color: $text-tertiary;
+          cursor: pointer;
+          transition: all $transition-base $transition-timing;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+
+          &:hover {
+            background: rgba($error, 0.1);
+            color: $error;
+          }
+        }
+      }
+    }
+
+    .addActionBtn {
+      width: 100%;
+      padding: $spacing-sm $spacing-md;
+      background: transparent;
+      border: 1px dashed $border-base;
+      border-radius: $radius-md;
+      color: $text-secondary;
+      font-size: $font-size-xs;
+      font-weight: $font-weight-medium;
+      cursor: pointer;
+      transition: all $transition-base $transition-timing;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: $spacing-xs;
+
+      &:hover {
+        border-color: $primary;
+        color: $primary;
+        background: rgba($primary, 0.05);
+      }
+    }
+  }
+}
+
+/* 动作图标 */
+.actionIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: $radius-sm;
+  flex-shrink: 0;
+}
+
+/* 动作选择器弹窗 */
+.modalBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(4px);
+  z-index: 1080;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-xl;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.actionSelectorModal {
+  background: $bg-elevated;
+  border-radius: $radius-xl;
+  box-shadow: $shadow-xl;
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: slideUp 0.2s ease-out;
+
+  .modalHeader {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: $spacing-lg;
+    border-bottom: 1px solid $border-base;
+    background: $bg-base;
+
+    .modalTitle {
+      font-size: $font-size-base;
+      font-weight: $font-weight-bold;
+      color: $text-primary;
+      margin: 0 0 4px 0;
+    }
+
+    .modalDesc {
+      font-size: $font-size-xs;
+      color: $text-tertiary;
+      margin: 0;
+    }
+
+    .modalClose {
+      padding: 6px;
+      background: transparent;
+      border: none;
+      border-radius: $radius-md;
+      color: $text-tertiary;
+      cursor: pointer;
+      transition: all $transition-base $transition-timing;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      &:hover {
+        background: $bg-hover;
+        color: $text-primary;
+      }
+    }
+  }
+
+  .actionGrid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: $spacing-md;
+    padding: $spacing-lg;
+    overflow-y: auto;
+    max-height: calc(80vh - 80px);
+    @include scrollbar;
+  }
+
+  .actionOption {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: $spacing-md;
+    border: 1px solid $border-base;
+    border-radius: $radius-lg;
+    background: $bg-base;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+    text-align: left;
+
+    &:hover {
+      border-color: $primary;
+      box-shadow: $shadow-md;
+      background: rgba($primary, 0.05);
+      transform: translateY(-2px);
+    }
+
+    .actionOptionIcon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+      border-radius: $radius-md;
+      margin-bottom: $spacing-sm;
+    }
+
+    .actionOptionTitle {
+      font-size: $font-size-sm;
+      font-weight: $font-weight-semibold;
+      color: $text-primary;
+      margin-bottom: 4px;
+    }
+
+    .actionOptionDesc {
+      font-size: 10px;
+      color: $text-tertiary;
+      line-height: 1.4;
+    }
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 触发器图标 */
+.triggerIcon {
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

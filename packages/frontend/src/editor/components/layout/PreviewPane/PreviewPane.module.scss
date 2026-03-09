@@ -1,0 +1,282 @@
+@use '@styles/_variables.scss' as *;
+@use '@styles/_mixins.scss' as *;
+
+.previewPaneWrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--preview-bg-color, #{$bg-elevated});
+  position: relative;
+  overflow: hidden;
+}
+
+// Tab 切换栏
+.tabBar {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 $spacing-md;
+  background: $bg-base;
+  border-bottom: 1px solid $border-base;
+  gap: 0;
+  flex-shrink: 0;
+}
+
+.tabButton {
+  padding: $spacing-sm $spacing-md;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  color: $text-secondary;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all $transition-base $transition-timing;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+
+  &:hover {
+    color: $text-primary;
+  }
+
+  &.active {
+    color: $primary;
+    border-bottom-color: $primary;
+  }
+
+  &.disabled {
+    color: $text-disabled;
+    cursor: not-allowed;
+  }
+}
+
+.compiledBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: $font-weight-semibold;
+  color: $text-inverse;
+  background: $primary;
+  border-radius: $radius-full;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+  }
+}
+
+.previewContainer {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.previewView {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.codeView {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: $bg-base;
+}
+
+.editorContainer {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.jsonEditorHeader {
+  padding: $spacing-xs $spacing-md;
+  background: $bg-elevated;
+  border-bottom: 1px solid $border-base;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.saveHint {
+  font-size: $font-size-xs;
+  color: $text-muted;
+  display: flex;
+  align-items: center;
+  gap: $spacing-xs;
+}
+
+.unsaved {
+  color: $warning;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.saved {
+  color: $text-muted;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $warning;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+// JSON Viewer
+.jsonViewer {
+  width: 100%;
+  height: 100%;
+  padding: $spacing-md;
+  overflow: auto;
+  background: $bg-base;
+}
+
+.jsonPre {
+  margin: 0;
+  font-family: $font-family-mono;
+  font-size: $font-size-sm;
+  line-height: $line-height-relaxed;
+  color: $text-primary;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+// Empty Compiled State
+.emptyCompiledState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: $spacing-xl * 2;
+  text-align: center;
+  color: $text-tertiary;
+}
+
+.emptyStateIcon {
+  color: $text-disabled;
+  margin-bottom: $spacing-md;
+
+  svg {
+    opacity: 0.5;
+  }
+}
+
+.emptyStateTitle {
+  font-size: $font-size-lg;
+  font-weight: $font-weight-semibold;
+  color: $text-secondary;
+  margin: 0 0 $spacing-sm 0;
+}
+
+.emptyStateDescription {
+  font-size: $font-size-sm;
+  color: $text-tertiary;
+  margin: 0;
+  line-height: $line-height-normal;
+}
+
+/* Dark theme variables */
+.previewPaneWrapper.dark-theme {
+  --preview-bg-color: #1e1e1e;
+  --preview-content-bg-color: #141414;
+}
+
+/* Light theme variables */
+.previewPaneWrapper.light-theme {
+  --preview-bg-color: #{$bg-elevated};
+  --preview-content-bg-color: #{$bg-base};
+}
+
+/* Selectable Canvas */
+.selectableCanvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: rgba(248, 250, 252, 0.5);
+}
+
+/* Preview Mode - Center the content */
+.previewContent {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  min-height: 100%;
+
+  /* 根节点占满画布 */
+  > * {
+    width: 100%;
+    height: 100%;
+  }
+
+  /* 预览模式下：去除 padding，内容撑满屏幕 */
+  &.previewMode{
+    padding: 0;
+  }
+}
+
+/* Selection Highlight */
+.selectionHighlight {
+  @include transition-all;
+  border: 2px solid $accent;
+  border-radius: $radius-sm;
+  pointer-events: none;
+}
+
+.componentLabel {
+  position: absolute;
+  top: -22px;
+  left: -2px;
+  background: $accent;
+  color: $text-inverse;
+  font-size: 10px;
+  font-family: $font-family-mono;
+  padding: 2px 6px;
+  border-radius: $radius-sm $radius-sm 0 0;
+  white-space: nowrap;
+  z-index: 1001;
+  line-height: 1.4;
+}
+
+/* Hover Highlight */
+.hoverHighlight {
+  @include transition-all;
+  border: 1px dashed $accent;
+  border-radius: $radius-sm;
+  pointer-events: none;
+}
+
+/* Override lowcode-component-wrapper cursor */
+:global(.lowcode-component-wrapper) {
+  cursor: pointer;
+}

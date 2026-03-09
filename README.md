@@ -1,61 +1,117 @@
-# 低代码平台
+# A2UI 低代码平台
 
-基于 JSON Schema 驱动的低代码平台，使用 React + TypeScript + Ant Design 构建。
+> **First A2UI Protocol Implementation** · AI 驱动的下一代低代码开发平台
 
-## 项目架构
+[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
+[![License](https://img.shields.io/badge/license-MIT-blue)]()
+[![React](https://img.shields.io/badge/React-18-blue)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)]()
+[![Ant Design](https://img.shields.io/badge/Ant%20Design-5-blue)]()
 
-```
-lowcode-platform/
-├── packages/
-│   ├── renderer/      # 运行时渲染器 (JSON Schema → React 组件)
-│   ├── components/    # 组件库 (基于 Ant Design)
-│   └── editor/        # 配置编辑器 (Monaco Editor + 实时预览)
-├── examples/
-│   └── playground/    # 示例应用
-└── package.json
-```
+---
 
-## 核心特性
+## 🌟 特性亮点
 
-- **JSON Schema 驱动**: 通过 **扁平化 (Flat)** 的 JSON Schema 定义页面结构，O(1) 查找效率高
-- **AST 代码生成**: `compiler` 基于 Babel AST (抽象语法树) 构建安全的 React 代码，从根源消除 XSS 注入风险
-- **样式引擎**: 内置 Tailwind 样式编译器，可将内联样式动态编译为 Tailwind CSS 原子类名组合
-- **运行时渲染**: `renderer` 内置强大的 DSL 执行引擎，支持多达 20+ 种复杂的流控制和异步逻辑
-- **组件化架构**: 深度集成 Ant Design 5，每个组件独立文件，便于扩展和自定义
-- **实时预览**: 编辑器支持配置联动，左侧编辑 JSON，右侧实时预览
+- **🤖 AI 对话优先** — 自然语言描述即可生成页面，对非技术用户更友好
+- **🔐 企业级安全** — 表达式沙箱 (jsep) + URL 白名单 + 后端 API 鉴权，多层防护
+- **⚡ 双输出通道** — 同一份 Schema 既可实时渲染预览，又可编译为标准 React 代码导出
+- **🧩 21 个组件元数据** — 可视化属性面板，所见即所得的编辑体验
+- **🔧 精简 DSL 引擎** — 10 种核心 Action，覆盖 90% 低代码场景
+- **📦 2 包精简架构** — Monorepo 结构，依赖清晰，维护轻松
 
-## 快速开始
+---
+
+## 🚀 快速开始
+
+### 环境要求
+
+- Node.js >= 18
+- pnpm >= 8
+
+### 安装与运行
 
 ```bash
+# 克隆项目
+git clone https://github.com/your-org/a2ui-lowcode.git
+cd a2ui-lowcode
+
 # 安装依赖
 pnpm install
 
-# 启动开发服务器
+# 启动开发服务器（前端 + 后端）
 pnpm dev
 
+# 访问 http://localhost:5173
+```
+
+### 构建
+
+```bash
 # 构建所有包
 pnpm build
 
-# 仅构建组件包
-pnpm build:packages
+# 仅构建前端
+pnpm build:frontend
 
-# 清理构建产物
-pnpm clean
+# 仅构建后端
+pnpm build:backend
 ```
 
-## 包说明
+---
 
-| 包名                           | 说明                                                           |
-| ------------------------------ | -------------------------------------------------------------- |
-| `@lowcode-platform/renderer`   | 运行时渲染引擎，内置完整的 DSL 解析器和安全沙箱                |
-| `@lowcode-platform/components` | 组件库，包含 Ant Design 5 组件封装和自定义组件                 |
-| `@lowcode-platform/compiler`   | 代码生成器，将扁平 Schema 编译为安全的 React 源代码 (AST 驱动) |
-| `@lowcode-platform/editor`     | 平台前端，包含 Monaco Editor、实时预览与 AI 助手调用           |
-| `@lowcode-platform/server`     | 平台后端，基于 NestJS 构建的统一大模型接入网关                 |
+## 📖 项目架构
 
-## JSON Schema 格式 (A2UI Flat Schema)
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         用户输入需求                              │
+│                    "帮我设计一个登录表单"                          │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      AI Assistant (Claude/OpenAI)               │
+│                   生成 A2UI Schema (JSON)                        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+            ┌────────────────┴────────────────┐
+            │                                 │
+            ▼                                 ▼
+┌───────────────────────┐         ┌───────────────────────┐
+│   Renderer (运行时)    │         │   Compiler (编译器)    │
+│   实时渲染预览         │         │   导出 React 代码       │
+│   - 组件树渲染         │         │   - Babel AST 生成     │
+│   - DSL 执行引擎        │         │   - Tailwind 编译      │
+│   - 事件处理           │         │   - 一键下载          │
+└───────────────────────┘         └───────────────────────┘
+```
 
-项目采用了**扁平化组件树 (Flat Schema)**，摒弃了传统的深度嵌套结构，以便于跨组件引用的状态管理和 O(1) 的检索修改效率：
+### 目录结构
+
+```
+packages/
+├── frontend/              # 前端整合包
+│   ├── src/
+│   │   ├── types/        # 类型定义 (Schema + DSL + Property Panel)
+│   │   ├── renderer/     # 运行时渲染引擎
+│   │   ├── components/   # UI 组件库 (21 个组件元数据)
+│   │   ├── editor/       # 编辑器 (AI 助手 + 属性面板 + 组件树)
+│   │   └── styles/       # 统一样式
+│   └── package.json
+│
+└── backend/               # 后端服务包
+    ├── src/
+    │   ├── modules/
+    │   │   ├── ai/       # AI 服务 (多 Provider 支持)
+    │   │   └── compiler/ # 编译器 (Schema → React 代码)
+    │   └── main.ts
+    └── package.json
+```
+
+---
+
+## 💡 A2UI Schema 格式
+
+采用 **Google A2UI 协议** 的扁平组件树结构，O(1) 检索效率：
 
 ```json
 {
@@ -64,182 +120,233 @@ pnpm clean
     "page_root": {
       "id": "page_root",
       "type": "Page",
-      "props": { "style": { "padding": "20px" } },
-      "childrenIds": ["container_1"]
+      "childrenIds": ["form_1"]
     },
-    "container_1": {
-      "id": "container_1",
-      "type": "Container",
-      "props": { "width": "md" },
-      "childrenIds": ["btn_1"]
+    "form_1": {
+      "id": "form_1",
+      "type": "Form",
+      "props": { "layout": "vertical" },
+      "childrenIds": ["input_1", "btn_1"]
+    },
+    "input_1": {
+      "id": "input_1",
+      "type": "Input",
+      "props": { "placeholder": "请输入用户名", "field": "username" }
     },
     "btn_1": {
       "id": "btn_1",
       "type": "Button",
-      "props": { "type": "primary", "children": "点击我" }
+      "props": { "type": "primary", "children": "登录" },
+      "events": {
+        "onClick": [{ "type": "apiCall", "url": "/api/login", "method": "POST" }]
+      }
     }
   }
 }
 ```
 
-## 可用组件
+---
 
-### 布局组件
+## 🎨 可用组件 (21 个带元数据)
 
-- `Container` - 容器组件，带默认样式
-- `Div` - 通用 div
-- `Space` - 间距组件
-- `Divider` - 分割线
+### 布局组件 (4)
 
-### 表单组件
+| 组件        | 说明     | 属性面板 |
+| ----------- | -------- | -------- |
+| `Container` | 容器     | ✅       |
+| `Space`     | 间距     | ✅       |
+| `Divider`   | 分割线   | ✅       |
+| `Div`       | 通用 div | -        |
 
-- `Form` - 表单
-- `FormItem` - 表单项（带 label）
-- `Input` - 输入框
-- `TextArea` - 文本域
-- `Checkbox` - 复选框
-- `Radio` - 单选框
-- `Select` - 选择器
-- `Switch` - 开关
-- `Slider` - 滑块
+### 表单组件 (10)
 
-### 数据展示
+| 组件          | 说明     | 属性面板 |
+| ------------- | -------- | -------- |
+| `Button`      | 按钮     | ✅       |
+| `Input`       | 输入框   | ✅       |
+| `TextArea`    | 多行文本 | ✅       |
+| `InputNumber` | 数字输入 | ✅       |
+| `Select`      | 选择器   | ✅       |
+| `Checkbox`    | 复选框   | ✅       |
+| `Radio`       | 单选框   | ✅       |
+| `Switch`      | 开关     | ✅       |
+| `Form`        | 表单     | ✅       |
+| `FormItem`    | 表单项   | ✅       |
 
-- `Table` - 表格
-- `Card` - 卡片
-- `List` - 列表
-- `Tabs` - 标签页
-- `Collapse` - 折叠面板
-- `Typography` - 排版
-- `Title` - 标题
+### 数据展示 (4)
 
-### 反馈组件
+| 组件    | 说明   | 属性面板 |
+| ------- | ------ | -------- |
+| `Card`  | 卡片   | ✅       |
+| `Table` | 表格   | ✅       |
+| `Tabs`  | 标签页 | ✅       |
+| `List`  | 列表   | -        |
 
-- `Modal` - 模态框
-- `Alert` - 警告提示
-- `Progress` - 进度条
+### 反馈组件 (3)
 
-更多组件请参考 [`@lowcode-platform/components`](./packages/components/README.md)
+| 组件         | 说明     | 属性面板 |
+| ------------ | -------- | -------- |
+| `Modal`      | 对话框   | ✅       |
+| `Alert`      | 警告提示 | ✅       |
+| `Typography` | 排版     | ✅       |
 
-## 技术栈
+> 💡 提示：更多组件（Typography, Text, Title, Slider, Collapse, Progress 等）持续补充中
 
-- **React 18** - UI 框架
-- **TypeScript** - 类型安全
-- **Ant Design** - UI 组件库
-- **Vite** - 构建工具
-- **Monaco Editor** - 代码编辑器
+---
+
+## 🔧 DSL Action 类型 (10 种核心)
+
+| 分类       | Action         | 说明            | 示例                                                       |
+| ---------- | -------------- | --------------- | ---------------------------------------------------------- |
+| **数据**   | `setValue`     | 设置字段/状态值 | `{ "type": "setValue", "field": "name", "value": "John" }` |
+| **网络**   | `apiCall`      | API 请求        | `{ "type": "apiCall", "url": "/api/users" }`               |
+| **路由**   | `navigate`     | 页面跳转        | `{ "type": "navigate", "to": "/dashboard" }`               |
+| **交互**   | `feedback`     | 消息提示        | `{ "type": "feedback", "level": "success" }`               |
+| **弹窗**   | `dialog`       | 模态框/确认框   | `{ "type": "dialog", "kind": "modal" }`                    |
+| **控制**   | `if`           | 条件分支        | `{ "type": "if", "condition": "{{valid}}" }`               |
+| **控制**   | `loop`         | 循环遍历        | `{ "type": "loop", "over": "{{items}}" }`                  |
+| **工具**   | `delay`        | 延迟执行        | `{ "type": "delay", "ms": 1000 }`                          |
+| **工具**   | `log`          | 控制台日志      | `{ "type": "log", "value": "{{data}}" }`                   |
+| **逃生舱** | `customScript` | 自定义脚本      | `{ "type": "customScript", "code": "..." }`                |
+
+---
+
+## 🛡️ 安全特性
+
+### 表达式沙箱
+
+- ✅ 使用 `jsep` AST 解析器替代 `new Function()`
+- ✅ 白名单全局对象（Math, JSON, Date 等）
+- ✅ 原型链保护（拦截 `__proto__`, `prototype`, `constructor`）
+- ✅ 编译器端二次验证 (`isValidExpressionPath`)
+
+### URL 安全
+
+- ✅ 拒绝 `javascript:`, `data:`, `file:` 伪协议
+- ✅ 域名白名单机制
+- ✅ 相对路径优先
+
+### 后端防护
+
+- ✅ Bearer Token 认证
+- ✅ API Key 过滤（响应中自动移除）
+- ✅ 限流保护（10 次/秒，100 次/分钟）
+- ✅ CORS 环境变量控制
+
+---
+
+## 📝 常用命令
+
+```bash
+# 开发
+pnpm dev              # 启动开发服务器
+pnpm dev:frontend     # 仅前端
+pnpm dev:backend      # 仅后端
+
+# 构建
+pnpm build            # 全量构建
+pnpm build:frontend   # 仅前端
+pnpm build:backend    # 仅后端
+
+# 代码质量
+pnpm lint             # ESLint 检查
+pnpm lint:fix         # 自动修复
+pnpm format           # Prettier 格式化
+pnpm format:write     # 写入文件
+
+# 测试
+pnpm test             # 运行测试
+pnpm test:coverage    # 生成覆盖率
+
+# 清理
+pnpm clean            # 清理构建产物
+```
+
+---
 
 ## 🔐 认证配置
 
-本项目使用简单的 **Bearer Token** 认证机制，用于前端与后端之间的身份验证。
-
-### 快速开始
-
-**默认配置**（开箱即用）：
-```
-后端 API_SECRET: dev-secret-token-change-in-production
-前端 VITE_API_SECRET: dev-secret-token-change-in-production
-```
-
-无需任何配置即可开始使用。
-
----
-
-### 配置说明
-
-#### 后端配置
-
-在 `packages/server/.env` 文件中设置：
+### 快速开始（默认配置）
 
 ```bash
-API_SECRET=your-secret-here
+# .env (后端 packages/backend/.env)
+API_SECRET=dev-secret-token-change-in-production
+
+# .env (前端 packages/frontend/.env.local)
+VITE_API_SECRET=dev-secret-token-change-in-production
 ```
 
-#### 前端配置
+### 生成强随机 Token
 
-**方式一：环境变量**
-
-在 `packages/editor/.env.local` 文件中设置：
-
-```bash
-VITE_API_SECRET=your-secret-here
-```
-
-**方式二：宿主应用注入**
-
-```typescript
-import { setApiSecret } from '@lowcode-platform/editor';
-
-setApiSecret('your-secret-here');
-```
-
----
-
-### 安全建议
-
-| 部署环境 | 默认 Token 安全性 | 建议 |
-|---------|------------------|------|
-| 本地开发 | ✅ 安全 | 使用默认值 |
-| 内网部署 | ✅ 安全 | 使用默认值（网络隔离） |
-| 公网部署 | ❌ 不安全 | **必须修改**为强随机字符串 |
-
-**生成强随机 Token**：
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 ---
 
-### 高级认证
+## 📚 技术栈
 
-本项目提供简单的基础认证，适合自部署场景。
-
-如需以下功能，请 Fork 项目后自行实现：
-- 🚀 JWT / Session 认证
-- 🚀 用户登录系统
-- 🚀 OAuth / SSO 集成
-- 🚀 多租户隔离
-- 🚀 动态 Token 管理
+| 层级            | 技术                        |
+| --------------- | --------------------------- |
+| **前端框架**    | React 18 + TypeScript       |
+| **UI 组件**     | Ant Design 5                |
+| **状态管理**    | Zustand                     |
+| **构建工具**    | Vite 5                      |
+| **CSS 方案**    | CSS Modules + Sass          |
+| **代码编辑器**  | Monaco Editor               |
+| **后端框架**    | NestJS                      |
+| **AI Provider** | OpenAI / Anthropic / Ollama |
+| **编译器**      | Babel AST                   |
 
 ---
 
-### API 调用示例
+## 🗺️ 路线图
 
-使用 `fetchApp` 调用 API，自动携带 Token：
+### 已完成 (Sprint 1-3 Phase 0)
 
-```typescript
-import { fetchApp } from './lib/httpClient';
+- ✅ 安全基建（表达式沙箱 + 后端鉴权）
+- ✅ 可视化编辑（属性面板 + 组件树 + 画布选中）
+- ✅ 架构重构（6 包 → 2 包）
+- ✅ 编译器迁移后端
+- ✅ 21 个组件元数据
 
-const data = await fetchApp.get('/api/v1/ai/models');
-await fetchApp.post('/api/v1/ai/models', config);
-await fetchApp.delete('/api/v1/ai/models/delete', { id });
-```
+### 进行中 (Sprint 3 Phase 1)
 
-请求自动添加 `Authorization: Bearer <token>` header。
+- 🔄 模板库（5-8 个内置模板）
+- 🔄 Demo 站点部署
+- 🔄 README 文档完善
 
-## 开发指南
+### 计划中
 
-### 添加自定义组件
+- ⏳ GitHub Actions CI
+- ⏳ 类型攻坚（消灭 `any`）
+- ⏳ 更多组件元数据
 
-1. 在 `packages/components/src/components/` 创建新组件文件
-2. 在 `packages/components/src/index.tsx` 中导出
-3. 重新构建：`pnpm build`
+---
 
-示例：
+## 🤝 贡献指南
 
-```tsx
-// packages/components/src/components/MyComponent.tsx
-import React from "react";
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
+3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
+4. 推送到分支 (`git push origin feature/amazing-feature`)
+5. 提交 Pull Request
 
-export interface MyComponentProps {
-  title?: string;
-}
+---
 
-export const MyComponent: React.FC<MyComponentProps> = ({
-  title = "默认标题",
-}) => {
-  return <div className="my-component">{title}</div>;
-};
+## 📄 开源协议
 
-export default MyComponent;
-```
+MIT License
+
+---
+
+## 🙏 致谢
+
+- [Google A2UI Protocol](https://a2ui.org) - AI Agent 到用户界面的开放协议
+- [Ant Design](https://ant.design) - 企业级 UI 组件库
+- [React](https://react.dev) - 用于构建用户界面的 JavaScript 库
+- [NestJS](https://nestjs.com) - 渐进式 Node.js 框架
+
+---
+
+**built with ❤️ by A2UI Team**
