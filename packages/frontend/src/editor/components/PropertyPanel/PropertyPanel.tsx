@@ -8,14 +8,55 @@ import { BooleanEditor } from './editors/BooleanEditor';
 import { SelectEditor } from './editors/SelectEditor';
 import { ColorEditor } from './editors/ColorEditor';
 import { JsonEditor } from './editors/JsonEditor';
+import { TableColumnsEditor } from './editors/TableColumnsEditor';
+import { FormRulesEditor } from './editors/FormRulesEditor';
+import { ExpressionEditor } from './editors/ExpressionEditor';
+import { SlotEditor } from './editors/SlotEditor';
 import { NoSelectionEmptyState } from '../EmptyState';
 import { EventConfigPanel } from './EventConfigPanel';
+import {
+  DEFAULT_TABLE_COLUMN,
+  sanitizeExpressionValue,
+  sanitizeFormRulesValue,
+  sanitizeJsonValue,
+  sanitizeSlotValue,
+  sanitizeTableColumnsValue,
+} from './editors/complexValueUtils';
 import styles from './PropertyPanel.module.scss';
 
 interface PropertyPanelProps {
   schema: A2UISchema | null;
   selectedId: string | null;
   onSchemaChange: (schema: A2UISchema) => void;
+}
+
+function normalizePropertyValue(prop: PropertyMeta, value: unknown): unknown {
+  switch (prop.editor) {
+    case 'tableColumns': {
+      const fallback = sanitizeTableColumnsValue(prop.defaultValue, [DEFAULT_TABLE_COLUMN]);
+      return sanitizeTableColumnsValue(value, fallback);
+    }
+    case 'formRules': {
+      const fallback = sanitizeFormRulesValue(prop.defaultValue, []);
+      return sanitizeFormRulesValue(value, fallback);
+    }
+    case 'json':
+      return sanitizeJsonValue(value, prop.defaultValue);
+    case 'expression':
+      return sanitizeExpressionValue(
+        value,
+        typeof prop.defaultValue === 'string' ? prop.defaultValue : '',
+      );
+    case 'slot':
+      return sanitizeSlotValue(
+        value,
+        typeof prop.defaultValue === 'string' ? prop.defaultValue : '',
+      );
+    default:
+      // Primitive editors (`string/number/boolean/select/color`) already provide typed values.
+      // Keep raw value here to avoid unintended coercion.
+      return value;
+  }
 }
 
 /**
@@ -76,17 +117,19 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   // 处理属性变更
   const handlePropertyChange = useCallback(
-    (key: string, value: unknown) => {
+    (prop: PropertyMeta, value: unknown) => {
       if (!schema || !selectedId) return;
       const component = schema.components[selectedId];
       if (!component) return;
+      const key = prop.key;
       const prevProps = component.props || {};
       const nextProps = { ...prevProps };
+      const normalizedValue = normalizePropertyValue(prop, value);
 
-      if (value === undefined) {
+      if (normalizedValue === undefined) {
         delete nextProps[key];
       } else {
-        nextProps[key] = value;
+        nextProps[key] = normalizedValue;
       }
 
       const newSchema: A2UISchema = {
@@ -109,38 +152,50 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
     (prop: PropertyMeta) => {
       if (!componentConfig) return null;
       const { component } = componentConfig;
-      const value = component.props?.[prop.key] ?? prop.defaultValue;
+      const rawValue = component.props?.[prop.key] ?? prop.defaultValue;
+      const value = normalizePropertyValue(prop, rawValue);
 
       const commonProps = {
-        key: prop.key,
         label: prop.label,
         value,
-        onChange: (val: unknown) => handlePropertyChange(prop.key, val),
+        onChange: (val: unknown) => handlePropertyChange(prop, val),
         description: prop.description,
       };
 
       switch (prop.editor) {
         case 'string':
-          return <StringEditor {...commonProps} />;
+          return <StringEditor key={prop.key} {...commonProps} />;
         case 'number':
-          return <NumberEditor {...commonProps} />;
+          return <NumberEditor key={prop.key} {...commonProps} />;
         case 'boolean':
-          return <BooleanEditor {...commonProps} />;
+          return <BooleanEditor key={prop.key} {...commonProps} />;
         case 'select':
-          return <SelectEditor {...commonProps} options={prop.options || []} />;
+          return <SelectEditor key={prop.key} {...commonProps} options={prop.options || []} />;
         case 'color':
-          return <ColorEditor {...commonProps} />;
+          return <ColorEditor key={prop.key} {...commonProps} />;
         case 'json':
-          return <JsonEditor {...commonProps} />;
+          return <JsonEditor key={prop.key} {...commonProps} defaultTemplate={prop.defaultValue} />;
+        case 'tableColumns':
+          return (
+            <TableColumnsEditor
+              key={prop.key}
+              {...commonProps}
+              defaultTemplate={prop.defaultValue}
+            />
+          );
+        case 'formRules':
+          return (
+            <FormRulesEditor key={prop.key} {...commonProps} defaultTemplate={prop.defaultValue} />
+          );
         case 'expression':
-          // 表达式编辑器暂用字符串编辑器
-          return <StringEditor {...commonProps} placeholder="输入表达式..." />;
+          return <ExpressionEditor key={prop.key} {...commonProps} />;
         case 'slot':
           return (
-            <StringEditor
+            <SlotEditor
+              key={prop.key}
               {...commonProps}
-              multiline
-              placeholder="插槽内容请通过组件树编辑"
+              defaultTemplate={prop.defaultValue}
+              placeholder="输入默认插槽内容（组件树子节点会附加在后）"
             />
           );
         default:
@@ -148,6 +203,21 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       }
     },
     [componentConfig, handlePropertyChange],
+  );
+
+  const collapseItems = useMemo(
+    () =>
+      Object.entries(groupedProperties).map(([groupName, properties]) => ({
+        key: groupName,
+        label: <span className={styles.groupHeader}>{groupName}</span>,
+        className: styles.collapsePanel,
+        children: (
+          <div className={styles.propertiesList}>
+            {properties.map((prop) => renderEditor(prop))}
+          </div>
+        ),
+      })),
+    [groupedProperties, renderEditor],
   );
 
   // 空状态
@@ -196,19 +266,8 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
               ghost
               expandIconPosition="end"
               className={styles.collapse}
-            >
-              {Object.entries(groupedProperties).map(([groupName, properties]) => (
-                <Collapse.Panel
-                  key={groupName}
-                  header={<span className={styles.groupHeader}>{groupName}</span>}
-                  className={styles.collapsePanel}
-                >
-                  <div className={styles.propertiesList}>
-                    {properties.map((prop) => renderEditor(prop))}
-                  </div>
-                </Collapse.Panel>
-              ))}
-            </Collapse>
+              items={collapseItems}
+            />
           </div>
         </>
       ) : (

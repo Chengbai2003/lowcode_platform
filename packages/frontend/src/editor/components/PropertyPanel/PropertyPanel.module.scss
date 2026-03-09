@@ -144,6 +144,107 @@
   }
 }
 
+.complexEditor {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.complexEditorActions {
+  display: flex;
+  gap: $spacing-sm;
+
+  button {
+    flex: 1;
+    padding: 6px $spacing-sm;
+    border: 1px solid $border-base;
+    background: $bg-base;
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+
+    &:hover {
+      color: $text-primary;
+      border-color: $primary;
+    }
+  }
+}
+
+.complexEditorCard {
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  background: $bg-base;
+  padding: $spacing-sm;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.complexEditorCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  font-weight: $font-weight-medium;
+
+  button {
+    border: none;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    font-size: $font-size-xs;
+    padding: 0;
+
+    &:hover {
+      color: $error;
+    }
+  }
+}
+
+.complexEditorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+}
+
+.formRulesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+  align-items: center;
+}
+
+.checkboxInline {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.complexEditorEmpty {
+  padding: $spacing-sm;
+  border: 1px dashed $border-base;
+  border-radius: $radius-sm;
+  color: $text-tertiary;
+  font-size: $font-size-xs;
+}
+
+.editorHint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: $text-tertiary;
+}
+
+.editorError {
+  margin-top: 6px;
+  font-size: 11px;
+  color: $error;
+}
+
 /* 按钮组样式 */
 .buttonGroup {
   display: grid;
@@ -321,7 +422,7 @@
     color: $text-secondary;
   }
 
-  input[type="range"] {
+  input[type='range'] {
     width: 96px;
     accent-color: $accent;
   }

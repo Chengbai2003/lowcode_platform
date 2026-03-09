@@ -15,6 +15,8 @@ export const DividerMeta: ComponentPanelConfig = {
         { label: '水平', value: 'horizontal' },
         { label: '垂直', value: 'vertical' },
       ],
+
+      group: '基础',
     },
     {
       key: 'orientation',
@@ -27,8 +29,10 @@ export const DividerMeta: ComponentPanelConfig = {
         { label: '右对齐', value: 'right' },
       ],
       visible: (props) => props.type === 'horizontal',
+
+      group: '基础',
     },
-    { key: 'dashed', label: '虚线', editor: 'boolean', defaultValue: false },
+    { key: 'dashed', label: '虚线', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'plain',
       label: '朴素样式',
@@ -39,9 +43,9 @@ export const DividerMeta: ComponentPanelConfig = {
     {
       key: 'children',
       label: '标题文字',
-      editor: 'string',
+      editor: 'slot',
       defaultValue: '',
-      group: '内容',
+      group: '基础',
     },
   ],
 };

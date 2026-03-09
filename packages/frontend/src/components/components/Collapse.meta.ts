@@ -6,7 +6,13 @@ export const CollapseMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'chevron-down-square',
   properties: [
-    { key: 'accordion', label: '手风琴模式', editor: 'boolean', defaultValue: false },
+    {
+      key: 'accordion',
+      label: '手风琴模式',
+      editor: 'boolean',
+      defaultValue: false,
+      group: '基础',
+    },
     { key: 'bordered', label: '显示边框', editor: 'boolean', defaultValue: true, group: '样式' },
     { key: 'ghost', label: '幽灵模式', editor: 'boolean', defaultValue: false, group: '样式' },
     {

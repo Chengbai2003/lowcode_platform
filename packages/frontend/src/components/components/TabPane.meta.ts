@@ -6,9 +6,9 @@ export const TabPaneMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'panel',
   properties: [
-    { key: 'tab', label: '页签标题', editor: 'string', defaultValue: '标签页' },
+    { key: 'tab', label: '页签标题', editor: 'string', defaultValue: '标签页', group: '基础' },
     { key: 'key', label: '唯一标识', editor: 'string', defaultValue: 'tab1', group: '高级' },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
+    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'forceRender',
       label: '强制渲染',

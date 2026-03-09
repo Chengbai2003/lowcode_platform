@@ -6,9 +6,9 @@ export const SiderMeta: ComponentPanelConfig = {
   category: 'layout',
   icon: 'sidebar',
   properties: [
-    { key: 'width', label: '宽度', editor: 'number', defaultValue: 200 },
-    { key: 'collapsed', label: '折叠', editor: 'boolean', defaultValue: false },
-    { key: 'collapsedWidth', label: '折叠宽度', editor: 'number', defaultValue: 80 },
+    { key: 'width', label: '宽度', editor: 'number', defaultValue: 200, group: '基础' },
+    { key: 'collapsed', label: '折叠', editor: 'boolean', defaultValue: false, group: '基础' },
+    { key: 'collapsedWidth', label: '折叠宽度', editor: 'number', defaultValue: 80, group: '基础' },
     {
       key: 'theme',
       label: '主题',

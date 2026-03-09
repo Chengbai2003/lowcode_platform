@@ -11,18 +11,24 @@ export const RadioButtonMeta: ComponentPanelConfig = {
       label: '按钮文字',
       editor: 'string',
       defaultValue: '选项',
+
+      group: '基础',
     },
     {
       key: 'value',
       label: '值',
       editor: 'string',
       defaultValue: 'option',
+
+      group: '基础',
     },
     {
       key: 'disabled',
       label: '禁用',
       editor: 'boolean',
       defaultValue: false,
+
+      group: '基础',
     },
   ],
 };

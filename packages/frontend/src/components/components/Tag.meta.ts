@@ -6,8 +6,8 @@ export const TagMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'tag',
   properties: [
-    { key: 'children', label: '文本', editor: 'string', defaultValue: '标签' },
-    { key: 'color', label: '颜色', editor: 'string', defaultValue: '' },
+    { key: 'children', label: '文本', editor: 'slot', defaultValue: '标签', group: '基础' },
+    { key: 'color', label: '颜色', editor: 'string', defaultValue: '', group: '基础' },
     { key: 'bordered', label: '显示边框', editor: 'boolean', defaultValue: true, group: '样式' },
   ],
 };

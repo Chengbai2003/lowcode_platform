@@ -11,9 +11,11 @@ export const RangePickerMeta: ComponentPanelConfig = {
       label: '占位符',
       editor: 'json',
       defaultValue: ['开始日期', '结束日期'],
+
+      group: '基础',
     },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
-    { key: 'allowClear', label: '允许清除', editor: 'boolean', defaultValue: true },
+    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false, group: '基础' },
+    { key: 'allowClear', label: '允许清除', editor: 'boolean', defaultValue: true, group: '基础' },
     {
       key: 'picker',
       label: '选择类型',

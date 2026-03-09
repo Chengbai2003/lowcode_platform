@@ -6,7 +6,7 @@ export const StepsMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'list-ordered',
   properties: [
-    { key: 'current', label: '当前步骤', editor: 'number', defaultValue: 0 },
+    { key: 'current', label: '当前步骤', editor: 'number', defaultValue: 0, group: '基础' },
     {
       key: 'direction',
       label: '方向',

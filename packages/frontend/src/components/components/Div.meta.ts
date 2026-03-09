@@ -6,9 +6,9 @@ export const DivMeta: ComponentPanelConfig = {
   category: 'layout',
   icon: 'square',
   properties: [
-    { key: 'id', label: 'ID', editor: 'string', defaultValue: '' },
-    { key: 'className', label: '类名', editor: 'string', defaultValue: '' },
-    { key: 'children', label: '内容', editor: 'string', defaultValue: '' },
+    { key: 'id', label: 'ID', editor: 'string', defaultValue: '', group: '基础' },
+    { key: 'className', label: '类名', editor: 'string', defaultValue: '', group: '基础' },
+    { key: 'children', label: '内容', editor: 'slot', defaultValue: '', group: '基础' },
     { key: 'style', label: '内联样式', editor: 'json', defaultValue: {}, group: '样式' },
   ],
 };

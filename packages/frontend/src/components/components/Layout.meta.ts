@@ -6,7 +6,7 @@ export const LayoutMeta: ComponentPanelConfig = {
   category: 'layout',
   icon: 'layout',
   properties: [
-    { key: 'hasSider', label: '包含侧边栏', editor: 'boolean', defaultValue: false },
+    { key: 'hasSider', label: '包含侧边栏', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'style',
       label: '容器样式',

@@ -11,12 +11,16 @@ export const SwitchMeta: ComponentPanelConfig = {
       label: '选中状态',
       editor: 'boolean',
       defaultValue: false,
+
+      group: '基础',
     },
     {
       key: 'disabled',
       label: '禁用',
       editor: 'boolean',
       defaultValue: false,
+
+      group: '基础',
     },
     {
       key: 'checkedChildren',

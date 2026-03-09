@@ -6,7 +6,7 @@ export const ProgressMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'chart-bar',
   properties: [
-    { key: 'percent', label: '进度', editor: 'number', defaultValue: 0 },
+    { key: 'percent', label: '进度', editor: 'number', defaultValue: 0, group: '基础' },
     {
       key: 'type',
       label: '类型',
@@ -32,7 +32,7 @@ export const ProgressMeta: ComponentPanelConfig = {
       ],
       group: '样式',
     },
-    { key: 'showInfo', label: '显示文本', editor: 'boolean', defaultValue: true },
+    { key: 'showInfo', label: '显示文本', editor: 'boolean', defaultValue: true, group: '基础' },
     {
       key: 'size',
       label: '尺寸',

@@ -6,8 +6,8 @@ export const ListMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'list',
   properties: [
-    { key: 'header', label: '头部内容', editor: 'string', defaultValue: '' },
-    { key: 'footer', label: '底部内容', editor: 'string', defaultValue: '' },
+    { key: 'header', label: '头部内容', editor: 'string', defaultValue: '', group: '基础' },
+    { key: 'footer', label: '底部内容', editor: 'string', defaultValue: '', group: '基础' },
     { key: 'bordered', label: '显示边框', editor: 'boolean', defaultValue: false, group: '样式' },
     { key: 'split', label: '显示分割线', editor: 'boolean', defaultValue: true, group: '样式' },
     {

@@ -6,7 +6,7 @@ export const TooltipMeta: ComponentPanelConfig = {
   category: 'feedback',
   icon: 'info',
   properties: [
-    { key: 'title', label: '提示内容', editor: 'string', defaultValue: '提示信息' },
+    { key: 'title', label: '提示内容', editor: 'string', defaultValue: '提示信息', group: '基础' },
     {
       key: 'trigger',
       label: '触发方式',
@@ -17,6 +17,8 @@ export const TooltipMeta: ComponentPanelConfig = {
         { label: '点击', value: 'click' },
         { label: '聚焦', value: 'focus' },
       ],
+
+      group: '基础',
     },
     {
       key: 'placement',

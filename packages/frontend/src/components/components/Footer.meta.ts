@@ -6,7 +6,7 @@ export const FooterMeta: ComponentPanelConfig = {
   category: 'layout',
   icon: 'layout-bottom',
   properties: [
-    { key: 'children', label: '内容', editor: 'string', defaultValue: 'Footer' },
+    { key: 'children', label: '内容', editor: 'slot', defaultValue: 'Footer', group: '基础' },
     { key: 'className', label: '类名', editor: 'string', defaultValue: '', group: '样式' },
     { key: 'style', label: '样式', editor: 'json', defaultValue: {}, group: '样式' },
   ],

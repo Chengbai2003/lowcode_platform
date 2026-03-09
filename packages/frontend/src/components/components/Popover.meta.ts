@@ -6,8 +6,8 @@ export const PopoverMeta: ComponentPanelConfig = {
   category: 'feedback',
   icon: 'message-circle',
   properties: [
-    { key: 'title', label: '标题', editor: 'string', defaultValue: '' },
-    { key: 'content', label: '内容', editor: 'string', defaultValue: '提示内容' },
+    { key: 'title', label: '标题', editor: 'string', defaultValue: '', group: '基础' },
+    { key: 'content', label: '内容', editor: 'string', defaultValue: '提示内容', group: '基础' },
     {
       key: 'trigger',
       label: '触发方式',
@@ -18,6 +18,8 @@ export const PopoverMeta: ComponentPanelConfig = {
         { label: '点击', value: 'click' },
         { label: '聚焦', value: 'focus' },
       ],
+
+      group: '基础',
     },
     {
       key: 'placement',

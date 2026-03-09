@@ -9,8 +9,10 @@ export const TitleMeta: ComponentPanelConfig = {
     {
       key: 'children',
       label: '标题内容',
-      editor: 'string',
+      editor: 'slot',
       defaultValue: '标题',
+
+      group: '基础',
     },
     {
       key: 'level',
@@ -25,6 +27,8 @@ export const TitleMeta: ComponentPanelConfig = {
         { label: 'H5', value: 5 },
         { label: 'H6', value: 6 },
       ],
+
+      group: '基础',
     },
     {
       key: 'type',
@@ -37,13 +41,15 @@ export const TitleMeta: ComponentPanelConfig = {
         { label: '警告', value: 'warning' },
         { label: '危险', value: 'danger' },
       ],
+
+      group: '基础',
     },
     {
       key: 'copyable',
       label: '可复制',
       editor: 'boolean',
       defaultValue: false,
-      group: '交互',
+      group: '高级',
     },
   ],
 };

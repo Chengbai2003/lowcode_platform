@@ -6,8 +6,8 @@ export const SkeletonMeta: ComponentPanelConfig = {
   category: 'feedback',
   icon: 'layout',
   properties: [
-    { key: 'loading', label: '加载中', editor: 'boolean', defaultValue: true },
-    { key: 'active', label: '动画效果', editor: 'boolean', defaultValue: true },
+    { key: 'loading', label: '加载中', editor: 'boolean', defaultValue: true, group: '基础' },
+    { key: 'active', label: '动画效果', editor: 'boolean', defaultValue: true, group: '基础' },
     { key: 'round', label: '圆角', editor: 'boolean', defaultValue: false, group: '样式' },
     { key: 'avatar', label: '显示头像', editor: 'boolean', defaultValue: false, group: '高级' },
     { key: 'title', label: '显示标题', editor: 'boolean', defaultValue: true, group: '高级' },

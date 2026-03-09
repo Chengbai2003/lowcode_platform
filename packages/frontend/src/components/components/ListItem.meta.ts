@@ -6,7 +6,7 @@ export const ListItemMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'list-item',
   properties: [
-    { key: 'children', label: '内容', editor: 'string', defaultValue: '列表项' },
+    { key: 'children', label: '内容', editor: 'slot', defaultValue: '列表项', group: '基础' },
     { key: 'extra', label: '额外内容', editor: 'string', defaultValue: '', group: '高级' },
     {
       key: 'actions',

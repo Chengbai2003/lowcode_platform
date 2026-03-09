@@ -6,9 +6,9 @@ export const CollapsePanelMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'panel',
   properties: [
-    { key: 'header', label: '标题', editor: 'string', defaultValue: '面板标题' },
+    { key: 'header', label: '标题', editor: 'string', defaultValue: '面板标题', group: '基础' },
     { key: 'key', label: '唯一标识', editor: 'string', defaultValue: 'panel1', group: '高级' },
-    { key: 'showArrow', label: '显示箭头', editor: 'boolean', defaultValue: true },
+    { key: 'showArrow', label: '显示箭头', editor: 'boolean', defaultValue: true, group: '基础' },
     {
       key: 'collapsible',
       label: '折叠触发方式',

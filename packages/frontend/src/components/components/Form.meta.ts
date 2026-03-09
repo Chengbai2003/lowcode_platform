@@ -7,10 +7,28 @@ export const FormMeta: ComponentPanelConfig = {
   icon: 'edit',
   properties: [
     {
+      key: 'name',
+      label: '表单名称',
+      editor: 'string',
+      defaultValue: '',
+      group: '基础',
+    },
+    {
       key: 'initialValues',
       label: '初始值',
       editor: 'json',
       defaultValue: {},
+      group: '基础',
+    },
+    {
+      key: 'autoComplete',
+      label: '自动完成',
+      editor: 'select',
+      defaultValue: 'on',
+      options: [
+        { label: '开启', value: 'on' },
+        { label: '关闭', value: 'off' },
+      ],
       group: '基础',
     },
     {
@@ -26,11 +44,26 @@ export const FormMeta: ComponentPanelConfig = {
       group: '样式',
     },
     {
+      key: 'className',
+      label: '类名',
+      editor: 'string',
+      defaultValue: '',
+      group: '样式',
+    },
+    {
+      key: 'style',
+      label: '样式',
+      editor: 'json',
+      defaultValue: {},
+      group: '样式',
+    },
+    {
       key: 'labelCol',
       label: '标签布局',
       editor: 'json',
       defaultValue: { span: 6 },
       group: '高级',
+      visible: (props) => props.layout !== 'inline',
     },
     {
       key: 'wrapperCol',
@@ -38,6 +71,7 @@ export const FormMeta: ComponentPanelConfig = {
       editor: 'json',
       defaultValue: { span: 18 },
       group: '高级',
+      visible: (props) => props.layout !== 'inline',
     },
     {
       key: 'labelAlign',
@@ -70,6 +104,32 @@ export const FormMeta: ComponentPanelConfig = {
       group: '高级',
     },
     {
+      key: 'preserve',
+      label: '保留字段值',
+      editor: 'boolean',
+      defaultValue: true,
+      group: '高级',
+    },
+    {
+      key: 'validateTrigger',
+      label: '默认校验触发',
+      editor: 'select',
+      defaultValue: 'onChange',
+      options: [
+        { label: '值变更', value: 'onChange' },
+        { label: '失焦', value: 'onBlur' },
+        { label: '提交', value: 'onSubmit' },
+      ],
+      group: '高级',
+    },
+    {
+      key: 'validateMessages',
+      label: '校验提示模板',
+      editor: 'json',
+      defaultValue: {},
+      group: '高级',
+    },
+    {
       key: 'requiredMark',
       label: '必填标记',
       editor: 'json',
@@ -82,6 +142,14 @@ export const FormMeta: ComponentPanelConfig = {
       label: '显示冒号',
       editor: 'boolean',
       defaultValue: true,
+      group: '高级',
+      visible: (props) => props.layout !== 'inline',
+    },
+    {
+      key: 'scrollToFirstError',
+      label: '提交失败滚动',
+      editor: 'boolean',
+      defaultValue: false,
       group: '高级',
     },
   ],

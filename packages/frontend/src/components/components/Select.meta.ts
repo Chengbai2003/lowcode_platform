@@ -11,6 +11,8 @@ export const SelectMeta: ComponentPanelConfig = {
       label: '占位符',
       editor: 'string',
       defaultValue: '请选择',
+
+      group: '基础',
     },
     {
       key: 'options',
@@ -20,6 +22,8 @@ export const SelectMeta: ComponentPanelConfig = {
         { label: '选项1', value: 'option1' },
         { label: '选项2', value: 'option2' },
       ],
+
+      group: '基础',
     },
     {
       key: 'mode',
@@ -31,27 +35,31 @@ export const SelectMeta: ComponentPanelConfig = {
         { label: '多选', value: 'multiple' },
         { label: '标签', value: 'tags' },
       ],
+
+      group: '基础',
     },
     {
       key: 'defaultValue',
       label: '默认值',
       editor: 'string',
       defaultValue: '',
+
+      group: '基础',
     },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
+    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'allowClear',
       label: '允许清除',
       editor: 'boolean',
       defaultValue: false,
-      group: '功能',
+      group: '高级',
     },
     {
       key: 'showSearch',
       label: '可搜索',
       editor: 'boolean',
       defaultValue: true,
-      group: '功能',
+      group: '高级',
     },
     {
       key: 'size',

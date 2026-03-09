@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import styles from '../PropertyPanel.module.scss';
+import { sanitizeJsonValue } from './complexValueUtils';
 
 interface JsonEditorProps {
   label: string;
@@ -7,6 +8,7 @@ interface JsonEditorProps {
   onChange: (value: unknown) => void;
   description?: string;
   placeholder?: string;
+  defaultTemplate?: unknown;
 }
 
 function toJsonString(value: unknown): string {
@@ -35,6 +37,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
   onChange,
   description,
   placeholder,
+  defaultTemplate,
 }) => {
   const externalValue = useMemo(() => toJsonString(value), [value]);
   const [text, setText] = useState<string>(externalValue);
@@ -45,10 +48,13 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     setError(null);
   }, [externalValue]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setText(e.target.value);
-    if (error) setError(null);
-  }, [error]);
+  const handleChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setText(e.target.value);
+      if (error) setError(null);
+    },
+    [error],
+  );
 
   const handleBlur = useCallback(() => {
     const trimmed = text.trim();
@@ -60,12 +66,27 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
 
     try {
       const parsed = JSON.parse(trimmed);
+
+      if (defaultTemplate !== undefined) {
+        const normalized = sanitizeJsonValue(parsed, defaultTemplate);
+        if (JSON.stringify(normalized) !== JSON.stringify(parsed)) {
+          onChange(normalized);
+          setError('JSON 类型与默认模板不匹配，已回退默认值');
+          return;
+        }
+      }
+
       onChange(parsed);
       setError(null);
     } catch {
+      if (defaultTemplate !== undefined) {
+        onChange(sanitizeJsonValue(undefined, defaultTemplate));
+        setError('JSON 格式不合法，已回退默认值');
+        return;
+      }
       setError('JSON 格式不合法');
     }
-  }, [text, onChange]);
+  }, [text, onChange, defaultTemplate]);
 
   return (
     <div className={styles.propertyItem}>
@@ -80,11 +101,7 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
           onBlur={handleBlur}
           placeholder={placeholder || '请输入合法 JSON，例如 {"span": 12}'}
         />
-        {error && (
-          <div style={{ marginTop: 6, fontSize: 11, color: '#cf1322' }}>
-            {error}
-          </div>
-        )}
+        {error && <div className={styles.editorError}>{error}</div>}
       </div>
     </div>
   );

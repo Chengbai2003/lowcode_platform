@@ -19,9 +19,11 @@ export const ContainerMeta: ComponentPanelConfig = {
         { label: 'XL', value: 'xl' },
         { label: '全宽', value: 'full' },
       ],
+
+      group: '基础',
     },
-    { key: 'padding', label: '内边距', editor: 'string', defaultValue: '16px' },
-    { key: 'center', label: '居中', editor: 'boolean', defaultValue: true },
+    { key: 'padding', label: '内边距', editor: 'string', defaultValue: '16px', group: '基础' },
+    { key: 'center', label: '居中', editor: 'boolean', defaultValue: true, group: '基础' },
     {
       key: 'className',
       label: '类名',

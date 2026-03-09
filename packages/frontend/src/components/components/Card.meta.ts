@@ -6,19 +6,23 @@ export const CardMeta: ComponentPanelConfig = {
   category: 'display',
   icon: 'card',
   properties: [
-    { key: 'title', label: '标题', editor: 'string', defaultValue: '' },
+    { key: 'title', label: '标题', editor: 'string', defaultValue: '', group: '基础' },
     {
       key: 'extra',
       label: '右侧内容',
       editor: 'string',
       defaultValue: '',
       description: '通常放置操作按钮',
+
+      group: '基础',
     },
     {
       key: 'hoverable',
       label: '悬浮阴影',
       editor: 'boolean',
       defaultValue: false,
+
+      group: '基础',
     },
     {
       key: 'size',
@@ -29,6 +33,8 @@ export const CardMeta: ComponentPanelConfig = {
         { label: '默认', value: 'default' },
         { label: '小', value: 'small' },
       ],
+
+      group: '基础',
     },
     {
       key: 'bordered',

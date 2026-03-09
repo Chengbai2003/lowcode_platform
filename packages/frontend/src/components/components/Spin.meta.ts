@@ -6,8 +6,8 @@ export const SpinMeta: ComponentPanelConfig = {
   category: 'feedback',
   icon: 'loader',
   properties: [
-    { key: 'spinning', label: '是否加载', editor: 'boolean', defaultValue: true },
-    { key: 'tip', label: '提示文本', editor: 'string', defaultValue: '加载中...' },
+    { key: 'spinning', label: '是否加载', editor: 'boolean', defaultValue: true, group: '基础' },
+    { key: 'tip', label: '提示文本', editor: 'string', defaultValue: '加载中...', group: '基础' },
     {
       key: 'size',
       label: '尺寸',

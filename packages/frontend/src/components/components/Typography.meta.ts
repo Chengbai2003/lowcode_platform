@@ -9,8 +9,10 @@ export const TypographyMeta: ComponentPanelConfig = {
     {
       key: 'children',
       label: '内容',
-      editor: 'string',
+      editor: 'slot',
       defaultValue: '排版内容',
+
+      group: '基础',
     },
     {
       key: 'className',

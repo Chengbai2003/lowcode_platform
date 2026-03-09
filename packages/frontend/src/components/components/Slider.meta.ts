@@ -6,11 +6,11 @@ export const SliderMeta: ComponentPanelConfig = {
   category: 'form',
   icon: 'sliders',
   properties: [
-    { key: 'min', label: '最小值', editor: 'number', defaultValue: 0 },
-    { key: 'max', label: '最大值', editor: 'number', defaultValue: 100 },
-    { key: 'step', label: '步长', editor: 'number', defaultValue: 1 },
-    { key: 'defaultValue', label: '默认值', editor: 'number', defaultValue: 0 },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
+    { key: 'min', label: '最小值', editor: 'number', defaultValue: 0, group: '基础' },
+    { key: 'max', label: '最大值', editor: 'number', defaultValue: 100, group: '基础' },
+    { key: 'step', label: '步长', editor: 'number', defaultValue: 1, group: '基础' },
+    { key: 'defaultValue', label: '默认值', editor: 'number', defaultValue: 0, group: '基础' },
+    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'vertical',
       label: '垂直方向',
