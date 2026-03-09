@@ -13,6 +13,7 @@ import {
   X,
   Check,
   FileText,
+  AppWindow,
 } from 'lucide-react';
 import { getAllTemplates, getTemplate } from '../../templates';
 import type { TemplateMeta, Template } from '../../templates/types';
@@ -33,6 +34,7 @@ const categoryIcons: Record<string, React.ReactNode> = {
   marketing: <LayoutGrid size={20} />,
   error: <X size={20} />,
   other: <FileText size={20} />,
+  detail: <AppWindow size={20} />,
 };
 
 const categoryLabels: Record<string, string> = {
@@ -44,6 +46,7 @@ const categoryLabels: Record<string, string> = {
   marketing: '营销页',
   error: '错误页',
   other: '其他',
+  detail: '详情页',
 };
 
 export const TemplateGallery: React.FC<TemplateGalleryProps> = ({ open, onClose, onApply }) => {

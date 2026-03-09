@@ -140,6 +140,7 @@ export function useComponentPosition(
 
     window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleResize);
+    container.addEventListener('scroll', handleScroll, true);
 
     return () => {
       if (rafRef.current) {
@@ -149,6 +150,7 @@ export function useComponentPosition(
       mutationObserverRef.current?.disconnect();
       window.removeEventListener('scroll', handleScroll, true);
       window.removeEventListener('resize', handleResize);
+      container.removeEventListener('scroll', handleScroll, true);
     };
   }, [containerRef, updatePositions]);
 

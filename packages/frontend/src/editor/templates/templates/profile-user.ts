@@ -6,212 +6,232 @@ import type { A2UISchema } from '../../../types/schema';
 
 const schema: A2UISchema = {
   version: 1,
-  rootId: 'page-1',
+  rootId: 'page-profile',
   components: {
-    'page-1': {
-      id: 'page-1',
+    'page-profile': {
+      id: 'page-profile',
       type: 'Page',
       props: {
-        style: {
-          padding: '24px',
-          backgroundColor: '#f5f5f5',
-          minHeight: '100vh',
-        },
+        style: { padding: '24px', backgroundColor: '#f0f2f5', minHeight: '100vh' },
       },
-      childrenIds: ['profile-header', 'profile-content'],
+      childrenIds: ['profile-row'],
     },
-    'profile-header': {
-      id: 'profile-header',
+    'profile-row': {
+      id: 'profile-row',
+      type: 'Row',
+      props: { gutter: [24, 24] },
+      childrenIds: ['col-avatar', 'col-settings'],
+    },
+    'col-avatar': {
+      id: 'col-avatar',
+      type: 'Col',
+      props: { span: 8 },
+      childrenIds: ['card-avatar'],
+    },
+    'card-avatar': {
+      id: 'card-avatar',
       type: 'Card',
       props: {
-        style: { marginBottom: '24px', borderRadius: '8px' },
-      },
-      childrenIds: ['header-content'],
-    },
-    'header-content': {
-      id: 'header-content',
-      type: 'Div',
-      props: {
+        bordered: false,
         style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: '24px',
+          borderRadius: '8px',
+          boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)',
+          textAlign: 'center',
+          paddingTop: '24px',
         },
       },
-      childrenIds: ['avatar', 'user-info'],
+      childrenIds: ['space-avatar'],
     },
-    avatar: {
-      id: 'avatar',
+    'space-avatar': {
+      id: 'space-avatar',
+      type: 'Space',
+      props: { direction: 'vertical', size: 'middle', align: 'center', style: { width: '100%' } },
+      childrenIds: ['user-avatar', 'user-name', 'user-role', 'divider-1', 'user-desc'],
+    },
+    'user-avatar': {
+      id: 'user-avatar',
       type: 'Avatar',
       props: {
-        size: 80,
-        src: 'https://api.dicebear.com/7.x/avataaars/svg?seed=user',
+        size: 104,
+        src: 'https://gw.alipayobjects.com/zos/antfincdn/XAosXuNZyF/BiazfanxmamNRoxxVxka.png',
       },
-    },
-    'user-info': {
-      id: 'user-info',
-      type: 'Div',
-      props: {},
-      childrenIds: ['user-name', 'user-email', 'user-role'],
+      childrenIds: [],
     },
     'user-name': {
       id: 'user-name',
       type: 'Title',
-      props: {
-        level: 3,
-        children: 'John Doe',
-        style: { margin: 0 },
-      },
-    },
-    'user-email': {
-      id: 'user-email',
-      type: 'Text',
-      props: {
-        children: 'john.doe@example.com',
-        style: { color: '#666' },
-      },
+      props: { level: 4, children: '管理员', style: { margin: 0 } },
+      childrenIds: [],
     },
     'user-role': {
       id: 'user-role',
-      type: 'Tag',
-      props: {
-        color: 'blue',
-        children: 'Administrator',
-      },
+      type: 'Text',
+      props: { type: 'secondary', children: '海纳百川，有容乃大' },
+      childrenIds: [],
     },
-    'profile-content': {
-      id: 'profile-content',
-      type: 'Row',
-      props: {
-        gutter: 24,
-      },
-      childrenIds: ['left-col', 'right-col'],
+    'divider-1': {
+      id: 'divider-1',
+      type: 'Divider',
+      props: { dashed: true },
+      childrenIds: [],
     },
-    'left-col': {
-      id: 'left-col',
-      type: 'Col',
-      props: { span: 8 },
-      childrenIds: ['menu-card'],
+    'user-desc': {
+      id: 'user-desc',
+      type: 'Text',
+      props: { children: 'A2UI 研发架构组' },
+      childrenIds: [],
     },
-    'menu-card': {
-      id: 'menu-card',
-      type: 'Card',
-      props: {
-        title: 'Settings',
-        style: { borderRadius: '8px' },
-      },
-      childrenIds: ['menu-list'],
-    },
-    'menu-list': {
-      id: 'menu-list',
-      type: 'Menu',
-      props: {
-        mode: 'inline',
-        selectedKeys: ['profile'],
-        items: [
-          { key: 'profile', label: 'Profile Information' },
-          { key: 'security', label: 'Security' },
-          { key: 'notifications', label: 'Notifications' },
-          { key: 'preferences', label: 'Preferences' },
-        ],
-      },
-    },
-    'right-col': {
-      id: 'right-col',
+    'col-settings': {
+      id: 'col-settings',
       type: 'Col',
       props: { span: 16 },
-      childrenIds: ['info-card'],
+      childrenIds: ['card-settings'],
     },
-    'info-card': {
-      id: 'info-card',
+    'card-settings': {
+      id: 'card-settings',
       type: 'Card',
       props: {
-        title: 'Profile Information',
-        style: { borderRadius: '8px' },
+        title: '基本设置',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['info-form'],
+      childrenIds: ['form-settings'],
     },
-    'info-form': {
-      id: 'info-form',
+    'form-settings': {
+      id: 'form-settings',
       type: 'Form',
-      props: {
-        layout: 'vertical',
+      props: { layout: 'vertical' },
+      events: {
+        onFinish: [{ type: 'apiCall', url: '/api/user/update', method: 'POST' }],
       },
-      childrenIds: ['form-row-1', 'form-row-2', 'form-row-3', 'save-btn'],
+      childrenIds: ['form-row-1', 'form-row-2', 'item-bio', 'form-row-action'],
     },
     'form-row-1': {
       id: 'form-row-1',
       type: 'Row',
-      props: { gutter: 16 },
-      childrenIds: ['first-name-col', 'last-name-col'],
+      props: { gutter: 24 },
+      childrenIds: ['col-email', 'col-name'],
     },
-    'first-name-col': {
-      id: 'first-name-col',
+    'col-email': {
+      id: 'col-email',
       type: 'Col',
       props: { span: 12 },
-      childrenIds: ['first-name-item'],
+      childrenIds: ['item-email'],
     },
-    'first-name-item': {
-      id: 'first-name-item',
+    'item-email': {
+      id: 'item-email',
       type: 'FormItem',
-      props: { label: 'First Name', name: 'firstName' },
-      childrenIds: ['first-name-input'],
+      props: { label: '邮箱', name: 'email', rules: [{ required: true, type: 'email' }] },
+      childrenIds: ['input-email'],
     },
-    'first-name-input': {
-      id: 'first-name-input',
+    'input-email': {
+      id: 'input-email',
       type: 'Input',
-      props: { defaultValue: 'John' },
+      props: { placeholder: 'admin@a2ui.dev' },
+      childrenIds: [],
     },
-    'last-name-col': {
-      id: 'last-name-col',
+    'col-name': {
+      id: 'col-name',
       type: 'Col',
       props: { span: 12 },
-      childrenIds: ['last-name-item'],
+      childrenIds: ['item-nickname'],
     },
-    'last-name-item': {
-      id: 'last-name-item',
+    'item-nickname': {
+      id: 'item-nickname',
       type: 'FormItem',
-      props: { label: 'Last Name', name: 'lastName' },
-      childrenIds: ['last-name-input'],
+      props: { label: '昵称', name: 'nickname', rules: [{ required: true }] },
+      childrenIds: ['input-nickname'],
     },
-    'last-name-input': {
-      id: 'last-name-input',
+    'input-nickname': {
+      id: 'input-nickname',
       type: 'Input',
-      props: { defaultValue: 'Doe' },
+      props: { placeholder: '请输入昵称' },
+      childrenIds: [],
     },
     'form-row-2': {
       id: 'form-row-2',
-      type: 'FormItem',
-      props: { label: 'Email', name: 'email' },
-      childrenIds: ['email-input'],
+      type: 'Row',
+      props: { gutter: 24 },
+      childrenIds: ['col-phone', 'col-dept'],
     },
-    'email-input': {
-      id: 'email-input',
+    'col-phone': {
+      id: 'col-phone',
+      type: 'Col',
+      props: { span: 12 },
+      childrenIds: ['item-phone'],
+    },
+    'item-phone': {
+      id: 'item-phone',
+      type: 'FormItem',
+      props: { label: '联系电话', name: 'phone' },
+      childrenIds: ['input-phone'],
+    },
+    'input-phone': {
+      id: 'input-phone',
       type: 'Input',
-      props: { defaultValue: 'john.doe@example.com' },
+      props: { placeholder: '138-xxxx-xxxx' },
+      childrenIds: [],
     },
-    'form-row-3': {
-      id: 'form-row-3',
+    'col-dept': {
+      id: 'col-dept',
+      type: 'Col',
+      props: { span: 12 },
+      childrenIds: ['item-dept'],
+    },
+    'item-dept': {
+      id: 'item-dept',
       type: 'FormItem',
-      props: { label: 'Bio', name: 'bio' },
-      childrenIds: ['bio-input'],
+      props: { label: '所属部门', name: 'department' },
+      childrenIds: ['select-dept'],
     },
-    'bio-input': {
-      id: 'bio-input',
+    'select-dept': {
+      id: 'select-dept',
+      type: 'Select',
+      props: {
+        placeholder: '请选择部门',
+        style: { width: '100%' },
+        options: [
+          { label: '研发部', value: 'dev' },
+          { label: '产品部', value: 'pm' },
+        ],
+      },
+      childrenIds: [],
+    },
+    'item-bio': {
+      id: 'item-bio',
+      type: 'FormItem',
+      props: { label: '个人简介', name: 'bio' },
+      childrenIds: ['textarea-bio'],
+    },
+    'textarea-bio': {
+      id: 'textarea-bio',
       type: 'TextArea',
-      props: {
-        rows: 4,
-        placeholder: 'Tell us about yourself...',
-      },
+      props: { placeholder: '简单介绍一下自己...', rows: 4 },
+      childrenIds: [],
     },
-    'save-btn': {
-      id: 'save-btn',
+    'form-row-action': {
+      id: 'form-row-action',
+      type: 'Row',
+      props: { style: { marginTop: '16px' } },
+      childrenIds: ['col-action'],
+    },
+    'col-action': {
+      id: 'col-action',
+      type: 'Col',
+      props: { span: 24 },
+      childrenIds: ['item-submit'],
+    },
+    'item-submit': {
+      id: 'item-submit',
+      type: 'FormItem',
+      props: { style: { margin: 0 } },
+      childrenIds: ['btn-submit'],
+    },
+    'btn-submit': {
+      id: 'btn-submit',
       type: 'Button',
-      props: {
-        type: 'primary',
-        children: 'Save Changes',
-        style: { marginTop: '16px' },
-      },
+      props: { type: 'primary', htmlType: 'submit', children: '更新基本信息' },
+      childrenIds: [],
     },
   },
 };

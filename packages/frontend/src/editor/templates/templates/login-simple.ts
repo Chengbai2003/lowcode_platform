@@ -6,10 +6,10 @@ import type { A2UISchema } from '../../../types/schema';
 
 const schema: A2UISchema = {
   version: 1,
-  rootId: 'page-1',
+  rootId: 'page-login',
   components: {
-    'page-1': {
-      id: 'page-1',
+    'page-login': {
+      id: 'page-login',
       type: 'Page',
       props: {
         style: {
@@ -26,10 +26,12 @@ const schema: A2UISchema = {
       id: 'login-card',
       type: 'Card',
       props: {
+        bordered: false,
         style: {
           width: '400px',
           borderRadius: '8px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          padding: '12px',
+          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
         },
       },
       childrenIds: ['login-header', 'login-form'],
@@ -37,114 +39,101 @@ const schema: A2UISchema = {
     'login-header': {
       id: 'login-header',
       type: 'Div',
-      props: {
-        style: {
-          textAlign: 'center',
-          marginBottom: '24px',
-        },
-      },
-      childrenIds: ['login-title', 'login-subtitle'],
+      props: { style: { textAlign: 'center', marginBottom: '32px' } },
+      childrenIds: ['login-title', 'login-sub'],
     },
     'login-title': {
       id: 'login-title',
       type: 'Title',
-      props: {
-        level: 2,
-        children: 'Welcome Back',
-        style: { margin: 0, color: '#1a1a1a' },
-      },
+      props: { level: 2, children: 'A2UI 中台系统', style: { margin: '0 0 8px 0' } },
+      childrenIds: [],
     },
-    'login-subtitle': {
-      id: 'login-subtitle',
+    'login-sub': {
+      id: 'login-sub',
       type: 'Text',
-      props: {
-        children: 'Please sign in to continue',
-        style: { color: '#666', marginTop: '8px' },
-      },
+      props: { type: 'secondary', children: '高效的企业级数字底座' },
+      childrenIds: [],
     },
     'login-form': {
       id: 'login-form',
       type: 'Form',
-      props: {
-        layout: 'vertical',
-        style: { width: '100%' },
+      props: { size: 'large' },
+      events: {
+        onFinish: [{ type: 'apiCall', url: '/api/login', method: 'POST' }],
       },
-      childrenIds: ['email-item', 'password-item', 'remember-row', 'submit-btn'],
+      childrenIds: ['item-user', 'item-pass', 'row-options', 'item-submit'],
     },
-    'email-item': {
-      id: 'email-item',
+    'item-user': {
+      id: 'item-user',
       type: 'FormItem',
-      props: {
-        label: 'Email',
-        name: 'email',
-        rules: [{ required: true, message: 'Please input your email!' }],
-      },
-      childrenIds: ['email-input'],
+      props: { name: 'username', rules: [{ required: true, message: '请输入工号' }] },
+      childrenIds: ['input-user'],
     },
-    'email-input': {
-      id: 'email-input',
+    'input-user': {
+      id: 'input-user',
       type: 'Input',
-      props: {
-        placeholder: 'Enter your email',
-        size: 'large',
-      },
+      props: { placeholder: '请输入工号', allowClear: true },
+      childrenIds: [],
     },
-    'password-item': {
-      id: 'password-item',
+    'item-pass': {
+      id: 'item-pass',
       type: 'FormItem',
-      props: {
-        label: 'Password',
-        name: 'password',
-        rules: [{ required: true, message: 'Please input your password!' }],
-      },
-      childrenIds: ['password-input'],
+      props: { name: 'password', rules: [{ required: true, message: '请输入密码' }] },
+      childrenIds: ['input-pass'],
     },
-    'password-input': {
-      id: 'password-input',
+    'input-pass': {
+      id: 'input-pass',
       type: 'InputPassword',
-      props: {
-        placeholder: 'Enter your password',
-        size: 'large',
-      },
+      props: { placeholder: '请输入密码' },
+      childrenIds: [],
     },
-    'remember-row': {
-      id: 'remember-row',
-      type: 'Div',
-      props: {
-        style: {
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '16px',
-        },
-      },
-      childrenIds: ['remember-checkbox', 'forgot-link'],
+    'row-options': {
+      id: 'row-options',
+      type: 'Row',
+      props: { justify: 'space-between', align: 'middle', style: { marginBottom: '24px' } },
+      childrenIds: ['col-rem', 'col-forgot'],
     },
-    'remember-checkbox': {
-      id: 'remember-checkbox',
+    'col-rem': {
+      id: 'col-rem',
+      type: 'Col',
+      props: {},
+      childrenIds: ['item-rem'],
+    },
+    'item-rem': {
+      id: 'item-rem',
+      type: 'FormItem',
+      props: { name: 'remember', valuePropName: 'checked', style: { margin: 0 } },
+      childrenIds: ['check-rem'],
+    },
+    'check-rem': {
+      id: 'check-rem',
       type: 'Checkbox',
-      props: {
-        children: 'Remember me',
-      },
+      props: { children: '自动登录' },
+      childrenIds: [],
     },
-    'forgot-link': {
-      id: 'forgot-link',
+    'col-forgot': {
+      id: 'col-forgot',
+      type: 'Col',
+      props: {},
+      childrenIds: ['link-forgot'],
+    },
+    'link-forgot': {
+      id: 'link-forgot',
       type: 'Link',
-      props: {
-        href: '/forgot-password',
-        children: 'Forgot password?',
-      },
+      props: { href: '#', children: '忘记密码？' },
+      childrenIds: [],
     },
-    'submit-btn': {
-      id: 'submit-btn',
+    'item-submit': {
+      id: 'item-submit',
+      type: 'FormItem',
+      props: { style: { margin: 0 } },
+      childrenIds: ['btn-submit'],
+    },
+    'btn-submit': {
+      id: 'btn-submit',
       type: 'Button',
-      props: {
-        type: 'primary',
-        htmlType: 'submit',
-        size: 'large',
-        block: true,
-        children: 'Sign In',
-      },
+      props: { type: 'primary', htmlType: 'submit', block: true, children: '登 录' },
+      childrenIds: [],
     },
   },
 };

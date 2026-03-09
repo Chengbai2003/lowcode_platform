@@ -6,222 +6,201 @@ import type { A2UISchema } from '../../../types/schema';
 
 const schema: A2UISchema = {
   version: 1,
-  rootId: 'page-1',
+  rootId: 'page-dashboard',
   components: {
-    'page-1': {
-      id: 'page-1',
+    'page-dashboard': {
+      id: 'page-dashboard',
       type: 'Page',
       props: {
-        style: {
-          padding: '24px',
-          backgroundColor: '#f5f5f5',
-          minHeight: '100vh',
-        },
+        style: { padding: '24px', backgroundColor: '#f0f2f5', minHeight: '100vh' },
       },
-      childrenIds: ['header-1', 'stats-row', 'content-row'],
+      childrenIds: ['dash-header', 'stat-row', 'content-row'],
     },
-    'header-1': {
-      id: 'header-1',
+    'dash-header': {
+      id: 'dash-header',
       type: 'Div',
-      props: {
-        style: {
-          marginBottom: '24px',
-        },
-      },
-      childrenIds: ['title-1'],
+      props: { style: { marginBottom: '24px' } },
+      childrenIds: ['dash-title'],
     },
-    'title-1': {
-      id: 'title-1',
+    'dash-title': {
+      id: 'dash-title',
       type: 'Title',
-      props: {
-        level: 2,
-        children: 'Dashboard Overview',
-        style: { margin: 0, color: '#1a1a1a' },
-      },
+      props: { level: 3, children: '工作台', style: { margin: 0 } },
+      childrenIds: [],
     },
-    'stats-row': {
-      id: 'stats-row',
+    'stat-row': {
+      id: 'stat-row',
       type: 'Row',
-      props: {
-        gutter: 16,
-        style: { marginBottom: '24px' },
-      },
-      childrenIds: ['stat-card-1', 'stat-card-2', 'stat-card-3', 'stat-card-4'],
+      props: { gutter: [24, 24], style: { marginBottom: '24px' } },
+      childrenIds: ['col-stat-1', 'col-stat-2', 'col-stat-3', 'col-stat-4'],
     },
-    'stat-card-1': {
-      id: 'stat-card-1',
+    'col-stat-1': {
+      id: 'col-stat-1',
+      type: 'Col',
+      props: { span: 6 },
+      childrenIds: ['card-stat-1'],
+    },
+    'card-stat-1': {
+      id: 'card-stat-1',
       type: 'Card',
       props: {
-        style: { borderRadius: '8px' },
+        title: '总活跃用户',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['stat-1-content'],
+      childrenIds: ['val-stat-1'],
     },
-    'stat-1-content': {
-      id: 'stat-1-content',
-      type: 'Div',
-      props: {},
-      childrenIds: ['stat-1-value', 'stat-1-label'],
-    },
-    'stat-1-value': {
-      id: 'stat-1-value',
+    'val-stat-1': {
+      id: 'val-stat-1',
       type: 'Title',
-      props: {
-        level: 3,
-        children: '1,234',
-        style: { margin: 0, color: '#1890ff' },
-      },
+      props: { level: 2, children: '24,593', style: { margin: 0, color: '#1890ff' } },
+      childrenIds: [],
     },
-    'stat-1-label': {
-      id: 'stat-1-label',
-      type: 'Text',
-      props: {
-        children: 'Total Users',
-        style: { color: '#666' },
-      },
+    'col-stat-2': {
+      id: 'col-stat-2',
+      type: 'Col',
+      props: { span: 6 },
+      childrenIds: ['card-stat-2'],
     },
-    'stat-card-2': {
-      id: 'stat-card-2',
+    'card-stat-2': {
+      id: 'card-stat-2',
       type: 'Card',
       props: {
-        style: { borderRadius: '8px' },
+        title: '今日新增订单',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['stat-2-content'],
+      childrenIds: ['val-stat-2'],
     },
-    'stat-2-content': {
-      id: 'stat-2-content',
-      type: 'Div',
-      props: {},
-      childrenIds: ['stat-2-value', 'stat-2-label'],
-    },
-    'stat-2-value': {
-      id: 'stat-2-value',
+    'val-stat-2': {
+      id: 'val-stat-2',
       type: 'Title',
-      props: {
-        level: 3,
-        children: '56,789',
-        style: { margin: 0, color: '#52c41a' },
-      },
+      props: { level: 2, children: '1,284', style: { margin: 0, color: '#52c41a' } },
+      childrenIds: [],
     },
-    'stat-2-label': {
-      id: 'stat-2-label',
-      type: 'Text',
-      props: {
-        children: 'Total Orders',
-        style: { color: '#666' },
-      },
+    'col-stat-3': {
+      id: 'col-stat-3',
+      type: 'Col',
+      props: { span: 6 },
+      childrenIds: ['card-stat-3'],
     },
-    'stat-card-3': {
-      id: 'stat-card-3',
+    'card-stat-3': {
+      id: 'card-stat-3',
       type: 'Card',
       props: {
-        style: { borderRadius: '8px' },
+        title: '本周总营收',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['stat-3-content'],
+      childrenIds: ['val-stat-3'],
     },
-    'stat-3-content': {
-      id: 'stat-3-content',
-      type: 'Div',
-      props: {},
-      childrenIds: ['stat-3-value', 'stat-3-label'],
-    },
-    'stat-3-value': {
-      id: 'stat-3-value',
+    'val-stat-3': {
+      id: 'val-stat-3',
       type: 'Title',
-      props: {
-        level: 3,
-        children: '$98,765',
-        style: { margin: 0, color: '#faad14' },
-      },
+      props: { level: 2, children: '¥ 89,400', style: { margin: 0, color: '#faad14' } },
+      childrenIds: [],
     },
-    'stat-3-label': {
-      id: 'stat-3-label',
-      type: 'Text',
-      props: {
-        children: 'Revenue',
-        style: { color: '#666' },
-      },
+    'col-stat-4': {
+      id: 'col-stat-4',
+      type: 'Col',
+      props: { span: 6 },
+      childrenIds: ['card-stat-4'],
     },
-    'stat-card-4': {
-      id: 'stat-card-4',
+    'card-stat-4': {
+      id: 'card-stat-4',
       type: 'Card',
       props: {
-        style: { borderRadius: '8px' },
+        title: '任务完成率',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['stat-4-content'],
+      childrenIds: ['val-stat-4'],
     },
-    'stat-4-content': {
-      id: 'stat-4-content',
-      type: 'Div',
-      props: {},
-      childrenIds: ['stat-4-value', 'stat-4-label'],
-    },
-    'stat-4-value': {
-      id: 'stat-4-value',
+    'val-stat-4': {
+      id: 'val-stat-4',
       type: 'Title',
-      props: {
-        level: 3,
-        children: '98.5%',
-        style: { margin: 0, color: '#722ed1' },
-      },
-    },
-    'stat-4-label': {
-      id: 'stat-4-label',
-      type: 'Text',
-      props: {
-        children: 'Satisfaction',
-        style: { color: '#666' },
-      },
+      props: { level: 2, children: '92.5%', style: { margin: 0, color: '#722ed1' } },
+      childrenIds: [],
     },
     'content-row': {
       id: 'content-row',
       type: 'Row',
-      props: {
-        gutter: 16,
-      },
-      childrenIds: ['main-card', 'side-card'],
+      props: { gutter: [24, 24] },
+      childrenIds: ['col-activity', 'col-actions'],
     },
-    'main-card': {
-      id: 'main-card',
+    'col-activity': {
+      id: 'col-activity',
+      type: 'Col',
+      props: { span: 16 },
+      childrenIds: ['card-activity'],
+    },
+    'card-activity': {
+      id: 'card-activity',
       type: 'Card',
       props: {
-        title: 'Recent Activity',
-        style: { borderRadius: '8px' },
+        title: '最近活动',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['activity-placeholder'],
+      childrenIds: ['table-activity'],
     },
-    'activity-placeholder': {
-      id: 'activity-placeholder',
-      type: 'Text',
+    'table-activity': {
+      id: 'table-activity',
+      type: 'Table',
       props: {
-        children: 'Activity feed will be displayed here...',
-        style: { color: '#999', padding: '40px 0', textAlign: 'center' },
+        size: 'small',
+        pagination: { pageSize: 5 },
+        columns: [
+          { title: '时间', dataIndex: 'time', key: 'time' },
+          { title: '操作人', dataIndex: 'user', key: 'user' },
+          { title: '事件描述', dataIndex: 'event', key: 'event' },
+        ],
+        dataSource: [
+          { key: '1', time: '10:23', user: '林冲', event: '更新了系统配置' },
+          { key: '2', time: '09:45', user: '武松', event: '处理了 3 笔高危订单' },
+        ],
       },
+      childrenIds: [],
     },
-    'side-card': {
-      id: 'side-card',
+    'col-actions': {
+      id: 'col-actions',
+      type: 'Col',
+      props: { span: 8 },
+      childrenIds: ['card-actions'],
+    },
+    'card-actions': {
+      id: 'card-actions',
       type: 'Card',
       props: {
-        title: 'Quick Actions',
-        style: { borderRadius: '8px' },
+        title: '快捷入口',
+        bordered: false,
+        style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['action-btn-1', 'action-btn-2'],
+      childrenIds: ['space-actions'],
     },
-    'action-btn-1': {
-      id: 'action-btn-1',
-      type: 'Button',
-      props: {
-        type: 'primary',
-        children: 'Create New',
-        style: { width: '100%', marginBottom: '12px' },
-      },
+    'space-actions': {
+      id: 'space-actions',
+      type: 'Space',
+      props: { direction: 'vertical', size: 'middle', style: { width: '100%' } },
+      childrenIds: ['btn-action-1', 'btn-action-2', 'btn-action-3'],
     },
-    'action-btn-2': {
-      id: 'action-btn-2',
+    'btn-action-1': {
+      id: 'btn-action-1',
       type: 'Button',
-      props: {
-        children: 'View Reports',
-        style: { width: '100%' },
-      },
+      props: { block: true, children: '发布新商品' },
+      childrenIds: [],
+    },
+    'btn-action-2': {
+      id: 'btn-action-2',
+      type: 'Button',
+      props: { block: true, children: '查看异常日志' },
+      childrenIds: [],
+    },
+    'btn-action-3': {
+      id: 'btn-action-3',
+      type: 'Button',
+      props: { block: true, children: '系统权限设置' },
+      childrenIds: [],
     },
   },
 };

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useEffect, memo, useCallback } from 'react';
+import React, { useMemo, useEffect, memo } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import {
@@ -293,19 +293,28 @@ const ComponentRenderer = memo(
       );
     }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
 
-    // 缓存点击事件处理器，避免每次渲染都创建新函数
-    const handleClick = useCallback(
-      (e: React.MouseEvent) => {
-        e.stopPropagation();
-        onComponentClick?.(node);
-      },
-      [onComponentClick, node],
-    );
-
     if (!Component) {
       console.warn(`Component "${componentName}" not found in registry, rendering as div`);
+      const fallbackClassName = [props.className, restProps.className].filter(Boolean).join(' ');
+      const fallbackMarkedClassName =
+        onComponentClick && id
+          ? [fallbackClassName, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
+              .filter(Boolean)
+              .join(' ')
+          : fallbackClassName;
       return (
-        <div {...props} {...eventHandlers} {...restProps} data-fallback-component={componentName}>
+        <div
+          {...props}
+          {...eventHandlers}
+          {...restProps}
+          data-fallback-component={componentName}
+          className={fallbackMarkedClassName}
+          {...(onComponentClick && id
+            ? {
+                'data-component-id': id,
+              }
+            : {})}
+        >
           {childrenElements}
         </div>
       );
@@ -386,6 +395,13 @@ const ComponentRenderer = memo(
         Reflect.deleteProperty(p, 'initialValue');
       }
 
+      if (onComponentClick && id) {
+        p['data-component-id'] = id;
+        p.className = [p.className, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
+          .filter(Boolean)
+          .join(' ');
+      }
+
       return p;
     }, [
       props,
@@ -396,6 +412,7 @@ const ComponentRenderer = memo(
       dispatch,
       componentName,
       eventDispatcher,
+      onComponentClick,
     ]);
 
     // 判断组件是否是"表单输入类"叶子组件（不支持 children，但可能有 props.children 文本）
@@ -438,19 +455,6 @@ const ComponentRenderer = memo(
           id={id}
         />
       );
-
-    if (onComponentClick) {
-      return (
-        <div
-          onClick={handleClick}
-          style={{ cursor: 'pointer', position: 'relative' }}
-          data-component-id={id}
-          className="lowcode-component-wrapper"
-        >
-          {content}
-        </div>
-      );
-    }
 
     return content;
   },

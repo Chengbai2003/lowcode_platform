@@ -10,6 +10,7 @@ import { loginSimpleTemplate } from './templates/login-simple';
 import { formContactTemplate } from './templates/form-contact';
 import { listTableTemplate } from './templates/list-table';
 import { profileUserTemplate } from './templates/profile-user';
+import { businessDetailTemplate } from './templates/business-detail';
 
 /**
  * 内置模板注册表
@@ -20,6 +21,7 @@ const builtinTemplates: Map<string, Template> = new Map([
   ['form-contact', formContactTemplate],
   ['list-table', listTableTemplate],
   ['profile-user', profileUserTemplate],
+  ['business-detail', businessDetailTemplate],
 ]);
 
 /**
