@@ -22,6 +22,7 @@ import {
   sanitizeSlotValue,
   sanitizeTableColumnsValue,
 } from './editors/complexValueUtils';
+import { isExpression } from '../../../renderer/executor/parser/expressionParser';
 import styles from './PropertyPanel.module.scss';
 
 interface PropertyPanelProps {
@@ -29,6 +30,25 @@ interface PropertyPanelProps {
   selectedId: string | null;
   onSchemaChange: (schema: A2UISchema) => void;
 }
+
+const EXPRESSION_HINT_KEYS = new Set([
+  'className',
+  'style',
+  'children',
+  'title',
+  'content',
+  'placeholder',
+  'label',
+  'text',
+  'message',
+  'description',
+  'tip',
+  'header',
+  'footer',
+  'subTitle',
+  'extra',
+  'tooltip',
+]);
 
 function normalizePropertyValue(prop: PropertyMeta, value: unknown): unknown {
   switch (prop.editor) {
@@ -41,6 +61,9 @@ function normalizePropertyValue(prop: PropertyMeta, value: unknown): unknown {
       return sanitizeFormRulesValue(value, fallback);
     }
     case 'json':
+      if (typeof value === 'string' && isExpression(value)) {
+        return value;
+      }
       return sanitizeJsonValue(value, prop.defaultValue);
     case 'expression':
       return sanitizeExpressionValue(
@@ -154,12 +177,18 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       const { component } = componentConfig;
       const rawValue = component.props?.[prop.key] ?? prop.defaultValue;
       const value = normalizePropertyValue(prop, rawValue);
+      const description =
+        EXPRESSION_HINT_KEYS.has(prop.key) && prop.editor !== 'expression'
+          ? prop.description
+            ? `${prop.description}（支持 {{}} 表达式）`
+            : '支持 {{}} 表达式'
+          : prop.description;
 
       const commonProps = {
         label: prop.label,
         value,
         onChange: (val: unknown) => handlePropertyChange(prop, val),
-        description: prop.description,
+        description,
       };
 
       switch (prop.editor) {
@@ -190,6 +219,32 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         case 'expression':
           return <ExpressionEditor key={prop.key} {...commonProps} />;
         case 'slot':
+          if (prop.key === 'children') {
+            const hasChildrenIds =
+              Array.isArray(component.childrenIds) && component.childrenIds.length > 0;
+            const slotText = sanitizeSlotValue(rawValue, '');
+            const hasSlotText = slotText.trim().length > 0;
+            const showConflictHint = hasChildrenIds && hasSlotText;
+
+            return (
+              <div key={prop.key} className={styles.slotEditorWithHint}>
+                {showConflictHint && (
+                  <div className={styles.slotConflictHint}>
+                    <div className={styles.slotConflictTitle}>插槽内容与子组件同时存在</div>
+                    <div className={styles.slotConflictBody}>
+                      渲染策略：先渲染插槽文本，再追加子组件树。表单输入类组件会忽略
+                      childrenIds。
+                    </div>
+                  </div>
+                )}
+                <SlotEditor
+                  {...commonProps}
+                  defaultTemplate={prop.defaultValue}
+                  placeholder="输入默认插槽内容（组件树子节点会附加在后）"
+                />
+              </div>
+            );
+          }
           return (
             <SlotEditor
               key={prop.key}

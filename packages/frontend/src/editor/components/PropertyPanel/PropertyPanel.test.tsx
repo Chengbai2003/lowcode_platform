@@ -153,4 +153,33 @@ describe('PropertyPanel complex editors', () => {
     const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
     expect(latestSchema.components['button-1']?.props?.children).toBe('立即提交');
   });
+
+  it('shows conflict hint when slot text and childrenIds both exist', () => {
+    const onSchemaChange = vi.fn();
+    const schema: A2UISchema = {
+      rootId: 'button-1',
+      components: {
+        'button-1': {
+          id: 'button-1',
+          type: 'Button',
+          props: {
+            children: '按钮文本',
+          },
+          childrenIds: ['icon-1'],
+        },
+        'icon-1': {
+          id: 'icon-1',
+          type: 'Div',
+          props: {},
+          childrenIds: [],
+        },
+      },
+    };
+
+    render(
+      <StatefulPanel initialSchema={schema} selectedId="button-1" onSchemaChange={onSchemaChange} />,
+    );
+
+    expect(screen.getByText('插槽内容与子组件同时存在')).toBeInTheDocument();
+  });
 });

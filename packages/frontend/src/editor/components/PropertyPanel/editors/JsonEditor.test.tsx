@@ -48,4 +48,19 @@ describe('JsonEditor', () => {
     expect(onChange).toHaveBeenCalledWith({ span: 6 });
     expect(screen.getByText('JSON 类型与默认模板不匹配，已回退默认值')).toBeInTheDocument();
   });
+
+  it('accepts expression string without json parsing', () => {
+    const onChange = vi.fn();
+
+    render(<JsonEditor label="JSON" value={{}} onChange={onChange} />);
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, {
+      target: { value: '{{state.dynamicStyle}}' },
+    });
+    fireEvent.blur(textarea);
+
+    expect(onChange).toHaveBeenCalledWith('{{state.dynamicStyle}}');
+    expect(screen.queryByText('JSON 格式不合法')).not.toBeInTheDocument();
+  });
 });

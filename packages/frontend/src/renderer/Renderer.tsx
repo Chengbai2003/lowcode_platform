@@ -9,6 +9,7 @@ import {
 } from './store/componentSlice';
 import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
+import { resolveValues } from './executor/parser/valueResolver';
 import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
 import { DSLExecutor } from './executor';
@@ -283,6 +284,18 @@ const ComponentRenderer = memo(
       return buildEventHandlers(events, eventDispatcher);
     }, [events, eventDispatcher]);
 
+    const resolvedSchemaProps = useMemo(() => {
+      if (!eventDispatcher) {
+        return props;
+      }
+      try {
+        return resolveValues(props as Record<string, any>, eventDispatcher.getExecutionContext());
+      } catch (error) {
+        console.warn('[Renderer] Failed to resolve props expressions', { id, error });
+        return props;
+      }
+    }, [props, eventDispatcher, id]);
+
     const childrenElements = useMemo(() => {
       return renderChildren(
         childrenIds,
@@ -295,7 +308,9 @@ const ComponentRenderer = memo(
 
     if (!Component) {
       console.warn(`Component "${componentName}" not found in registry, rendering as div`);
-      const fallbackClassName = [props.className, restProps.className].filter(Boolean).join(' ');
+      const fallbackClassName = [resolvedSchemaProps.className, restProps.className]
+        .filter(Boolean)
+        .join(' ');
       const fallbackMarkedClassName =
         onComponentClick && id
           ? [fallbackClassName, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
@@ -321,7 +336,7 @@ const ComponentRenderer = memo(
     }
 
     const mergedProps = useMemo(() => {
-      const p: any = { ...props, ...restProps, ...eventHandlers };
+      const p: any = { ...resolvedSchemaProps, ...restProps, ...eventHandlers };
 
       if (componentValue !== undefined) {
         p.value = componentValue;

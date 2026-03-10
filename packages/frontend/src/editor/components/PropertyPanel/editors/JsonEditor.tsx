@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import styles from '../PropertyPanel.module.scss';
 import { sanitizeJsonValue } from './complexValueUtils';
+import { isExpression } from '../../../../renderer/executor/parser/expressionParser';
 
 interface JsonEditorProps {
   label: string;
@@ -60,6 +61,12 @@ export const JsonEditor: React.FC<JsonEditorProps> = ({
     const trimmed = text.trim();
     if (!trimmed) {
       onChange(undefined);
+      setError(null);
+      return;
+    }
+
+    if (isExpression(trimmed)) {
+      onChange(trimmed);
       setError(null);
       return;
     }

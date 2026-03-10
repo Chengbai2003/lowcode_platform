@@ -99,6 +99,31 @@
   gap: $spacing-md;
 }
 
+.slotEditorWithHint {
+  @include flex-column;
+  gap: $spacing-sm;
+}
+
+.slotConflictHint {
+  border: 1px solid $warning;
+  background: rgba($warning, 0.08);
+  border-radius: $radius-md;
+  padding: $spacing-sm $spacing-md;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.slotConflictTitle {
+  font-weight: $font-weight-medium;
+  color: $warning;
+  margin-bottom: 4px;
+}
+
+.slotConflictBody {
+  color: $text-tertiary;
+  line-height: 1.4;
+}
+
 /* 编辑器通用样式 */
 .propertyItem {
   @include flex-column;
