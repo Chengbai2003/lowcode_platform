@@ -50,6 +50,17 @@ const EXPRESSION_HINT_KEYS = new Set([
   'tooltip',
 ]);
 
+const COMMON_PROPERTIES: PropertyMeta[] = [
+  {
+    key: 'visible',
+    label: '显示条件',
+    editor: 'expression',
+    defaultValue: '',
+    description: '返回 true 显示，false 隐藏（为空则显示）',
+    group: '高级',
+  },
+];
+
 function normalizePropertyValue(prop: PropertyMeta, value: unknown): unknown {
   switch (prop.editor) {
     case 'tableColumns': {
@@ -66,10 +77,16 @@ function normalizePropertyValue(prop: PropertyMeta, value: unknown): unknown {
       }
       return sanitizeJsonValue(value, prop.defaultValue);
     case 'expression':
-      return sanitizeExpressionValue(
-        value,
-        typeof prop.defaultValue === 'string' ? prop.defaultValue : '',
-      );
+      if (typeof value === 'boolean' || typeof value === 'number') {
+        return `{{${value}}}`;
+      }
+      {
+        const normalized = sanitizeExpressionValue(
+          value,
+          typeof prop.defaultValue === 'string' ? prop.defaultValue : '',
+        );
+        return normalized === '' ? undefined : normalized;
+      }
     case 'slot':
       return sanitizeSlotValue(
         value,
@@ -106,19 +123,24 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   const groupedProperties = useMemo(() => {
     if (!componentConfig) return {};
     const { component, meta } = componentConfig;
+    const metaProperties = meta.properties || [];
+    const extraProperties = COMMON_PROPERTIES.filter(
+      (prop) => !metaProperties.some((metaProp) => metaProp.key === prop.key),
+    );
+    const allProperties = [...metaProperties, ...extraProperties];
     const groups: Record<string, PropertyMeta[]> = {
       基础: [],
       样式: [],
       高级: [],
     };
 
-    const resolvedProps = meta.properties.reduce<Record<string, unknown>>((acc, prop) => {
+    const resolvedProps = allProperties.reduce<Record<string, unknown>>((acc, prop) => {
       const currentValue = component.props?.[prop.key];
       acc[prop.key] = currentValue ?? prop.defaultValue;
       return acc;
     }, {});
 
-    const visibleProperties = meta.properties.filter((prop) => {
+    const visibleProperties = allProperties.filter((prop) => {
       if (!prop.visible) return true;
       try {
         return Boolean(prop.visible(resolvedProps));
@@ -232,8 +254,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
                   <div className={styles.slotConflictHint}>
                     <div className={styles.slotConflictTitle}>插槽内容与子组件同时存在</div>
                     <div className={styles.slotConflictBody}>
-                      渲染策略：先渲染插槽文本，再追加子组件树。表单输入类组件会忽略
-                      childrenIds。
+                      渲染策略：先渲染插槽文本，再追加子组件树。表单输入类组件会忽略 childrenIds。
                     </div>
                   </div>
                 )}

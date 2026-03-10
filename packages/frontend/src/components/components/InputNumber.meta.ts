@@ -17,8 +17,8 @@ export const InputNumberMeta: ComponentPanelConfig = {
     {
       key: 'disabled',
       label: '禁用',
-      editor: 'boolean',
-      defaultValue: false,
+      editor: 'expression',
+      defaultValue: '',
 
       group: '基础',
     },

@@ -13,7 +13,7 @@ export const DatePickerMeta: ComponentPanelConfig = {
       defaultValue: '请选择日期',
       group: '基础',
     },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false, group: '基础' },
+    { key: 'disabled', label: '禁用', editor: 'expression', defaultValue: '', group: '基础' },
     { key: 'allowClear', label: '允许清除', editor: 'boolean', defaultValue: true, group: '基础' },
     {
       key: 'picker',

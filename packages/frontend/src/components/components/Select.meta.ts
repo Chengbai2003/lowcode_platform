@@ -46,7 +46,7 @@ export const SelectMeta: ComponentPanelConfig = {
 
       group: '基础',
     },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false, group: '基础' },
+    { key: 'disabled', label: '禁用', editor: 'expression', defaultValue: '', group: '基础' },
     {
       key: 'allowClear',
       label: '允许清除',

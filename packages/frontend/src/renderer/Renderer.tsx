@@ -14,6 +14,11 @@ import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
 import { DSLExecutor } from './executor';
 import type { ActionList, ExecutionContext } from '../types';
+import {
+  Text as TypographyText,
+  Title as TypographyTitle,
+  Paragraph as TypographyParagraph,
+} from '../components/components/Typography';
 
 /**
  * 事件派发中心
@@ -152,12 +157,15 @@ const builtInComponents: ComponentRegistry = {
       {children}
     </div>
   ),
-  Text: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-  Title: ({ children, level = 1, ...props }: any) => {
-    const HeadingTag = `h${level}` as keyof JSX.IntrinsicElements;
-    return <HeadingTag {...props}>{children}</HeadingTag>;
-  },
-  Paragraph: ({ children, ...props }: any) => <p {...props}>{children}</p>,
+  Text: ({ children, ...props }: any) => <TypographyText {...props}>{children}</TypographyText>,
+  Title: ({ children, level = 1, ...props }: any) => (
+    <TypographyTitle level={level} {...props}>
+      {children}
+    </TypographyTitle>
+  ),
+  Paragraph: ({ children, ...props }: any) => (
+    <TypographyParagraph {...props}>{children}</TypographyParagraph>
+  ),
   Input: (props: any) => <input {...props} />,
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   TextArea: (props: any) => <textarea {...props} />,
@@ -269,16 +277,18 @@ const ComponentRenderer = memo(
     [key: string]: any;
   }) => {
     const node = flatComponents[nodeId];
-    if (!node) return null;
-
-    const { type: componentName, props = {}, childrenIds, events = {}, id } = node;
-
-    if (!componentName) return null;
+    const componentName = node?.type;
+    const props = node?.props ?? {};
+    const childrenIds = node?.childrenIds;
+    const events = node?.events ?? {};
+    const id = node?.id;
 
     const dispatch = useAppDispatch();
     const componentValue = useAppSelector((state) => (id ? state.components.data[id] : undefined));
 
-    const Component = components[componentName] || builtInComponents[componentName];
+    const Component = componentName
+      ? components[componentName] || builtInComponents[componentName]
+      : undefined;
 
     const eventHandlers = useMemo(() => {
       return buildEventHandlers(events, eventDispatcher);
@@ -296,6 +306,18 @@ const ComponentRenderer = memo(
       }
     }, [props, eventDispatcher, id]);
 
+    const hasVisibleProp =
+      resolvedSchemaProps && Object.prototype.hasOwnProperty.call(resolvedSchemaProps, 'visible');
+    const isVisible = !hasVisibleProp || Boolean((resolvedSchemaProps as any).visible);
+
+    const sanitizedProps = useMemo(() => {
+      if (!hasVisibleProp) {
+        return resolvedSchemaProps;
+      }
+      const { visible, ...rest } = resolvedSchemaProps as Record<string, unknown>;
+      return rest;
+    }, [hasVisibleProp, resolvedSchemaProps]);
+
     const childrenElements = useMemo(() => {
       return renderChildren(
         childrenIds,
@@ -306,37 +328,8 @@ const ComponentRenderer = memo(
       );
     }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
 
-    if (!Component) {
-      console.warn(`Component "${componentName}" not found in registry, rendering as div`);
-      const fallbackClassName = [resolvedSchemaProps.className, restProps.className]
-        .filter(Boolean)
-        .join(' ');
-      const fallbackMarkedClassName =
-        onComponentClick && id
-          ? [fallbackClassName, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
-              .filter(Boolean)
-              .join(' ')
-          : fallbackClassName;
-      return (
-        <div
-          {...props}
-          {...eventHandlers}
-          {...restProps}
-          data-fallback-component={componentName}
-          className={fallbackMarkedClassName}
-          {...(onComponentClick && id
-            ? {
-                'data-component-id': id,
-              }
-            : {})}
-        >
-          {childrenElements}
-        </div>
-      );
-    }
-
     const mergedProps = useMemo(() => {
-      const p: any = { ...resolvedSchemaProps, ...restProps, ...eventHandlers };
+      const p: any = { ...sanitizedProps, ...restProps, ...eventHandlers };
 
       if (componentValue !== undefined) {
         p.value = componentValue;
@@ -419,7 +412,7 @@ const ComponentRenderer = memo(
 
       return p;
     }, [
-      props,
+      sanitizedProps,
       restProps,
       eventHandlers,
       componentValue,
@@ -429,6 +422,43 @@ const ComponentRenderer = memo(
       eventDispatcher,
       onComponentClick,
     ]);
+
+    if (!node || !componentName) {
+      return null;
+    }
+
+    if (!isVisible) {
+      return null;
+    }
+
+    if (!Component) {
+      console.warn(`Component "${componentName}" not found in registry, rendering as div`);
+      const fallbackClassName = [sanitizedProps?.className, restProps.className]
+        .filter(Boolean)
+        .join(' ');
+      const fallbackMarkedClassName =
+        onComponentClick && id
+          ? [fallbackClassName, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
+              .filter(Boolean)
+              .join(' ')
+          : fallbackClassName;
+      return (
+        <div
+          {...sanitizedProps}
+          {...eventHandlers}
+          {...restProps}
+          data-fallback-component={componentName}
+          className={fallbackMarkedClassName}
+          {...(onComponentClick && id
+            ? {
+                'data-component-id': id,
+              }
+            : {})}
+        >
+          {childrenElements}
+        </div>
+      );
+    }
 
     // 判断组件是否是"表单输入类"叶子组件（不支持 children，但可能有 props.children 文本）
     // 注意：Button、Title、Text、Tag 等组件支持 props.children 显示文本

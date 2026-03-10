@@ -99,8 +99,8 @@ export const FormMeta: ComponentPanelConfig = {
     {
       key: 'disabled',
       label: '整体禁用',
-      editor: 'boolean',
-      defaultValue: false,
+      editor: 'expression',
+      defaultValue: '',
       group: '高级',
     },
     {

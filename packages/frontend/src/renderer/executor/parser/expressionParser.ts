@@ -6,6 +6,58 @@
 import type { ParsedExpression } from '../../../types';
 import { safeEvaluate, SAFE_GLOBALS } from './safeEvaluator';
 
+const VALID_ALIAS_REGEX = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+const RESERVED_IDENTIFIERS = new Set([
+  'true',
+  'false',
+  'null',
+  'undefined',
+  'if',
+  'else',
+  'for',
+  'while',
+  'return',
+  'switch',
+  'case',
+  'default',
+  'typeof',
+  'new',
+  'this',
+  'class',
+  'extends',
+  'let',
+  'const',
+  'var',
+  'function',
+  'import',
+  'export',
+  'void',
+  'delete',
+  'in',
+  'instanceof',
+  ...Object.keys(SAFE_GLOBALS),
+]);
+const RESERVED_CONTEXT_KEYS = new Set([
+  ...RESERVED_IDENTIFIERS,
+  'data',
+  'formData',
+  'state',
+  'route',
+  'user',
+  'ui',
+  'api',
+  'utils',
+  'navigate',
+  'back',
+  'event',
+  'dispatch',
+  'getState',
+  'components',
+  '__proto__',
+  'constructor',
+  'prototype',
+]);
+
 /**
  * 表达式正则表达式
  * 匹配 {{ expression }} 格式
@@ -25,6 +77,38 @@ function isExpressionString(str: string): boolean {
  */
 function isSimpleVariable(str: string): boolean {
   return /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(str.trim());
+}
+
+function isReservedLiteral(str: string): boolean {
+  const trimmed = str.trim();
+  return trimmed === 'true' || trimmed === 'false' || trimmed === 'null' || trimmed === 'undefined';
+}
+
+function isValidAliasKey(key: string, context: Record<string, any>): boolean {
+  if (!VALID_ALIAS_REGEX.test(key)) return false;
+  if (RESERVED_CONTEXT_KEYS.has(key)) return false;
+  if (Object.prototype.hasOwnProperty.call(context, key)) return false;
+  return true;
+}
+
+export function buildExpressionContext(context: Record<string, any> = {}): Record<string, any> {
+  if (!context || typeof context !== 'object') {
+    return {};
+  }
+
+  const resolvedContext: Record<string, any> = { ...context };
+  const data = (context as Record<string, any>).data;
+
+  if (!data || typeof data !== 'object') {
+    return resolvedContext;
+  }
+
+  for (const [key, value] of Object.entries(data)) {
+    if (!isValidAliasKey(key, resolvedContext)) continue;
+    resolvedContext[key] = value;
+  }
+
+  return resolvedContext;
 }
 
 /**
@@ -85,6 +169,14 @@ export function parseExpression(str: string): ParsedExpression {
   if (exprMatch) {
     const expr = exprMatch[1].trim();
 
+    if (isReservedLiteral(expr)) {
+      return {
+        type: 'literal',
+        raw: str,
+        value: parseLiteral(expr),
+      };
+    }
+
     if (isSimpleVariable(expr)) {
       return {
         type: 'variable',
@@ -120,43 +212,12 @@ function extractVariables(expr: string): string[] {
     /([a-zA-Z_$][a-zA-Z0-9_$]*)/g, // 简单变量名
   ];
 
-  const BLACKLIST = [
-    'true',
-    'false',
-    'null',
-    'undefined',
-    'if',
-    'else',
-    'for',
-    'while',
-    'return',
-    'switch',
-    'case',
-    'default',
-    'typeof',
-    'new',
-    'this',
-    'class',
-    'extends',
-    'let',
-    'const',
-    'var',
-    'function',
-    'import',
-    'export',
-    'void',
-    'delete',
-    'in',
-    'instanceof',
-    ...Object.keys(SAFE_GLOBALS),
-  ];
-
   for (const pattern of patterns) {
     let match;
     while ((match = pattern.exec(expr)) !== null) {
       const varName = match[1];
       // 过滤掉关键字和已存在的变量
-      if (!BLACKLIST.includes(varName) && !variables.includes(varName)) {
+      if (!RESERVED_IDENTIFIERS.has(varName) && !variables.includes(varName)) {
         variables.push(varName);
       }
     }
@@ -279,11 +340,12 @@ function executeComplexExpression(expr: string, context: Record<string, any>): a
  * 插值模板字符串
  */
 export function interpolateTemplate(template: string, context: Record<string, any>): string {
+  const resolvedContext = buildExpressionContext(context);
   // replace all occurrences
   return template.replace(getExpressionRegex(), (_match, expr) => {
     const trimmed = expr.trim();
     const parsed = parseExpression(`{{${trimmed}}}`);
-    const value = evaluateExpression(parsed, context);
+    const value = evaluateExpression(parsed, resolvedContext);
 
     // 处理undefined和null
     if (value === undefined || value === null) {
@@ -309,7 +371,7 @@ export function parseAndEvaluate(str: any, context: { [key: string]: any }): any
   }
 
   const parsed = parseExpression(str);
-  return evaluateExpression(parsed, context);
+  return evaluateExpression(parsed, buildExpressionContext(context));
 }
 
 /**

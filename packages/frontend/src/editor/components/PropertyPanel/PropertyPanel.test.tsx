@@ -147,7 +147,7 @@ describe('PropertyPanel complex editors', () => {
 
     expect(screen.getByDisplayValue('按钮')).toBeInTheDocument();
 
-    const textarea = screen.getByRole('textbox');
+    const textarea = screen.getByPlaceholderText('输入默认插槽内容（组件树子节点会附加在后）');
     fireEvent.change(textarea, { target: { value: '立即提交' } });
 
     const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
@@ -177,7 +177,11 @@ describe('PropertyPanel complex editors', () => {
     };
 
     render(
-      <StatefulPanel initialSchema={schema} selectedId="button-1" onSchemaChange={onSchemaChange} />,
+      <StatefulPanel
+        initialSchema={schema}
+        selectedId="button-1"
+        onSchemaChange={onSchemaChange}
+      />,
     );
 
     expect(screen.getByText('插槽内容与子组件同时存在')).toBeInTheDocument();
