@@ -36,5 +36,5 @@ export type ApiCallAction = {
 export type DelayAction = {
   type: 'delay';
   /** 延迟时间(ms) */
-  ms: number;
+  ms?: number;
 };

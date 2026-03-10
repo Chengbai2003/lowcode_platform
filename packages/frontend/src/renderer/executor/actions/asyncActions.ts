@@ -197,9 +197,9 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
  */
 export const delay: ActionHandler = async (action) => {
   const delayAction = action as DelayAction;
-  const { ms } = delayAction;
+  const ms = typeof delayAction.ms === 'number' ? delayAction.ms : 0;
 
-  if (typeof ms !== 'number' || ms < 0) {
+  if (Number.isNaN(ms) || ms < 0) {
     throw new Error('delay: ms must be a positive number');
   }
 

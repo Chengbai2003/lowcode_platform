@@ -1,14 +1,21 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { ConfigProvider, theme, message } from 'antd';
+import { ConfigProvider, theme, message, notification, Modal } from 'antd';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ExternalLink } from 'lucide-react';
-import type { LowcodeEditorProps } from './types';
+import type { EventContext, EventUIContext, LowcodeEditorProps } from './types';
 import type { A2UISchema } from '../types';
 import { componentRegistry } from '../components';
 import { compileSchema } from './services/compilerApi';
-import { EditorHeader, PreviewPane, PropertyPanel, ErrorBoundary } from './components';
+import {
+  EditorHeader,
+  PreviewPane,
+  PropertyPanel,
+  ErrorBoundary,
+  useUndoRedoShortcuts,
+} from './components';
 import { ComponentTree } from './components/TreeView/ComponentTree';
 import { useFloatingIslandHotkey } from './hooks/useFloatingIslandHotkey';
+import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
 import { useSelectionStore } from './store/editor-store';
@@ -56,6 +63,78 @@ function LowcodeEditorInner({
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
 
+  const uiContext = useMemo<EventUIContext>(() => {
+    const modal = {
+      confirm: (options: Parameters<typeof Modal.confirm>[0]) =>
+        new Promise<boolean>((resolve) => {
+          Modal.confirm({
+            ...options,
+            onOk: () => resolve(true),
+            onCancel: () => resolve(false),
+          });
+        }),
+      info: (options: Parameters<typeof Modal.info>[0]) =>
+        new Promise<void>((resolve) => {
+          Modal.info({
+            ...options,
+            onOk: () => resolve(),
+          });
+        }),
+      success: (options: Parameters<typeof Modal.success>[0]) =>
+        new Promise<void>((resolve) => {
+          Modal.success({
+            ...options,
+            onOk: () => resolve(),
+          });
+        }),
+      error: (options: Parameters<typeof Modal.error>[0]) =>
+        new Promise<void>((resolve) => {
+          Modal.error({
+            ...options,
+            onOk: () => resolve(),
+          });
+        }),
+      warning: (options: Parameters<typeof Modal.warning>[0]) =>
+        new Promise<void>((resolve) => {
+          Modal.warning({
+            ...options,
+            onOk: () => resolve(),
+          });
+        }),
+    };
+
+    return {
+      message: {
+        success: (content: string) => message.success(content),
+        error: (content: string) => message.error(content),
+        warning: (content: string) => message.warning(content),
+        info: (content: string) => message.info(content),
+      },
+      notification: {
+        success: (options: Parameters<typeof notification.success>[0]) =>
+          notification.success(options),
+        error: (options: Parameters<typeof notification.error>[0]) => notification.error(options),
+        warning: (options: Parameters<typeof notification.warning>[0]) =>
+          notification.warning(options),
+        info: (options: Parameters<typeof notification.info>[0]) => notification.info(options),
+      },
+      modal,
+    };
+  }, []);
+
+  const mergedEventContext = useMemo<EventContext>(() => {
+    const providedUi: EventUIContext = eventContext?.ui ?? {};
+    return {
+      ...eventContext,
+      ui: {
+        message: providedUi.message ?? uiContext.message,
+        notification: providedUi.notification ?? uiContext.notification,
+        modal: providedUi.modal ?? uiContext.modal,
+        openTab: providedUi.openTab,
+      },
+    };
+  }, [eventContext, uiContext]);
+
   // Use ref to store mode for event listener (avoid rebinding on mode change)
   const modeRef = useRef(mode);
   useEffect(() => {
@@ -88,14 +167,36 @@ function LowcodeEditorInner({
     [selectComponent],
   );
 
-  // 处理 Schema 变化
-  const handleSchemaChange = useCallback(
+  const handleSchemaUpdate = useCallback(
     (newSchema: A2UISchema) => {
       setSchema(newSchema);
       onChange?.(newSchema);
     },
     [onChange],
   );
+
+  const { updateSchema, forceUpdateSchema, undo, redo, canUndo, canRedo, historySize } =
+    useSchemaHistoryStore(schema, handleSchemaUpdate, {
+      enableMerge: true,
+      mergeWindow: 500,
+    });
+
+  // 处理 Schema 变化（记录历史）
+  const handleSchemaChange = useCallback(
+    (newSchema: A2UISchema) => {
+      updateSchema(newSchema, '更新 Schema');
+    },
+    [updateSchema],
+  );
+
+  const handleSchemaCommit = useCallback(
+    (newSchema: A2UISchema) => {
+      forceUpdateSchema(newSchema, '保存 Schema');
+    },
+    [forceUpdateSchema],
+  );
+
+  useUndoRedoShortcuts({ onUndo: undo, onRedo: redo });
 
   // 处理编译
   const handleCompile = useCallback(async () => {
@@ -119,21 +220,19 @@ function LowcodeEditorInner({
   // 处理AI生成的Schema更新
   const handleAISchemaUpdate = useCallback(
     (newSchema: A2UISchema) => {
-      setSchema(newSchema);
-      onChange?.(newSchema);
+      forceUpdateSchema(newSchema, 'AI 更新 Schema');
       message.success('Schema 已更新！');
     },
-    [onChange],
+    [forceUpdateSchema],
   );
 
   // 处理模板应用
   const handleApplyTemplate = useCallback(
     (templateSchema: A2UISchema) => {
-      setSchema(templateSchema);
-      onChange?.(templateSchema);
+      forceUpdateSchema(templateSchema, '应用模板');
       message.success('模板已应用！');
     },
-    [onChange],
+    [forceUpdateSchema],
   );
 
   // 处理历史回滚
@@ -180,11 +279,11 @@ function LowcodeEditorInner({
                 onThemeChange={setPreviewTheme}
                 mode={mode}
                 onModeChange={setMode}
-                onUndo={() => message.info('撤销功能')}
-                onRedo={() => message.info('重做功能')}
-                canUndo={false}
-                canRedo={false}
-                historySize={0}
+                onUndo={undo}
+                onRedo={redo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+                historySize={historySize}
                 onApplyTemplate={handleApplyTemplate}
               />
             </motion.div>
@@ -218,11 +317,12 @@ function LowcodeEditorInner({
             <PreviewPane
               schema={schema}
               allComponents={allComponents}
-              eventContext={eventContext}
+              eventContext={mergedEventContext}
               previewTheme={previewTheme}
               isPreviewMode={isPreviewMode}
               compiledCode={compiledCode}
               onSchemaChange={handleSchemaChange}
+              onSchemaCommit={handleSchemaCommit}
             />
           </main>
 
