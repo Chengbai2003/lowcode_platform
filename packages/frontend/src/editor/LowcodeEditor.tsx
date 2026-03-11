@@ -235,16 +235,6 @@ function LowcodeEditorInner({
     [forceUpdateSchema],
   );
 
-  // 处理历史回滚
-  const handleRollback = useCallback(
-    (actionResult: unknown) => {
-      if (actionResult && schema) {
-        message.info('回滚功能需要完整实现 actionResult 解析');
-      }
-    },
-    [schema],
-  );
-
   // 合并自定义组件与默认注册表
   const allComponents = useMemo(() => {
     const componentsOnly = Object.keys(componentRegistry).reduce(
@@ -359,9 +349,7 @@ function LowcodeEditorInner({
         </AnimatePresence>
 
         {/* AI 历史抽屉 - 预览模式下隐藏 */}
-        <AnimatePresence>
-          {!isPreviewMode && <HistoryDrawer onRollback={handleRollback} />}
-        </AnimatePresence>
+        <AnimatePresence>{!isPreviewMode && <HistoryDrawer />}</AnimatePresence>
 
         {/* 浮动退出预览按钮 */}
         <AnimatePresence>

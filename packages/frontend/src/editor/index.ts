@@ -86,7 +86,6 @@ export type { SchemaChangeCallback, ComponentOperation } from './commands';
 
 // Export hooks
 export {
-  useSchemaHistory,
   useSchemaHistoryStore,
   useSchemaCommands,
   useFloatingIslandHotkey,

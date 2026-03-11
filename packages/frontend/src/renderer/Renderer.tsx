@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useEffect, memo } from 'react';
+import React, { useMemo, useEffect, useRef, memo } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import {
@@ -73,19 +73,22 @@ export class EventDispatcher {
   }
 
   /**
-   * 更新执行上下文
+   * 更新执行上下文（不可变更新）
    */
   setContext(key: string, value: any) {
-    this.context[key] = value;
-
-    (this.executionContext as any)[key] = value;
+    this.context = { ...this.context, [key]: value };
+    this.executionContext = { ...this.executionContext, [key]: value };
   }
 
   /**
-   * 更新组件数据到执行上下文
+   * 更新组件数据到执行上下文（不可变更新）
    */
   updateComponentData(componentId: string, value: any) {
-    (this.executionContext as any).data[componentId] = value;
+    const currentData = (this.executionContext as any).data || {};
+    this.executionContext = {
+      ...this.executionContext,
+      data: { ...currentData, [componentId]: value },
+    };
   }
 
   /**
@@ -267,6 +270,7 @@ const ComponentRenderer = memo(
     eventDispatcher,
     nodeId,
     flatComponents,
+    ancestors: parentAncestors,
     ...restProps
   }: {
     nodeId: string;
@@ -274,6 +278,7 @@ const ComponentRenderer = memo(
     components: ComponentRegistry;
     eventDispatcher?: EventDispatcher;
     onComponentClick?: (node: A2UIComponent) => void;
+    ancestors?: Set<string>;
     [key: string]: any;
   }) => {
     const node = flatComponents[nodeId];
@@ -282,6 +287,13 @@ const ComponentRenderer = memo(
     const childrenIds = node?.childrenIds;
     const events = node?.events ?? {};
     const id = node?.id;
+
+    // 构建包含当前节点的祖先集合，传递给子节点用于循环检测
+    const ancestors = useMemo(() => {
+      const set = new Set(parentAncestors);
+      if (nodeId) set.add(nodeId);
+      return set;
+    }, [parentAncestors, nodeId]);
 
     const dispatch = useAppDispatch();
     const componentValue = useAppSelector((state) => (id ? state.components.data[id] : undefined));
@@ -325,8 +337,9 @@ const ComponentRenderer = memo(
         flatComponents,
         eventDispatcher,
         onComponentClick,
+        ancestors,
       );
-    }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
+    }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick, ancestors]);
 
     const mergedProps = useMemo(() => {
       const p: any = { ...sanitizedProps, ...restProps, ...eventHandlers };
@@ -511,11 +524,19 @@ function renderChildren(
   flatComponents: Record<string, A2UIComponent>,
   eventDispatcher?: EventDispatcher,
   onComponentClick?: (node: A2UIComponent) => void,
+  ancestors?: Set<string>,
 ): React.ReactNode {
   if (!childrenIds || !Array.isArray(childrenIds)) return null;
 
   return childrenIds.map((childId) => {
     if (typeof childId === 'string' && flatComponents[childId]) {
+      // 循环引用检测：如果子节点已在祖先链中，跳过渲染
+      if (ancestors?.has(childId)) {
+        console.warn(
+          `[Renderer] Circular reference detected: ${childId} is already an ancestor. Skipping.`,
+        );
+        return null;
+      }
       return (
         <ComponentRenderer
           key={childId}
@@ -524,6 +545,7 @@ function renderChildren(
           components={components}
           eventDispatcher={eventDispatcher}
           onComponentClick={onComponentClick}
+          ancestors={ancestors}
         />
       );
     }
@@ -568,6 +590,25 @@ export function Renderer({
     }
   }, [schema, dispatch]);
 
+  // 稳定 flatComponents 引用：仅在内容实际变化时更新
+  const flatComponentsRef = useRef(schema?.components);
+  const stableFlatComponents = useMemo(() => {
+    const next = schema?.components;
+    if (next && flatComponentsRef.current && next !== flatComponentsRef.current) {
+      // 浅比较：key 集合相同且每个 value 引用相同则复用旧引用
+      const prevKeys = Object.keys(flatComponentsRef.current);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((k) => flatComponentsRef.current![k] === next[k])
+      ) {
+        return flatComponentsRef.current;
+      }
+    }
+    flatComponentsRef.current = next;
+    return next;
+  }, [schema?.components]);
+
   const eventDispatcher = useMemo(() => {
     return new EventDispatcher(eventContext, dispatch, store.getState);
   }, [dispatch]); // eventContext变化会在下面的useEffect中处理
@@ -582,11 +623,11 @@ export function Renderer({
 
   const allComponents = { ...builtInComponents, ...components };
 
-  if (schema && schema.rootId && schema.components) {
+  if (schema && schema.rootId && stableFlatComponents) {
     return (
       <ComponentRenderer
         nodeId={schema.rootId}
-        flatComponents={schema.components}
+        flatComponents={stableFlatComponents}
         components={allComponents}
         eventDispatcher={eventDispatcher}
         onComponentClick={onComponentClick}

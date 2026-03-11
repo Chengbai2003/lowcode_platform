@@ -290,8 +290,40 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 }
 
 /**
+ * AST 缓存：避免每次渲染重复解析相同表达式
+ * 使用简单 LRU 策略，超出容量时淘汰最早插入的条目
+ */
+const AST_CACHE_MAX_SIZE = 500;
+const astCache = new Map<string, jsep.Expression>();
+
+function getCachedAST(expression: string): jsep.Expression {
+  const cached = astCache.get(expression);
+  if (cached !== undefined) {
+    // 移到末尾以维持 LRU 顺序
+    astCache.delete(expression);
+    astCache.set(expression, cached);
+    return cached;
+  }
+  const ast = jsep(expression);
+  if (astCache.size >= AST_CACHE_MAX_SIZE) {
+    // 淘汰最早插入的条目（Map 迭代顺序 = 插入顺序）
+    const firstKey = astCache.keys().next().value!;
+    astCache.delete(firstKey);
+  }
+  astCache.set(expression, ast);
+  return ast;
+}
+
+/**
+ * 清除 AST 缓存（用于测试或热更新场景）
+ */
+export function clearASTCache(): void {
+  astCache.clear();
+}
+
+/**
  * 安全评估表达式
- * 使用 jsep 解析 AST，并在白名单控制下求值
+ * 使用 jsep 解析 AST（带 LRU 缓存），并在白名单控制下求值
  *
  * @param expression 要计算的表达式字符串
  * @param context 上下文数据
@@ -303,11 +335,10 @@ export function safeEvaluate(expression: string, context: Record<string, any> = 
   }
 
   try {
-    const ast = jsep(expression);
+    const ast = getCachedAST(expression);
     return evaluateNode(ast, context);
   } catch (error) {
     // 表达式语法报错，安全返回 undefined
-    // console.warn(`[SafeEvaluator] Failed to parse AST for: ${expression}`, error);
     return undefined;
   }
 }
