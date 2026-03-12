@@ -11,14 +11,14 @@
     "build:packages": "pnpm --filter @lowcode-platform/frontend build",
     "clean": "pnpm -r clean",
     "type-check": "pnpm -r type-check",
-    "lint": "eslint packages/",
+    "lint": "oxlint packages/",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",
     "format:check": "prettier --check \"packages/**/*.{ts,tsx,json}\"",
     "prepare": "husky"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --fix",
+      "oxlint --fix",
       "prettier --write"
     ],
     "*.{json,md,css}": [
@@ -34,20 +34,15 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/node": "^20.10.0",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
-    "eslint": "^9.39.3",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.0",
+    "oxlint": "^1.55.0",
     "prettier": "^3.8.1",
     "rimraf": "^6.1.3",
     "typescript": "^5.3.3",
-    "typescript-eslint": "^8.56.1",
     "vite": "^5.0.8"
   },
   "engines": {
