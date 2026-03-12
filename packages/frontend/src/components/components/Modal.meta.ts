@@ -11,12 +11,16 @@ export const ModalMeta: ComponentPanelConfig = {
       label: '标题',
       editor: 'string',
       defaultValue: '标题',
+
+      group: '基础',
     },
     {
       key: 'open',
       label: '是否可见',
       editor: 'boolean',
       defaultValue: false,
+
+      group: '基础',
     },
     {
       key: 'okText',

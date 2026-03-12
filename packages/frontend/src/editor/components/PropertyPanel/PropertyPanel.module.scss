@@ -64,7 +64,7 @@
   }
 
   .componentId {
-    font-size: 10px;
+    font-size: $font-size-xs;
     font-family: $font-family-mono;
     color: $text-muted;
     background: $bg-hover;
@@ -97,6 +97,31 @@
 .propertiesList {
   @include flex-column;
   gap: $spacing-md;
+}
+
+.slotEditorWithHint {
+  @include flex-column;
+  gap: $spacing-sm;
+}
+
+.slotConflictHint {
+  border: 1px solid $warning;
+  background: rgba($warning, 0.08);
+  border-radius: $radius-md;
+  padding: $spacing-sm $spacing-md;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.slotConflictTitle {
+  font-weight: $font-weight-medium;
+  color: $warning;
+  margin-bottom: 4px;
+}
+
+.slotConflictBody {
+  color: $text-tertiary;
+  line-height: 1.4;
 }
 
 /* 编辑器通用样式 */
@@ -142,6 +167,107 @@
     font-family: $font-family-mono;
     font-size: $font-size-xs;
   }
+}
+
+.complexEditor {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.complexEditorActions {
+  display: flex;
+  gap: $spacing-sm;
+
+  button {
+    flex: 1;
+    padding: 6px $spacing-sm;
+    border: 1px solid $border-base;
+    background: $bg-base;
+    border-radius: $radius-sm;
+    font-size: $font-size-xs;
+    color: $text-secondary;
+    cursor: pointer;
+    transition: all $transition-base $transition-timing;
+
+    &:hover {
+      color: $text-primary;
+      border-color: $primary;
+    }
+  }
+}
+
+.complexEditorCard {
+  border: 1px solid $border-base;
+  border-radius: $radius-md;
+  background: $bg-base;
+  padding: $spacing-sm;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+}
+
+.complexEditorCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+  font-weight: $font-weight-medium;
+
+  button {
+    border: none;
+    background: transparent;
+    color: $text-tertiary;
+    cursor: pointer;
+    font-size: $font-size-xs;
+    padding: 0;
+
+    &:hover {
+      color: $error;
+    }
+  }
+}
+
+.complexEditorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+}
+
+.formRulesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+  align-items: center;
+}
+
+.checkboxInline {
+  display: inline-flex;
+  align-items: center;
+  gap: $spacing-xs;
+  font-size: $font-size-xs;
+  color: $text-secondary;
+}
+
+.complexEditorEmpty {
+  padding: $spacing-sm;
+  border: 1px dashed $border-base;
+  border-radius: $radius-sm;
+  color: $text-tertiary;
+  font-size: $font-size-xs;
+}
+
+.editorHint {
+  margin-top: 6px;
+  font-size: 11px;
+  color: $text-tertiary;
+}
+
+.editorError {
+  margin-top: 6px;
+  font-size: 11px;
+  color: $error;
 }
 
 /* 按钮组样式 */
@@ -240,7 +366,7 @@
     }
 
     .label {
-      font-size: 10px;
+      font-size: $font-size-xs;
       font-weight: $font-weight-medium;
       color: $text-tertiary;
       width: 28px;
@@ -321,7 +447,7 @@
     color: $text-secondary;
   }
 
-  input[type="range"] {
+  input[type='range'] {
     width: 96px;
     accent-color: $accent;
   }
@@ -587,8 +713,33 @@
           color: $text-primary;
         }
 
+        .actionCardControls {
+          display: flex;
+          align-items: center;
+          gap: $spacing-xs;
+        }
+
+        .actionConfigBtn {
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 4px 6px;
+          border-radius: $radius-sm;
+          border: 1px solid $border-base;
+          background: $bg-base;
+          font-size: $font-size-xs;
+          color: $text-secondary;
+          cursor: pointer;
+          transition: all $transition-base $transition-timing;
+
+          &:hover {
+            border-color: $primary;
+            color: $primary;
+          }
+        }
+
         .actionSummary {
-          font-size: 10px;
+          font-size: $font-size-xs;
           font-family: $font-family-mono;
           color: $text-secondary;
           background: $bg-hover;
@@ -613,6 +764,60 @@
             background: rgba($error, 0.1);
             color: $error;
           }
+        }
+
+        .actionEditor {
+          margin-top: $spacing-sm;
+          padding-top: $spacing-sm;
+          border-top: 1px dashed $border-base;
+          display: grid;
+          gap: $spacing-sm;
+        }
+
+        .actionFieldRow {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: $spacing-sm;
+          align-items: end;
+        }
+
+        .actionField {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+          font-size: $font-size-xs;
+          color: $text-secondary;
+
+          label {
+            font-weight: $font-weight-medium;
+            color: $text-secondary;
+          }
+
+          input,
+          select,
+          textarea {
+            @include input-base;
+            background: $bg-base;
+            font-size: $font-size-xs;
+            padding: 6px $spacing-sm;
+            border-radius: $radius-sm;
+
+            &:focus {
+              border-color: $accent;
+              box-shadow: 0 0 0 1px $accent;
+            }
+          }
+
+          textarea {
+            min-height: 80px;
+            resize: vertical;
+            font-family: $font-family-mono;
+          }
+        }
+
+        .actionHint {
+          font-size: $font-size-xs;
+          color: $text-tertiary;
         }
       }
     }
@@ -767,7 +972,7 @@
     }
 
     .actionOptionDesc {
-      font-size: 10px;
+      font-size: $font-size-xs;
       color: $text-tertiary;
       line-height: 1.4;
     }

@@ -15,6 +15,8 @@ export const SpaceMeta: ComponentPanelConfig = {
         { label: '水平', value: 'horizontal' },
         { label: '垂直', value: 'vertical' },
       ],
+
+      group: '基础',
     },
     {
       key: 'size',
@@ -26,6 +28,8 @@ export const SpaceMeta: ComponentPanelConfig = {
         { label: '中', value: 'middle' },
         { label: '大', value: 'large' },
       ],
+
+      group: '基础',
     },
     {
       key: 'align',
@@ -38,13 +42,15 @@ export const SpaceMeta: ComponentPanelConfig = {
         { label: '结束', value: 'end' },
         { label: '拉伸', value: 'stretch' },
       ],
+
+      group: '基础',
     },
     {
       key: 'wrap',
       label: '自动换行',
       editor: 'boolean',
       defaultValue: false,
-      group: '布局',
+      group: '样式',
     },
   ],
 };

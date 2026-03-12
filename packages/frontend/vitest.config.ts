@@ -4,6 +4,13 @@ import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern',
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,

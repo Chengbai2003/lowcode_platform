@@ -3,3 +3,8 @@ export { NumberEditor } from './NumberEditor';
 export { BooleanEditor } from './BooleanEditor';
 export { SelectEditor } from './SelectEditor';
 export { ColorEditor } from './ColorEditor';
+export { JsonEditor } from './JsonEditor';
+export { TableColumnsEditor } from './TableColumnsEditor';
+export { FormRulesEditor } from './FormRulesEditor';
+export { ExpressionEditor } from './ExpressionEditor';
+export { SlotEditor } from './SlotEditor';

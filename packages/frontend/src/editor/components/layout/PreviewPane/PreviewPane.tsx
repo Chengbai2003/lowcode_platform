@@ -87,6 +87,7 @@ interface PreviewPaneProps {
   isPreviewMode?: boolean;
   compiledCode?: string | null;
   onSchemaChange?: (schema: A2UISchema) => void;
+  onSchemaCommit?: (schema: A2UISchema) => void;
 }
 
 type ActiveTab = 'preview' | 'json' | 'compiled';
@@ -99,6 +100,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   isPreviewMode,
   compiledCode,
   onSchemaChange,
+  onSchemaCommit,
 }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('preview');
   const [editedJson, setEditedJson] = useState<string>('');
@@ -154,7 +156,11 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
         }
         try {
           const parsed = parseAndValidateSchema(editedJsonRef.current);
-          onSchemaChange?.(parsed);
+          if (onSchemaCommit) {
+            onSchemaCommit(parsed);
+          } else {
+            onSchemaChange?.(parsed);
+          }
           setHasUnsavedChanges(false);
           hasUnsavedChangesRef.current = false;
         } catch (e) {

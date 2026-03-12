@@ -7,14 +7,96 @@ import { NumberEditor } from './editors/NumberEditor';
 import { BooleanEditor } from './editors/BooleanEditor';
 import { SelectEditor } from './editors/SelectEditor';
 import { ColorEditor } from './editors/ColorEditor';
+import { JsonEditor } from './editors/JsonEditor';
+import { TableColumnsEditor } from './editors/TableColumnsEditor';
+import { FormRulesEditor } from './editors/FormRulesEditor';
+import { ExpressionEditor } from './editors/ExpressionEditor';
+import { SlotEditor } from './editors/SlotEditor';
 import { NoSelectionEmptyState } from '../EmptyState';
 import { EventConfigPanel } from './EventConfigPanel';
+import {
+  DEFAULT_TABLE_COLUMN,
+  sanitizeExpressionValue,
+  sanitizeFormRulesValue,
+  sanitizeJsonValue,
+  sanitizeSlotValue,
+  sanitizeTableColumnsValue,
+} from './editors/complexValueUtils';
+import { isExpression } from '../../../renderer/executor/parser/expressionParser';
 import styles from './PropertyPanel.module.scss';
 
 interface PropertyPanelProps {
   schema: A2UISchema | null;
   selectedId: string | null;
   onSchemaChange: (schema: A2UISchema) => void;
+}
+
+const EXPRESSION_HINT_KEYS = new Set([
+  'className',
+  'style',
+  'children',
+  'title',
+  'content',
+  'placeholder',
+  'label',
+  'text',
+  'message',
+  'description',
+  'tip',
+  'header',
+  'footer',
+  'subTitle',
+  'extra',
+  'tooltip',
+]);
+
+const COMMON_PROPERTIES: PropertyMeta[] = [
+  {
+    key: 'visible',
+    label: '显示条件',
+    editor: 'expression',
+    defaultValue: '',
+    description: '返回 true 显示，false 隐藏（为空则显示）',
+    group: '高级',
+  },
+];
+
+function normalizePropertyValue(prop: PropertyMeta, value: unknown): unknown {
+  switch (prop.editor) {
+    case 'tableColumns': {
+      const fallback = sanitizeTableColumnsValue(prop.defaultValue, [DEFAULT_TABLE_COLUMN]);
+      return sanitizeTableColumnsValue(value, fallback);
+    }
+    case 'formRules': {
+      const fallback = sanitizeFormRulesValue(prop.defaultValue, []);
+      return sanitizeFormRulesValue(value, fallback);
+    }
+    case 'json':
+      if (typeof value === 'string' && isExpression(value)) {
+        return value;
+      }
+      return sanitizeJsonValue(value, prop.defaultValue);
+    case 'expression':
+      if (typeof value === 'boolean' || typeof value === 'number') {
+        return `{{${value}}}`;
+      }
+      {
+        const normalized = sanitizeExpressionValue(
+          value,
+          typeof prop.defaultValue === 'string' ? prop.defaultValue : '',
+        );
+        return normalized === '' ? undefined : normalized;
+      }
+    case 'slot':
+      return sanitizeSlotValue(
+        value,
+        typeof prop.defaultValue === 'string' ? prop.defaultValue : '',
+      );
+    default:
+      // Primitive editors (`string/number/boolean/select/color`) already provide typed values.
+      // Keep raw value here to avoid unintended coercion.
+      return value;
+  }
 }
 
 /**
@@ -40,13 +122,34 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   // 按分组组织属性
   const groupedProperties = useMemo(() => {
     if (!componentConfig) return {};
-    const { meta } = componentConfig;
+    const { component, meta } = componentConfig;
+    const metaProperties = meta.properties || [];
+    const extraProperties = COMMON_PROPERTIES.filter(
+      (prop) => !metaProperties.some((metaProp) => metaProp.key === prop.key),
+    );
+    const allProperties = [...metaProperties, ...extraProperties];
     const groups: Record<string, PropertyMeta[]> = {
       基础: [],
       样式: [],
       高级: [],
     };
-    meta.properties.forEach((prop) => {
+
+    const resolvedProps = allProperties.reduce<Record<string, unknown>>((acc, prop) => {
+      const currentValue = component.props?.[prop.key];
+      acc[prop.key] = currentValue ?? prop.defaultValue;
+      return acc;
+    }, {});
+
+    const visibleProperties = allProperties.filter((prop) => {
+      if (!prop.visible) return true;
+      try {
+        return Boolean(prop.visible(resolvedProps));
+      } catch {
+        return false;
+      }
+    });
+
+    visibleProperties.forEach((prop) => {
       const group = prop.group || '基础';
       if (!groups[group]) {
         groups[group] = [];
@@ -59,10 +162,20 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
 
   // 处理属性变更
   const handlePropertyChange = useCallback(
-    (key: string, value: unknown) => {
+    (prop: PropertyMeta, value: unknown) => {
       if (!schema || !selectedId) return;
       const component = schema.components[selectedId];
       if (!component) return;
+      const key = prop.key;
+      const prevProps = component.props || {};
+      const nextProps = { ...prevProps };
+      const normalizedValue = normalizePropertyValue(prop, value);
+
+      if (normalizedValue === undefined) {
+        delete nextProps[key];
+      } else {
+        nextProps[key] = normalizedValue;
+      }
 
       const newSchema: A2UISchema = {
         ...schema,
@@ -70,10 +183,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           ...schema.components,
           [selectedId]: {
             ...component,
-            props: {
-              ...component.props,
-              [key]: value,
-            },
+            props: nextProps,
           },
         },
       };
@@ -87,41 +197,103 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
     (prop: PropertyMeta) => {
       if (!componentConfig) return null;
       const { component } = componentConfig;
-      const value = component.props?.[prop.key] ?? prop.defaultValue;
+      const rawValue = component.props?.[prop.key] ?? prop.defaultValue;
+      const value = normalizePropertyValue(prop, rawValue);
+      const description =
+        EXPRESSION_HINT_KEYS.has(prop.key) && prop.editor !== 'expression'
+          ? prop.description
+            ? `${prop.description}（支持 {{}} 表达式）`
+            : '支持 {{}} 表达式'
+          : prop.description;
 
       const commonProps = {
-        key: prop.key,
         label: prop.label,
         value,
-        onChange: (val: unknown) => handlePropertyChange(prop.key, val),
-        description: prop.description,
+        onChange: (val: unknown) => handlePropertyChange(prop, val),
+        description,
       };
 
       switch (prop.editor) {
         case 'string':
-          return <StringEditor {...commonProps} />;
+          return <StringEditor key={prop.key} {...commonProps} />;
         case 'number':
-          return <NumberEditor {...commonProps} />;
+          return <NumberEditor key={prop.key} {...commonProps} />;
         case 'boolean':
-          return <BooleanEditor {...commonProps} />;
+          return <BooleanEditor key={prop.key} {...commonProps} />;
         case 'select':
-          return <SelectEditor {...commonProps} options={prop.options || []} />;
+          return <SelectEditor key={prop.key} {...commonProps} options={prop.options || []} />;
         case 'color':
-          return <ColorEditor {...commonProps} />;
+          return <ColorEditor key={prop.key} {...commonProps} />;
         case 'json':
-          // JSON 编辑器暂用字符串编辑器
-          return <StringEditor {...commonProps} multiline />;
+          return <JsonEditor key={prop.key} {...commonProps} defaultTemplate={prop.defaultValue} />;
+        case 'tableColumns':
+          return (
+            <TableColumnsEditor
+              key={prop.key}
+              {...commonProps}
+              defaultTemplate={prop.defaultValue}
+            />
+          );
+        case 'formRules':
+          return (
+            <FormRulesEditor key={prop.key} {...commonProps} defaultTemplate={prop.defaultValue} />
+          );
         case 'expression':
-          // 表达式编辑器暂用字符串编辑器
-          return <StringEditor {...commonProps} placeholder="输入表达式..." />;
+          return <ExpressionEditor key={prop.key} {...commonProps} />;
         case 'slot':
-          // 插槽编辑器暂不支持
-          return null;
+          if (prop.key === 'children') {
+            const hasChildrenIds =
+              Array.isArray(component.childrenIds) && component.childrenIds.length > 0;
+            const slotText = sanitizeSlotValue(rawValue, '');
+            const hasSlotText = slotText.trim().length > 0;
+            const showConflictHint = hasChildrenIds && hasSlotText;
+
+            return (
+              <div key={prop.key} className={styles.slotEditorWithHint}>
+                {showConflictHint && (
+                  <div className={styles.slotConflictHint}>
+                    <div className={styles.slotConflictTitle}>插槽内容与子组件同时存在</div>
+                    <div className={styles.slotConflictBody}>
+                      渲染策略：先渲染插槽文本，再追加子组件树。表单输入类组件会忽略 childrenIds。
+                    </div>
+                  </div>
+                )}
+                <SlotEditor
+                  {...commonProps}
+                  defaultTemplate={prop.defaultValue}
+                  placeholder="输入默认插槽内容（组件树子节点会附加在后）"
+                />
+              </div>
+            );
+          }
+          return (
+            <SlotEditor
+              key={prop.key}
+              {...commonProps}
+              defaultTemplate={prop.defaultValue}
+              placeholder="输入默认插槽内容（组件树子节点会附加在后）"
+            />
+          );
         default:
           return null;
       }
     },
     [componentConfig, handlePropertyChange],
+  );
+
+  const collapseItems = useMemo(
+    () =>
+      Object.entries(groupedProperties).map(([groupName, properties]) => ({
+        key: groupName,
+        label: <span className={styles.groupHeader}>{groupName}</span>,
+        className: styles.collapsePanel,
+        children: (
+          <div className={styles.propertiesList}>
+            {properties.map((prop) => renderEditor(prop))}
+          </div>
+        ),
+      })),
+    [groupedProperties, renderEditor],
   );
 
   // 空状态
@@ -170,19 +342,8 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
               ghost
               expandIconPosition="end"
               className={styles.collapse}
-            >
-              {Object.entries(groupedProperties).map(([groupName, properties]) => (
-                <Collapse.Panel
-                  key={groupName}
-                  header={<span className={styles.groupHeader}>{groupName}</span>}
-                  className={styles.collapsePanel}
-                >
-                  <div className={styles.propertiesList}>
-                    {properties.map((prop) => renderEditor(prop))}
-                  </div>
-                </Collapse.Panel>
-              ))}
-            </Collapse>
+              items={collapseItems}
+            />
           </div>
         </>
       ) : (

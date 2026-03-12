@@ -6,15 +6,17 @@ export const InputMeta: ComponentPanelConfig = {
   category: 'form',
   icon: 'text-input',
   properties: [
-    { key: 'placeholder', label: '占位符', editor: 'string', defaultValue: '' },
+    { key: 'placeholder', label: '占位符', editor: 'string', defaultValue: '', group: '基础' },
     {
       key: 'defaultValue',
       label: '默认值',
       editor: 'string',
       defaultValue: '',
+
+      group: '基础',
     },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
-    { key: 'readOnly', label: '只读', editor: 'boolean', defaultValue: false },
+    { key: 'disabled', label: '禁用', editor: 'expression', defaultValue: '', group: '基础' },
+    { key: 'readOnly', label: '只读', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'size',
       label: '尺寸',
@@ -25,13 +27,15 @@ export const InputMeta: ComponentPanelConfig = {
         { label: '中', value: 'middle' },
         { label: '小', value: 'small' },
       ],
+
+      group: '基础',
     },
     {
       key: 'allowClear',
       label: '允许清除',
       editor: 'boolean',
       defaultValue: false,
-      group: '功能',
+      group: '高级',
     },
     {
       key: 'bordered',

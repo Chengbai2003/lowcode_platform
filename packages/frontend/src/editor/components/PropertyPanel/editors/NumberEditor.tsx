@@ -4,7 +4,7 @@ import styles from '../PropertyPanel.module.scss';
 interface NumberEditorProps {
   label: string;
   value: unknown;
-  onChange: (value: number) => void;
+  onChange: (value: number | undefined) => void;
   description?: string;
   min?: number;
   max?: number;
@@ -22,7 +22,12 @@ export const NumberEditor: React.FC<NumberEditorProps> = ({
 }) => {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = parseFloat(e.target.value);
+      const input = e.target.value;
+      if (input === '') {
+        onChange(undefined);
+        return;
+      }
+      const val = parseFloat(input);
       if (!isNaN(val)) {
         onChange(val);
       }
@@ -30,7 +35,7 @@ export const NumberEditor: React.FC<NumberEditorProps> = ({
     [onChange],
   );
 
-  const numValue = typeof value === 'number' ? value : 0;
+  const numValue = typeof value === 'number' ? value : '';
 
   return (
     <div className={styles.propertyItem}>

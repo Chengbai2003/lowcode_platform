@@ -9,8 +9,10 @@ export const TextMeta: ComponentPanelConfig = {
     {
       key: 'children',
       label: '文本内容',
-      editor: 'string',
+      editor: 'slot',
       defaultValue: '文本内容',
+
+      group: '基础',
     },
     {
       key: 'type',
@@ -23,8 +25,10 @@ export const TextMeta: ComponentPanelConfig = {
         { label: '警告', value: 'warning' },
         { label: '危险', value: 'danger' },
       ],
+
+      group: '基础',
     },
-    { key: 'strong', label: '粗体', editor: 'boolean', defaultValue: false },
+    { key: 'strong', label: '粗体', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'mark',
       label: '标记',
@@ -44,14 +48,14 @@ export const TextMeta: ComponentPanelConfig = {
       label: '可复制',
       editor: 'boolean',
       defaultValue: false,
-      group: '交互',
+      group: '高级',
     },
     {
       key: 'ellipsis',
       label: '省略',
       editor: 'boolean',
       defaultValue: false,
-      group: '布局',
+      group: '样式',
     },
   ],
 };

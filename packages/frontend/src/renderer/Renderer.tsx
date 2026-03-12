@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useEffect, memo } from 'react';
+import React, { useMemo, useEffect, useRef, memo } from 'react';
 import type { RendererProps, ComponentRegistry, A2UIComponent } from './types';
 import { useAppDispatch, useAppSelector } from './store/hooks';
 import {
@@ -9,10 +9,16 @@ import {
 } from './store/componentSlice';
 import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
+import { resolveValues } from './executor/parser/valueResolver';
 import { deepEqual } from './utils/compare';
 import { shallowEqual } from 'react-redux';
 import { DSLExecutor } from './executor';
 import type { ActionList, ExecutionContext } from '../types';
+import {
+  Text as TypographyText,
+  Title as TypographyTitle,
+  Paragraph as TypographyParagraph,
+} from '../components/components/Typography';
 
 /**
  * 事件派发中心
@@ -67,19 +73,22 @@ export class EventDispatcher {
   }
 
   /**
-   * 更新执行上下文
+   * 更新执行上下文（不可变更新）
    */
   setContext(key: string, value: any) {
-    this.context[key] = value;
-
-    (this.executionContext as any)[key] = value;
+    this.context = { ...this.context, [key]: value };
+    this.executionContext = { ...this.executionContext, [key]: value };
   }
 
   /**
-   * 更新组件数据到执行上下文
+   * 更新组件数据到执行上下文（不可变更新）
    */
   updateComponentData(componentId: string, value: any) {
-    (this.executionContext as any).data[componentId] = value;
+    const currentData = (this.executionContext as any).data || {};
+    this.executionContext = {
+      ...this.executionContext,
+      data: { ...currentData, [componentId]: value },
+    };
   }
 
   /**
@@ -151,12 +160,15 @@ const builtInComponents: ComponentRegistry = {
       {children}
     </div>
   ),
-  Text: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-  Title: ({ children, level = 1, ...props }: any) => {
-    const HeadingTag = `h${level}` as keyof JSX.IntrinsicElements;
-    return <HeadingTag {...props}>{children}</HeadingTag>;
-  },
-  Paragraph: ({ children, ...props }: any) => <p {...props}>{children}</p>,
+  Text: ({ children, ...props }: any) => <TypographyText {...props}>{children}</TypographyText>,
+  Title: ({ children, level = 1, ...props }: any) => (
+    <TypographyTitle level={level} {...props}>
+      {children}
+    </TypographyTitle>
+  ),
+  Paragraph: ({ children, ...props }: any) => (
+    <TypographyParagraph {...props}>{children}</TypographyParagraph>
+  ),
   Input: (props: any) => <input {...props} />,
   Button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
   TextArea: (props: any) => <textarea {...props} />,
@@ -258,6 +270,7 @@ const ComponentRenderer = memo(
     eventDispatcher,
     nodeId,
     flatComponents,
+    ancestors: parentAncestors,
     ...restProps
   }: {
     nodeId: string;
@@ -265,23 +278,57 @@ const ComponentRenderer = memo(
     components: ComponentRegistry;
     eventDispatcher?: EventDispatcher;
     onComponentClick?: (node: A2UIComponent) => void;
+    ancestors?: Set<string>;
     [key: string]: any;
   }) => {
     const node = flatComponents[nodeId];
-    if (!node) return null;
+    const componentName = node?.type;
+    const props = node?.props ?? {};
+    const childrenIds = node?.childrenIds;
+    const events = node?.events ?? {};
+    const id = node?.id;
 
-    const { type: componentName, props = {}, childrenIds, events = {}, id } = node;
-
-    if (!componentName) return null;
+    // 构建包含当前节点的祖先集合，传递给子节点用于循环检测
+    const ancestors = useMemo(() => {
+      const set = new Set(parentAncestors);
+      if (nodeId) set.add(nodeId);
+      return set;
+    }, [parentAncestors, nodeId]);
 
     const dispatch = useAppDispatch();
     const componentValue = useAppSelector((state) => (id ? state.components.data[id] : undefined));
 
-    const Component = components[componentName] || builtInComponents[componentName];
+    const Component = componentName
+      ? components[componentName] || builtInComponents[componentName]
+      : undefined;
 
     const eventHandlers = useMemo(() => {
       return buildEventHandlers(events, eventDispatcher);
     }, [events, eventDispatcher]);
+
+    const resolvedSchemaProps = useMemo(() => {
+      if (!eventDispatcher) {
+        return props;
+      }
+      try {
+        return resolveValues(props as Record<string, any>, eventDispatcher.getExecutionContext());
+      } catch (error) {
+        console.warn('[Renderer] Failed to resolve props expressions', { id, error });
+        return props;
+      }
+    }, [props, eventDispatcher, id]);
+
+    const hasVisibleProp =
+      resolvedSchemaProps && Object.prototype.hasOwnProperty.call(resolvedSchemaProps, 'visible');
+    const isVisible = !hasVisibleProp || Boolean((resolvedSchemaProps as any).visible);
+
+    const sanitizedProps = useMemo(() => {
+      if (!hasVisibleProp) {
+        return resolvedSchemaProps;
+      }
+      const { visible, ...rest } = resolvedSchemaProps as Record<string, unknown>;
+      return rest;
+    }, [hasVisibleProp, resolvedSchemaProps]);
 
     const childrenElements = useMemo(() => {
       return renderChildren(
@@ -290,38 +337,12 @@ const ComponentRenderer = memo(
         flatComponents,
         eventDispatcher,
         onComponentClick,
+        ancestors,
       );
-    }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick]);
-
-    if (!Component) {
-      console.warn(`Component "${componentName}" not found in registry, rendering as div`);
-      const fallbackClassName = [props.className, restProps.className].filter(Boolean).join(' ');
-      const fallbackMarkedClassName =
-        onComponentClick && id
-          ? [fallbackClassName, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
-              .filter(Boolean)
-              .join(' ')
-          : fallbackClassName;
-      return (
-        <div
-          {...props}
-          {...eventHandlers}
-          {...restProps}
-          data-fallback-component={componentName}
-          className={fallbackMarkedClassName}
-          {...(onComponentClick && id
-            ? {
-                'data-component-id': id,
-              }
-            : {})}
-        >
-          {childrenElements}
-        </div>
-      );
-    }
+    }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick, ancestors]);
 
     const mergedProps = useMemo(() => {
-      const p: any = { ...props, ...restProps, ...eventHandlers };
+      const p: any = { ...sanitizedProps, ...restProps, ...eventHandlers };
 
       if (componentValue !== undefined) {
         p.value = componentValue;
@@ -404,7 +425,7 @@ const ComponentRenderer = memo(
 
       return p;
     }, [
-      props,
+      sanitizedProps,
       restProps,
       eventHandlers,
       componentValue,
@@ -414,6 +435,43 @@ const ComponentRenderer = memo(
       eventDispatcher,
       onComponentClick,
     ]);
+
+    if (!node || !componentName) {
+      return null;
+    }
+
+    if (!isVisible) {
+      return null;
+    }
+
+    if (!Component) {
+      console.warn(`Component "${componentName}" not found in registry, rendering as div`);
+      const fallbackClassName = [sanitizedProps?.className, restProps.className]
+        .filter(Boolean)
+        .join(' ');
+      const fallbackMarkedClassName =
+        onComponentClick && id
+          ? [fallbackClassName, 'lowcode-component-wrapper', `lowcode-component-id-${id}`]
+              .filter(Boolean)
+              .join(' ')
+          : fallbackClassName;
+      return (
+        <div
+          {...sanitizedProps}
+          {...eventHandlers}
+          {...restProps}
+          data-fallback-component={componentName}
+          className={fallbackMarkedClassName}
+          {...(onComponentClick && id
+            ? {
+                'data-component-id': id,
+              }
+            : {})}
+        >
+          {childrenElements}
+        </div>
+      );
+    }
 
     // 判断组件是否是"表单输入类"叶子组件（不支持 children，但可能有 props.children 文本）
     // 注意：Button、Title、Text、Tag 等组件支持 props.children 显示文本
@@ -466,11 +524,19 @@ function renderChildren(
   flatComponents: Record<string, A2UIComponent>,
   eventDispatcher?: EventDispatcher,
   onComponentClick?: (node: A2UIComponent) => void,
+  ancestors?: Set<string>,
 ): React.ReactNode {
   if (!childrenIds || !Array.isArray(childrenIds)) return null;
 
   return childrenIds.map((childId) => {
     if (typeof childId === 'string' && flatComponents[childId]) {
+      // 循环引用检测：如果子节点已在祖先链中，跳过渲染
+      if (ancestors?.has(childId)) {
+        console.warn(
+          `[Renderer] Circular reference detected: ${childId} is already an ancestor. Skipping.`,
+        );
+        return null;
+      }
       return (
         <ComponentRenderer
           key={childId}
@@ -479,6 +545,7 @@ function renderChildren(
           components={components}
           eventDispatcher={eventDispatcher}
           onComponentClick={onComponentClick}
+          ancestors={ancestors}
         />
       );
     }
@@ -523,6 +590,25 @@ export function Renderer({
     }
   }, [schema, dispatch]);
 
+  // 稳定 flatComponents 引用：仅在内容实际变化时更新
+  const flatComponentsRef = useRef(schema?.components);
+  const stableFlatComponents = useMemo(() => {
+    const next = schema?.components;
+    if (next && flatComponentsRef.current && next !== flatComponentsRef.current) {
+      // 浅比较：key 集合相同且每个 value 引用相同则复用旧引用
+      const prevKeys = Object.keys(flatComponentsRef.current);
+      const nextKeys = Object.keys(next);
+      if (
+        prevKeys.length === nextKeys.length &&
+        nextKeys.every((k) => flatComponentsRef.current![k] === next[k])
+      ) {
+        return flatComponentsRef.current;
+      }
+    }
+    flatComponentsRef.current = next;
+    return next;
+  }, [schema?.components]);
+
   const eventDispatcher = useMemo(() => {
     return new EventDispatcher(eventContext, dispatch, store.getState);
   }, [dispatch]); // eventContext变化会在下面的useEffect中处理
@@ -537,11 +623,11 @@ export function Renderer({
 
   const allComponents = { ...builtInComponents, ...components };
 
-  if (schema && schema.rootId && schema.components) {
+  if (schema && schema.rootId && stableFlatComponents) {
     return (
       <ComponentRenderer
         nodeId={schema.rootId}
-        flatComponents={schema.components}
+        flatComponents={stableFlatComponents}
         components={allComponents}
         eventDispatcher={eventDispatcher}
         onComponentClick={onComponentClick}

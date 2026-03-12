@@ -18,15 +18,19 @@ export const ButtonMeta: ComponentPanelConfig = {
         { label: '链接', value: 'link' },
         { label: '文本', value: 'text' },
       ],
+
+      group: '基础',
     },
     {
       key: 'children',
       label: '按钮文字',
-      editor: 'string',
+      editor: 'slot',
       defaultValue: '按钮',
+
+      group: '基础',
     },
-    { key: 'disabled', label: '禁用', editor: 'boolean', defaultValue: false },
-    { key: 'loading', label: '加载中', editor: 'boolean', defaultValue: false },
+    { key: 'disabled', label: '禁用', editor: 'expression', defaultValue: '', group: '基础' },
+    { key: 'loading', label: '加载中', editor: 'boolean', defaultValue: false, group: '基础' },
     {
       key: 'size',
       label: '尺寸',
@@ -37,6 +41,8 @@ export const ButtonMeta: ComponentPanelConfig = {
         { label: '中', value: 'middle' },
         { label: '小', value: 'small' },
       ],
+
+      group: '基础',
     },
     {
       key: 'block',

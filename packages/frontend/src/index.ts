@@ -148,7 +148,6 @@ export type { SchemaChangeCallback, ComponentOperation } from './editor';
 
 // Hook exports
 export {
-  useSchemaHistory,
   useSchemaHistoryStore,
   useSchemaCommands,
   useFloatingIslandHotkey,

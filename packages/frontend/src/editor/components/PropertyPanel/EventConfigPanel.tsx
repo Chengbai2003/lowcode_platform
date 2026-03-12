@@ -196,6 +196,33 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
     [schema, selectedId, events, onSchemaChange],
   );
 
+  const handleUpdateAction = useCallback(
+    (trigger: string, actionIndex: number, nextAction: Action) => {
+      if (!schema || !selectedId) return;
+
+      const currentActions = events[trigger] || [];
+      const newActions = currentActions.map((action, idx) =>
+        idx === actionIndex ? nextAction : action,
+      );
+
+      const newSchema: A2UISchema = {
+        ...schema,
+        components: {
+          ...schema.components,
+          [selectedId]: {
+            ...schema.components[selectedId],
+            events: {
+              ...schema.components[selectedId]?.events,
+              [trigger]: newActions,
+            },
+          },
+        },
+      };
+      onSchemaChange(newSchema);
+    },
+    [schema, selectedId, events, onSchemaChange],
+  );
+
   // 空状态
   if (!schema || !selectedId) {
     return (
@@ -230,6 +257,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
               onOpenActionModal={handleOpenActionModal}
               onDeleteFlow={handleDeleteFlow}
               onDeleteAction={handleDeleteAction}
+              onUpdateAction={handleUpdateAction}
             />
           ))
         )}

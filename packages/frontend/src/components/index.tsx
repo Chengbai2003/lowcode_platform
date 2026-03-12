@@ -98,6 +98,34 @@ import { AlertMeta } from './components/Alert.meta';
 import { TableMeta } from './components/Table.meta';
 import { FormMeta } from './components/Form.meta';
 import { FormItemMeta } from './components/FormItem.meta';
+import { DivMeta } from './components/Div.meta';
+import { CheckboxGroupMeta } from './components/CheckboxGroup.meta';
+import { RadioGroupMeta } from './components/RadioGroup.meta';
+import { RadioButtonMeta } from './components/RadioButton.meta';
+import { SliderMeta } from './components/Slider.meta';
+import { ListMeta } from './components/List.meta';
+import { ListItemMeta } from './components/ListItem.meta';
+import { TabPaneMeta } from './components/TabPane.meta';
+import { CollapseMeta } from './components/Collapse.meta';
+import { CollapsePanelMeta } from './components/CollapsePanel.meta';
+import { PopoverMeta } from './components/Popover.meta';
+import { TooltipMeta } from './components/Tooltip.meta';
+import { RowMeta } from './components/Row.meta';
+import { ColMeta } from './components/Col.meta';
+import { LayoutMeta } from './components/Layout.meta';
+import { HeaderMeta } from './components/Header.meta';
+import { ContentMeta } from './components/Content.meta';
+import { FooterMeta } from './components/Footer.meta';
+import { SiderMeta } from './components/Sider.meta';
+import { TagMeta } from './components/Tag.meta';
+import { BadgeMeta } from './components/Badge.meta';
+import { StepsMeta } from './components/Steps.meta';
+import { StepMeta } from './components/Step.meta';
+import { ProgressMeta } from './components/Progress.meta';
+import { SpinMeta } from './components/Spin.meta';
+import { SkeletonMeta } from './components/Skeleton.meta';
+import { DatePickerMeta } from './components/DatePicker.meta';
+import { RangePickerMeta } from './components/RangePicker.meta';
 
 import type { ComponentPanelConfig } from '../types';
 
@@ -112,7 +140,7 @@ interface ComponentRegistryEntry {
 export const componentRegistry: Record<string, ComponentRegistryEntry> = {
   // 布局组件
   Container: { component: Container, meta: ContainerMeta },
-  Div: { component: (props: any) => <div {...props} />, meta: undefined },
+  Div: { component: (props: any) => <div {...props} />, meta: DivMeta },
 
   // 基础组件
   Button: { component: Button, meta: ButtonMeta },
@@ -121,12 +149,12 @@ export const componentRegistry: Record<string, ComponentRegistryEntry> = {
   InputNumber: { component: InputNumber, meta: InputNumberMeta },
   Select: { component: Select, meta: SelectMeta },
   Checkbox: { component: Checkbox, meta: CheckboxMeta },
-  CheckboxGroup: { component: CheckboxGroup, meta: undefined },
+  CheckboxGroup: { component: CheckboxGroup, meta: CheckboxGroupMeta },
   Radio: { component: Radio, meta: RadioMeta },
-  RadioGroup: { component: RadioGroup, meta: undefined },
-  RadioButton: { component: RadioButton, meta: undefined },
+  RadioGroup: { component: RadioGroup, meta: RadioGroupMeta },
+  RadioButton: { component: RadioButton, meta: RadioButtonMeta },
   Switch: { component: Switch, meta: SwitchMeta },
-  Slider: { component: Slider, meta: undefined },
+  Slider: { component: Slider, meta: SliderMeta },
 
   // 表单
   Form: { component: Form, meta: FormMeta },
@@ -135,29 +163,29 @@ export const componentRegistry: Record<string, ComponentRegistryEntry> = {
   // 数据展示
   Table: { component: Table, meta: TableMeta },
   Card: { component: Card, meta: CardMeta },
-  List: { component: List, meta: undefined },
-  ListItem: { component: ListItem, meta: undefined },
+  List: { component: List, meta: ListMeta },
+  ListItem: { component: ListItem, meta: ListItemMeta },
   Tabs: { component: Tabs, meta: TabsMeta },
-  TabPane: { component: TabPane, meta: undefined },
-  Collapse: { component: Collapse, meta: undefined },
-  CollapsePanel: { component: CollapsePanel, meta: undefined },
+  TabPane: { component: TabPane, meta: TabPaneMeta },
+  Collapse: { component: Collapse, meta: CollapseMeta },
+  CollapsePanel: { component: CollapsePanel, meta: CollapsePanelMeta },
 
   // 反馈
   Modal: { component: Modal, meta: ModalMeta },
-  Popover: { component: Popover, meta: undefined },
-  Tooltip: { component: Tooltip, meta: undefined },
+  Popover: { component: Popover, meta: PopoverMeta },
+  Tooltip: { component: Tooltip, meta: TooltipMeta },
   Alert: { component: Alert, meta: AlertMeta },
 
   // 布局
   Space: { component: Space, meta: SpaceMeta },
   Divider: { component: Divider, meta: DividerMeta },
-  Row: { component: Row, meta: undefined },
-  Col: { component: Col, meta: undefined },
-  Layout: { component: Layout, meta: undefined },
-  Header: { component: Header, meta: undefined },
-  Content: { component: Content, meta: undefined },
-  Footer: { component: Footer, meta: undefined },
-  Sider: { component: AntSider, meta: undefined },
+  Row: { component: Row, meta: RowMeta },
+  Col: { component: Col, meta: ColMeta },
+  Layout: { component: Layout, meta: LayoutMeta },
+  Header: { component: Header, meta: HeaderMeta },
+  Content: { component: Content, meta: ContentMeta },
+  Footer: { component: Footer, meta: FooterMeta },
+  Sider: { component: AntSider, meta: SiderMeta },
 
   // 排版
   Typography: { component: Typography, meta: TypographyMeta },
@@ -166,17 +194,17 @@ export const componentRegistry: Record<string, ComponentRegistryEntry> = {
   Paragraph: { component: Paragraph, meta: TextMeta }, // Paragraph 共享 Text 的元数据
 
   // 其他
-  Tag: { component: Tag, meta: undefined },
-  Badge: { component: Badge, meta: undefined },
-  Steps: { component: Steps, meta: undefined },
-  Step: { component: Step, meta: undefined },
-  Progress: { component: Progress, meta: undefined },
-  Spin: { component: Spin, meta: undefined },
-  Skeleton: { component: Skeleton, meta: undefined },
+  Tag: { component: Tag, meta: TagMeta },
+  Badge: { component: Badge, meta: BadgeMeta },
+  Steps: { component: Steps, meta: StepsMeta },
+  Step: { component: Step, meta: StepMeta },
+  Progress: { component: Progress, meta: ProgressMeta },
+  Spin: { component: Spin, meta: SpinMeta },
+  Skeleton: { component: Skeleton, meta: SkeletonMeta },
 
   // 日期/时间
-  DatePicker: { component: DatePicker, meta: undefined },
-  RangePicker: { component: RangePicker, meta: undefined },
+  DatePicker: { component: DatePicker, meta: DatePickerMeta },
+  RangePicker: { component: RangePicker, meta: RangePickerMeta },
 };
 
 /**

@@ -35,6 +35,63 @@ const DEFAULT_OPTIONS: ValidationOptions = {
   allowedComponentTypes: ALLOWED_COMPONENT_TYPES,
   sanitizeDangerousValues: true,
 };
+const COMPONENT_ID_REGEX = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+const RESERVED_COMPONENT_IDS = new Set([
+  'data',
+  'formData',
+  'state',
+  'route',
+  'user',
+  'ui',
+  'api',
+  'utils',
+  'navigate',
+  'back',
+  'event',
+  'dispatch',
+  'getState',
+  'components',
+  'true',
+  'false',
+  'null',
+  'undefined',
+  'if',
+  'else',
+  'for',
+  'while',
+  'return',
+  'switch',
+  'case',
+  'default',
+  'typeof',
+  'new',
+  'this',
+  'class',
+  'extends',
+  'let',
+  'const',
+  'var',
+  'function',
+  'import',
+  'export',
+  'void',
+  'delete',
+  'in',
+  'instanceof',
+  '__proto__',
+  'constructor',
+  'prototype',
+  'Math',
+  'JSON',
+  'Date',
+  'String',
+  'Number',
+  'Boolean',
+  'parseInt',
+  'parseFloat',
+  'isNaN',
+  'isFinite',
+]);
 
 /**
  * Schema 校验器类
@@ -208,6 +265,22 @@ export class SchemaValidator {
         );
       }
       ids.add(component.id);
+
+      if (!COMPONENT_ID_REGEX.test(component.id)) {
+        this.addWarning(
+          `components.${key}.id`,
+          `组件 ID "${component.id}" 不符合 JS 标识符规则，无法作为表达式顶层变量使用`,
+          'best_practice',
+          component.id,
+        );
+      } else if (RESERVED_COMPONENT_IDS.has(component.id)) {
+        this.addWarning(
+          `components.${key}.id`,
+          `组件 ID "${component.id}" 与系统保留字冲突，无法作为表达式顶层变量使用`,
+          'best_practice',
+          component.id,
+        );
+      }
 
       // 检查 key 和 id 是否一致
       if (component.id !== key) {

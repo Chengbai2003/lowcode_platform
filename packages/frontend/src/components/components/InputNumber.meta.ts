@@ -11,12 +11,16 @@ export const InputNumberMeta: ComponentPanelConfig = {
       label: '占位符',
       editor: 'string',
       defaultValue: '请输入数字',
+
+      group: '基础',
     },
     {
       key: 'disabled',
       label: '禁用',
-      editor: 'boolean',
-      defaultValue: false,
+      editor: 'expression',
+      defaultValue: '',
+
+      group: '基础',
     },
     {
       key: 'min',

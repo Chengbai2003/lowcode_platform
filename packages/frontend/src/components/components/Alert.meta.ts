@@ -11,6 +11,8 @@ export const AlertMeta: ComponentPanelConfig = {
       label: '警告内容',
       editor: 'string',
       defaultValue: '警告提示',
+
+      group: '基础',
     },
     {
       key: 'description',

@@ -6,6 +6,8 @@ export type EditorType =
   | 'select' // 下拉选择
   | 'color' // 颜色选择器
   | 'json' // JSON 编辑器
+  | 'tableColumns' // Table 列配置可视化编辑器
+  | 'formRules' // FormItem rules 可视化编辑器
   | 'slot' // 插槽（children 配置）
   | 'expression'; // 表达式绑定
 
