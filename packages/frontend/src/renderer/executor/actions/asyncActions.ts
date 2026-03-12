@@ -153,6 +153,11 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
         }
         target[lastKey] = response;
       }
+
+      // 通知响应式系统：API 结果写入无法精确追踪，标记全量变更
+      if (typeof context.markFullChange === 'function') {
+        context.markFullChange();
+      }
     }
 
     // 成功回调

@@ -145,6 +145,15 @@ export interface ExecutionContext {
   navigate: (path: string, params?: Record<string, unknown>) => void;
   back: () => void;
 
+  // 设置组件数据
+  setComponentData?: (id: string, value: unknown) => void;
+
+  // 通知响应式系统全量变更
+  markFullChange?: () => void;
+
+  // 当前 schema 组件池（componentId -> component）
+  components?: Record<string, unknown>;
+
   // 自定义扩展数据
   [key: string]: unknown;
 }

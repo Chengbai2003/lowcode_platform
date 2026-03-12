@@ -5,6 +5,7 @@
 
 import type { ParsedExpression } from '../../../types';
 import { safeEvaluate, SAFE_GLOBALS } from './safeEvaluator';
+import { getFlag } from '../../featureFlags';
 
 const VALID_ALIAS_REGEX = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 const RESERVED_IDENTIFIERS = new Set([
@@ -87,6 +88,7 @@ function isReservedLiteral(str: string): boolean {
 function isValidAliasKey(key: string, context: Record<string, any>): boolean {
   if (!VALID_ALIAS_REGEX.test(key)) return false;
   if (RESERVED_CONTEXT_KEYS.has(key)) return false;
+  if (key in Object.prototype) return false;
   if (Object.prototype.hasOwnProperty.call(context, key)) return false;
   return true;
 }
@@ -96,18 +98,35 @@ export function buildExpressionContext(context: Record<string, any> = {}): Recor
     return {};
   }
 
-  const resolvedContext: Record<string, any> = { ...context };
   const data = (context as Record<string, any>).data;
 
   if (!data || typeof data !== 'object') {
-    return resolvedContext;
+    return { ...context };
   }
 
+  // Phase 2: Proxy 惰性别名，按需读取而非全量展开
+  if (getFlag('selectiveEvaluation')) {
+    return new Proxy(context, {
+      get(target, key: string) {
+        if (key in target) return target[key];
+        if (typeof key === 'string' && isValidAliasKey(key, target) && key in data) {
+          return data[key];
+        }
+        return undefined;
+      },
+      has(target, key: string) {
+        if (key in target) return true;
+        return typeof key === 'string' && isValidAliasKey(key, target) && key in data;
+      },
+    });
+  }
+
+  // 默认路径：全量展开（向后兼容）
+  const resolvedContext: Record<string, any> = { ...context };
   for (const [key, value] of Object.entries(data)) {
     if (!isValidAliasKey(key, resolvedContext)) continue;
     resolvedContext[key] = value;
   }
-
   return resolvedContext;
 }
 

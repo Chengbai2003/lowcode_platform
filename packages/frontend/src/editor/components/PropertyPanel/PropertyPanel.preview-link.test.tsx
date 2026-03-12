@@ -43,11 +43,7 @@ const TestHarness: React.FC<TestHarnessProps> = ({
     <div>
       <PropertyPanel schema={schema} selectedId="root" onSchemaChange={setSchema} />
       <LowcodeProvider>
-        <Renderer
-          schema={schema}
-          eventContext={eventContext}
-          onComponentClick={() => {}}
-        />
+        <Renderer schema={schema} eventContext={eventContext} onComponentClick={() => {}} />
       </LowcodeProvider>
     </div>
   );

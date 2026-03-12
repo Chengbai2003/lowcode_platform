@@ -92,6 +92,11 @@ export const setValue: ActionHandler = async (action, context) => {
     });
   }
 
+  // 通知响应式系统：DSL 写入无法精确追踪，标记全量变更
+  if (typeof context.markFullChange === 'function') {
+    context.markFullChange();
+  }
+
   return { field, value: resolvedValue, merge };
 };
 

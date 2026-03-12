@@ -48,26 +48,29 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
     );
 
     // Resolve clicked/hovered component id by walking up DOM tree
-    const resolveComponentIdFromTarget = useCallback((target: EventTarget | null): string | null => {
-      if (!(target instanceof Element)) return null;
+    const resolveComponentIdFromTarget = useCallback(
+      (target: EventTarget | null): string | null => {
+        if (!(target instanceof Element)) return null;
 
-      let current: Element | null = target;
-      while (current && current !== containerRef.current) {
-        const dataId = current.getAttribute('data-component-id');
-        if (dataId) return dataId;
+        let current: Element | null = target;
+        while (current && current !== containerRef.current) {
+          const dataId = current.getAttribute('data-component-id');
+          if (dataId) return dataId;
 
-        const markerClass = Array.from(current.classList).find((cls) =>
-          cls.startsWith(COMPONENT_ID_CLASS_PREFIX),
-        );
-        if (markerClass) {
-          return markerClass.slice(COMPONENT_ID_CLASS_PREFIX.length) || null;
+          const markerClass = Array.from(current.classList).find((cls) =>
+            cls.startsWith(COMPONENT_ID_CLASS_PREFIX),
+          );
+          if (markerClass) {
+            return markerClass.slice(COMPONENT_ID_CLASS_PREFIX.length) || null;
+          }
+
+          current = current.parentElement;
         }
 
-        current = current.parentElement;
-      }
-
-      return null;
-    }, []);
+        return null;
+      },
+      [],
+    );
 
     // Handle component click
     const handleComponentClick = useCallback(
