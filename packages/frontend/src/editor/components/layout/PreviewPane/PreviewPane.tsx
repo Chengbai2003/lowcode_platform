@@ -1,58 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import type { ComponentRegistry, A2UISchema } from '../../../../types';
+import { validateA2UISchemaWithWhitelist } from '../../../../schema/schemaValidation';
 import { SelectableCanvas } from './SelectableCanvas';
 import { NoSchemaEmptyState } from '../../EmptyState';
 import styles from './PreviewPane.module.scss';
-
-/**
- * A2UISchema 运行时校验
- * 确保用户编辑的 JSON 符合基本的 schema 结构
- */
-function isValidA2UISchema(data: unknown): data is A2UISchema {
-  if (!data || typeof data !== 'object') return false;
-
-  const obj = data as Record<string, unknown>;
-
-  // 检查 rootId
-  if (typeof obj.rootId !== 'string') return false;
-
-  // 检查 components
-  if (typeof obj.components !== 'object' || obj.components === null) return false;
-
-  const components = obj.components as Record<string, unknown>;
-  const rootId = obj.rootId as string;
-
-  // 检查根组件是否存在
-  if (!components[rootId]) return false;
-
-  // 检查每个组件的基本结构
-  for (const [id, comp] of Object.entries(components)) {
-    if (!comp || typeof comp !== 'object') return false;
-
-    const component = comp as Record<string, unknown>;
-
-    // 检查 id 匹配
-    if (component.id !== id) return false;
-
-    // 检查 type
-    if (typeof component.type !== 'string') return false;
-
-    // 检查 childrenIds (如果存在)
-    if (component.childrenIds !== undefined) {
-      if (!Array.isArray(component.childrenIds)) return false;
-
-      // 验证所有子组件 ID 是否存在于 components 中
-      for (const childId of component.childrenIds) {
-        if (typeof childId !== 'string' || !components[childId]) {
-          return false;
-        }
-      }
-    }
-  }
-
-  return true;
-}
 
 /**
  * 类型守卫错误信息
@@ -67,16 +19,15 @@ class SchemaValidationError extends Error {
 /**
  * 校验并转换 JSON 字符串为 A2UISchema
  */
-function parseAndValidateSchema(jsonString: string): A2UISchema {
+function parseAndValidateSchema(jsonString: string, whitelist: string[]): A2UISchema {
   const parsed = JSON.parse(jsonString);
+  const result = validateA2UISchemaWithWhitelist(parsed, whitelist);
 
-  if (!isValidA2UISchema(parsed)) {
-    throw new SchemaValidationError(
-      '无效的 A2UI Schema 格式：缺少必要的 rootId 或 components 字段，或组件结构不完整',
-    );
+  if (!result.success) {
+    throw new SchemaValidationError(result.error.issues[0]?.message || '无效的 A2UI Schema');
   }
 
-  return parsed;
+  return result.data;
 }
 
 interface PreviewPaneProps {
@@ -105,15 +56,25 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   const [activeTab, setActiveTab] = useState<ActiveTab>('preview');
   const [editedJson, setEditedJson] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const editedJsonRef = useRef<string>('');
   const hasUnsavedChangesRef = useRef(false);
+  const saveWhitelistRef = useRef<string[]>(Object.keys(allComponents));
+  const onSchemaCommitRef = useRef(onSchemaCommit);
+  const onSchemaChangeRef = useRef(onSchemaChange);
 
-  // 同步 ref 和 state
   useEffect(() => {
     editedJsonRef.current = editedJson;
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [editedJson, hasUnsavedChanges]);
+
+  useEffect(() => {
+    saveWhitelistRef.current = Object.keys(allComponents);
+  }, [allComponents]);
+
+  useEffect(() => {
+    onSchemaCommitRef.current = onSchemaCommit;
+    onSchemaChangeRef.current = onSchemaChange;
+  }, [onSchemaChange, onSchemaCommit]);
 
   // 将 schema 转换为可展示的 JSON 格式
   const getDisplayJson = useCallback(() => {
@@ -142,35 +103,30 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   }, []);
 
   // Editor 挂载时注册 Ctrl/Cmd + S 快捷键
-  const handleEditorMount: OnMount = useCallback(
-    (editor, monacoInstance) => {
-      editorRef.current = editor;
+  const handleEditorMount: OnMount = useCallback((editor, monacoInstance) => {
+    if (!monacoInstance) return;
 
-      if (!monacoInstance) return;
-
-      // 注册 Ctrl/Cmd + S 快捷键
-      editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
-        // 直接使用 ref 调用保存逻辑，避免闭包陷阱
-        if (!hasUnsavedChangesRef.current) {
-          return;
+    // 注册 Ctrl/Cmd + S 快捷键
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+      // 直接使用 ref 调用保存逻辑，避免闭包陷阱
+      if (!hasUnsavedChangesRef.current) {
+        return;
+      }
+      try {
+        const parsed = parseAndValidateSchema(editedJsonRef.current, saveWhitelistRef.current);
+        if (onSchemaCommitRef.current) {
+          onSchemaCommitRef.current(parsed);
+        } else {
+          onSchemaChangeRef.current?.(parsed);
         }
-        try {
-          const parsed = parseAndValidateSchema(editedJsonRef.current);
-          if (onSchemaCommit) {
-            onSchemaCommit(parsed);
-          } else {
-            onSchemaChange?.(parsed);
-          }
-          setHasUnsavedChanges(false);
-          hasUnsavedChangesRef.current = false;
-        } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : 'JSON 格式错误';
-          alert(`保存失败：${errorMessage}`);
-        }
-      });
-    },
-    [onSchemaChange],
-  );
+        setHasUnsavedChanges(false);
+        hasUnsavedChangesRef.current = false;
+      } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : 'JSON 格式错误';
+        alert(`保存失败：${errorMessage}`);
+      }
+    });
+  }, []);
 
   // 切换到编译代码 Tab 时的检查
   const handleCompiledTabClick = () => {

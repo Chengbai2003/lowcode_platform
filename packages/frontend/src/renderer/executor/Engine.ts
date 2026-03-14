@@ -194,6 +194,12 @@ export class DSLExecutor {
    */
   private async _executeAction(action: Action, context: ExecutionContext): Promise<any> {
     const actionType = action.type;
+
+    // 安全检查：customScript 需要显式启用
+    if (actionType === 'customScript' && !this.options.enableCustomScript) {
+      throw new Error('customScript is disabled. Enable it via options.enableCustomScript: true');
+    }
+
     const handler = this.handlers[actionType];
 
     if (!handler) {
