@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { TemplateGallery } from '../../TemplateGallery/TemplateGallery';
 import type { Template } from '../../../templates/types';
+import { useEditorStore } from '../../../store/editor-store';
 import styles from './Header.module.scss';
 
 /**
@@ -48,6 +49,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   onApplyTemplate,
 }) => {
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
+  const setHistoryDrawerOpen = useEditorStore((state) => state.setHistoryDrawerOpen);
 
   const handleThemeToggle = useCallback(() => {
     onThemeChange(previewTheme === 'light' ? 'dark' : 'light');
@@ -90,7 +92,8 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
           <span>模板</span>
         </button>
         <div className={styles.divider}></div>
-        <button className={styles.actionButton}>
+        {/* 保存按钮 - TODO: 实现保存功能 */}
+        <button className={styles.actionButton} disabled title="保存功能开发中">
           <Save size={18} />
           <span>保存</span>
         </button>
@@ -127,13 +130,14 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
           </button>
         </div>
         <div className={styles.iconButtons}>
-          <button title="历史记录">
+          <button title="历史记录" onClick={() => setHistoryDrawerOpen(true)}>
             <History size={18} />
           </button>
-          <button title="切换主题" onClick={handleThemeToggle}>
+          <button title="切换主题（已禁用）" onClick={handleThemeToggle} disabled>
             <Moon size={18} />
           </button>
-          <button title="帮助">
+          {/* TODO: 实现帮助功能 */}
+          <button title="帮助" disabled>
             <HelpCircle size={18} />
           </button>
         </div>

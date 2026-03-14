@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import type { A2UISchema } from '../../types';
 import { LowcodeProvider, Renderer, EventDispatcher } from '../';
 
@@ -10,6 +11,14 @@ import { LowcodeProvider, Renderer, EventDispatcher } from '../';
 
 /** 等待 microtask flush（EventDispatcher 使用 queueMicrotask 批处理） */
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+const renderWithFlush = async (ui: ReactElement) => {
+  let result: ReturnType<typeof render> | undefined;
+  await act(async () => {
+    result = render(ui);
+    await flushMicrotasks();
+  });
+  return result!;
+};
 
 // 启用 reactiveContext flag
 beforeEach(() => {
@@ -151,7 +160,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
         inputB: {
           id: 'inputB',
           type: 'Input',
-          props: { placeholder: 'type here' },
+          props: { placeholder: 'type here', value: '' },
         },
         textA: {
           id: 'textA',
@@ -164,7 +173,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
       },
     };
 
-    render(
+    await renderWithFlush(
       <LowcodeProvider>
         <Renderer schema={schema} />
       </LowcodeProvider>,
@@ -197,7 +206,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
         inputB: {
           id: 'inputB',
           type: 'Input',
-          props: { placeholder: 'toggle input' },
+          props: { placeholder: 'toggle input', value: '' },
         },
         textA: {
           id: 'textA',
@@ -210,7 +219,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
       },
     };
 
-    render(
+    await renderWithFlush(
       <LowcodeProvider>
         <Renderer schema={schema} />
       </LowcodeProvider>,
@@ -229,7 +238,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
     expect(screen.queryByText('Conditionally visible')).toBeNull();
   });
 
-  it('static visible=false hides component', () => {
+  it('static visible=false hides component', async () => {
     const schema: A2UISchema = {
       rootId: 'root',
       components: {
@@ -250,7 +259,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
       },
     };
 
-    render(
+    await renderWithFlush(
       <LowcodeProvider>
         <Renderer schema={schema} />
       </LowcodeProvider>,
@@ -272,7 +281,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
         inputB: {
           id: 'inputB',
           type: 'Input',
-          props: { placeholder: 'lock input' },
+          props: { placeholder: 'lock input', value: '' },
         },
         btn: {
           id: 'btn',
@@ -285,7 +294,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
       },
     };
 
-    render(
+    await renderWithFlush(
       <LowcodeProvider>
         <Renderer schema={schema} />
       </LowcodeProvider>,

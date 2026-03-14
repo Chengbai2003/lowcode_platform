@@ -1,4 +1,11 @@
-import { ProjectRepository, Project, ProjectMeta, AISession, AISessionMeta } from '../../types';
+import {
+  ProjectRepository,
+  Project,
+  ProjectMeta,
+  AISession,
+  AISessionMeta,
+  SessionListOptions,
+} from '../../types';
 import { set, get, del } from 'idb-keyval';
 
 const PROJECT_META_KEY = 'project_metas';
@@ -95,7 +102,7 @@ export class IndexedDBProjectRepository implements ProjectRepository {
     }
   }
 
-  async listSessions(projectId?: string): Promise<AISessionMeta[]> {
+  async listSessions(projectId?: string, options?: SessionListOptions): Promise<AISessionMeta[]> {
     try {
       let sessionMetas: AISessionMeta[] = (await get(SESSION_META_KEY)) || [];
 
@@ -105,7 +112,15 @@ export class IndexedDBProjectRepository implements ProjectRepository {
       }
 
       // 按更新时间倒序排列
-      return sessionMetas.sort((a, b) => b.updatedAt - a.updatedAt);
+      const sorted = sessionMetas.sort((a, b) => b.updatedAt - a.updatedAt);
+
+      if (!options) return sorted;
+      const offset = Math.max(0, options.offset ?? 0);
+      const limit = options.limit;
+      if (limit === undefined) {
+        return sorted.slice(offset);
+      }
+      return sorted.slice(offset, offset + limit);
     } catch (error) {
       console.error('Failed to list sessions:', error);
       return [];

@@ -1,5 +1,10 @@
 import { set, get, del } from 'idb-keyval';
-import type { AISession, AISessionMeta, AISessionRepository } from '../../../types';
+import type {
+  AISession,
+  AISessionMeta,
+  AISessionRepository,
+  SessionListOptions,
+} from '../../../types';
 
 const SESSION_META_KEY = 'session_metas';
 
@@ -146,7 +151,7 @@ export class IndexedDBSessionRepository implements AISessionRepository {
   /**
    * 列出所有会话元数据
    */
-  async listSessions(projectId?: string): Promise<AISessionMeta[]> {
+  async listSessions(projectId?: string, options?: SessionListOptions): Promise<AISessionMeta[]> {
     try {
       let metas: AISessionMeta[] = (await get(SESSION_META_KEY)) || [];
 
@@ -154,7 +159,14 @@ export class IndexedDBSessionRepository implements AISessionRepository {
         metas = metas.filter((m) => m.projectId === projectId);
       }
 
-      return metas.sort((a, b) => b.updatedAt - a.updatedAt);
+      const sorted = metas.sort((a, b) => b.updatedAt - a.updatedAt);
+      if (!options) return sorted;
+      const offset = Math.max(0, options.offset ?? 0);
+      const limit = options.limit;
+      if (limit === undefined) {
+        return sorted.slice(offset);
+      }
+      return sorted.slice(offset, offset + limit);
     } catch (error) {
       console.error('Failed to list sessions:', error);
       return [];

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { A2UISchema } from '../../../types';
 import { PropertyPanel } from './PropertyPanel';
 import { LowcodeProvider, Renderer } from '@/renderer';
@@ -21,6 +21,16 @@ const createSchema = (): A2UISchema => ({
     },
   },
 });
+
+const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
+const renderWithFlush = async (ui: React.ReactElement) => {
+  let result: ReturnType<typeof render> | undefined;
+  await act(async () => {
+    result = render(ui);
+    await flushMicrotasks();
+  });
+  return result!;
+};
 
 interface TestHarnessProps {
   initialSchema: A2UISchema;
@@ -54,7 +64,7 @@ describe('PropertyPanel -> preview linkage', () => {
     const eventContext = { appName: 'demo' };
     let latestSchema = createSchema();
 
-    const { container, unmount } = render(
+    const { container, unmount } = await renderWithFlush(
       <TestHarness
         initialSchema={latestSchema}
         eventContext={eventContext}
@@ -65,7 +75,9 @@ describe('PropertyPanel -> preview linkage', () => {
     );
 
     const classNameInput = screen.getByDisplayValue('initial-class');
-    fireEvent.change(classNameInput, { target: { value: '{{appName}}' } });
+    await act(async () => {
+      fireEvent.change(classNameInput, { target: { value: '{{appName}}' } });
+    });
 
     await waitFor(() => {
       const rootEl = container.querySelector('[data-component-id="root"]') as HTMLElement | null;
@@ -74,7 +86,9 @@ describe('PropertyPanel -> preview linkage', () => {
     });
 
     const slotTextarea = screen.getByDisplayValue('initial slot');
-    fireEvent.change(slotTextarea, { target: { value: 'updated slot' } });
+    await act(async () => {
+      fireEvent.change(slotTextarea, { target: { value: 'updated slot' } });
+    });
 
     await waitFor(() => {
       const rootEl = container.querySelector('[data-component-id="root"]') as HTMLElement | null;
@@ -89,17 +103,22 @@ describe('PropertyPanel -> preview linkage', () => {
 
     expect(styleTextarea).toBeDefined();
 
-    fireEvent.change(styleTextarea!, { target: { value: '{"color":"red"}' } });
-    fireEvent.blur(styleTextarea!);
+    await act(async () => {
+      fireEvent.change(styleTextarea!, { target: { value: '{"color":"red"}' } });
+      fireEvent.blur(styleTextarea!);
+    });
 
     await waitFor(() => {
       const rootEl = container.querySelector('[data-component-id="root"]') as HTMLElement | null;
       expect(rootEl?.style.color).toBe('red');
     });
 
-    unmount();
+    await act(async () => {
+      unmount();
+      await flushMicrotasks();
+    });
 
-    render(
+    await renderWithFlush(
       <TestHarness
         initialSchema={latestSchema}
         eventContext={eventContext}

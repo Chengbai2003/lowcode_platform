@@ -2,9 +2,15 @@ import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { ConfigProvider, theme, message, notification, Modal } from 'antd';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ExternalLink } from 'lucide-react';
-import type { EventContext, EventUIContext, LowcodeEditorProps } from './types';
-import type { A2UISchema } from '../types';
+import type {
+  EventContext,
+  EventUIContext,
+  LowcodeEditorProps,
+  NotificationOptions,
+} from './types';
+import type { A2UISchema, A2UIComponent, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
+import { validateAndAutoFixA2UISchema } from '../schema/schemaValidation';
 import { compileSchema } from './services/compilerApi';
 import {
   EditorHeader,
@@ -111,12 +117,14 @@ function LowcodeEditorInner({
         info: (content: string) => message.info(content),
       },
       notification: {
-        success: (options: Parameters<typeof notification.success>[0]) =>
-          notification.success(options),
-        error: (options: Parameters<typeof notification.error>[0]) => notification.error(options),
-        warning: (options: Parameters<typeof notification.warning>[0]) =>
-          notification.warning(options),
-        info: (options: Parameters<typeof notification.info>[0]) => notification.info(options),
+        success: (options: NotificationOptions) =>
+          notification.success(options as Parameters<typeof notification.success>[0]),
+        error: (options: NotificationOptions) =>
+          notification.error(options as Parameters<typeof notification.error>[0]),
+        warning: (options: NotificationOptions) =>
+          notification.warning(options as Parameters<typeof notification.warning>[0]),
+        info: (options: NotificationOptions) =>
+          notification.info(options as Parameters<typeof notification.info>[0]),
       },
       modal,
     };
@@ -216,16 +224,6 @@ function LowcodeEditorInner({
       setCompiledCode(null);
     }
   }, [schema]);
-
-  // 处理AI生成的Schema更新
-  const handleAISchemaUpdate = useCallback(
-    (newSchema: A2UISchema) => {
-      forceUpdateSchema(newSchema, 'AI 更新 Schema');
-      message.success('Schema 已更新！');
-    },
-    [forceUpdateSchema],
-  );
-
   // 处理模板应用
   const handleApplyTemplate = useCallback(
     (templateSchema: A2UISchema) => {
@@ -246,6 +244,112 @@ function LowcodeEditorInner({
     );
     return { ...componentsOnly, ...customComponents };
   }, [customComponents]);
+
+  const handleAISchemaUpdate = useCallback(
+    (newSchema: A2UISchema) => {
+      const whitelist = Object.keys(allComponents);
+      const result = validateAndAutoFixA2UISchema(newSchema, whitelist);
+
+      if (!result.success) {
+        const errorMessage = result.error.issues[0]?.message || 'Schema 校验失败';
+        onError?.(errorMessage);
+        message.error(`AI Schema 无法应用：${errorMessage}`);
+        return false;
+      }
+
+      if (result.fixes.length > 0) {
+        message.info(`已自动修复 ${result.fixes.length} 处 Schema 问题`);
+      }
+
+      forceUpdateSchema(result.data, 'AI 更新 Schema');
+      message.success('Schema 已更新！');
+      return true;
+    },
+    [allComponents, forceUpdateSchema, onError],
+  );
+
+  const isA2UISchema = (value: unknown): value is A2UISchema => {
+    if (!value || typeof value !== 'object') return false;
+    return 'rootId' in value && 'components' in value;
+  };
+
+  const extractSchemaSnapshot = (value: unknown): A2UISchema | null => {
+    if (isA2UISchema(value)) {
+      return value;
+    }
+    if (!value || typeof value !== 'object') return null;
+    const actionResult = value as Partial<AIMessageActionResult>;
+    if (isA2UISchema(actionResult.schemaSnapshot)) {
+      return actionResult.schemaSnapshot;
+    }
+    const maybeProps = (actionResult as { props?: unknown }).props;
+    if (isA2UISchema(maybeProps)) {
+      return maybeProps;
+    }
+    return null;
+  };
+
+  const buildSubtreeSchema = (source: A2UISchema, rootId: string): A2UISchema | null => {
+    const root = source.components[rootId];
+    if (!root) return null;
+
+    const components: Record<string, A2UIComponent> = {};
+    const stack = [rootId];
+
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (components[id]) continue;
+      const node = source.components[id];
+      if (!node) continue;
+      components[id] = node;
+      if (Array.isArray(node.childrenIds)) {
+        for (const childId of node.childrenIds) {
+          if (typeof childId === 'string' && source.components[childId]) {
+            stack.push(childId);
+          }
+        }
+      }
+    }
+
+    return { rootId, components };
+  };
+
+  const applyComponentSnapshot = (snapshot: A2UISchema, componentId: string): A2UISchema | null => {
+    if (!schema.components[componentId]) return null;
+
+    const subtree =
+      snapshot.rootId === componentId ? snapshot : buildSubtreeSchema(snapshot, componentId);
+    if (!subtree) return null;
+    if (!subtree.components[subtree.rootId]) return null;
+
+    const toRemove = new Set<string>();
+    const stack = [componentId];
+    while (stack.length > 0) {
+      const id = stack.pop()!;
+      if (toRemove.has(id)) continue;
+      toRemove.add(id);
+      const node = schema.components[id];
+      if (!node?.childrenIds) continue;
+      for (const childId of node.childrenIds) {
+        if (typeof childId === 'string' && schema.components[childId]) {
+          stack.push(childId);
+        }
+      }
+    }
+
+    const nextComponents = { ...schema.components };
+    for (const id of toRemove) {
+      delete nextComponents[id];
+    }
+    for (const [id, comp] of Object.entries(subtree.components)) {
+      nextComponents[id] = comp;
+    }
+
+    return {
+      ...schema,
+      components: nextComponents,
+    };
+  };
 
   const isPreviewMode = mode === 'preview';
 
@@ -349,7 +453,31 @@ function LowcodeEditorInner({
         </AnimatePresence>
 
         {/* AI 历史抽屉 - 预览模式下隐藏 */}
-        <AnimatePresence>{!isPreviewMode && <HistoryDrawer />}</AnimatePresence>
+        <AnimatePresence>
+          {!isPreviewMode && (
+            <HistoryDrawer
+              onRollback={(nextSchema) => {
+                const snapshot = extractSchemaSnapshot(nextSchema);
+                if (!snapshot) {
+                  message.error('该历史记录缺少可应用的 Schema 数据');
+                  return false;
+                }
+
+                const actionResult = nextSchema as Partial<AIMessageActionResult>;
+                if (actionResult?.componentId && snapshot.rootId === actionResult.componentId) {
+                  const merged = applyComponentSnapshot(snapshot, actionResult.componentId);
+                  if (!merged) {
+                    message.error('未找到对应组件，无法应用历史记录');
+                    return false;
+                  }
+                  return handleAISchemaUpdate(merged);
+                }
+
+                return handleAISchemaUpdate(snapshot);
+              }}
+            />
+          )}
+        </AnimatePresence>
 
         {/* 浮动退出预览按钮 */}
         <AnimatePresence>
