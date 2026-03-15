@@ -12,6 +12,10 @@ export const RENDERER_FLAGS_DEFAULTS = {
   selectiveEvaluation: true,
   /** 启用脚本能力模型（Phase 3） */
   capabilityScript: false,
+  /** 启用 ReactiveRuntime (Phase 1) - 默认关闭，测试通过后开启 */
+  useReactiveRuntime: false,
+  /** 启用 runtime 调试日志 */
+  runtimeDebug: false,
 } as const;
 
 export type RendererFlagKey = keyof typeof RENDERER_FLAGS_DEFAULTS;

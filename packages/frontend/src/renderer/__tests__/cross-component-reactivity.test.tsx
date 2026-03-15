@@ -144,6 +144,75 @@ describe('EventDispatcher subscribe mechanism', () => {
     expect(changed).not.toBe('all');
     expect((changed as Set<string>).size).toBe(0);
   });
+
+  it('initializes ReactiveRuntime with existing execution context namespaces', () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const dispatcher = new EventDispatcher(
+      {
+        data: { inputA: 'ready' },
+        state: { loading: true },
+        formData: { profile: { name: 'Alice' } },
+        components: { root: { id: 'root', type: 'Div' } },
+      },
+      vi.fn(),
+      vi.fn(),
+    );
+
+    const runtime = dispatcher.getRuntime();
+    expect(runtime).not.toBeNull();
+    expect(runtime?.get('inputA')).toBe('ready');
+    expect(runtime?.get('state.loading')).toBe(true);
+    expect(runtime?.get('formData.profile.name')).toBe('Alice');
+    expect(runtime?.get('components.root')).toEqual({ id: 'root', type: 'Div' });
+  });
+
+  it('keeps versioned changed keys when ReactiveRuntime is enabled', async () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const dispatcher = new EventDispatcher({}, vi.fn(), vi.fn());
+
+    dispatcher.updateComponentData('input1', 'a');
+    await flushMicrotasks();
+
+    dispatcher.updateComponentData('input2', 'b');
+    await flushMicrotasks();
+
+    const firstFlush = dispatcher.getChangedKeysForVersion(0);
+    expect(firstFlush).not.toBe('all');
+    expect((firstFlush as Set<string>).has('input1')).toBe(true);
+    expect((firstFlush as Set<string>).has('input2')).toBe(true);
+
+    const secondFlush = dispatcher.getChangedKeysForVersion(1);
+    expect(secondFlush).not.toBe('all');
+    expect((secondFlush as Set<string>).has('input2')).toBe(true);
+    expect((secondFlush as Set<string>).has('input1')).toBe(false);
+  });
+
+  it('syncs components into ReactiveRuntime when context updates later', async () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const dispatcher = new EventDispatcher({}, vi.fn(), vi.fn());
+    dispatcher.setContext('components', {
+      root: { id: 'root', type: 'Div' },
+      button1: { id: 'button1', type: 'Button' },
+    });
+
+    await flushMicrotasks();
+
+    const runtime = dispatcher.getRuntime();
+    expect(runtime?.get('components.root')).toEqual({ id: 'root', type: 'Div' });
+    expect(runtime?.get('components.button1')).toEqual({ id: 'button1', type: 'Button' });
+  });
 });
 
 describe('Cross-component reactivity (Phase 1)', () => {

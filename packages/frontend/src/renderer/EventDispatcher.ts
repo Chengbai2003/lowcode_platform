@@ -7,6 +7,8 @@
 import { DSLExecutor } from './executor';
 import type { ActionList, ExecutionContext } from '../types';
 import { setComponentData, setComponentConfig } from './store/componentSlice';
+import { ReactiveRuntime } from './reactive/runtime';
+import { getFlag } from './featureFlags';
 
 /**
  * 事件派发中心类
@@ -27,6 +29,9 @@ export class EventDispatcher {
   private flushScheduled = false;
   private mergedCache = new Map<number, ReadonlySet<string> | 'all'>();
 
+  /** ReactiveRuntime 实例 (Phase 1 - 根据 feature flag 条件启用) */
+  private runtime: ReactiveRuntime | null = null;
+
   constructor(context: Record<string, any> = {}, dispatch: any, getState: any) {
     this.context = context;
     this.dispatch = dispatch;
@@ -35,7 +40,7 @@ export class EventDispatcher {
     // 创建DSL执行引擎
     this.dslExecutor = new DSLExecutor({
       debug: process.env.NODE_ENV !== 'production',
-      // Renderer runtime keeps legacy customScript available unless caller explicitly opts out.
+      // 渲染器运行时保持 legacy customScript 可用，除非调用方显式禁用。
       enableCustomScript: context.enableCustomScript ?? true,
       onError: (error, action) => {
         console.error('[DSL Error]', error.message, { action });
@@ -76,10 +81,41 @@ export class EventDispatcher {
       markFullChange: () => this.markFullChange(),
       ...this.context,
     });
+
+    // 初始化 ReactiveRuntime (根据 feature flag)
+    // 注意：useReactiveRuntime 是新的 flag，默认关闭
+    // reactiveContext 是旧 flag，用于响应式 context 订阅（已默认开启）
+    if (getFlag('useReactiveRuntime')) {
+      this.runtime = new ReactiveRuntime();
+      this.runtime.initialize({
+        data:
+          this.executionContext.data && typeof this.executionContext.data === 'object'
+            ? (this.executionContext.data as Record<string, unknown>)
+            : undefined,
+        state:
+          this.executionContext.state && typeof this.executionContext.state === 'object'
+            ? (this.executionContext.state as Record<string, unknown>)
+            : undefined,
+        formData:
+          this.executionContext.formData && typeof this.executionContext.formData === 'object'
+            ? (this.executionContext.formData as Record<string, unknown>)
+            : undefined,
+        components:
+          this.executionContext.components && typeof this.executionContext.components === 'object'
+            ? (this.executionContext.components as Record<string, unknown>)
+            : undefined,
+      });
+    }
   }
 
   /** 订阅 context 变化（符合 useSyncExternalStore 协议） */
   subscribe = (listener: () => void) => {
+    // 如果 runtime 启用，优先使用 runtime 订阅（避免双重通知）
+    if (this.runtime) {
+      return this.runtime.subscribe(listener);
+    }
+
+    // 回退到传统订阅机制
     this.listeners.add(listener);
     return () => {
       this.listeners.delete(listener);
@@ -87,10 +123,34 @@ export class EventDispatcher {
   };
 
   /** 获取当前版本号（useSyncExternalStore snapshot） */
-  getVersion = () => this.version;
+  getVersion = () => {
+    // 如果 runtime 启用，使用 runtime 的版本
+    if (this.runtime) {
+      return this.runtime.getVersion();
+    }
+    return this.version;
+  };
 
   /** 组件按 version 查询变更集（不可变，无竞争） */
   getChangedKeysForVersion = (sinceVersion: number): ReadonlySet<string> | 'all' => {
+    // 如果 runtime 启用，使用 runtime 的变更追踪
+    if (this.runtime) {
+      const dirtyPaths = this.runtime.getDirtyPaths(sinceVersion);
+      if (dirtyPaths === 'all') return 'all';
+      // 将 DataPath 转换为组件 ID（去掉命名空间前缀）
+      const result = new Set<string>();
+      for (const path of dirtyPaths) {
+        // data.input1 -> input1, state.loading -> state.loading (保持原样)
+        if (path.startsWith('data.')) {
+          result.add(path.slice(5));
+        } else {
+          result.add(path);
+        }
+      }
+      return result;
+    }
+
+    // 传统逻辑
     if (sinceVersion >= this.version) return new Set();
 
     const cached = this.mergedCache.get(sinceVersion);
@@ -152,19 +212,31 @@ export class EventDispatcher {
 
   /**
    * 内部统一写入：更新 executionContext.data + 累积 pendingKey + scheduleFlush
+   * 同时写入 ReactiveRuntime (如果启用)
    */
   private _writeComponentData(componentId: string, value: any) {
+    // 1. 更新 executionContext (保持兼容)
     const currentData = this.executionContext.data || {};
     this.executionContext = {
       ...this.executionContext,
       data: { ...currentData, [componentId]: value },
     };
+
+    // 2. 如果 runtime 启用，写入 runtime（runtime 会触发通知）
+    if (this.runtime) {
+      this.runtime.set(componentId, value);
+      // runtime 启用时，跳过传统 flush 机制
+      return;
+    }
+
+    // 3. 传统路径：累积 pendingKey 和调度 flush
     this.addPendingKey(componentId);
     this.scheduleFlush();
   }
 
   /**
    * 从 Redux store 回读组件数据并同步到 executionContext，保持双写路径一致性。
+   * 同时同步到 ReactiveRuntime (如果启用)。
    * 返回 true 表示已成功回读并同步；false 表示无法从 store 读取。
    */
   private syncComponentDataFromStore(componentId: string): boolean {
@@ -179,10 +251,20 @@ export class EventDispatcher {
     const nextValue = (storeData as Record<string, any>)[componentId];
 
     if (!Object.is(prevValue, nextValue)) {
+      // 1. 同步到 executionContext
       this.executionContext = {
         ...this.executionContext,
         data: { ...currentData, [componentId]: nextValue },
       };
+
+      // 2. 同步到 runtime (如果启用)
+      if (this.runtime) {
+        this.runtime.set(componentId, nextValue);
+        // runtime 启用时，跳过传统 flush 机制
+        return true;
+      }
+
+      // 3. 传统路径：标记变更并调度 flush
       this.addPendingKey(componentId);
       this.scheduleFlush();
     }
@@ -192,6 +274,11 @@ export class EventDispatcher {
 
   /** 标记为全量变更（用于无法精确追踪的写入路径） */
   markFullChange = () => {
+    // 如果 runtime 启用，使用 runtime 的全量失效
+    if (this.runtime) {
+      this.runtime.markAllDirty();
+      return;
+    }
     this.setPendingAll();
     this.scheduleFlush();
   };
@@ -202,6 +289,23 @@ export class EventDispatcher {
   setContext(key: string, value: any) {
     this.context = { ...this.context, [key]: value };
     this.executionContext = { ...this.executionContext, [key]: value };
+
+    // 同步到 runtime (如果启用且是数据相关的 key)
+    if (this.runtime) {
+      // data, state, formData 是 runtime 管理的命名空间
+      if (key === 'data' || key === 'state' || key === 'formData') {
+        if (typeof value === 'object' && value !== null) {
+          this.runtime.setNamespace(key, value as Record<string, unknown>);
+          return;
+        }
+      }
+
+      if (key === 'components' && typeof value === 'object' && value !== null) {
+        this.runtime.setComponents(value as Record<string, unknown>);
+        return;
+      }
+    }
+
     this.setPendingAll();
     this.scheduleFlush();
   }
@@ -257,5 +361,13 @@ export class EventDispatcher {
    */
   getExecutionContext(): ExecutionContext {
     return this.executionContext;
+  }
+
+  /**
+   * 获取 ReactiveRuntime 实例 (Phase 1)
+   * @returns ReactiveRuntime 实例，如果未启用则返回 null
+   */
+  getRuntime(): ReactiveRuntime | null {
+    return this.runtime;
   }
 }
