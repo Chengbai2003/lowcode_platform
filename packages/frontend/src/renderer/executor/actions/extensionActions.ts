@@ -10,6 +10,17 @@ import type { CustomScriptAction } from '../../../types/dsl/actions/extension';
 import { getFlag } from '../../featureFlags';
 import { createCapabilityAPI } from '../capability/capabilityAPI';
 
+const BLOCKED_SCRIPT_PATTERNS = [
+  {
+    pattern: /\bimport\s*\(/,
+    message: 'Dynamic import is not allowed in customScript',
+  },
+  {
+    pattern: /\brequire\s*\(/,
+    message: 'require() is not allowed in customScript',
+  },
+] as const;
+
 function cloneForSandbox<T>(value: T): T {
   if (typeof globalThis.structuredClone === 'function') {
     try {
@@ -194,6 +205,13 @@ function executeInSandbox(
   timeout: number,
 ): Promise<any> {
   return new Promise((resolve, reject) => {
+    for (const blocked of BLOCKED_SCRIPT_PATTERNS) {
+      if (blocked.pattern.test(code)) {
+        reject(new Error(blocked.message));
+        return;
+      }
+    }
+
     const timeoutId = setTimeout(() => {
       reject(new Error(`Execution timeout (${timeout}ms) - Note: Only stops async hangs.`));
     }, timeout);

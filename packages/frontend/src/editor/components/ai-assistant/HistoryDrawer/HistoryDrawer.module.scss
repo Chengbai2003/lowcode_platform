@@ -144,6 +144,28 @@
   gap: 4px;
 }
 
+.loadMore {
+  display: flex;
+  justify-content: center;
+  padding: 8px 20px 16px;
+}
+
+.loadMoreButton {
+  padding: 6px 12px;
+  font-size: 12px;
+  border: 1px solid var(--color-border, #d9d9d9);
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-secondary, #666);
+  transition: all 0.2s;
+}
+
+.loadMoreButton:hover {
+  border-color: var(--color-primary, #1890ff);
+  color: var(--color-primary, #1890ff);
+}
+
 /* Session Detail */
 .detailHeader {
   display: flex;

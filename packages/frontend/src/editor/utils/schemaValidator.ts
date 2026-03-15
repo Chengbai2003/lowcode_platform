@@ -4,6 +4,10 @@
  */
 
 import type { A2UISchema } from '../../types';
+import {
+  validateA2UISchemaWithWhitelist,
+  validateAndAutoFixA2UISchema,
+} from '../../schema/schemaValidation';
 import type {
   ValidationResult,
   ValidationError,
@@ -15,11 +19,9 @@ import {
   ALLOWED_COMPONENT_TYPES,
   ALLOWED_PROPERTIES,
   REQUIRED_PROPERTIES,
-  isComponentTypeAllowed,
   isPropertyAllowed,
   containsDangerousPattern,
   DEFAULT_LIMITS,
-  normalizeComponentType,
   DANGEROUS_ACTION_TYPES,
 } from '../constants/aiSafetyConfig';
 
@@ -115,8 +117,15 @@ export class SchemaValidator {
     this.warnings = [];
     this.fixes = [];
 
-    // 1. 基础类型检查
-    if (!this.validateBasicStructure(schema)) {
+    const whitelist = this.options.allowUnknownTypes
+      ? []
+      : (this.options.allowedComponentTypes ?? ALLOWED_COMPONENT_TYPES);
+    const coreResult = this.options.strict
+      ? validateA2UISchemaWithWhitelist(schema, whitelist)
+      : validateAndAutoFixA2UISchema(schema, whitelist);
+
+    if (!coreResult.success) {
+      this.consumeCoreValidationError(coreResult.error);
       return {
         valid: false,
         errors: this.errors,
@@ -124,31 +133,26 @@ export class SchemaValidator {
       };
     }
 
-    const typedSchema = schema as A2UISchema;
+    const typedSchema = coreResult.data as A2UISchema;
     this.fixedSchema = JSON.parse(JSON.stringify(typedSchema));
+    const coreFixes = (coreResult as { fixes?: string[] }).fixes;
+    if (Array.isArray(coreFixes) && coreFixes.length > 0) {
+      this.fixes.push(...coreFixes);
+    }
 
-    // 2. 大小限制检查
+    // 1. 大小限制检查
     this.validateSizeLimits(typedSchema);
 
-    // 3. 根节点校验
-    this.validateRoot(typedSchema);
-
-    // 4. 组件唯一性校验
+    // 2. 组件唯一性校验
     this.validateComponentUniqueness(typedSchema);
 
-    // 5. 组件类型校验
-    this.validateComponentTypes(typedSchema);
-
-    // 6. 属性校验
+    // 3. 属性校验
     this.validateProperties(typedSchema);
 
-    // 7. 子节点引用校验
-    this.validateChildrenReferences(typedSchema);
-
-    // 8. 安全检查
+    // 4. 安全检查
     this.validateSecurity(typedSchema);
 
-    // 9. 嵌套深度检查
+    // 5. 嵌套深度检查
     this.validateNestingDepth(typedSchema);
 
     return {
@@ -161,42 +165,20 @@ export class SchemaValidator {
     };
   }
 
-  /**
-   * 校验基础结构
-   */
-  private validateBasicStructure(schema: unknown): boolean {
-    if (!schema || typeof schema !== 'object') {
-      this.addError('', 'Schema 必须是一个对象', 'type', schema);
-      return false;
+  private consumeCoreValidationError(error: {
+    issues?: Array<{ path?: Array<string | number>; message: string }>;
+  }): void {
+    const issues = error.issues ?? [];
+
+    if (issues.length === 0) {
+      this.addError('', 'Schema 校验失败', 'format');
+      return;
     }
 
-    const s = schema as Record<string, unknown>;
-
-    // 检查 components
-    if (!s.components || typeof s.components !== 'object') {
-      this.addError('components', 'Schema 必须包含 components 对象', 'required');
-      return false;
+    for (const issue of issues) {
+      const path = Array.isArray(issue.path) ? issue.path.join('.') : '';
+      this.addError(path, issue.message, 'format');
     }
-
-    // 检查 rootId
-    if (!s.rootId || typeof s.rootId !== 'string') {
-      if (!this.options.strict) {
-        // 自动修复：寻找第一个组件作为 rootId
-        const keys = Object.keys(s.components as object);
-        if (keys.length > 0) {
-          (schema as A2UISchema).rootId = keys[0];
-          this.addFix('自动设置 rootId 为第一个组件');
-        } else {
-          this.addError('rootId', 'Schema 必须包含有效的 rootId', 'required');
-          return false;
-        }
-      } else {
-        this.addError('rootId', 'Schema 必须包含有效的 rootId', 'required');
-        return false;
-      }
-    }
-
-    return true;
   }
 
   /**
@@ -221,29 +203,6 @@ export class SchemaValidator {
         `组件数量超过限制 (${componentCount} > ${this.options.maxComponents})`,
         'constraint',
       );
-    }
-  }
-
-  /**
-   * 校验根节点
-   */
-  private validateRoot(schema: A2UISchema): void {
-    if (!schema.components[schema.rootId]) {
-      this.addError(
-        'rootId',
-        `rootId "${schema.rootId}" 在 components 中不存在`,
-        'reference',
-        schema.rootId,
-      );
-
-      // 尝试自动修复
-      if (!this.options.strict) {
-        const firstKey = Object.keys(schema.components)[0];
-        if (firstKey) {
-          this.fixedSchema!.rootId = firstKey;
-          this.addFix(`将 rootId 修正为 "${firstKey}"`);
-        }
-      }
     }
   }
 
@@ -294,47 +253,6 @@ export class SchemaValidator {
         if (!this.options.strict && this.fixedSchema) {
           this.fixedSchema.components[key].id = key;
           this.addFix(`修正组件 "${key}" 的 id 为 "${key}"`);
-        }
-      }
-    }
-  }
-
-  /**
-   * 校验组件类型
-   */
-  private validateComponentTypes(schema: A2UISchema): void {
-    const whitelist = this.options.allowedComponentTypes || ALLOWED_COMPONENT_TYPES;
-
-    for (const [id, component] of Object.entries(schema.components)) {
-      if (!component.type) {
-        this.addError(`components.${id}`, '组件缺少 type 属性', 'required');
-        continue;
-      }
-
-      // 检查类型是否在白名单中
-      if (!isComponentTypeAllowed(component.type, whitelist)) {
-        const normalizedType = normalizeComponentType(component.type);
-
-        if (isComponentTypeAllowed(normalizedType, whitelist)) {
-          // 可以自动修正
-          if (!this.options.strict && this.fixedSchema) {
-            this.fixedSchema.components[id].type = normalizedType;
-            this.addFix(`组件 "${id}" 类型 "${component.type}" 修正为 "${normalizedType}"`);
-          } else {
-            this.addWarning(
-              `components.${id}`,
-              `组件类型 "${component.type}" 不在白名单中，建议使用 "${normalizedType}"`,
-              'compatibility',
-            );
-          }
-        } else if (!this.options.allowUnknownTypes) {
-          this.addError(
-            `components.${id}.type`,
-            `组件类型 "${component.type}" 未注册`,
-            'unknown',
-            component.type,
-            `使用已注册的组件类型，如: ${whitelist.slice(0, 5).join(', ')}`,
-          );
         }
       }
     }
@@ -397,62 +315,6 @@ export class SchemaValidator {
           `components.${id}.props`,
           `组件属性数量过多 (${propCount} > ${DEFAULT_LIMITS.maxPropsPerComponent})`,
           'performance',
-        );
-      }
-    }
-  }
-
-  /**
-   * 校验子节点引用
-   */
-  private validateChildrenReferences(schema: A2UISchema): void {
-    const componentIds = new Set(Object.keys(schema.components));
-    const referencedIds = new Set<string>();
-    const parentMap = new Map<string, string>();
-
-    for (const [id, component] of Object.entries(schema.components)) {
-      const childrenIds = component.childrenIds || [];
-
-      for (const childId of childrenIds) {
-        // 检查引用是否存在
-        if (!componentIds.has(childId)) {
-          this.addError(
-            `components.${id}.childrenIds`,
-            `子节点 "${childId}" 不存在于 components 中`,
-            'reference',
-            childId,
-          );
-
-          // 自动修复：移除无效引用
-          if (!this.options.strict && this.fixedSchema) {
-            this.fixedSchema.components[id].childrenIds = childrenIds.filter(
-              (cid) => cid !== childId,
-            );
-            this.addFix(`移除组件 "${id}" 的无效子节点引用 "${childId}"`);
-          }
-        } else {
-          // 检查是否有循环引用或多个父节点
-          if (referencedIds.has(childId)) {
-            const existingParent = parentMap.get(childId);
-            this.addWarning(
-              `components.${id}.childrenIds`,
-              `子节点 "${childId}" 被多个父节点引用 (已有父节点: "${existingParent}")`,
-              'best_practice',
-            );
-          }
-          referencedIds.add(childId);
-          parentMap.set(childId, id);
-        }
-      }
-    }
-
-    // 检查孤立节点（未被引用的节点，除了 root）
-    for (const id of componentIds) {
-      if (id !== schema.rootId && !referencedIds.has(id)) {
-        this.addWarning(
-          `components.${id}`,
-          '组件未被任何其他组件引用（孤立节点）',
-          'best_practice',
         );
       }
     }

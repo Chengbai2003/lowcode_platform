@@ -8,7 +8,14 @@ import type {
 } from '../types';
 
 // Re-export types for convenience
-export type { A2UISchema, ComponentRegistry, A2UIComponent, PropertyMeta };
+export type {
+  A2UISchema,
+  ComponentRegistry,
+  A2UIComponent,
+  PropertyMeta,
+  NotificationOptions,
+  ModalOptions,
+};
 
 export interface LowcodeEditorProps {
   /**

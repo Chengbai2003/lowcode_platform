@@ -99,3 +99,8 @@ export const mockSessions: AISession[] = [
     createAIMessage(msgId('msg5', 2), '已创建注册表单，包含姓名、邮箱、密码字段。', 71, true),
   ]),
 ];
+
+// Mock 会话详情映射（sessionId -> messages）
+export const mockSessionDetails: Record<string, AISessionMessage[]> = Object.fromEntries(
+  mockSessions.map((session) => [session.id, session.messages || []]),
+);

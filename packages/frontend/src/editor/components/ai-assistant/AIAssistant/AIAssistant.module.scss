@@ -4,8 +4,8 @@
   flex-direction: column;
   height: 100%;
   width: 100%;
-  background: #1e1e1e;
-  color: #cccccc;
+  background: var(--bg-panel);
+  color: var(--text-primary);
 }
 
 .aiContent {
@@ -28,17 +28,17 @@
 }
 
 .messagesContainer::-webkit-scrollbar-track {
-  background: #252526;
+  background: var(--bg-tertiary);
   border-radius: 3px;
 }
 
 .messagesContainer::-webkit-scrollbar-thumb {
-  background: #424242;
+  background: var(--border-secondary);
   border-radius: 3px;
 }
 
 .messagesContainer::-webkit-scrollbar-thumb:hover {
-  background: #4f4f4f;
+  background: var(--border-primary);
 }
 
 .message {
@@ -59,13 +59,13 @@
 }
 
 .messageContent {
-  background: #37373d;
+  background: var(--bg-secondary);
   padding: 12px 16px;
   border-radius: 12px;
-  border-left: 3px solid #007fd4;
+  border-left: 3px solid var(--primary-color);
   margin-bottom: 4px;
   max-width: 80%;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  box-shadow: var(--shadow-md);
 }
 
 .messageUser {
@@ -75,8 +75,8 @@
 }
 
 .messageUser .messageContent {
-  background: #007fd4;
-  color: white;
+  background: var(--primary-color);
+  color: var(--text-inverse);
   border-left: none;
   border-bottom-right-radius: 2px;
 }
@@ -88,15 +88,15 @@
 }
 
 .messageAi .messageContent {
-  background: #37373d;
-  border-left: 3px solid #007fd4;
+  background: var(--bg-secondary);
+  border-left: 3px solid var(--primary-color);
   border-bottom-left-radius: 2px;
 }
 
 .messageSystem .messageContent {
-  background: #1e1e1e;
-  border: 1px solid #3e3e42;
-  border-left: 3px solid #808080;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-secondary);
+  border-left: 3px solid var(--text-tertiary);
   margin-right: 20px;
 }
 
@@ -109,19 +109,19 @@
 .modelIndicator {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #424242;
+  border-top: 1px solid var(--border-secondary);
 }
 
 .modelLabel {
   font-size: 11px;
-  color: #858585;
-  background: #2d2d30;
+  color: var(--text-tertiary);
+  background: var(--bg-tertiary);
   padding: 2px 6px;
   border-radius: 3px;
 }
 
 .loadingIcon {
-  color: #007fd4;
+  color: var(--primary-color);
   font-size: 16px;
   animation: spin 1s linear infinite;
 }
@@ -138,8 +138,8 @@
 
 .errorMessage {
   color: #f48771;
-  background: #2d1b1b;
-  border: 1px solid #8c3d3d;
+  background: rgba(244, 135, 113, 0.12);
+  border: 1px solid rgba(244, 135, 113, 0.4);
   padding: 12px;
   border-radius: 4px;
   display: block;
@@ -151,15 +151,15 @@
 
 .suggestionsTitle {
   font-size: 12px;
-  color: #858585;
+  color: var(--text-tertiary);
   margin-bottom: 8px;
 }
 
 .suggestionTag {
   margin: 2px 4px 2px 0;
-  background: #264f78;
-  border-color: #264f78;
-  color: #cccccc;
+  background: rgba(24, 144, 255, 0.12);
+  border-color: rgba(24, 144, 255, 0.2);
+  color: var(--text-secondary);
   font-size: 11px;
   padding: 2px 6px;
   border-radius: 2px;
@@ -172,7 +172,7 @@
 
 .messageTime {
   font-size: 11px;
-  color: #858585;
+  color: var(--text-tertiary);
   margin-top: 4px;
 }
 
@@ -182,7 +182,7 @@
 
 .divider {
   margin: 0 0 16px 0;
-  border-color: #303030;
+  border-color: var(--border-secondary);
 }
 
 .inputArea {
@@ -205,30 +205,30 @@
 }
 
 .helpIcon {
-  color: #858585;
+  color: var(--text-tertiary);
   cursor: pointer;
   transition: color 0.2s;
 }
 
 .helpIcon:hover {
-  color: #cccccc;
+  color: var(--text-secondary);
 }
 
 .inputArea .ant-input {
-  background: #252526;
-  border-color: #3e3e42;
-  color: #cccccc;
+  background: var(--bg-tertiary);
+  border-color: var(--border-secondary);
+  color: var(--text-primary);
   border-radius: 4px;
 }
 
 .inputArea .ant-input:focus,
 .inputArea .ant-input-focused {
-  border-color: #007fd4;
-  box-shadow: 0 0 0 2px rgba(0, 127, 212, 0.2);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
 }
 
 .inputArea .ant-input::placeholder {
-  color: #858585;
+  color: var(--text-tertiary);
 }
 
 .inputArea .ant-btn {

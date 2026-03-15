@@ -7,9 +7,9 @@
 
 export const RENDERER_FLAGS_DEFAULTS = {
   /** 启用响应式 context 订阅（Phase 1） */
-  reactiveContext: false,
+  reactiveContext: true,
   /** 启用表达式选择性求值（Phase 2） */
-  selectiveEvaluation: false,
+  selectiveEvaluation: true,
   /** 启用脚本能力模型（Phase 3） */
   capabilityScript: false,
 } as const;

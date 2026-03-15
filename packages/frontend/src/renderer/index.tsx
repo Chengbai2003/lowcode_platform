@@ -11,9 +11,9 @@ import { Renderer } from './Renderer';
 import { store } from './store';
 
 export { Renderer } from './Renderer';
-export { EventDispatcher } from './Renderer';
+export { EventDispatcher } from './EventDispatcher';
 export type { RendererProps, ComponentRegistry, A2UIComponent, A2UISchema } from './types';
-export { builtInComponents } from './Renderer';
+export { builtInComponents } from './builtInComponents';
 
 // 导出 Redux 相关
 export { store } from './store';

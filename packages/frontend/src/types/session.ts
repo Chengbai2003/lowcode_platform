@@ -1,3 +1,5 @@
+import type { A2UISchema } from './schema';
+
 // AI 角色类型
 export type AIRole = 'user' | 'assistant' | 'system';
 
@@ -22,6 +24,8 @@ export interface AIMessageActionResult {
   componentId?: string;
   props?: Record<string, unknown>;
   previousProps?: Record<string, unknown>;
+  // Optional schema snapshot for rollback/apply actions
+  schemaSnapshot?: A2UISchema;
 }
 
 // AI 会话消息
@@ -56,9 +60,14 @@ export interface AISession extends AISessionMeta {
 export interface SessionRepository {
   saveSession(session: AISession): Promise<void>;
   loadSession(sessionId: string): Promise<AISession | null>;
-  listSessions(projectId?: string): Promise<AISessionMeta[]>;
+  listSessions(projectId?: string, options?: SessionListOptions): Promise<AISessionMeta[]>;
   deleteSession(sessionId: string): Promise<void>;
   clearOldSessions(maxAgeDays?: number): Promise<void>;
+}
+
+export interface SessionListOptions {
+  offset?: number;
+  limit?: number;
 }
 
 // AI 会话仓库接口（扩展版）
