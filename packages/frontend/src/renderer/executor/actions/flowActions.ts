@@ -44,7 +44,7 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
   }
 
   if (!actions || actions.length === 0) {
-    return { count: 0, items: resolvedOver };
+    return { count: resolvedOver.length, items: resolvedOver };
   }
 
   const results = [];

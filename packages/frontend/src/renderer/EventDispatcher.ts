@@ -6,7 +6,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { DSLExecutor } from './executor';
 import type { ActionList, ExecutionContext } from '../types';
-import { setComponentData, setComponentConfig } from './store/componentSlice';
+import {
+  setComponentData,
+  setComponentConfig,
+  setMultipleComponentData,
+} from './store/componentSlice';
 import { ReactiveRuntime } from './reactive/runtime';
 import { getFlag } from './featureFlags';
 
@@ -104,6 +108,11 @@ export class EventDispatcher {
           this.executionContext.components && typeof this.executionContext.components === 'object'
             ? (this.executionContext.components as Record<string, unknown>)
             : undefined,
+      });
+
+      // Phase 2: runtime 作为主写链，flush 后再回填兼容层。
+      this.runtime.subscribe(() => {
+        this.syncCompatibilityStateFromRuntime();
       });
     }
   }
@@ -211,10 +220,93 @@ export class EventDispatcher {
   }
 
   /**
+   * 将 runtime 的稳定结果镜像回 executionContext / Redux 兼容层。
+   */
+  private syncCompatibilityStateFromRuntime() {
+    if (!this.runtime) {
+      return;
+    }
+
+    const nextData = { ...this.runtime.getData() };
+    const nextState = { ...this.runtime.getState() };
+    const nextFormData = { ...this.runtime.getFormData() };
+    const nextComponents = { ...this.runtime.getComponents() };
+
+    this.executionContext = {
+      ...this.executionContext,
+      data: nextData,
+      state: nextState,
+      formData: nextFormData,
+      components: nextComponents,
+    };
+
+    const storeData = this.getState?.()?.components?.data;
+    if (this.isShallowEqualRecord(storeData, nextData)) {
+      return;
+    }
+
+    try {
+      this.dispatch(setMultipleComponentData(nextData));
+    } catch (error) {
+      console.warn('[EventDispatcher] Failed to mirror runtime snapshot to Redux bridge', {
+        error,
+      });
+    }
+  }
+
+  private isShallowEqualRecord(
+    left: unknown,
+    right: Record<string, unknown>,
+  ): left is Record<string, unknown> {
+    if (!left || typeof left !== 'object') {
+      return false;
+    }
+
+    const leftRecord = left as Record<string, unknown>;
+    const leftKeys = Object.keys(leftRecord);
+    const rightKeys = Object.keys(right);
+
+    if (leftKeys.length !== rightKeys.length) {
+      return false;
+    }
+
+    for (const key of rightKeys) {
+      if (!Object.is(leftRecord[key], right[key])) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  /**
    * 内部统一写入：更新 executionContext.data + 累积 pendingKey + scheduleFlush
    * 同时写入 ReactiveRuntime (如果启用)
    */
   private _writeComponentData(componentId: string, value: any) {
+    // Phase 2: 当功能开关启用时，仅使用 runtime 路径
+    if (this.runtime && getFlag('useReactiveRuntime')) {
+      const currentData = this.executionContext.data || {};
+      this.executionContext = {
+        ...this.executionContext,
+        data: { ...currentData, [componentId]: value },
+      };
+
+      this.runtime.set(componentId, value);
+
+      // Redux 在 Phase 2 仍作为兼容读桥，失败不应反向影响 runtime 主链。
+      try {
+        this.dispatch(setComponentData({ id: componentId, value }));
+      } catch (error) {
+        console.warn('[EventDispatcher] Failed to mirror runtime write to Redux bridge', {
+          componentId,
+          error,
+        });
+      }
+
+      return; // 完成 - runtime 处理脏追踪和通知
+    }
+
     // 1. 更新 executionContext (保持兼容)
     const currentData = this.executionContext.data || {};
     this.executionContext = {
@@ -222,11 +314,10 @@ export class EventDispatcher {
       data: { ...currentData, [componentId]: value },
     };
 
-    // 2. 如果 runtime 启用，写入 runtime（runtime 会触发通知）
+    // 2. 如果 runtime 存在但开关关闭，仍然写入（兼容模式）
     if (this.runtime) {
       this.runtime.set(componentId, value);
-      // runtime 启用时，跳过传统 flush 机制
-      return;
+      return; // 跳过遗留 flush
     }
 
     // 3. 传统路径：累积 pendingKey 和调度 flush
@@ -287,6 +378,19 @@ export class EventDispatcher {
    * 更新执行上下文（不可变更新）
    */
   setContext(key: string, value: any) {
+    if (Object.is(this.executionContext[key], value)) {
+      return;
+    }
+
+    if (
+      (key === 'data' || key === 'state' || key === 'formData' || key === 'components') &&
+      value &&
+      typeof value === 'object' &&
+      this.isShallowEqualRecord(this.executionContext[key], value as Record<string, unknown>)
+    ) {
+      return;
+    }
+
     this.context = { ...this.context, [key]: value };
     this.executionContext = { ...this.executionContext, [key]: value };
 
@@ -324,7 +428,7 @@ export class EventDispatcher {
     try {
       // 将事件对象添加到上下文
       const contextWithEvent: ExecutionContext = {
-        ...this.executionContext,
+        ...this.getExecutionContext(),
         event,
       };
 
@@ -360,7 +464,19 @@ export class EventDispatcher {
    * 获取当前执行上下文
    */
   getExecutionContext(): ExecutionContext {
-    return this.executionContext;
+    if (!this.runtime) {
+      return this.executionContext;
+    }
+
+    return {
+      ...this.executionContext,
+      data: { ...this.runtime.getData() },
+      state: { ...this.runtime.getState() },
+      formData: { ...this.runtime.getFormData() },
+      components: { ...this.runtime.getComponents() },
+      // 为 action handler 添加 runtime 引用（Phase 2）
+      runtime: this.runtime || undefined,
+    };
   }
 
   /**

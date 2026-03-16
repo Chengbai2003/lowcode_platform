@@ -382,15 +382,69 @@ export function interpolateTemplate(template: string, context: Record<string, an
 
 /**
  * 快捷方法：直接解析并执行表达式
+ * 如果 context 包含 runtime，则使用 tracking proxy 进行依赖收集
  */
-export function parseAndEvaluate(str: any, context: { [key: string]: any }): any {
+export function parseAndEvaluate(str: any, context: { [key: string]: any; runtime?: any }): any {
   // 非字符串直接返回
   if (typeof str !== 'string') {
     return str;
   }
 
   const parsed = parseExpression(str);
+
+  // 如果 runtime 存在，使用 tracking proxy 进行依赖收集
+  if (context.runtime && typeof context.runtime.createTrackingProxy === 'function') {
+    // 启动追踪
+    context.runtime.startTracking();
+    try {
+      const trackingProxy = context.runtime.createTrackingProxy();
+      // 使用 tracking proxy 作为 context 进行求值
+      const result = evaluateExpression(parsed, buildExpressionContextWithProxy(trackingProxy));
+      // 停止追踪（依赖已收集到 runtime 内部）
+      context.runtime.stopTracking();
+      return result;
+    } catch (error) {
+      // 确保即使出错也停止追踪
+      context.runtime.stopTracking();
+      throw error;
+    }
+  }
+
   return evaluateExpression(parsed, buildExpressionContext(context));
+}
+
+/**
+ * 为 tracking proxy 构建表达式上下文
+ * 直接使用 proxy 作为数据源，而不是全量展开
+ */
+function buildExpressionContextWithProxy(proxy: Record<string, any>): Record<string, any> {
+  // Phase 2: Proxy 惰性别名，按需读取
+  if (getFlag('selectiveEvaluation')) {
+    return new Proxy(proxy, {
+      get(target, key: string) {
+        if (key in target) return target[key];
+        if (typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})) {
+          return (target.data as Record<string, any>)[key];
+        }
+        return undefined;
+      },
+      has(target, key: string) {
+        if (key in target) return true;
+        return (
+          typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})
+        );
+      },
+    });
+  }
+
+  // 默认路径：全量展开（向后兼容）
+  const resolvedContext: Record<string, any> = { ...proxy };
+  const data = (proxy.data as Record<string, any>) || {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!isValidAliasKey(key, resolvedContext)) continue;
+    resolvedContext[key] = value;
+  }
+  return resolvedContext;
 }
 
 /**

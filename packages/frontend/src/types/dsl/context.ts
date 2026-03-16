@@ -10,6 +10,9 @@ export type Value =
   | Record<string, unknown>
   | unknown[];
 
+// 前向声明 ReactiveRuntime 类型，避免循环依赖
+import type { ReactiveRuntime } from '../../renderer/reactive';
+
 /**
  * 模态框配置选项
  */
@@ -153,6 +156,12 @@ export interface ExecutionContext {
 
   // 当前 schema 组件池（componentId -> component）
   components?: Record<string, unknown>;
+
+  /**
+   * ReactiveRuntime 引用，用于统一写路径（Phase 2）
+   * 当存在时，action handler 应使用 runtime.set() 而非直接变更
+   */
+  runtime?: ReactiveRuntime;
 
   // 自定义扩展数据
   [key: string]: unknown;

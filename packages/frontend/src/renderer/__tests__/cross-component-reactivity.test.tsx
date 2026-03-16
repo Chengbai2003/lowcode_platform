@@ -213,9 +213,111 @@ describe('EventDispatcher subscribe mechanism', () => {
     expect(runtime?.get('components.root')).toEqual({ id: 'root', type: 'Div' });
     expect(runtime?.get('components.button1')).toEqual({ id: 'button1', type: 'Button' });
   });
+
+  it('passes runtime into DSL execution so later actions can read earlier writes', async () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const state = { components: { data: {} as Record<string, unknown> } };
+    const dispatch = vi.fn((action: any) => {
+      if (action.type?.endsWith('/setMultipleComponentData')) {
+        state.components.data = { ...state.components.data, ...action.payload };
+      }
+    });
+
+    const dispatcher = new EventDispatcher({}, dispatch, () => state);
+
+    await dispatcher.execute([
+      { type: 'setValue', field: 'input1', value: 'runtime-first' },
+      { type: 'setValue', field: 'mirror', value: '{{ data.input1 }}' },
+    ]);
+
+    await flushMicrotasks();
+
+    expect(dispatcher.getRuntime()?.get('input1')).toBe('runtime-first');
+    expect(dispatcher.getRuntime()?.get('mirror')).toBe('runtime-first');
+    expect(dispatcher.getExecutionContext().data.input1).toBe('runtime-first');
+    expect(dispatcher.getExecutionContext().data.mirror).toBe('runtime-first');
+    expect(state.components.data.input1).toBe('runtime-first');
+    expect(state.components.data.mirror).toBe('runtime-first');
+  });
+
+  it('keeps runtime input writes mirrored to compatibility layers', async () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const state = { components: { data: {} as Record<string, unknown> } };
+    const dispatch = vi.fn((action: any) => {
+      if (action.type?.endsWith('/setComponentData')) {
+        const { id, value } = action.payload as { id: string; value: unknown };
+        state.components.data[id] = value;
+      }
+
+      if (action.type?.endsWith('/setMultipleComponentData')) {
+        state.components.data = { ...state.components.data, ...action.payload };
+      }
+    });
+
+    const dispatcher = new EventDispatcher({}, dispatch, () => state);
+
+    dispatcher.updateComponentData('input1', 'hello-runtime');
+
+    expect(dispatcher.getRuntime()?.get('input1')).toBe('hello-runtime');
+    expect(dispatcher.getExecutionContext().data.input1).toBe('hello-runtime');
+    expect(state.components.data.input1).toBe('hello-runtime');
+
+    await flushMicrotasks();
+
+    expect(dispatcher.getExecutionContext().data.input1).toBe('hello-runtime');
+    expect(state.components.data.input1).toBe('hello-runtime');
+  });
 });
 
 describe('Cross-component reactivity (Phase 1)', () => {
+  it('uses schema initial values in runtime-driven expressions on first render', () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const schema: A2UISchema = {
+      rootId: 'root',
+      components: {
+        root: {
+          id: 'root',
+          type: 'Div',
+          props: {},
+          childrenIds: ['inputB', 'textA'],
+        },
+        inputB: {
+          id: 'inputB',
+          type: 'Input',
+          props: { initialValue: 'show' },
+        },
+        textA: {
+          id: 'textA',
+          type: 'Span',
+          props: {
+            visible: "{{ data.inputB === 'show' }}",
+            children: 'Visible from schema initial value',
+          },
+        },
+      },
+    };
+
+    render(
+      <LowcodeProvider>
+        <Renderer schema={schema} />
+      </LowcodeProvider>,
+    );
+
+    expect(screen.getByText('Visible from schema initial value')).toBeTruthy();
+  });
+
   it('A.visible reacts to data.B change via eventDispatcher: hidden → visible', async () => {
     const schema: A2UISchema = {
       rootId: 'root',

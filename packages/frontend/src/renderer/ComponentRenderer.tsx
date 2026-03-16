@@ -5,8 +5,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useMemo, useRef, memo, useSyncExternalStore } from 'react';
-import { useAppDispatch, useAppSelector } from './store/hooks';
-import { setComponentData } from './store/componentSlice';
+import { useAppSelector } from './store/hooks';
 import type { ComponentRegistry, A2UIComponent } from './types';
 import type { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';
@@ -67,10 +66,37 @@ export const ComponentRenderer = memo(
       return set;
     }, [parentAncestors, nodeId]);
 
-    const dispatch = useAppDispatch();
-    const componentValue = useAppSelector((state) => (id ? state.components.data[id] : undefined));
+    const storeComponentValue = useAppSelector((state) =>
+      id ? state.components.data[id] : undefined,
+    );
+    const schemaInitialValue = useMemo(() => {
+      if (!id) {
+        return undefined;
+      }
 
-    const reactiveEnabled = getFlag('reactiveContext');
+      if (props.initialValue !== undefined) {
+        return props.initialValue;
+      }
+
+      if (componentName === 'Form' && props.initialValues !== undefined) {
+        return props.initialValues;
+      }
+
+      if (props.value !== undefined) {
+        return props.value;
+      }
+
+      if (props.defaultValue !== undefined) {
+        return props.defaultValue;
+      }
+
+      return undefined;
+    }, [componentName, id, props]);
+    const componentValue =
+      storeComponentValue !== undefined ? storeComponentValue : schemaInitialValue;
+
+    // 启用条件：reactiveContext 或 useReactiveRuntime 任一为 true
+    const reactiveEnabled = getFlag('reactiveContext') || getFlag('useReactiveRuntime');
     const contextVersion = useSyncExternalStore(
       reactiveEnabled ? (eventDispatcher?.subscribe ?? noopSubscribe) : noopSubscribe,
       reactiveEnabled ? (eventDispatcher?.getVersion ?? noopGetVersion) : noopGetVersion,
@@ -170,8 +196,8 @@ export const ComponentRenderer = memo(
           const originalOnValuesChange = p.onValuesChange;
           p.onValuesChange = (changedValues: any, allValues: any, ...args: any[]) => {
             const newValue = { ...(componentValue || {}), ...allValues };
-            dispatch(setComponentData({ id, value: newValue }));
 
+            // Phase 2: 单一写路径 - 通过 EventDispatcher -> ReactiveRuntime
             if (eventDispatcher) {
               eventDispatcher.updateComponentData(id, newValue);
             }
@@ -195,8 +221,7 @@ export const ComponentRenderer = memo(
               value = e.target.checked;
             }
 
-            dispatch(setComponentData({ id, value }));
-
+            // Phase 2: 单一写路径 - 通过 EventDispatcher -> ReactiveRuntime
             if (eventDispatcher) {
               eventDispatcher.updateComponentData(id, value);
             }
@@ -230,7 +255,6 @@ export const ComponentRenderer = memo(
       eventHandlers,
       componentValue,
       id,
-      dispatch,
       componentName,
       eventDispatcher,
       onComponentClick,

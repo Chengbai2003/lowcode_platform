@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createCapabilityAPI } from '../executor/capability/capabilityAPI';
+import type { ReactiveRuntime } from '../reactive';
 
 describe('CapabilityAPI', () => {
   function createTestAPI(data: Record<string, any> = {}) {
@@ -15,6 +16,32 @@ describe('CapabilityAPI', () => {
     });
 
     return { api, setComponentData, markFullChange };
+  }
+
+  /**
+   * 创建带 mock runtime 的测试 API
+   */
+  function createTestAPIWithRuntime(data: Record<string, any> = {}) {
+    const setComponentData = vi.fn();
+    const markFullChange = vi.fn();
+    const validIds = new Set(Object.keys(data));
+
+    // 创建 mock ReactiveRuntime
+    const runtime = {
+      get: vi.fn((id: string) => data[id]),
+      set: vi.fn(),
+      patch: vi.fn(),
+    } as unknown as ReactiveRuntime;
+
+    const api = createCapabilityAPI({
+      validComponentIds: validIds,
+      runtime,
+      getData: () => data,
+      setComponentData,
+      markFullChange,
+    });
+
+    return { api, runtime, setComponentData, markFullChange };
   }
 
   it('get returns component value', () => {
@@ -41,16 +68,12 @@ describe('CapabilityAPI', () => {
     expect(markFullChange).toHaveBeenCalledTimes(1);
   });
 
-  it('set warns for unknown componentId but still writes', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('set throws for unknown componentId and does not write', () => {
     const { api, setComponentData, markFullChange } = createTestAPI({ input1: '' });
-    api.set('unknownId', 'value');
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Unknown componentId "unknownId"'),
-    );
-    expect(setComponentData).toHaveBeenCalledWith('unknownId', 'value');
-    expect(markFullChange).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
+
+    expect(() => api.set('unknownId', 'value')).toThrow('Unknown componentId "unknownId"');
+    expect(setComponentData).not.toHaveBeenCalled();
+    expect(markFullChange).not.toHaveBeenCalled();
   });
 
   it('patch updates multiple components', () => {
@@ -69,31 +92,31 @@ describe('CapabilityAPI', () => {
     expect(() => api.patch(null as any)).toThrow('patch expects a plain object');
   });
 
-  it('patch warns for unknown componentIds but still writes all', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('patch throws for unknown componentIds and does not write', () => {
     const { api, setComponentData, markFullChange } = createTestAPI({
       input1: '',
     });
-    api.patch({ input1: 'a', unknownId: 'b' });
-    expect(setComponentData).toHaveBeenCalledWith('input1', 'a');
-    expect(setComponentData).toHaveBeenCalledWith('unknownId', 'b');
-    expect(markFullChange).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('Unknown componentId "unknownId"'),
+
+    expect(() => api.patch({ input1: 'a', unknownId: 'b' })).toThrow(
+      'Unknown componentId "unknownId"',
     );
-    warnSpy.mockRestore();
+    expect(setComponentData).not.toHaveBeenCalled();
+    expect(markFullChange).not.toHaveBeenCalled();
   });
 
-  it('patch writes and calls markFullChange even when all IDs are unknown', () => {
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { api, setComponentData, markFullChange } = createTestAPI({
-      input1: '',
-    });
-    api.patch({ unknownA: 'x', unknownB: 'y' });
-    expect(setComponentData).toHaveBeenCalledWith('unknownA', 'x');
-    expect(setComponentData).toHaveBeenCalledWith('unknownB', 'y');
-    expect(markFullChange).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
+  it('patch throws for array input', () => {
+    const { api } = createTestAPI({ input1: '' });
+    expect(() => api.patch(['input1'] as any)).toThrow('patch expects a plain object');
+  });
+
+  it('set throws for forbidden componentId', () => {
+    const { api } = createTestAPI({ input1: '' });
+    expect(() => api.set('__proto__', 'value')).toThrow('Forbidden componentId');
+  });
+
+  it('patch throws for forbidden componentId', () => {
+    const { api } = createTestAPI({ input1: '' });
+    expect(() => api.patch({ constructor: 'boom' } as any)).toThrow('Forbidden componentId');
   });
 
   it('log outputs to console', () => {
@@ -107,5 +130,74 @@ describe('CapabilityAPI', () => {
   it('set throws for invalid componentId', () => {
     const { api } = createTestAPI();
     expect(() => api.set('', 'value')).toThrow('Invalid componentId');
+  });
+
+  // ============ Runtime 路径测试 ============
+
+  describe('runtime path', () => {
+    it('get uses runtime.get when runtime exists', () => {
+      const { api, runtime } = createTestAPIWithRuntime({ input1: 'hello' });
+      const result = api.get('input1');
+
+      expect(runtime.get).toHaveBeenCalledWith('input1');
+      expect(result).toBe('hello');
+    });
+
+    it('set uses runtime.set when runtime exists, not setComponentData', () => {
+      const { api, runtime, setComponentData, markFullChange } = createTestAPIWithRuntime({
+        input1: '',
+      });
+
+      api.set('input1', 'new value');
+
+      // 验证 runtime.set 被调用
+      expect(runtime.set).toHaveBeenCalledWith('input1', 'new value');
+      // 验证遗留路径未被调用
+      expect(setComponentData).not.toHaveBeenCalled();
+      expect(markFullChange).not.toHaveBeenCalled();
+    });
+
+    it('runtime path still rejects unknown componentId writes', () => {
+      const { api, runtime } = createTestAPIWithRuntime({ input1: '' });
+
+      expect(() => api.set('unknownId', 'value')).toThrow('Unknown componentId "unknownId"');
+      expect(runtime.set).not.toHaveBeenCalled();
+    });
+
+    it('patch uses runtime.patch when runtime exists, not multiple setComponentData', () => {
+      const { api, runtime, setComponentData, markFullChange } = createTestAPIWithRuntime({
+        input1: '',
+        input2: '',
+      });
+
+      api.patch({ input1: 'a', input2: 'b' });
+
+      // 验证 runtime.patch 被调用
+      expect(runtime.patch).toHaveBeenCalledWith({ input1: 'a', input2: 'b' });
+      // 验证遗留路径未被调用
+      expect(setComponentData).not.toHaveBeenCalled();
+      expect(markFullChange).not.toHaveBeenCalled();
+    });
+
+    it('runtime path does not call markFullChange for set', () => {
+      const { api, markFullChange } = createTestAPIWithRuntime({ input1: '' });
+
+      api.set('input1', 'value');
+
+      // runtime 路径不应触发全量失效
+      expect(markFullChange).not.toHaveBeenCalled();
+    });
+
+    it('runtime path does not call markFullChange for patch', () => {
+      const { api, markFullChange } = createTestAPIWithRuntime({
+        input1: '',
+        input2: '',
+      });
+
+      api.patch({ input1: 'a', input2: 'b' });
+
+      // runtime 路径不应触发全量失效
+      expect(markFullChange).not.toHaveBeenCalled();
+    });
   });
 });

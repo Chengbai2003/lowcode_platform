@@ -6,6 +6,7 @@
 import type { ActionHandler } from '../../../types';
 import type { ApiCallAction, DelayAction } from '../../../types/dsl/actions/async';
 import type { Action } from '../../../types/dsl/action-union';
+import type { ApiRequestConfig } from '../../../types/dsl/context';
 import { resolveValue, resolveValues } from '../parser';
 
 /**
@@ -45,6 +46,19 @@ function isSafeUrl(url: string): boolean {
     return true;
   } catch {
     return false; // 无效的 URL
+  }
+}
+
+/**
+ * 原型污染防护：验证 resultTo 路径是否安全
+ * 阻止 __proto__, constructor, prototype 等危险路径
+ */
+function validateResultToPath(path: string): void {
+  const keys = path.split('.');
+  for (const key of keys) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      throw new Error(`apiCall: unsafe resultTo path "${key}"`);
+    }
   }
 }
 
@@ -90,6 +104,11 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     );
   }
 
+  // 原型污染防护：验证 resultTo 路径安全性（在 try-catch 外部抛出）
+  if (resultTo) {
+    validateResultToPath(resultTo);
+  }
+
   try {
     // 构建 URL
     let fullUrl = resolvedUrl as string;
@@ -130,7 +149,14 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
           ? apiFn(fullUrl)
           : apiFn(fullUrl, resolvedBody));
       } else if (typeof context.api.request === 'function') {
-        response = await context.api.request(config as any);
+        const requestConfig: ApiRequestConfig = {
+          url: resolvedUrl as string,
+          method: resolvedMethod as ApiRequestConfig['method'],
+          headers: (resolvedHeaders as Record<string, string> | undefined) ?? undefined,
+          params: resolvedParams,
+          data: resolvedBody,
+        };
+        response = await context.api.request(requestConfig);
       }
     } else {
       const fetchResponse = await fetch(fullUrl, config);
@@ -142,21 +168,28 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     }
 
     // 保存结果
-    if (resultTo && context.data) {
-      const keys = resultTo.split('.');
-      const lastKey = keys.pop();
-      if (lastKey) {
-        let target: Record<string, unknown> = context.data;
-        for (const key of keys) {
-          if (target[key] == null) target[key] = {};
-          target = target[key] as Record<string, unknown>;
+    if (resultTo) {
+      // Phase 2: Runtime 路径 - 精准脏追踪
+      if (context.runtime) {
+        context.runtime.set(resultTo, response);
+        // 不需要 markFullChange - runtime 追踪脏路径
+      } else if (context.data) {
+        // 遗留：直接变更路径（路径已在 try-catch 外部验证）
+        const keys = resultTo.split('.');
+        const lastKey = keys.pop();
+        if (lastKey) {
+          let target: Record<string, unknown> = context.data;
+          for (const key of keys) {
+            if (target[key] == null) target[key] = {};
+            target = target[key] as Record<string, unknown>;
+          }
+          target[lastKey] = response;
         }
-        target[lastKey] = response;
-      }
 
-      // 通知响应式系统：API 结果写入无法精确追踪，标记全量变更
-      if (typeof context.markFullChange === 'function') {
-        context.markFullChange();
+        // 通知响应式系统：API 结果写入无法精确追踪，标记全量变更
+        if (typeof context.markFullChange === 'function') {
+          context.markFullChange();
+        }
       }
     }
 
