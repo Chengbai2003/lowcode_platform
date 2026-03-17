@@ -61,6 +61,47 @@ describe('PropertyPanel complex editors', () => {
     expect(columns).toHaveLength(2);
   });
 
+  it('supports switching table column kinds and editing action buttons', () => {
+    const onSchemaChange = vi.fn();
+    const schema = createSchema('table-1', 'Table', {
+      columns: [{ title: '名称', dataIndex: 'name', key: 'name' }],
+    });
+
+    render(
+      <StatefulPanel initialSchema={schema} selectedId="table-1" onSchemaChange={onSchemaChange} />,
+    );
+
+    fireEvent.change(screen.getByLabelText('列1类型'), {
+      target: { value: 'action' },
+    });
+
+    expect(screen.getByText('按钮 1')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('列1按钮1文本'), {
+      target: { value: '查看' },
+    });
+    fireEvent.change(screen.getByLabelText('列1按钮1类型'), {
+      target: { value: 'link' },
+    });
+    fireEvent.click(screen.getByLabelText('列1按钮1危险样式'));
+
+    const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
+    const columns = latestSchema.components['table-1']?.props?.columns as Array<
+      Record<string, unknown>
+    >;
+
+    expect(columns[0]).toMatchObject({
+      kind: 'action',
+      buttons: [
+        {
+          label: '查看',
+          buttonType: 'link',
+          danger: true,
+        },
+      ],
+    });
+  });
+
   it('supports visual edit for form rules', () => {
     const onSchemaChange = vi.fn();
     const schema = createSchema('form-item-1', 'FormItem', { rules: 'invalid' });

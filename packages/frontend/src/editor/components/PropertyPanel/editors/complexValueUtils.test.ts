@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  createDefaultTableActionButton,
   createDefaultFormRule,
   sanitizeExpressionValue,
   sanitizeFormRulesValue,
@@ -12,14 +13,23 @@ describe('sanitizeTableColumnsValue', () => {
   it('returns fallback template for non-array values', () => {
     const result = sanitizeTableColumnsValue('not-json');
 
-    expect(result).toEqual([{ title: '列1', dataIndex: 'col1', key: 'col1' }]);
+    expect(result).toEqual([{ kind: 'data', title: '列1', dataIndex: 'col1', key: 'col1' }]);
   });
 
   it('returns cloned fallback for null/undefined input', () => {
     const fallback = [{ title: '姓名', dataIndex: 'name', key: 'name' }];
     const result = sanitizeTableColumnsValue(undefined, fallback);
 
-    expect(result).toEqual(fallback);
+    expect(result).toEqual([
+      {
+        kind: 'data',
+        title: '姓名',
+        dataIndex: 'name',
+        key: 'name',
+        width: undefined,
+        align: undefined,
+      },
+    ]);
     expect(result).not.toBe(fallback);
     expect(result[0]).not.toBe(fallback[0]);
   });
@@ -31,6 +41,7 @@ describe('sanitizeTableColumnsValue', () => {
 
     expect(result).toEqual([
       {
+        kind: 'data',
         title: '列1',
         dataIndex: 'name',
         key: 'name',
@@ -50,10 +61,81 @@ describe('sanitizeTableColumnsValue', () => {
 
     expect(result).toHaveLength(1500);
     expect(result[1499]).toMatchObject({
+      kind: 'data',
       title: '列1500',
       dataIndex: 'col1500',
       key: 'col1500',
     });
+  });
+
+  it('treats legacy columns without kind as data columns', () => {
+    const result = sanitizeTableColumnsValue([
+      {
+        title: '用户名',
+        dataIndex: 'name',
+        key: 'name',
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        kind: 'data',
+        title: '用户名',
+        dataIndex: 'name',
+        key: 'name',
+      },
+    ]);
+  });
+
+  it('normalizes link and action columns', () => {
+    const result = sanitizeTableColumnsValue([
+      {
+        kind: 'link',
+        title: '详情',
+        dataIndex: 'name',
+        key: 'detail',
+        textMode: 'template',
+        textTemplate: '{{record.name}}',
+        actions: [{ type: 'navigate', to: '/users/{{record.id}}' }],
+      },
+      {
+        kind: 'action',
+        title: '操作',
+        key: 'actions',
+        buttons: [
+          {
+            label: '',
+            buttonType: 'invalid',
+            danger: true,
+            actions: [{ type: 'feedback', kind: 'message', content: 'ok', level: 'success' }],
+          },
+        ],
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        kind: 'link',
+        title: '详情',
+        dataIndex: 'name',
+        key: 'detail',
+        textMode: 'template',
+        textTemplate: '{{record.name}}',
+        actions: [{ type: 'navigate', to: '/users/{{record.id}}' }],
+      },
+      {
+        kind: 'action',
+        title: '操作',
+        key: 'actions',
+        buttons: [
+          {
+            ...createDefaultTableActionButton(0),
+            danger: true,
+            actions: [{ type: 'feedback', kind: 'message', content: 'ok', level: 'success' }],
+          },
+        ],
+      },
+    ]);
   });
 });
 

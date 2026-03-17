@@ -10,7 +10,7 @@ export const TableMeta: ComponentPanelConfig = {
       key: 'columns',
       label: '列配置',
       editor: 'tableColumns',
-      defaultValue: [{ title: '列1', dataIndex: 'col1', key: 'col1' }],
+      defaultValue: [{ kind: 'data', title: '列1', dataIndex: 'col1', key: 'col1' }],
       group: '基础',
     },
     {

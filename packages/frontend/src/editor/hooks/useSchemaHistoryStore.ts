@@ -26,12 +26,14 @@ export function useSchemaHistoryStore(
 ) {
   const { maxHistorySize = 50, enableMerge = true, mergeWindow = 500 } = options;
 
-  // 引用上一次的 schema 用于撤销
-  const lastSchemaRef = useRef<A2UISchema | null>(schema);
+  // 当前已应用到 UI 的 schema，避免在同一渲染周期内读到旧闭包值。
+  const currentSchemaRef = useRef<A2UISchema | null>(schema);
   // 用于合并连续操作的计时器
   const mergeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 暂存的命令
+  // 暂存的合并命令
   const pendingCommandRef = useRef<UpdateSchemaCommand | null>(null);
+  // 记录连续输入开始前的 schema，供撤销回退使用
+  const pendingStartSchemaRef = useRef<A2UISchema | null>(null);
 
   const {
     executeCommand,
@@ -44,6 +46,10 @@ export function useSchemaHistoryStore(
     getRedoStackSize,
   } = useHistoryStore();
 
+  useEffect(() => {
+    currentSchemaRef.current = schema;
+  }, [schema]);
+
   // 组件卸载时清理计时器，防止内存泄漏
   useEffect(() => {
     return () => {
@@ -52,8 +58,31 @@ export function useSchemaHistoryStore(
         mergeTimerRef.current = null;
       }
       pendingCommandRef.current = null;
+      pendingStartSchemaRef.current = null;
     };
   }, []);
+
+  const clearPendingMerge = useCallback(() => {
+    if (mergeTimerRef.current) {
+      clearTimeout(mergeTimerRef.current);
+      mergeTimerRef.current = null;
+    }
+    pendingCommandRef.current = null;
+    pendingStartSchemaRef.current = null;
+  }, []);
+
+  const flushPendingMerge = useCallback(() => {
+    if (mergeTimerRef.current) {
+      clearTimeout(mergeTimerRef.current);
+      mergeTimerRef.current = null;
+    }
+
+    if (pendingCommandRef.current) {
+      executeCommand(pendingCommandRef.current);
+      pendingCommandRef.current = null;
+      pendingStartSchemaRef.current = null;
+    }
+  }, [executeCommand]);
 
   /**
    * 更新 Schema 并记录历史
@@ -61,48 +90,39 @@ export function useSchemaHistoryStore(
    */
   const updateSchema = useCallback(
     (newSchema: A2UISchema, description: string = '更新 Schema') => {
-      if (!schema) return;
+      const currentSchema = currentSchemaRef.current;
+      if (!currentSchema) return;
 
-      const oldSchema = lastSchemaRef.current || schema;
-
-      // 如果启用合并且有暂存的命令，检查是否在合并窗口内
-      if (enableMerge && pendingCommandRef.current && mergeTimerRef.current) {
-        // 清除之前的计时器
-        clearTimeout(mergeTimerRef.current);
-
-        // 创建新命令并执行
-        const command = createUpdateSchemaCommand(oldSchema, newSchema, onChange, description);
-        pendingCommandRef.current = command;
-
-        // 设置新的合并计时器
-        mergeTimerRef.current = setTimeout(() => {
-          if (pendingCommandRef.current) {
-            executeCommand(pendingCommandRef.current);
-            pendingCommandRef.current = null;
-          }
-        }, mergeWindow);
-      } else {
-        // 直接创建并执行命令
-        const command = createUpdateSchemaCommand(oldSchema, newSchema, onChange, description);
-
-        if (enableMerge) {
-          // 设置合并计时器
-          pendingCommandRef.current = command;
-          mergeTimerRef.current = setTimeout(() => {
-            if (pendingCommandRef.current) {
-              executeCommand(pendingCommandRef.current);
-              pendingCommandRef.current = null;
-            }
-          }, mergeWindow);
-        } else {
-          executeCommand(command);
-        }
+      if (!enableMerge) {
+        const command = createUpdateSchemaCommand(currentSchema, newSchema, onChange, description);
+        executeCommand(command);
+        currentSchemaRef.current = newSchema;
+        return;
       }
 
-      // 更新引用
-      lastSchemaRef.current = newSchema;
+      onChange(newSchema);
+      currentSchemaRef.current = newSchema;
+
+      const burstStartSchema = pendingStartSchemaRef.current || currentSchema;
+      pendingStartSchemaRef.current = burstStartSchema;
+
+      pendingCommandRef.current = createUpdateSchemaCommand(
+        burstStartSchema,
+        newSchema,
+        onChange,
+        description,
+        { applyOnExecute: false },
+      );
+
+      if (mergeTimerRef.current) {
+        clearTimeout(mergeTimerRef.current);
+      }
+
+      mergeTimerRef.current = setTimeout(() => {
+        flushPendingMerge();
+      }, mergeWindow);
     },
-    [schema, onChange, executeCommand, enableMerge, mergeWindow],
+    [onChange, executeCommand, enableMerge, mergeWindow, flushPendingMerge],
   );
 
   /**
@@ -110,69 +130,55 @@ export function useSchemaHistoryStore(
    */
   const forceUpdateSchema = useCallback(
     (newSchema: A2UISchema, description: string = '更新 Schema') => {
-      if (!schema) return;
+      const currentSchema = currentSchemaRef.current;
+      if (!currentSchema) return;
 
-      const oldSchema = lastSchemaRef.current || schema;
-
-      // 清除合并计时器
-      if (mergeTimerRef.current) {
-        clearTimeout(mergeTimerRef.current);
-        mergeTimerRef.current = null;
-      }
-
-      // 如果有暂存的命令，先执行它
-      if (pendingCommandRef.current) {
-        executeCommand(pendingCommandRef.current);
-        pendingCommandRef.current = null;
-      }
+      flushPendingMerge();
 
       // 创建并执行新命令
-      const command = createUpdateSchemaCommand(oldSchema, newSchema, onChange, description);
+      const command = createUpdateSchemaCommand(
+        currentSchemaRef.current || currentSchema,
+        newSchema,
+        onChange,
+        description,
+      );
       executeCommand(command);
-
-      // 更新引用
-      lastSchemaRef.current = newSchema;
+      currentSchemaRef.current = newSchema;
     },
-    [schema, onChange, executeCommand],
+    [onChange, executeCommand, flushPendingMerge],
   );
 
   /**
    * 撤销操作
    */
   const handleUndo = useCallback(() => {
+    flushPendingMerge();
     const command = undo();
     if (command instanceof UpdateSchemaCommand) {
-      // 更新引用为撤销后的状态
-      lastSchemaRef.current = schema;
+      currentSchemaRef.current = command.getOldSchema();
     }
     return command;
-  }, [undo, schema]);
+  }, [undo, flushPendingMerge]);
 
   /**
    * 重做操作
    */
   const handleRedo = useCallback(() => {
+    flushPendingMerge();
     const command = redo();
     if (command instanceof UpdateSchemaCommand) {
-      // 更新引用为重做后的状态
-      lastSchemaRef.current = schema;
+      currentSchemaRef.current = command.getNewSchema();
     }
     return command;
-  }, [redo, schema]);
+  }, [redo, flushPendingMerge]);
 
   /**
    * 清空历史记录
    */
   const handleClear = useCallback(() => {
-    // 清除合并计时器和暂存命令
-    if (mergeTimerRef.current) {
-      clearTimeout(mergeTimerRef.current);
-      mergeTimerRef.current = null;
-    }
-    pendingCommandRef.current = null;
-
+    clearPendingMerge();
     clear();
-  }, [clear]);
+  }, [clear, clearPendingMerge]);
 
   return {
     /** 更新 Schema（支持合并） */
@@ -184,9 +190,9 @@ export function useSchemaHistoryStore(
     /** 重做 */
     redo: handleRedo,
     /** 是否可以撤销 */
-    canUndo: canUndo(),
+    canUndo: pendingCommandRef.current !== null || canUndo(),
     /** 是否可以重做 */
-    canRedo: canRedo(),
+    canRedo: pendingCommandRef.current === null && canRedo(),
     /** 清空历史 */
     clear: handleClear,
     /** 撤销栈大小 */

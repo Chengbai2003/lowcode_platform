@@ -22,12 +22,13 @@ export class UpdateSchemaCommand implements Command {
   private oldSchema: A2UISchema;
   private newSchema: A2UISchema;
   private onChange: SchemaChangeCallback;
+  private applyOnExecute: boolean;
 
   constructor(
     oldSchema: A2UISchema,
     newSchema: A2UISchema,
     onChange: SchemaChangeCallback,
-    options: CommandOptions & { timestamp: number; id: string },
+    options: CommandOptions & { timestamp: number; id: string; applyOnExecute?: boolean },
   ) {
     this.oldSchema = oldSchema;
     this.newSchema = newSchema;
@@ -35,11 +36,14 @@ export class UpdateSchemaCommand implements Command {
     this.description = options.description;
     this.timestamp = options.timestamp;
     this.id = options.id;
+    this.applyOnExecute = options.applyOnExecute ?? true;
   }
 
   execute(): void {
-    // execute 时应用新 schema（通常在首次执行时调用）
-    this.onChange(this.newSchema);
+    // 历史合并场景下，schema 可能已提前应用，此时 execute 仅负责入栈。
+    if (this.applyOnExecute) {
+      this.onChange(this.newSchema);
+    }
   }
 
   undo(): void {
@@ -51,6 +55,14 @@ export class UpdateSchemaCommand implements Command {
     // 重做时再次应用新 schema
     this.onChange(this.newSchema);
   }
+
+  getOldSchema(): A2UISchema {
+    return this.oldSchema;
+  }
+
+  getNewSchema(): A2UISchema {
+    return this.newSchema;
+  }
 }
 
 /**
@@ -61,11 +73,13 @@ export function createUpdateSchemaCommand(
   newSchema: A2UISchema,
   onChange: SchemaChangeCallback,
   description: string = '更新 Schema',
+  config: { applyOnExecute?: boolean } = {},
 ): UpdateSchemaCommand {
   const id = `schema_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   return new UpdateSchemaCommand(oldSchema, newSchema, onChange, {
     description,
     id,
+    applyOnExecute: config.applyOnExecute,
     timestamp: Date.now(),
   });
 }

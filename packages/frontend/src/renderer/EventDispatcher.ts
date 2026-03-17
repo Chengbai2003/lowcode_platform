@@ -269,10 +269,15 @@ export class EventDispatcher {
     this._writeComponentData(componentId, value);
   }
 
-  async execute(actions: ActionList, event?: Event | any): Promise<any> {
+  async execute(
+    actions: ActionList,
+    event?: Event | any,
+    extraContext: Record<string, unknown> = {},
+  ): Promise<any> {
     try {
       const contextWithEvent: ExecutionContext = {
         ...this.getExecutionContext(),
+        ...extraContext,
         event,
       };
 

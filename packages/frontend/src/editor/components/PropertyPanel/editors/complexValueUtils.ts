@@ -1,12 +1,33 @@
-export type TableColumnAlign = 'left' | 'center' | 'right';
-
-export interface TableColumnItem {
-  title: string;
-  dataIndex: string;
-  key: string;
-  width?: number;
-  align?: TableColumnAlign;
-}
+import {
+  DEFAULT_TABLE_COLUMN,
+  createDefaultTableActionButton,
+  createDefaultTableColumn,
+  isTableActionColumn,
+  isTableLinkColumn,
+  sanitizeTableActionButtons,
+  sanitizeTableColumnsValue,
+  type TableActionColumnButton,
+  type TableActionButtonType,
+  type TableColumnAlign,
+  type TableColumnItem,
+  type TableColumnKind,
+  type TableLinkTextMode,
+} from '../../../../types/table-column';
+export {
+  DEFAULT_TABLE_COLUMN,
+  createDefaultTableActionButton,
+  createDefaultTableColumn,
+  isTableActionColumn,
+  isTableLinkColumn,
+  sanitizeTableActionButtons,
+  sanitizeTableColumnsValue,
+  type TableActionColumnButton,
+  type TableActionButtonType,
+  type TableColumnAlign,
+  type TableColumnItem,
+  type TableColumnKind,
+  type TableLinkTextMode,
+};
 
 export interface FormRuleItem {
   required?: boolean;
@@ -15,16 +36,9 @@ export interface FormRuleItem {
   trigger?: string;
 }
 
-const TABLE_ALIGN_SET = new Set<TableColumnAlign>(['left', 'center', 'right']);
 const FORM_RULE_TRIGGERS = new Set(['onChange', 'onBlur', 'onSubmit']);
 const EXPRESSION_REGEX = /^\{\{[\s\S]+\}\}$/;
 const MAX_EXPRESSION_LENGTH = 10000;
-
-export const DEFAULT_TABLE_COLUMN: TableColumnItem = {
-  title: '列1',
-  dataIndex: 'col1',
-  key: 'col1',
-};
 
 export const DEFAULT_FORM_RULE: FormRuleItem = {
   required: false,
@@ -57,30 +71,6 @@ function tryParseJsonValue(value: unknown): unknown {
   } catch {
     return value;
   }
-}
-
-function toPositiveNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed) && parsed > 0) {
-      return parsed;
-    }
-  }
-
-  return undefined;
-}
-
-export function createDefaultTableColumn(index: number): TableColumnItem {
-  const no = index + 1;
-  return {
-    title: `列${no}`,
-    dataIndex: `col${no}`,
-    key: `col${no}`,
-  };
 }
 
 export function createDefaultFormRule(): FormRuleItem {
@@ -169,56 +159,6 @@ export function sanitizeSlotValue(value: unknown, fallback = ''): string {
   if (typeof value === 'string') return value;
   if (typeof value === 'number' || typeof value === 'boolean') return String(value);
   return fallback;
-}
-
-export function sanitizeTableColumnsValue(
-  value: unknown,
-  fallback: TableColumnItem[] = [DEFAULT_TABLE_COLUMN],
-): TableColumnItem[] {
-  const parsed = tryParseJsonValue(value);
-  if (!Array.isArray(parsed)) {
-    return fallback.length > 0 ? fallback.map((item) => ({ ...item })) : [DEFAULT_TABLE_COLUMN];
-  }
-
-  const normalized = parsed
-    .map((item, index): TableColumnItem | null => {
-      if (!item || typeof item !== 'object') {
-        return null;
-      }
-
-      const record = item as Record<string, unknown>;
-      const defaultColumn = createDefaultTableColumn(index);
-      const title =
-        typeof record.title === 'string' && record.title.trim()
-          ? record.title.trim()
-          : defaultColumn.title;
-      const dataIndex =
-        typeof record.dataIndex === 'string' && record.dataIndex.trim()
-          ? record.dataIndex.trim()
-          : defaultColumn.dataIndex;
-      const key =
-        typeof record.key === 'string' && record.key.trim() ? record.key.trim() : dataIndex;
-      const width = toPositiveNumber(record.width);
-      const align =
-        typeof record.align === 'string' && TABLE_ALIGN_SET.has(record.align as TableColumnAlign)
-          ? (record.align as TableColumnAlign)
-          : undefined;
-
-      return {
-        title,
-        dataIndex,
-        key,
-        width,
-        align,
-      };
-    })
-    .filter((item): item is TableColumnItem => item !== null);
-
-  if (normalized.length === 0) {
-    return fallback.length > 0 ? fallback.map((item) => ({ ...item })) : [DEFAULT_TABLE_COLUMN];
-  }
-
-  return normalized;
 }
 
 export function sanitizeFormRulesValue(

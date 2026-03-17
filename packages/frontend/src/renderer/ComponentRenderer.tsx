@@ -200,6 +200,11 @@ export const ComponentRenderer = memo(
           .join(' ');
       }
 
+      if (componentName === 'Table') {
+        p.__eventDispatcher = eventDispatcher;
+        p.__componentId = id;
+      }
+
       return p;
     }, [
       sanitizedProps,

@@ -6,3 +6,4 @@ export * from './repository';
 export * from './api';
 export * from './property-panel';
 export * from './session';
+export * from './table-column';
