@@ -3,6 +3,8 @@ import { render, screen, act, fireEvent } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import type { A2UISchema } from '../../types';
 import { LowcodeProvider, Renderer, EventDispatcher } from '../';
+import { ComponentRenderer } from '../ComponentRenderer';
+import * as valueResolver from '../executor/parser/valueResolver';
 
 /**
  * 跨组件响应式联动测试
@@ -278,6 +280,42 @@ describe('EventDispatcher subscribe mechanism', () => {
 });
 
 describe('Cross-component reactivity (Phase 1)', () => {
+  it('reads node value from runtime without depending on Redux selector bridge', async () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+    };
+
+    const Echo = ({ value }: { value?: string }) => <div data-testid="echo-value">{value}</div>;
+    const dispatcher = new EventDispatcher({}, vi.fn(), () => ({ components: { data: {} } }));
+    const flatComponents = {
+      echo1: {
+        id: 'echo1',
+        type: 'Echo',
+        props: { initialValue: 'schema-seed' },
+      },
+    };
+
+    render(
+      <ComponentRenderer
+        nodeId="echo1"
+        flatComponents={flatComponents as any}
+        components={{ Echo } as any}
+        eventDispatcher={dispatcher}
+      />,
+    );
+
+    expect(screen.getByTestId('echo-value').textContent).toBe('schema-seed');
+
+    await act(async () => {
+      dispatcher.updateComponentData('echo1', 'runtime-only');
+      await flushMicrotasks();
+    });
+
+    expect(screen.getByTestId('echo-value').textContent).toBe('runtime-only');
+    expect(dispatcher.getRuntime()?.get('echo1')).toBe('runtime-only');
+  });
+
   it('uses schema initial values in runtime-driven expressions on first render', () => {
     (window as any).__RENDERER_FLAGS__ = {
       reactiveContext: true,
@@ -483,5 +521,80 @@ describe('Cross-component reactivity (Phase 1)', () => {
     });
 
     expect(button).toHaveProperty('disabled', true);
+  });
+
+  it('does not recompute unrelated resolved props when runtime updates an unrelated field', async () => {
+    (window as any).__RENDERER_FLAGS__ = {
+      reactiveContext: true,
+      useReactiveRuntime: true,
+      selectiveEvaluation: true,
+    };
+
+    const resolveSpy = vi.spyOn(valueResolver, 'resolveValues');
+    const targetResolveCount = () =>
+      resolveSpy.mock.calls.filter(
+        ([values]) => (values as Record<string, unknown>).children === 'Depends on inputB',
+      ).length;
+
+    const schema: A2UISchema = {
+      rootId: 'root',
+      components: {
+        root: {
+          id: 'root',
+          type: 'Div',
+          props: {},
+          childrenIds: ['inputB', 'inputC', 'textA'],
+        },
+        inputB: {
+          id: 'inputB',
+          type: 'Input',
+          props: { placeholder: 'dep input', value: '' },
+        },
+        inputC: {
+          id: 'inputC',
+          type: 'Input',
+          props: { placeholder: 'other input', value: '' },
+        },
+        textA: {
+          id: 'textA',
+          type: 'Span',
+          props: {
+            visible: "{{ data.inputB === 'show' }}",
+            children: 'Depends on inputB',
+          },
+        },
+      },
+    };
+
+    try {
+      await renderWithFlush(
+        <LowcodeProvider>
+          <Renderer schema={schema} />
+        </LowcodeProvider>,
+      );
+
+      expect(targetResolveCount()).toBe(1);
+
+      await act(async () => {
+        fireEvent.change(screen.getByPlaceholderText('other input'), {
+          target: { value: 'ignore-me' },
+        });
+        await flushMicrotasks();
+      });
+
+      expect(targetResolveCount()).toBe(1);
+
+      await act(async () => {
+        fireEvent.change(screen.getByPlaceholderText('dep input'), {
+          target: { value: 'show' },
+        });
+        await flushMicrotasks();
+      });
+
+      expect(targetResolveCount()).toBe(2);
+      expect(screen.getByText('Depends on inputB')).toBeTruthy();
+    } finally {
+      resolveSpy.mockRestore();
+    }
   });
 });

@@ -394,18 +394,29 @@ export function parseAndEvaluate(str: any, context: { [key: string]: any; runtim
 
   // 如果 runtime 存在，使用 tracking proxy 进行依赖收集
   if (context.runtime && typeof context.runtime.createTrackingProxy === 'function') {
-    // 启动追踪
-    context.runtime.startTracking();
+    const ownsTracking =
+      typeof context.runtime.isTrackingActive === 'function'
+        ? !context.runtime.isTrackingActive()
+        : true;
+
+    if (ownsTracking && typeof context.runtime.startTracking === 'function') {
+      context.runtime.startTracking();
+    }
+
     try {
       const trackingProxy = context.runtime.createTrackingProxy();
       // 使用 tracking proxy 作为 context 进行求值
       const result = evaluateExpression(parsed, buildExpressionContextWithProxy(trackingProxy));
-      // 停止追踪（依赖已收集到 runtime 内部）
-      context.runtime.stopTracking();
+      // 仅在当前表达式拥有 tracking 生命周期时收尾
+      if (ownsTracking && typeof context.runtime.stopTracking === 'function') {
+        context.runtime.stopTracking();
+      }
       return result;
     } catch (error) {
       // 确保即使出错也停止追踪
-      context.runtime.stopTracking();
+      if (ownsTracking && typeof context.runtime.stopTracking === 'function') {
+        context.runtime.stopTracking();
+      }
       throw error;
     }
   }

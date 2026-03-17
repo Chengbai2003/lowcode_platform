@@ -51,6 +51,23 @@ function parsePath(path: DataPath): { namespace: string; rest: string } {
   return { namespace: 'data', rest: path };
 }
 
+function normalizePath(path: DataPath): DataPath {
+  const { namespace, rest } = parsePath(path);
+  return `${namespace}.${rest}`;
+}
+
+function normalizeDeps(deps?: Set<DataPath>): Set<DataPath> | undefined {
+  if (!deps) {
+    return undefined;
+  }
+
+  const normalized = new Set<DataPath>();
+  for (const dep of deps) {
+    normalized.add(normalizePath(dep));
+  }
+  return normalized;
+}
+
 /**
  * 通过点分隔路径从对象获取值。
  */
@@ -270,7 +287,7 @@ export class ReactiveRuntime {
   ): Unsubscribe {
     const computedListener = {
       listener,
-      deps: deps ?? new Set<DataPath>(),
+      deps: normalizeDeps(deps) ?? new Set<DataPath>(),
     };
 
     this.computedListeners.set(nodeId, computedListener);
@@ -278,6 +295,18 @@ export class ReactiveRuntime {
     return () => {
       this.computedListeners.delete(nodeId);
     };
+  }
+
+  /**
+   * 更新已注册计算节点的依赖集合。
+   */
+  updateComputedDeps(nodeId: string, deps: Set<DataPath>): void {
+    const computedListener = this.computedListeners.get(nodeId);
+    if (!computedListener) {
+      return;
+    }
+
+    computedListener.deps = normalizeDeps(deps) ?? new Set<DataPath>();
   }
 
   /**
@@ -325,6 +354,13 @@ export class ReactiveRuntime {
    */
   stopTracking(): Set<DataPath> {
     return this.trackingScope.stop();
+  }
+
+  /**
+   * 检查当前是否已有外层追踪会话在运行。
+   */
+  isTrackingActive(): boolean {
+    return this.trackingScope.isActive();
   }
 
   /**
@@ -394,7 +430,7 @@ export class ReactiveRuntime {
       return;
     }
 
-    (this.dirtyPaths as Set<DataPath>).add(path);
+    (this.dirtyPaths as Set<DataPath>).add(normalizePath(path));
   }
 
   /**

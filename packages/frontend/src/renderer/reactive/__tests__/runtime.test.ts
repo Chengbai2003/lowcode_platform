@@ -374,6 +374,21 @@ describe('ReactiveRuntime', () => {
       expect(listener1).not.toHaveBeenCalled();
       expect(listener2).toHaveBeenCalledTimes(1);
     });
+
+    it('应支持更新已注册节点的依赖集合', async () => {
+      const listener = vi.fn();
+
+      runtime.subscribeComputed('node1', listener, new Set(['input1']));
+      runtime.updateComputedDeps('node1', new Set(['input2']));
+
+      runtime.set('input1', 'skip');
+      await vi.runAllTimersAsync();
+      expect(listener).not.toHaveBeenCalled();
+
+      runtime.set('input2', 'hit');
+      await vi.runAllTimersAsync();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('getSnapshot()', () => {
@@ -562,13 +577,18 @@ describe('ReactiveRuntime', () => {
 
         const fromStart = runtime.getDirtyPaths(0);
         expect(fromStart).not.toBe('all');
-        expect((fromStart as Set<string>).has('input1')).toBe(true);
+        expect(
+          (fromStart as Set<string>).has('input1') || (fromStart as Set<string>).has('data.input1'),
+        ).toBe(true);
         expect((fromStart as Set<string>).has('state.loading')).toBe(true);
 
         const fromFirstFlush = runtime.getDirtyPaths(1);
         expect(fromFirstFlush).not.toBe('all');
         expect((fromFirstFlush as Set<string>).has('state.loading')).toBe(true);
-        expect((fromFirstFlush as Set<string>).has('input1')).toBe(false);
+        expect(
+          (fromFirstFlush as Set<string>).has('input1') ||
+            (fromFirstFlush as Set<string>).has('data.input1'),
+        ).toBe(false);
       });
 
       it('查询当前版本时应返回空集合', async () => {
