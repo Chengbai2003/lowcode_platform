@@ -25,6 +25,7 @@ import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
 import { useSelectionStore } from './store/editor-store';
+import { createDefaultReactiveSchema } from './templates/reactiveSchema';
 import styles from './LowcodeEditor.module.scss';
 
 /**
@@ -38,20 +39,7 @@ function LowcodeEditorInner({
   eventContext = {},
 }: LowcodeEditorProps) {
   // 初始化 Schema
-  const defaultSchema: A2UISchema = useMemo(
-    () => ({
-      rootId: 'root',
-      components: {
-        root: {
-          id: 'root',
-          type: 'Page',
-          props: {},
-          childrenIds: [],
-        },
-      },
-    }),
-    [],
-  );
+  const defaultSchema: A2UISchema = useMemo(() => createDefaultReactiveSchema(), []);
 
   const initialSchemaObj = useMemo(() => {
     if (typeof initialSchema === 'string') {

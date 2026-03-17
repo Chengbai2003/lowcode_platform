@@ -19,6 +19,8 @@ export function Renderer({
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
+  const lastRootIdRef = useRef<string | null>(schema?.rootId ?? null);
+
   const flattenedData = useMemo(() => {
     if (!schema?.components) {
       return {};
@@ -82,9 +84,25 @@ export function Renderer({
 
   useEffect(() => {
     if (eventDispatcher) {
-      eventDispatcher.setContext('data', runtimeInitialData);
+      const nextRootId = schema?.rootId ?? null;
+      const rootChanged = lastRootIdRef.current !== nextRootId;
+
+      if (rootChanged) {
+        eventDispatcher.setContext('data', runtimeInitialData);
+        lastRootIdRef.current = nextRootId;
+        return;
+      }
+
+      const currentData = eventDispatcher.getExecutionContext().data ?? {};
+      const mergedData = {
+        ...flattenedData,
+        ...currentData,
+        ...eventContextData,
+      };
+
+      eventDispatcher.setContext('data', mergedData);
     }
-  }, [eventDispatcher, runtimeInitialData]);
+  }, [eventDispatcher, eventContextData, flattenedData, runtimeInitialData, schema?.rootId]);
 
   useEffect(() => {
     if (stableFlatComponents && eventDispatcher) {

@@ -34,7 +34,7 @@ const schema: A2UISchema = {
           boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
         },
       },
-      childrenIds: ['login-header', 'login-form'],
+      childrenIds: ['login-header', 'loginForm'],
     },
     'login-header': {
       id: 'login-header',
@@ -45,23 +45,38 @@ const schema: A2UISchema = {
     'login-title': {
       id: 'login-title',
       type: 'Title',
-      props: { level: 2, children: 'A2UI 中台系统', style: { margin: '0 0 8px 0' } },
+      props: {
+        level: 2,
+        children: '{{ loginForm.username ? "欢迎回来，" + loginForm.username : "A2UI 中台系统" }}',
+        style: { margin: '0 0 8px 0' },
+      },
       childrenIds: [],
     },
     'login-sub': {
       id: 'login-sub',
       type: 'Text',
-      props: { type: 'secondary', children: '高效的企业级数字底座' },
+      props: {
+        type: 'secondary',
+        children:
+          '{{ loginForm.remember ? "已启用自动登录，提交后会保留当前账号" : "高效的企业级数字底座" }}',
+      },
       childrenIds: [],
     },
-    'login-form': {
-      id: 'login-form',
+    loginForm: {
+      id: 'loginForm',
       type: 'Form',
-      props: { size: 'large' },
+      props: {
+        size: 'large',
+        initialValues: {
+          username: 'ops-admin',
+          password: '123456',
+          remember: true,
+        },
+      },
       events: {
         onFinish: [{ type: 'apiCall', url: '/api/login', method: 'POST' }],
       },
-      childrenIds: ['item-user', 'item-pass', 'row-options', 'item-submit'],
+      childrenIds: ['item-user', 'item-pass', 'row-options', 'item-submit', 'login-tips'],
     },
     'item-user': {
       id: 'item-user',
@@ -120,7 +135,11 @@ const schema: A2UISchema = {
     'link-forgot': {
       id: 'link-forgot',
       type: 'Link',
-      props: { href: '#', children: '忘记密码？' },
+      props: {
+        href: '#',
+        children:
+          '{{ loginForm.username ? "找回 " + loginForm.username + " 的密码？" : "忘记密码？" }}',
+      },
       childrenIds: [],
     },
     'item-submit': {
@@ -132,7 +151,25 @@ const schema: A2UISchema = {
     'btn-submit': {
       id: 'btn-submit',
       type: 'Button',
-      props: { type: 'primary', htmlType: 'submit', block: true, children: '登 录' },
+      props: {
+        type: 'primary',
+        htmlType: 'submit',
+        block: true,
+        disabled: '{{ !loginForm.username || !loginForm.password }}',
+        children: '登 录',
+      },
+      childrenIds: [],
+    },
+    'login-tips': {
+      id: 'login-tips',
+      type: 'Alert',
+      props: {
+        type: 'info',
+        showIcon: true,
+        style: { marginTop: '16px' },
+        message:
+          '{{ "本次将使用 " + loginForm.username + " 登录，记住我状态：" + (loginForm.remember ? "开启" : "关闭") }}',
+      },
       childrenIds: [],
     },
   },

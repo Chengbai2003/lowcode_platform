@@ -60,13 +60,17 @@ const schema: A2UISchema = {
     'user-name': {
       id: 'user-name',
       type: 'Title',
-      props: { level: 4, children: '管理员', style: { margin: 0 } },
+      props: { level: 4, children: '{{ profileForm.nickname }}', style: { margin: 0 } },
       childrenIds: [],
     },
     'user-role': {
       id: 'user-role',
       type: 'Text',
-      props: { type: 'secondary', children: '海纳百川，有容乃大' },
+      props: {
+        type: 'secondary',
+        children:
+          '{{ profileForm.department === "dev" ? "研发部" : profileForm.department === "pm" ? "产品部" : "未设置部门" }}',
+      },
       childrenIds: [],
     },
     'divider-1': {
@@ -78,7 +82,7 @@ const schema: A2UISchema = {
     'user-desc': {
       id: 'user-desc',
       type: 'Text',
-      props: { children: 'A2UI 研发架构组' },
+      props: { children: '{{ profileForm.bio }}' },
       childrenIds: [],
     },
     'col-settings': {
@@ -95,12 +99,21 @@ const schema: A2UISchema = {
         bordered: false,
         style: { borderRadius: '8px', boxShadow: '0 1px 2px 0 rgba(0,0,0,0.03)' },
       },
-      childrenIds: ['form-settings'],
+      childrenIds: ['profileForm'],
     },
-    'form-settings': {
-      id: 'form-settings',
+    profileForm: {
+      id: 'profileForm',
       type: 'Form',
-      props: { layout: 'vertical' },
+      props: {
+        layout: 'vertical',
+        initialValues: {
+          email: 'admin@a2ui.dev',
+          nickname: '管理员',
+          phone: '138-0000-0000',
+          department: 'dev',
+          bio: '负责 A2UI 平台的研发架构与组件体系建设。',
+        },
+      },
       events: {
         onFinish: [{ type: 'apiCall', url: '/api/user/update', method: 'POST' }],
       },

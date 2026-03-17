@@ -12,6 +12,7 @@ import type {
 import { validateSchema } from './schemaValidator';
 import { validateAIOutput, extractAndValidateSchema } from './aiOutputValidator';
 import { normalizeComponentType } from '../constants/aiSafetyConfig';
+import { createDefaultReactiveSchema } from '../templates/reactiveSchema';
 
 /**
  * 校验失败记录
@@ -365,18 +366,7 @@ export class ErrorRecoveryManager {
    * 创建默认 Schema
    */
   private createDefaultSchema(): A2UISchema {
-    return {
-      version: 1,
-      rootId: 'root',
-      components: {
-        root: {
-          id: 'root',
-          type: 'Page',
-          props: { title: '新页面' },
-          childrenIds: [],
-        },
-      },
-    };
+    return createDefaultReactiveSchema();
   }
 
   /**

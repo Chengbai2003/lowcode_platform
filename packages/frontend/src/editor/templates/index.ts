@@ -3,6 +3,7 @@
  */
 import type { Template, TemplateMeta, TemplateCategory } from './types';
 import type { A2UISchema } from '../../types/schema';
+import { cloneSchema } from './reactiveSchema';
 
 // 导入内置模板
 import { dashboardBasicTemplate } from './templates/dashboard-basic';
@@ -53,7 +54,15 @@ export function getTemplatesByCategory(category: TemplateCategory): TemplateMeta
  * 获取单个模板
  */
 export function getTemplate(id: string): Template | undefined {
-  return builtinTemplates.get(id);
+  const template = builtinTemplates.get(id);
+  if (!template) {
+    return undefined;
+  }
+
+  return {
+    ...template,
+    schema: cloneSchema(template.schema),
+  };
 }
 
 /**
@@ -61,7 +70,7 @@ export function getTemplate(id: string): Template | undefined {
  */
 export function getTemplateSchema(id: string): A2UISchema | undefined {
   const template = builtinTemplates.get(id);
-  return template?.schema;
+  return template ? cloneSchema(template.schema) : undefined;
 }
 
 /**
@@ -77,9 +86,7 @@ export function createProjectFromTemplate(
     return null;
   }
 
-  // 创建新 Schema，保留模板结构
-  // 注意：version 和 rootId 保持不变
-  return { ...schema };
+  return cloneSchema(schema);
 }
 
 /**

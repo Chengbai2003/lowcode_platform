@@ -3,11 +3,23 @@
  */
 import type { Template } from '../types';
 import type { A2UISchema } from '../../../types/schema';
+import { createHiddenDataNode } from '../reactiveSchema';
 
 const schema: A2UISchema = {
   version: 1,
   rootId: 'page-detail',
   components: {
+    ticketDetail: createHiddenDataNode('ticketDetail', {
+      code: 'TASK-001',
+      requester: '张三 (研发中心)',
+      appliedAt: '2026-03-09 10:15',
+      status: '处理中',
+      statusType: 'warning',
+    }),
+    ticketLogs: createHiddenDataNode('ticketLogs', [
+      { key: '1', time: '10:15', user: '张三', action: '提交申请' },
+      { key: '2', time: '10:42', user: '李四', action: '补充了审批备注' },
+    ]),
     'page-detail': {
       id: 'page-detail',
       type: 'Page',
@@ -38,7 +50,11 @@ const schema: A2UISchema = {
     'header-title': {
       id: 'header-title',
       type: 'Title',
-      props: { level: 3, children: '工单明细：TASK-001', style: { margin: 0 } },
+      props: {
+        level: 3,
+        children: '{{ "工单明细：" + ticketDetail.code }}',
+        style: { margin: 0 },
+      },
       childrenIds: [],
     },
     'header-actions': {
@@ -51,14 +67,60 @@ const schema: A2UISchema = {
       id: 'btn-reject',
       type: 'Button',
       props: { danger: true, children: '驳回' },
-      events: { onClick: [] },
+      events: {
+        onClick: [
+          {
+            type: 'setValue',
+            field: 'ticketDetail',
+            value: {
+              code: 'TASK-001',
+              requester: '张三 (研发中心)',
+              appliedAt: '2026-03-09 10:15',
+              status: '已驳回',
+              statusType: 'danger',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'ticketLogs',
+            value: [
+              { key: '1', time: '10:15', user: '张三', action: '提交申请' },
+              { key: '2', time: '10:42', user: '李四', action: '补充了审批备注' },
+              { key: '3', time: '11:28', user: '审批人', action: '确认信息不完整并驳回工单' },
+            ],
+          },
+        ],
+      },
       childrenIds: [],
     },
     'btn-pass': {
       id: 'btn-pass',
       type: 'Button',
       props: { type: 'primary', children: '通过' },
-      events: { onClick: [] },
+      events: {
+        onClick: [
+          {
+            type: 'setValue',
+            field: 'ticketDetail',
+            value: {
+              code: 'TASK-001',
+              requester: '张三 (研发中心)',
+              appliedAt: '2026-03-09 10:15',
+              status: '已通过',
+              statusType: 'success',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'ticketLogs',
+            value: [
+              { key: '1', time: '10:15', user: '张三', action: '提交申请' },
+              { key: '2', time: '10:42', user: '李四', action: '补充了审批备注' },
+              { key: '3', time: '11:28', user: '审批人', action: '审批通过并同步到执行系统' },
+            ],
+          },
+        ],
+      },
       childrenIds: [],
     },
     'info-card': {
@@ -99,7 +161,12 @@ const schema: A2UISchema = {
       props: { type: 'secondary', children: '申请人' },
       childrenIds: [],
     },
-    'val-1': { id: 'val-1', type: 'Text', props: { children: '张三 (研发中心)' }, childrenIds: [] },
+    'val-1': {
+      id: 'val-1',
+      type: 'Text',
+      props: { children: '{{ ticketDetail.requester }}' },
+      childrenIds: [],
+    },
     'col-info-2': {
       id: 'col-info-2',
       type: 'Col',
@@ -118,7 +185,12 @@ const schema: A2UISchema = {
       props: { type: 'secondary', children: '申请时间' },
       childrenIds: [],
     },
-    'val-2': { id: 'val-2', type: 'Text', props: { children: '2026-03-09' }, childrenIds: [] },
+    'val-2': {
+      id: 'val-2',
+      type: 'Text',
+      props: { children: '{{ ticketDetail.appliedAt }}' },
+      childrenIds: [],
+    },
     'col-info-3': {
       id: 'col-info-3',
       type: 'Col',
@@ -140,7 +212,11 @@ const schema: A2UISchema = {
     'val-3': {
       id: 'val-3',
       type: 'Text',
-      props: { children: '处理中', strong: true, type: 'warning' },
+      props: {
+        children: '{{ ticketDetail.status }}',
+        strong: true,
+        type: '{{ ticketDetail.statusType }}',
+      },
       childrenIds: [],
     },
     'logs-card': {
@@ -163,7 +239,7 @@ const schema: A2UISchema = {
           { title: '操作人', dataIndex: 'user', key: 'user' },
           { title: '动作', dataIndex: 'action', key: 'action' },
         ],
-        dataSource: [{ key: '1', time: '10:15', user: '张三', action: '提交申请' }],
+        dataSource: '{{ ticketLogs }}',
       },
       childrenIds: [],
     },

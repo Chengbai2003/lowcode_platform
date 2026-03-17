@@ -34,12 +34,20 @@ const schema: A2UISchema = {
           boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
         },
       },
-      childrenIds: ['main-form'],
+      childrenIds: ['contactForm', 'preview-divider', 'preview-space'],
     },
-    'main-form': {
-      id: 'main-form',
+    contactForm: {
+      id: 'contactForm',
       type: 'Form',
-      props: { layout: 'vertical' },
+      props: {
+        layout: 'vertical',
+        initialValues: {
+          name: '张三',
+          email: 'zhangsan@company.com',
+          subject: 'trial',
+          message: '想先了解产品试用和团队协作能力。',
+        },
+      },
       events: {
         onFinish: [{ type: 'apiCall', url: '/api/contact', method: 'POST' }],
       },
@@ -166,6 +174,67 @@ const schema: A2UISchema = {
       id: 'btn-submit',
       type: 'Button',
       props: { type: 'primary', htmlType: 'submit', size: 'large', children: '提交信息' },
+      childrenIds: [],
+    },
+    'preview-divider': {
+      id: 'preview-divider',
+      type: 'Divider',
+      props: { style: { margin: '24px 0 16px 0' } },
+      childrenIds: [],
+    },
+    'preview-space': {
+      id: 'preview-space',
+      type: 'Space',
+      props: { direction: 'vertical', size: 8, style: { width: '100%' } },
+      childrenIds: [
+        'preview-title',
+        'preview-name',
+        'preview-email',
+        'preview-subject',
+        'preview-message',
+      ],
+    },
+    'preview-title': {
+      id: 'preview-title',
+      type: 'Text',
+      props: {
+        strong: true,
+        children: '实时预览',
+      },
+      childrenIds: [],
+    },
+    'preview-name': {
+      id: 'preview-name',
+      type: 'Text',
+      props: {
+        children: '{{ "联系人：" + contactForm.name }}',
+      },
+      childrenIds: [],
+    },
+    'preview-email': {
+      id: 'preview-email',
+      type: 'Text',
+      props: {
+        children: '{{ "联系邮箱：" + contactForm.email }}',
+      },
+      childrenIds: [],
+    },
+    'preview-subject': {
+      id: 'preview-subject',
+      type: 'Text',
+      props: {
+        children:
+          '{{ "咨询主题：" + (contactForm.subject === "trial" ? "产品试用" : contactForm.subject === "business" ? "商务合作" : "技术支持") }}',
+      },
+      childrenIds: [],
+    },
+    'preview-message': {
+      id: 'preview-message',
+      type: 'Paragraph',
+      props: {
+        children: '{{ "消息摘要：" + contactForm.message }}',
+        style: { marginBottom: 0 },
+      },
       childrenIds: [],
     },
   },

@@ -3,11 +3,27 @@
  */
 import type { Template } from '../types';
 import type { A2UISchema } from '../../../types/schema';
+import { createHiddenDataNode } from '../reactiveSchema';
 
 const schema: A2UISchema = {
   version: 1,
   rootId: 'page-dashboard',
   components: {
+    dashboardScene: createHiddenDataNode('dashboardScene', {
+      title: '工作台',
+      subtitle: '今日运营概览',
+    }),
+    dashboardMetrics: createHiddenDataNode('dashboardMetrics', {
+      activeUsers: '24,593',
+      newOrders: '1,284',
+      revenue: '89,400',
+      completionRate: '92.5%',
+    }),
+    dashboardActivities: createHiddenDataNode('dashboardActivities', [
+      { key: '1', time: '10:23', user: '林冲', event: '更新了系统配置' },
+      { key: '2', time: '09:45', user: '武松', event: '处理了 3 笔高危订单' },
+      { key: '3', time: '08:18', user: '鲁智深', event: '完成了晨间巡检' },
+    ]),
     'page-dashboard': {
       id: 'page-dashboard',
       type: 'Page',
@@ -20,12 +36,21 @@ const schema: A2UISchema = {
       id: 'dash-header',
       type: 'Div',
       props: { style: { marginBottom: '24px' } },
-      childrenIds: ['dash-title'],
+      childrenIds: ['dash-title', 'dash-subtitle'],
     },
     'dash-title': {
       id: 'dash-title',
       type: 'Title',
-      props: { level: 3, children: '工作台', style: { margin: 0 } },
+      props: { level: 3, children: '{{ dashboardScene.title }}', style: { margin: 0 } },
+      childrenIds: [],
+    },
+    'dash-subtitle': {
+      id: 'dash-subtitle',
+      type: 'Text',
+      props: {
+        children: '{{ dashboardScene.subtitle }}',
+        style: { color: '#64748b' },
+      },
       childrenIds: [],
     },
     'stat-row': {
@@ -53,7 +78,11 @@ const schema: A2UISchema = {
     'val-stat-1': {
       id: 'val-stat-1',
       type: 'Title',
-      props: { level: 2, children: '24,593', style: { margin: 0, color: '#1890ff' } },
+      props: {
+        level: 2,
+        children: '{{ dashboardMetrics.activeUsers }}',
+        style: { margin: 0, color: '#1890ff' },
+      },
       childrenIds: [],
     },
     'col-stat-2': {
@@ -75,7 +104,11 @@ const schema: A2UISchema = {
     'val-stat-2': {
       id: 'val-stat-2',
       type: 'Title',
-      props: { level: 2, children: '1,284', style: { margin: 0, color: '#52c41a' } },
+      props: {
+        level: 2,
+        children: '{{ dashboardMetrics.newOrders }}',
+        style: { margin: 0, color: '#52c41a' },
+      },
       childrenIds: [],
     },
     'col-stat-3': {
@@ -97,7 +130,11 @@ const schema: A2UISchema = {
     'val-stat-3': {
       id: 'val-stat-3',
       type: 'Title',
-      props: { level: 2, children: '¥ 89,400', style: { margin: 0, color: '#faad14' } },
+      props: {
+        level: 2,
+        children: '{{ "¥ " + dashboardMetrics.revenue }}',
+        style: { margin: 0, color: '#faad14' },
+      },
       childrenIds: [],
     },
     'col-stat-4': {
@@ -119,7 +156,11 @@ const schema: A2UISchema = {
     'val-stat-4': {
       id: 'val-stat-4',
       type: 'Title',
-      props: { level: 2, children: '92.5%', style: { margin: 0, color: '#722ed1' } },
+      props: {
+        level: 2,
+        children: '{{ dashboardMetrics.completionRate }}',
+        style: { margin: 0, color: '#722ed1' },
+      },
       childrenIds: [],
     },
     'content-row': {
@@ -155,10 +196,7 @@ const schema: A2UISchema = {
           { title: '操作人', dataIndex: 'user', key: 'user' },
           { title: '事件描述', dataIndex: 'event', key: 'event' },
         ],
-        dataSource: [
-          { key: '1', time: '10:23', user: '林冲', event: '更新了系统配置' },
-          { key: '2', time: '09:45', user: '武松', event: '处理了 3 笔高危订单' },
-        ],
+        dataSource: '{{ dashboardActivities }}',
       },
       childrenIds: [],
     },
@@ -188,18 +226,121 @@ const schema: A2UISchema = {
       id: 'btn-action-1',
       type: 'Button',
       props: { block: true, children: '发布新商品' },
+      events: {
+        onClick: [
+          {
+            type: 'setValue',
+            field: 'dashboardScene',
+            value: {
+              title: '商品运营工作台',
+              subtitle: '新品发布后的实时监控快照',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'dashboardMetrics',
+            value: {
+              activeUsers: '26,108',
+              newOrders: '1,962',
+              revenue: '128,640',
+              completionRate: '96.1%',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'dashboardActivities',
+            value: [
+              { key: '1', time: '11:08', user: '商品运营', event: '完成新品上架并同步首页推荐位' },
+              {
+                key: '2',
+                time: '10:46',
+                user: '市场团队',
+                event: '创建新品首发活动并推送给会员用户',
+              },
+              { key: '3', time: '10:15', user: '客服中心', event: '接入新品 FAQ 与售后答疑脚本' },
+            ],
+          },
+        ],
+      },
       childrenIds: [],
     },
     'btn-action-2': {
       id: 'btn-action-2',
       type: 'Button',
       props: { block: true, children: '查看异常日志' },
+      events: {
+        onClick: [
+          {
+            type: 'setValue',
+            field: 'dashboardScene',
+            value: {
+              title: '风控巡检看板',
+              subtitle: '聚焦异常订单和系统告警的排查视图',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'dashboardMetrics',
+            value: {
+              activeUsers: '22,904',
+              newOrders: '318',
+              revenue: '53,200',
+              completionRate: '81.4%',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'dashboardActivities',
+            value: [
+              { key: '1', time: '10:52', user: '风控引擎', event: '拦截 12 笔异常支付请求' },
+              { key: '2', time: '10:19', user: 'SRE', event: '完成支付网关重试链路回放' },
+              { key: '3', time: '09:57', user: '审计系统', event: '生成高风险订单复盘报告' },
+            ],
+          },
+        ],
+      },
       childrenIds: [],
     },
     'btn-action-3': {
       id: 'btn-action-3',
       type: 'Button',
       props: { block: true, children: '系统权限设置' },
+      events: {
+        onClick: [
+          {
+            type: 'setValue',
+            field: 'dashboardScene',
+            value: {
+              title: '权限治理中心',
+              subtitle: '面向组织权限调整和访问审计的协同视图',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'dashboardMetrics',
+            value: {
+              activeUsers: '18,420',
+              newOrders: '742',
+              revenue: '67,800',
+              completionRate: '98.3%',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'dashboardActivities',
+            value: [
+              { key: '1', time: '11:30', user: 'IAM 管理员', event: '批量收敛过期项目成员权限' },
+              { key: '2', time: '10:11', user: '审计平台', event: '同步最新的敏感操作访问记录' },
+              {
+                key: '3',
+                time: '09:34',
+                user: '安全负责人',
+                event: '确认关键系统最小权限策略生效',
+              },
+            ],
+          },
+        ],
+      },
       childrenIds: [],
     },
   },

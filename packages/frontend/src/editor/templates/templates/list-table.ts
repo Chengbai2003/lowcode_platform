@@ -3,10 +3,89 @@
  */
 import type { Template } from '../types';
 import type { A2UISchema } from '../../../types/schema';
+import { createHiddenDataNode } from '../reactiveSchema';
 
 const schema: A2UISchema = {
   rootId: 'page-list',
   components: {
+    userRowsAll: createHiddenDataNode('userRowsAll', [
+      {
+        key: '1',
+        name: 'Linus Torvalds',
+        email: 'linus@linux.org',
+        status: '🟢 正常活跃',
+      },
+      {
+        key: '2',
+        name: 'Ada Lovelace',
+        email: 'ada@analytical.engine',
+        status: '🟢 正常活跃',
+      },
+      {
+        key: '3',
+        name: 'Grace Hopper',
+        email: 'grace@navy.mil',
+        status: '⛔ 风险冻结',
+      },
+    ]),
+    activeRows: createHiddenDataNode('activeRows', [
+      {
+        key: '1',
+        name: 'Linus Torvalds',
+        email: 'linus@linux.org',
+        status: '🟢 正常活跃',
+      },
+      {
+        key: '2',
+        name: 'Ada Lovelace',
+        email: 'ada@analytical.engine',
+        status: '🟢 正常活跃',
+      },
+    ]),
+    bannedRows: createHiddenDataNode('bannedRows', [
+      {
+        key: '3',
+        name: 'Grace Hopper',
+        email: 'grace@navy.mil',
+        status: '⛔ 风险冻结',
+      },
+    ]),
+    linusRows: createHiddenDataNode('linusRows', [
+      {
+        key: '1',
+        name: 'Linus Torvalds',
+        email: 'linus@linux.org',
+        status: '🟢 正常活跃',
+      },
+    ]),
+    adaRows: createHiddenDataNode('adaRows', [
+      {
+        key: '2',
+        name: 'Ada Lovelace',
+        email: 'ada@analytical.engine',
+        status: '🟢 正常活跃',
+      },
+    ]),
+    filteredUsers: createHiddenDataNode('filteredUsers', [
+      {
+        key: '1',
+        name: 'Linus Torvalds',
+        email: 'linus@linux.org',
+        status: '🟢 正常活跃',
+      },
+      {
+        key: '2',
+        name: 'Ada Lovelace',
+        email: 'ada@analytical.engine',
+        status: '🟢 正常活跃',
+      },
+      {
+        key: '3',
+        name: 'Grace Hopper',
+        email: 'grace@navy.mil',
+        status: '⛔ 风险冻结',
+      },
+    ]),
     'page-list': {
       id: 'page-list',
       type: 'Page',
@@ -37,7 +116,8 @@ const schema: A2UISchema = {
       type: 'Title',
       props: {
         level: 3,
-        children: '用户管理中心',
+        children:
+          '{{ userFilters.status === "active" ? "用户管理中心 · 活跃用户" : userFilters.status === "banned" ? "用户管理中心 · 风险名单" : "用户管理中心 · 全量视图" }}',
         style: {
           margin: 0,
         },
@@ -72,24 +152,19 @@ const schema: A2UISchema = {
           boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.03)',
         },
       },
-      childrenIds: ['filter-form'],
+      childrenIds: ['userFilters'],
     },
-    'filter-form': {
-      id: 'filter-form',
+    userFilters: {
+      id: 'userFilters',
       type: 'Form',
       props: {
         style: {
           width: '100%',
         },
-      },
-      events: {
-        onFinish: [
-          {
-            type: 'apiCall',
-            url: '/api/users',
-            method: 'GET',
-          },
-        ],
+        initialValues: {
+          keyword: '',
+          status: 'all',
+        },
       },
       childrenIds: ['filter-fields-row', 'filter-actions-row'],
     },
@@ -129,7 +204,7 @@ const schema: A2UISchema = {
       id: 'input-search',
       type: 'Input',
       props: {
-        placeholder: '请输入姓名、邮箱',
+        placeholder: '输入 linus / ada 体验联动过滤',
         allowClear: true,
       },
       childrenIds: [],
@@ -165,6 +240,10 @@ const schema: A2UISchema = {
           width: '100%',
         },
         options: [
+          {
+            label: '全部用户',
+            value: 'all',
+          },
           {
             label: '正常活跃',
             value: 'active',
@@ -250,7 +329,21 @@ const schema: A2UISchema = {
         children: '重置',
       },
       events: {
-        onClick: [],
+        onClick: [
+          {
+            type: 'setValue',
+            field: 'userFilters',
+            value: {
+              keyword: '',
+              status: 'all',
+            },
+          },
+          {
+            type: 'setValue',
+            field: 'filteredUsers',
+            value: '{{ userRowsAll }}',
+          },
+        ],
       },
       childrenIds: [],
     },
@@ -259,8 +352,69 @@ const schema: A2UISchema = {
       type: 'Button',
       props: {
         type: 'primary',
-        htmlType: 'submit',
         children: '查询',
+      },
+      events: {
+        onClick: [
+          {
+            type: 'if',
+            condition: '{{ userFilters.keyword && userFilters.keyword.toLowerCase() === "linus" }}',
+            then: [
+              {
+                type: 'setValue',
+                field: 'filteredUsers',
+                value: '{{ linusRows }}',
+              },
+            ],
+            else: [
+              {
+                type: 'if',
+                condition:
+                  '{{ userFilters.keyword && userFilters.keyword.toLowerCase() === "ada" }}',
+                then: [
+                  {
+                    type: 'setValue',
+                    field: 'filteredUsers',
+                    value: '{{ adaRows }}',
+                  },
+                ],
+                else: [
+                  {
+                    type: 'if',
+                    condition: '{{ userFilters.status === "active" }}',
+                    then: [
+                      {
+                        type: 'setValue',
+                        field: 'filteredUsers',
+                        value: '{{ activeRows }}',
+                      },
+                    ],
+                    else: [
+                      {
+                        type: 'if',
+                        condition: '{{ userFilters.status === "banned" }}',
+                        then: [
+                          {
+                            type: 'setValue',
+                            field: 'filteredUsers',
+                            value: '{{ bannedRows }}',
+                          },
+                        ],
+                        else: [
+                          {
+                            type: 'setValue',
+                            field: 'filteredUsers',
+                            value: '{{ userRowsAll }}',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
       },
       childrenIds: [],
     },
@@ -298,14 +452,7 @@ const schema: A2UISchema = {
             key: 'status',
           },
         ],
-        dataSource: [
-          {
-            key: '1',
-            name: 'Linus Torvalds',
-            email: 'linus@linux.org',
-            status: '🟢 正常活跃',
-          },
-        ],
+        dataSource: '{{ filteredUsers }}',
         pagination: {
           pageSize: 10,
         },
