@@ -30,6 +30,21 @@ export const setValue: ActionHandler = async (action, context) => {
   const { field, value, merge = false } = setValueAction;
   const resolvedValue = resolveValue(value, context);
 
+  // Phase 2: Runtime 路径 - 精准脏追踪
+  if (context.runtime) {
+    if (merge && typeof resolvedValue === 'object' && resolvedValue !== null) {
+      // 合并模式：获取当前值，合并后设置
+      const current = context.runtime.get(field);
+      const merged = { ...(current as Record<string, unknown>), ...resolvedValue };
+      context.runtime.set(field, merged);
+    } else {
+      context.runtime.set(field, resolvedValue);
+    }
+    // 不需要 markFullChange - runtime 精准追踪脏路径
+    return { field, value: resolvedValue, merge };
+  }
+
+  // 遗留：直接变更路径（当 runtime 禁用时保持向后兼容）
   // 解析路径
   const keys = field.split('.');
   const lastKey = keys.pop();

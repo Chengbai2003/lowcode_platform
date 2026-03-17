@@ -382,15 +382,94 @@ export function interpolateTemplate(template: string, context: Record<string, an
 
 /**
  * 快捷方法：直接解析并执行表达式
+ * 如果 context 包含 runtime，则使用 tracking proxy 进行依赖收集
  */
-export function parseAndEvaluate(str: any, context: { [key: string]: any }): any {
+export function parseAndEvaluate(str: any, context: { [key: string]: any; runtime?: any }): any {
   // 非字符串直接返回
   if (typeof str !== 'string') {
     return str;
   }
 
   const parsed = parseExpression(str);
+
+  // 如果 runtime 存在，使用 tracking proxy 进行依赖收集
+  if (context.runtime && typeof context.runtime.createTrackingProxy === 'function') {
+    const ownsTracking =
+      typeof context.runtime.isTrackingActive === 'function'
+        ? !context.runtime.isTrackingActive()
+        : true;
+
+    if (ownsTracking && typeof context.runtime.startTracking === 'function') {
+      context.runtime.startTracking();
+    }
+
+    try {
+      const trackingProxy = context.runtime.createTrackingProxy();
+      // 使用 tracking proxy 作为 runtime 命名空间，并保留额外上下文键。
+      const result = evaluateExpression(
+        parsed,
+        buildExpressionContextWithProxy(trackingProxy, context),
+      );
+      // 仅在当前表达式拥有 tracking 生命周期时收尾
+      if (ownsTracking && typeof context.runtime.stopTracking === 'function') {
+        context.runtime.stopTracking();
+      }
+      return result;
+    } catch (error) {
+      // 确保即使出错也停止追踪
+      if (ownsTracking && typeof context.runtime.stopTracking === 'function') {
+        context.runtime.stopTracking();
+      }
+      throw error;
+    }
+  }
+
   return evaluateExpression(parsed, buildExpressionContext(context));
+}
+
+/**
+ * 为 tracking proxy 构建表达式上下文
+ * 直接使用 proxy 作为数据源，而不是全量展开
+ */
+function buildExpressionContextWithProxy(
+  proxy: Record<string, any>,
+  context: Record<string, any> = {},
+): Record<string, any> {
+  const baseContext: Record<string, any> = {
+    ...context,
+    data: proxy.data,
+    state: proxy.state,
+    formData: proxy.formData,
+    components: proxy.components,
+  };
+
+  // Phase 2: Proxy 惰性别名，按需读取
+  if (getFlag('selectiveEvaluation')) {
+    return new Proxy(baseContext, {
+      get(target, key: string) {
+        if (key in target) return target[key];
+        if (typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})) {
+          return (target.data as Record<string, any>)[key];
+        }
+        return undefined;
+      },
+      has(target, key: string) {
+        if (key in target) return true;
+        return (
+          typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})
+        );
+      },
+    });
+  }
+
+  // 默认路径：全量展开（向后兼容）
+  const resolvedContext: Record<string, any> = { ...baseContext };
+  const data = (proxy.data as Record<string, any>) || {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!isValidAliasKey(key, resolvedContext)) continue;
+    resolvedContext[key] = value;
+  }
+  return resolvedContext;
 }
 
 /**

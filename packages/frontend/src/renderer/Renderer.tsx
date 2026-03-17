@@ -5,9 +5,6 @@
 
 import React, { useMemo, useEffect, useRef } from 'react';
 import type { RendererProps } from './types';
-import { useAppDispatch } from './store/hooks';
-import { setMultipleComponentData } from './store/componentSlice';
-import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
 import { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';
@@ -22,16 +19,24 @@ export function Renderer({
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
-  const dispatch = useAppDispatch();
-
-  useEffect(() => {
-    if (schema && schema.components) {
-      const flattenedData = flattenSchemaValues(schema);
-      if (Object.keys(flattenedData).length > 0) {
-        dispatch(setMultipleComponentData(flattenedData));
-      }
+  const flattenedData = useMemo(() => {
+    if (!schema?.components) {
+      return {};
     }
-  }, [schema, dispatch]);
+    return flattenSchemaValues(schema);
+  }, [schema]);
+
+  const eventContextData = useMemo(() => {
+    if (!eventContext.data || typeof eventContext.data !== 'object') {
+      return {};
+    }
+    return eventContext.data as Record<string, unknown>;
+  }, [eventContext]);
+
+  const runtimeInitialData = useMemo(
+    () => ({ ...flattenedData, ...eventContextData }),
+    [flattenedData, eventContextData],
+  );
 
   // 稳定 flatComponents 引用：仅在内容实际变化时更新
   const flatComponentsRef = useRef(schema?.components);
@@ -53,16 +58,33 @@ export function Renderer({
   }, [schema?.components]);
 
   const eventDispatcher = useMemo(() => {
-    return new EventDispatcher(eventContext, dispatch, store.getState);
-  }, [dispatch]); // eventContext变化会在下面的useEffect中处理
+    return new EventDispatcher(
+      {
+        ...eventContext,
+        data: runtimeInitialData,
+        components: stableFlatComponents,
+      },
+      eventContext.dispatch,
+      eventContext.getState,
+    );
+  }, [eventContext.dispatch, eventContext.getState]); // eventContext变化会在下面的useEffect中处理
 
   useEffect(() => {
     if (eventContext && eventDispatcher) {
       Object.entries(eventContext).forEach(([key, value]) => {
+        if (key === 'data' || key === 'components') {
+          return;
+        }
         eventDispatcher.setContext(key, value);
       });
     }
   }, [eventContext, eventDispatcher]);
+
+  useEffect(() => {
+    if (eventDispatcher) {
+      eventDispatcher.setContext('data', runtimeInitialData);
+    }
+  }, [eventDispatcher, runtimeInitialData]);
 
   useEffect(() => {
     if (stableFlatComponents && eventDispatcher) {

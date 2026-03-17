@@ -115,6 +115,9 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
 
     const api = createCapabilityAPI({
       validComponentIds: validIds,
+      // Phase 2: 为统一写路径传递 runtime
+      runtime: context.runtime,
+      // 遗留：保持向后兼容
       getData: () => (context.data || {}) as Record<string, any>,
       setComponentData: context.setComponentData
         ? (id: string, value: any) => context.setComponentData!(id, value)

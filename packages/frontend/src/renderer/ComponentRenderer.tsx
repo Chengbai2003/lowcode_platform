@@ -4,15 +4,12 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, useRef, memo, useSyncExternalStore } from 'react';
-import { useAppDispatch, useAppSelector } from './store/hooks';
-import { setComponentData } from './store/componentSlice';
+import { useMemo, memo } from 'react';
 import type { ComponentRegistry, A2UIComponent } from './types';
 import type { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';
-import { resolveValues } from './executor/parser/valueResolver';
-import { analyzeComponentDeps, setsOverlap } from './reactive/dependencyAnalyzer';
-import { getFlag } from './featureFlags';
+import { useNodeValue, useResolvedSchemaProps } from './ComponentRenderer.runtime';
+import { analyzeComponentDeps } from './reactive/dependencyAnalyzer';
 import {
   BaseComponent,
   FormSyncWrapper,
@@ -22,10 +19,6 @@ import {
   INPUT_LEAF_COMPONENTS,
   resolveVisibilityProps,
 } from './ComponentRenderer.helpers';
-
-// 模块级常量：保证 useSyncExternalStore 的 subscribe/getSnapshot 引用稳定
-const noopSubscribe = () => () => {};
-const noopGetVersion = () => 0;
 
 /**
  * 组件渲染器 Props
@@ -67,14 +60,30 @@ export const ComponentRenderer = memo(
       return set;
     }, [parentAncestors, nodeId]);
 
-    const dispatch = useAppDispatch();
-    const componentValue = useAppSelector((state) => (id ? state.components.data[id] : undefined));
+    const schemaInitialValue = useMemo(() => {
+      if (!id) {
+        return undefined;
+      }
 
-    const reactiveEnabled = getFlag('reactiveContext');
-    const contextVersion = useSyncExternalStore(
-      reactiveEnabled ? (eventDispatcher?.subscribe ?? noopSubscribe) : noopSubscribe,
-      reactiveEnabled ? (eventDispatcher?.getVersion ?? noopGetVersion) : noopGetVersion,
-    );
+      if (props.initialValue !== undefined) {
+        return props.initialValue;
+      }
+
+      if (componentName === 'Form' && props.initialValues !== undefined) {
+        return props.initialValues;
+      }
+
+      if (props.value !== undefined) {
+        return props.value;
+      }
+
+      if (props.defaultValue !== undefined) {
+        return props.defaultValue;
+      }
+
+      return undefined;
+    }, [componentName, id, props]);
+    const componentValue = useNodeValue(id, schemaInitialValue, eventDispatcher);
 
     const Component = componentName
       ? components[componentName] || builtInComponents[componentName]
@@ -85,44 +94,13 @@ export const ComponentRenderer = memo(
     }, [events, eventDispatcher]);
 
     const deps = useMemo(() => analyzeComponentDeps(props as Record<string, any>), [props]);
-    const prevResolvedRef = useRef<Record<string, any> | null>(null);
-    const lastConsumedVersionRef = useRef(0);
-
-    const resolvedSchemaProps = useMemo(() => {
-      if (!eventDispatcher) {
-        return props;
-      }
-
-      if (
-        getFlag('selectiveEvaluation') &&
-        getFlag('reactiveContext') &&
-        prevResolvedRef.current !== null
-      ) {
-        const changed = eventDispatcher.getChangedKeysForVersion(lastConsumedVersionRef.current);
-        if (
-          changed !== 'all' &&
-          !deps.hasDynamicDeps &&
-          changed.size > 0 &&
-          !setsOverlap(changed, deps.dataDeps)
-        ) {
-          lastConsumedVersionRef.current = contextVersion;
-          return prevResolvedRef.current;
-        }
-      }
-
-      try {
-        const result = resolveValues(
-          props as Record<string, any>,
-          eventDispatcher.getExecutionContext(),
-        );
-        prevResolvedRef.current = result;
-        lastConsumedVersionRef.current = contextVersion;
-        return result;
-      } catch (error) {
-        console.warn('[Renderer] Failed to resolve props expressions', { id, error });
-        return props;
-      }
-    }, [props, eventDispatcher, id, contextVersion, deps]);
+    const resolvedSchemaProps = useResolvedSchemaProps(
+      nodeId,
+      id,
+      props as Record<string, any>,
+      eventDispatcher,
+      deps,
+    );
 
     const { isVisible, sanitizedProps } = useMemo(
       () => resolveVisibilityProps(resolvedSchemaProps),
@@ -170,8 +148,8 @@ export const ComponentRenderer = memo(
           const originalOnValuesChange = p.onValuesChange;
           p.onValuesChange = (changedValues: any, allValues: any, ...args: any[]) => {
             const newValue = { ...(componentValue || {}), ...allValues };
-            dispatch(setComponentData({ id, value: newValue }));
 
+            // Phase 2: 单一写路径 - 通过 EventDispatcher -> ReactiveRuntime
             if (eventDispatcher) {
               eventDispatcher.updateComponentData(id, newValue);
             }
@@ -195,8 +173,7 @@ export const ComponentRenderer = memo(
               value = e.target.checked;
             }
 
-            dispatch(setComponentData({ id, value }));
-
+            // Phase 2: 单一写路径 - 通过 EventDispatcher -> ReactiveRuntime
             if (eventDispatcher) {
               eventDispatcher.updateComponentData(id, value);
             }
@@ -230,7 +207,6 @@ export const ComponentRenderer = memo(
       eventHandlers,
       componentValue,
       id,
-      dispatch,
       componentName,
       eventDispatcher,
       onComponentClick,

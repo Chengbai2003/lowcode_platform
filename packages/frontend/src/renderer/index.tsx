@@ -6,16 +6,14 @@
  */
 
 import React from 'react';
-import { Provider } from 'react-redux';
 import { Renderer } from './Renderer';
-import { store } from './store';
 
 export { Renderer } from './Renderer';
 export { EventDispatcher } from './EventDispatcher';
 export type { RendererProps, ComponentRegistry, A2UIComponent, A2UISchema } from './types';
 export { builtInComponents } from './builtInComponents';
 
-// 导出 Redux 相关
+// 导出 Redux 兼容层相关 API
 export { store } from './store';
 export { useAppDispatch, useAppSelector } from './store/hooks';
 export {
@@ -36,10 +34,11 @@ export {
 export { autoFixSchema } from './utils/schema-auto-fix';
 
 /**
- * Redux Provider 包装组件
+ * 兼容保留的 Provider 包装组件。
+ * Renderer 已不再依赖 Redux，上层继续包裹不会影响运行。
  */
 export const LowcodeProvider = ({ children }: { children: React.ReactNode }) => {
-  return <Provider store={store}>{children}</Provider>;
+  return <>{children}</>;
 };
 
 /**
