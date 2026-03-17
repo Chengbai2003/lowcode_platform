@@ -5,7 +5,6 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ReactiveRuntime } from '../runtime';
-import type { Unsubscribe } from '../types';
 
 describe('ReactiveRuntime', () => {
   let runtime: ReactiveRuntime;
@@ -450,7 +449,7 @@ describe('ReactiveRuntime', () => {
       const proxy = runtime.createTrackingProxy();
 
       // 访问属性
-      const _ = (proxy as Record<string, unknown>).input1;
+      void (proxy as Record<string, unknown>).input1;
 
       const deps = runtime.stopTracking();
 
@@ -463,7 +462,7 @@ describe('ReactiveRuntime', () => {
       runtime.startTracking();
       const proxy = runtime.createTrackingProxy();
 
-      const _ = ((proxy as Record<string, unknown>).user as Record<string, unknown>).name;
+      void ((proxy as Record<string, unknown>).user as Record<string, unknown>).name;
 
       const deps = runtime.stopTracking();
 
@@ -476,7 +475,7 @@ describe('ReactiveRuntime', () => {
       runtime.startTracking();
       const proxy = runtime.createTrackingProxy();
 
-      const _ = ((proxy as Record<string, unknown>).state as Record<string, unknown>).loading;
+      void ((proxy as Record<string, unknown>).state as Record<string, unknown>).loading;
 
       const deps = runtime.stopTracking();
 

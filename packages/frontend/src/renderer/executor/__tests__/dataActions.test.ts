@@ -5,7 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { setValue } from '../actions/dataActions';
-import type { ExecutionContext } from '../../../../types';
+import type { ExecutionContext } from '../../../types';
 import type { ReactiveRuntime } from '../../reactive/runtime';
 
 describe('dataActions - setValue', () => {
@@ -63,8 +63,8 @@ describe('dataActions - setValue', () => {
   function createContextWithRuntime(): {
     context: ExecutionContext;
     mockRuntime: {
-      get: ReturnType<typeof vi.fn>;
-      set: ReturnType<typeof vi.fn>;
+      get: any;
+      set: any;
     };
   } {
     const mockRuntime = {
@@ -294,8 +294,8 @@ describe('dataActions - setValue', () => {
   describe('Runtime 路径（有 runtime）', () => {
     let context: ExecutionContext;
     let mockRuntime: {
-      get: ReturnType<typeof vi.fn>;
-      set: ReturnType<typeof vi.fn>;
+      get: any;
+      set: any;
     };
 
     beforeEach(() => {

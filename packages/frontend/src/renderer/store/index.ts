@@ -2,7 +2,8 @@ import { configureStore } from '@reduxjs/toolkit';
 import componentReducer from './componentSlice';
 
 /**
- * Redux store 配置
+ * Redux 兼容层 store。
+ * Renderer 主链已不依赖它，仅保留给遗留接入方。
  */
 export const store = configureStore({
   reducer: {

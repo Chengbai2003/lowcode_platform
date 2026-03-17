@@ -5,7 +5,6 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { SnapshotManager } from '../snapshot';
-import type { RuntimeSnapshot } from '../types';
 
 describe('SnapshotManager', () => {
   let manager: SnapshotManager;
@@ -250,7 +249,7 @@ describe('SnapshotManager', () => {
       const snapshot = manager.createSnapshot({}, {}, {}, {}, 1);
 
       expect(() => {
-        (snapshot as Record<string, unknown>).newProp = 'value';
+        (snapshot as unknown as Record<string, unknown>).newProp = 'value';
       }).toThrow();
     });
 

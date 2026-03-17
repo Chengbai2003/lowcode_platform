@@ -405,8 +405,11 @@ export function parseAndEvaluate(str: any, context: { [key: string]: any; runtim
 
     try {
       const trackingProxy = context.runtime.createTrackingProxy();
-      // 使用 tracking proxy 作为 context 进行求值
-      const result = evaluateExpression(parsed, buildExpressionContextWithProxy(trackingProxy));
+      // 使用 tracking proxy 作为 runtime 命名空间，并保留额外上下文键。
+      const result = evaluateExpression(
+        parsed,
+        buildExpressionContextWithProxy(trackingProxy, context),
+      );
       // 仅在当前表达式拥有 tracking 生命周期时收尾
       if (ownsTracking && typeof context.runtime.stopTracking === 'function') {
         context.runtime.stopTracking();
@@ -428,10 +431,21 @@ export function parseAndEvaluate(str: any, context: { [key: string]: any; runtim
  * 为 tracking proxy 构建表达式上下文
  * 直接使用 proxy 作为数据源，而不是全量展开
  */
-function buildExpressionContextWithProxy(proxy: Record<string, any>): Record<string, any> {
+function buildExpressionContextWithProxy(
+  proxy: Record<string, any>,
+  context: Record<string, any> = {},
+): Record<string, any> {
+  const baseContext: Record<string, any> = {
+    ...context,
+    data: proxy.data,
+    state: proxy.state,
+    formData: proxy.formData,
+    components: proxy.components,
+  };
+
   // Phase 2: Proxy 惰性别名，按需读取
   if (getFlag('selectiveEvaluation')) {
-    return new Proxy(proxy, {
+    return new Proxy(baseContext, {
       get(target, key: string) {
         if (key in target) return target[key];
         if (typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})) {
@@ -449,7 +463,7 @@ function buildExpressionContextWithProxy(proxy: Record<string, any>): Record<str
   }
 
   // 默认路径：全量展开（向后兼容）
-  const resolvedContext: Record<string, any> = { ...proxy };
+  const resolvedContext: Record<string, any> = { ...baseContext };
   const data = (proxy.data as Record<string, any>) || {};
   for (const [key, value] of Object.entries(data)) {
     if (!isValidAliasKey(key, resolvedContext)) continue;

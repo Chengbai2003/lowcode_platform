@@ -1,21 +1,22 @@
-import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import type { Reducer } from '@reduxjs/toolkit';
+import {
+  COMPONENT_SET_CONFIG,
+  COMPONENT_SET_DATA,
+  COMPONENT_SET_MULTIPLE_DATA,
+  setCompatibilityComponentConfig,
+  setCompatibilityComponentData,
+  setCompatibilityMultipleComponentData,
+} from './compat';
+
+const COMPONENT_CLEAR_DATA = 'components/clearComponentData';
+const COMPONENT_RESET_ALL_DATA = 'components/resetAllData';
 
 /**
- * 组件状态结构
+ * 兼容层状态结构。
+ * Renderer 主链已迁移到 ReactiveRuntime，这里的 store 仅服务遗留调用方。
  */
 export interface ComponentState {
-  /**
-   * 业务数据 (Values)
-   * Key: Component ID
-   * Value: Component Value
-   */
   data: Record<string, any>;
-
-  /**
-   * 配置数据 (Props/Config)
-   * Key: Component ID
-   * Value: Component Props
-   */
   config: Record<string, any>;
 }
 
@@ -24,56 +25,60 @@ const initialState: ComponentState = {
   config: {},
 };
 
-export const componentSlice = createSlice({
-  name: 'components',
-  initialState,
-  reducers: {
-    /**
-     * 更新组件业务数据
-     */
-    setComponentData: (state, action: PayloadAction<{ id: string; value: any }>) => {
-      const { id, value } = action.payload;
-      state.data[id] = value;
-    },
+export const setComponentData = setCompatibilityComponentData;
+export const setMultipleComponentData = setCompatibilityMultipleComponentData;
+export const setComponentConfig = setCompatibilityComponentConfig;
 
-    /**
-     * 批量更新组件业务数据
-     */
-    setMultipleComponentData: (state, action: PayloadAction<Record<string, any>>) => {
-      state.data = { ...state.data, ...action.payload };
-    },
+export function clearComponentData(id: string) {
+  return {
+    type: COMPONENT_CLEAR_DATA,
+    payload: id,
+  };
+}
 
-    /**
-     * 清除指定组件数据
-     */
-    clearComponentData: (state, action: PayloadAction<string>) => {
-      const id = action.payload;
-      delete state.data[id];
-    },
+export function resetAllData() {
+  return {
+    type: COMPONENT_RESET_ALL_DATA,
+  };
+}
 
-    /**
-     * 更新组件配置
-     */
-    setComponentConfig: (state, action: PayloadAction<{ id: string; config: any }>) => {
-      const { id, config } = action.payload;
-      state.config[id] = { ...state.config[id], ...config };
-    },
-
-    /**
-     * 重置所有数据
-     */
-    resetAllData: () => {
+const componentReducer: Reducer<ComponentState> = (state = initialState, action) => {
+  switch (action.type) {
+    case COMPONENT_SET_DATA: {
+      const { id, value } = action.payload as { id: string; value: any };
+      return {
+        ...state,
+        data: { ...state.data, [id]: value },
+      };
+    }
+    case COMPONENT_SET_MULTIPLE_DATA:
+      return {
+        ...state,
+        data: { ...state.data, ...(action.payload as Record<string, any>) },
+      };
+    case COMPONENT_SET_CONFIG: {
+      const { id, config } = action.payload as { id: string; config: any };
+      return {
+        ...state,
+        config: {
+          ...state.config,
+          [id]: { ...state.config[id], ...config },
+        },
+      };
+    }
+    case COMPONENT_CLEAR_DATA: {
+      const nextData = { ...state.data };
+      delete nextData[action.payload as string];
+      return {
+        ...state,
+        data: nextData,
+      };
+    }
+    case COMPONENT_RESET_ALL_DATA:
       return initialState;
-    },
-  },
-});
+    default:
+      return state;
+  }
+};
 
-export const {
-  setComponentData,
-  setMultipleComponentData,
-  clearComponentData,
-  setComponentConfig,
-  resetAllData,
-} = componentSlice.actions;
-
-export default componentSlice.reducer;
+export default componentReducer;

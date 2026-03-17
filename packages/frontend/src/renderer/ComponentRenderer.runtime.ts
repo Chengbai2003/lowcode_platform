@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { EventDispatcher } from './EventDispatcher';
 import { getFlag } from './featureFlags';
 import type { ComponentDeps } from './reactive/dependencyAnalyzer';
-import { setsOverlap } from './reactive/dependencyAnalyzer';
 import { resolveValues } from './executor/parser/valueResolver';
 
 const noopSubscribe = () => () => {};
@@ -48,12 +47,9 @@ function readComponentValue(eventDispatcher: EventDispatcher | undefined, id?: s
     return undefined;
   }
 
-  const runtime = eventDispatcher.getRuntime();
-  if (runtime) {
-    const runtimeValue = runtime.get(id);
-    if (runtimeValue !== undefined) {
-      return runtimeValue;
-    }
+  const runtimeValue = eventDispatcher.getRuntime().get(id);
+  if (runtimeValue !== undefined) {
+    return runtimeValue;
   }
 
   return eventDispatcher.getExecutionContext().data?.[id];
@@ -64,23 +60,20 @@ export function useNodeValue(
   schemaInitialValue: unknown,
   eventDispatcher: EventDispatcher | undefined,
 ): unknown {
-  const reactiveEnabled = getFlag('reactiveContext') || getFlag('useReactiveRuntime');
-  const runtime = eventDispatcher?.getRuntime() ?? null;
+  const runtime = eventDispatcher?.getRuntime();
 
   const version = useSyncExternalStore(
-    reactiveEnabled
-      ? runtime && id
-        ? (listener) =>
-            runtime.subscribeComputed(`node-value:${id}`, listener, new Set([`data.${id}`]))
-        : (eventDispatcher?.subscribe ?? noopSubscribe)
+    runtime && id
+      ? (listener) =>
+          runtime.subscribeComputed(`node-value:${id}`, listener, new Set([`data.${id}`]))
       : noopSubscribe,
-    reactiveEnabled ? (eventDispatcher?.getVersion ?? noopGetVersion) : noopGetVersion,
+    runtime ? () => runtime.getVersion() : noopGetVersion,
   );
 
   return useMemo(() => {
     const value = readComponentValue(eventDispatcher, id);
     return value !== undefined ? value : schemaInitialValue;
-  }, [eventDispatcher, id, schemaInitialValue, runtime, version]);
+  }, [eventDispatcher, id, schemaInitialValue, version]);
 }
 
 export function useResolvedSchemaProps(
@@ -88,77 +81,65 @@ export function useResolvedSchemaProps(
   id: string | undefined,
   props: Record<string, any>,
   eventDispatcher: EventDispatcher | undefined,
-  deps: ComponentDeps,
+  _deps: ComponentDeps,
 ): Record<string, any> {
-  const reactiveEnabled = getFlag('reactiveContext') || getFlag('useReactiveRuntime');
-  const runtime = eventDispatcher?.getRuntime() ?? null;
+  const runtime = eventDispatcher?.getRuntime();
   const trackedDepsRef = useRef<Set<string>>(new Set());
   const prevResolvedRef = useRef<Record<string, any> | null>(null);
+  const prevSourcePropsRef = useRef<Record<string, any> | null>(null);
   const lastConsumedVersionRef = useRef(0);
+
   const contextVersion = useSyncExternalStore(
-    reactiveEnabled
-      ? runtime
-        ? (listener) =>
-            runtime.subscribeComputed(`resolved-props:${nodeId}`, listener, trackedDepsRef.current)
-        : (eventDispatcher?.subscribe ?? noopSubscribe)
+    runtime
+      ? (listener) =>
+          runtime.subscribeComputed(`resolved-props:${nodeId}`, listener, trackedDepsRef.current)
       : noopSubscribe,
-    reactiveEnabled
-      ? runtime
-        ? () => runtime.getVersion()
-        : (eventDispatcher?.getVersion ?? noopGetVersion)
-      : noopGetVersion,
+    runtime ? () => runtime.getVersion() : noopGetVersion,
   );
+
   const resolvedSchemaProps = useMemo(() => {
     if (!eventDispatcher) {
       return props;
     }
 
-    if (getFlag('selectiveEvaluation') && prevResolvedRef.current !== null) {
-      if (runtime) {
-        const changed = runtime.getDirtyPaths(lastConsumedVersionRef.current);
-        if (!hasAffectedRuntimeDeps(changed, trackedDepsRef.current)) {
-          lastConsumedVersionRef.current = contextVersion;
-          return prevResolvedRef.current;
-        }
-      } else if (getFlag('reactiveContext') && !deps.hasDynamicDeps) {
-        const changed = eventDispatcher.getChangedKeysForVersion(lastConsumedVersionRef.current);
-        if (changed !== 'all' && changed.size > 0 && !setsOverlap(changed, deps.dataDeps)) {
-          lastConsumedVersionRef.current = contextVersion;
-          return prevResolvedRef.current;
-        }
+    if (
+      getFlag('selectiveEvaluation') &&
+      prevResolvedRef.current !== null &&
+      prevSourcePropsRef.current === props
+    ) {
+      const changed = runtime?.getDirtyPaths(lastConsumedVersionRef.current) ?? 'all';
+      if (!hasAffectedRuntimeDeps(changed, trackedDepsRef.current)) {
+        lastConsumedVersionRef.current = contextVersion;
+        return prevResolvedRef.current;
       }
     }
 
     try {
-      let nextTrackedDeps = trackedDepsRef.current;
-      let result: Record<string, any>;
+      runtime?.startTracking();
 
+      const result = resolveValues(props, eventDispatcher.getExecutionContext());
       if (runtime) {
-        runtime.startTracking();
-        try {
-          result = resolveValues(props, eventDispatcher.getExecutionContext());
-          nextTrackedDeps = runtime.stopTracking();
-        } catch (error) {
-          runtime.stopTracking();
-          throw error;
-        }
-      } else {
-        result = resolveValues(props, eventDispatcher.getExecutionContext());
+        trackedDepsRef.current = runtime.stopTracking();
       }
 
-      trackedDepsRef.current = nextTrackedDeps;
       prevResolvedRef.current = result;
+      prevSourcePropsRef.current = props;
       lastConsumedVersionRef.current = contextVersion;
       return result;
     } catch (error) {
+      if (runtime?.isTrackingActive()) {
+        runtime.stopTracking();
+      }
+
       console.warn('[Renderer] Failed to resolve props expressions', {
         id,
         nodeId,
         error,
       });
+      prevSourcePropsRef.current = props;
       return props;
     }
-  }, [contextVersion, deps, eventDispatcher, id, nodeId, props]);
+  }, [contextVersion, eventDispatcher, id, nodeId, props, runtime]);
 
   const trackedDepsKey = useMemo(
     () => serializeDeps(trackedDepsRef.current),
@@ -166,7 +147,7 @@ export function useResolvedSchemaProps(
   );
 
   useEffect(() => {
-    if (!runtime || typeof runtime.updateComputedDeps !== 'function') {
+    if (!runtime) {
       return;
     }
 

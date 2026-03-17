@@ -5,8 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { apiCall, delay } from '../actions/asyncActions';
-import type { ExecutionContext } from '../../../../types/dsl/context';
-import type { Action } from '../../../../types/dsl/action-union';
+import type { ExecutionContext } from '../../../types';
 import { ReactiveRuntime } from '../../reactive/runtime';
 
 describe('asyncActions', () => {
@@ -14,7 +13,7 @@ describe('asyncActions', () => {
 
   beforeEach(() => {
     mockFetch = vi.fn();
-    global.fetch = mockFetch;
+    global.fetch = mockFetch as typeof fetch;
     vi.useFakeTimers();
   });
 
@@ -199,7 +198,7 @@ describe('asyncActions', () => {
         const action = {
           type: 'apiCall' as const,
           url: 'https://api.example.com/users',
-          onSuccess: [{ type: 'log' as const, message: 'success' }],
+          onSuccess: [{ type: 'log' as const, value: 'success' }],
         };
 
         await apiCall(action, context, mockExecutor);
@@ -224,7 +223,7 @@ describe('asyncActions', () => {
         const action = {
           type: 'apiCall' as const,
           url: 'https://api.example.com/users',
-          onError: [{ type: 'log' as const, message: 'error' }],
+          onError: [{ type: 'log' as const, value: 'error' }],
         };
 
         await apiCall(action, context, mockExecutor);

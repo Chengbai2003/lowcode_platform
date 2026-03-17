@@ -8,6 +8,8 @@ import { ifAction, loopAction } from '../actions/flowActions';
 import { DSLExecutor } from '../Engine';
 import type { ExecutionContext, IfAction, LoopAction, Action } from '../../../types';
 
+const createLogAction = (value: string): Action => ({ type: 'log', value });
+
 function createExecutionContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
   return DSLExecutor.createContext(overrides) as ExecutionContext;
 }
@@ -27,8 +29,8 @@ describe('flowActions', () => {
 
   describe('ifAction', () => {
     it('条件为 true 时执行 then 分支', async () => {
-      const thenAction = { type: 'log', message: 'then executed' } as Action;
-      const elseAction = { type: 'log', message: 'else executed' } as Action;
+      const thenAction = createLogAction('then executed');
+      const elseAction = createLogAction('else executed');
 
       const mockExecutor = {
         executeSingle: vi.fn().mockResolvedValue(undefined),
@@ -48,8 +50,8 @@ describe('flowActions', () => {
     });
 
     it('条件为 false 时执行 else 分支', async () => {
-      const thenAction = { type: 'log', message: 'then executed' } as Action;
-      const elseAction = { type: 'log', message: 'else executed' } as Action;
+      const thenAction = createLogAction('then executed');
+      const elseAction = createLogAction('else executed');
 
       const mockExecutor = {
         executeSingle: vi.fn().mockResolvedValue(undefined),
@@ -82,7 +84,7 @@ describe('flowActions', () => {
         const action: IfAction = {
           type: 'if',
           condition: value,
-          then: [{ type: 'log', message: 'then' }],
+          then: [createLogAction('then')],
         };
 
         await ifAction(action, context, mockExecutor);
@@ -105,8 +107,8 @@ describe('flowActions', () => {
         const action: IfAction = {
           type: 'if',
           condition: value,
-          then: [{ type: 'log', message: 'then' }],
-          else: [{ type: 'log', message: 'else' }],
+          then: [createLogAction('then')],
+          else: [createLogAction('else')],
         };
 
         await ifAction(action, context, mockExecutor);
@@ -124,7 +126,7 @@ describe('flowActions', () => {
       const action: IfAction = {
         type: 'if',
         condition: false,
-        then: [{ type: 'log', message: 'then' }],
+        then: [createLogAction('then')],
         // 无 else 分支
       };
 
@@ -139,9 +141,9 @@ describe('flowActions', () => {
       };
 
       const actions: Action[] = [
-        { type: 'log', message: 'action1' },
-        { type: 'log', message: 'action2' },
-        { type: 'log', message: 'action3' },
+        createLogAction('action1'),
+        createLogAction('action2'),
+        createLogAction('action3'),
       ];
 
       const action: IfAction = {
@@ -166,7 +168,7 @@ describe('flowActions', () => {
       const action: IfAction = {
         type: 'if',
         condition: true,
-        then: [{ type: 'log', message: 'then' }],
+        then: [createLogAction('then')],
       };
 
       const result = await ifAction(action, context, mockExecutor);
@@ -190,7 +192,7 @@ describe('flowActions', () => {
       const action: IfAction = {
         type: 'if',
         condition: 'active', // 非空字符串为 truthy
-        then: [{ type: 'log', message: 'then' }],
+        then: [createLogAction('then')],
       };
 
       await ifAction(action, contextWithExpr, mockExecutor);
@@ -211,7 +213,7 @@ describe('flowActions', () => {
         type: 'loop',
         over: items,
         itemVar: 'item',
-        actions: [{ type: 'log', message: 'item' }],
+        actions: [createLogAction('item')],
       };
 
       await loopAction(action, context, mockExecutor);
@@ -248,7 +250,7 @@ describe('flowActions', () => {
         over: items,
         itemVar: 'element',
         indexVar: 'idx',
-        actions: [{ type: 'log', message: 'element' }],
+        actions: [createLogAction('element')],
       };
 
       await loopAction(action, context, mockExecutor);
@@ -274,7 +276,7 @@ describe('flowActions', () => {
         type: 'loop',
         over: [],
         itemVar: 'item',
-        actions: [{ type: 'log', message: 'item' }],
+        actions: [createLogAction('item')],
       };
 
       const result = await loopAction(action, context, mockExecutor);
@@ -319,7 +321,7 @@ describe('flowActions', () => {
         type: 'loop',
         over: 'not-an-array',
         itemVar: 'item',
-        actions: [{ type: 'log', message: 'item' }],
+        actions: [createLogAction('item')],
       } as unknown as LoopAction;
 
       await expect(loopAction(action, context, mockExecutor)).rejects.toThrow(
@@ -341,7 +343,7 @@ describe('flowActions', () => {
         type: 'loop',
         over: items,
         itemVar: 'item',
-        actions: [{ type: 'log', message: 'item' }],
+        actions: [createLogAction('item')],
       };
 
       const result = (await loopAction(action, context, mockExecutor)) as {
@@ -370,7 +372,7 @@ describe('flowActions', () => {
         type: 'loop',
         over: items,
         itemVar: 'item',
-        actions: [{ type: 'log', message: 'item' }],
+        actions: [createLogAction('item')],
       };
 
       await loopAction(action, context, mockExecutor);
@@ -393,7 +395,7 @@ describe('flowActions', () => {
       const innerIf: IfAction = {
         type: 'if',
         condition: true,
-        then: [{ type: 'log', message: 'inner-then' }],
+        then: [createLogAction('inner-then')],
       };
 
       const outerIf: IfAction = {
@@ -418,7 +420,7 @@ describe('flowActions', () => {
       const ifAction_: IfAction = {
         type: 'if',
         condition: true,
-        then: [{ type: 'log', message: 'conditional-log' }],
+        then: [createLogAction('conditional-log')],
       };
 
       const action: LoopAction = {

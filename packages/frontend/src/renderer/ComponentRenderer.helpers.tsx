@@ -5,10 +5,9 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { memo, useEffect } from 'react';
-import { shallowEqual } from 'react-redux';
 import type { ActionList } from '../types';
 import type { EventDispatcher } from './EventDispatcher';
-import { deepEqual } from './utils/compare';
+import { deepEqual, shallowEqual } from './utils/compare';
 
 export const CONTAINER_COMPONENTS = new Set([
   'Form',

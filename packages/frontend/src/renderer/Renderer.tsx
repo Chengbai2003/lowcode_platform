@@ -5,9 +5,6 @@
 
 import React, { useMemo, useEffect, useRef } from 'react';
 import type { RendererProps } from './types';
-import { useAppDispatch } from './store/hooks';
-import { setMultipleComponentData } from './store/componentSlice';
-import { store } from './store';
 import { flattenSchemaValues } from './utils/schema';
 import { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';
@@ -22,7 +19,6 @@ export function Renderer({
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
-  const dispatch = useAppDispatch();
   const flattenedData = useMemo(() => {
     if (!schema?.components) {
       return {};
@@ -41,12 +37,6 @@ export function Renderer({
     () => ({ ...flattenedData, ...eventContextData }),
     [flattenedData, eventContextData],
   );
-
-  useEffect(() => {
-    if (Object.keys(runtimeInitialData).length > 0) {
-      dispatch(setMultipleComponentData(runtimeInitialData));
-    }
-  }, [dispatch, runtimeInitialData]);
 
   // 稳定 flatComponents 引用：仅在内容实际变化时更新
   const flatComponentsRef = useRef(schema?.components);
@@ -74,10 +64,10 @@ export function Renderer({
         data: runtimeInitialData,
         components: stableFlatComponents,
       },
-      dispatch,
-      store.getState,
+      eventContext.dispatch,
+      eventContext.getState,
     );
-  }, [dispatch]); // eventContext变化会在下面的useEffect中处理
+  }, [eventContext.dispatch, eventContext.getState]); // eventContext变化会在下面的useEffect中处理
 
   useEffect(() => {
     if (eventContext && eventDispatcher) {

@@ -138,10 +138,9 @@ describe('createTrackingProxy', () => {
 
     it('应追踪多个属性访问', () => {
       const data = { a: 1, b: 2, c: 3 };
-      const proxy = createTrackingProxy(data, tracker);
+      const proxy = createTrackingProxy(data, tracker) as Record<string, number>;
 
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const _ = proxy.a + proxy.b + proxy.c;
+      void (proxy.a + proxy.b + proxy.c);
 
       expect(tracker).toHaveBeenCalledWith('a');
       expect(tracker).toHaveBeenCalledWith('b');
@@ -174,9 +173,9 @@ describe('createTrackingProxy', () => {
 
     it('应追踪深度嵌套路径', () => {
       const data = { a: { b: { c: { d: 'deep' } } } };
-      const proxy = createTrackingProxy(data, tracker);
+      const proxy = createTrackingProxy(data, tracker) as Record<string, Record<string, unknown>>;
 
-      const value = ((proxy.a as Record<string, unknown>).b as Record<string, unknown>).c;
+      void ((proxy.a as Record<string, unknown>).b as Record<string, unknown>).c;
 
       expect(tracker).toHaveBeenCalledWith('a');
       expect(tracker).toHaveBeenCalledWith('a.b');
@@ -351,8 +350,7 @@ describe('createDeepTrackingProxy', () => {
     const data = { name: 'John' };
     const proxy = createDeepTrackingProxy(data, 'data.user', tracker);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _ = proxy.name;
+    void proxy.name;
 
     expect(tracker).toHaveBeenCalledWith('data.user.name');
   });
@@ -361,8 +359,7 @@ describe('createDeepTrackingProxy', () => {
     const data = { name: 'John' };
     const proxy = createDeepTrackingProxy(data, '', tracker);
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _ = proxy.name;
+    void proxy.name;
 
     expect(tracker).toHaveBeenCalledWith('name');
   });

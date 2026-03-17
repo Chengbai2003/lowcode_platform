@@ -4,7 +4,7 @@
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useMemo, memo } from 'react';
+import { useMemo, memo } from 'react';
 import type { ComponentRegistry, A2UIComponent } from './types';
 import type { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';

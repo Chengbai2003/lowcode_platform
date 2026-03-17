@@ -6,16 +6,10 @@
  */
 
 export const RENDERER_FLAGS_DEFAULTS = {
-  /** 启用响应式 context 订阅（Phase 1） */
-  reactiveContext: true,
-  /** 启用表达式选择性求值（Phase 2） */
+  /** 启用表达式选择性求值 */
   selectiveEvaluation: true,
-  /** 启用脚本能力模型（Phase 3） */
+  /** 启用脚本能力模型 */
   capabilityScript: false,
-  /** 启用 ReactiveRuntime (Phase 1) */
-  useReactiveRuntime: true,
-  /** 启用 runtime 调试日志 */
-  runtimeDebug: false,
 } as const;
 
 export type RendererFlagKey = keyof typeof RENDERER_FLAGS_DEFAULTS;
@@ -30,7 +24,7 @@ export type RendererFlagKey = keyof typeof RENDERER_FLAGS_DEFAULTS;
  *   3. 避免热路径上反复解析 URL
  *
  * 运行时切换请使用 window.__RENDERER_FLAGS__，例如：
- *   (window as any).__RENDERER_FLAGS__ = { reactiveContext: true };
+ *   (window as any).__RENDERER_FLAGS__ = { selectiveEvaluation: true };
  */
 let cachedUrlFlags: Record<string, string | null> | null = null;
 
