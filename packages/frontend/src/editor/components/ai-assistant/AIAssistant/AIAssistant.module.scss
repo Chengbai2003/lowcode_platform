@@ -2,7 +2,9 @@
 .aiAssistant {
   display: flex;
   flex-direction: column;
+  flex: 1;
   height: 100%;
+  min-height: 0;
   width: 100%;
   background: var(--bg-panel);
   color: var(--text-primary);
@@ -12,15 +14,19 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
+  height: 100%;
   padding: 16px;
   overflow: hidden;
 }
 
 .messagesContainer {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: 16px;
   padding-right: 8px;
+  overscroll-behavior: contain;
 }
 
 .messagesContainer::-webkit-scrollbar {
@@ -65,6 +71,7 @@
   border-left: 3px solid var(--primary-color);
   margin-bottom: 4px;
   max-width: 80%;
+  overflow: visible;
   box-shadow: var(--shadow-md);
 }
 
@@ -104,6 +111,100 @@
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.markdownContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.paragraph,
+.blockquoteLine {
+  margin: 0;
+}
+
+.heading1,
+.heading2,
+.heading3 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.35;
+  color: inherit;
+}
+
+.heading1 {
+  font-size: 18px;
+}
+
+.heading2 {
+  font-size: 16px;
+}
+
+.heading3 {
+  font-size: 14px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.listItem {
+  margin: 0;
+}
+
+.blockquote {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(24, 144, 255, 0.45);
+  background: rgba(24, 144, 255, 0.08);
+  border-radius: 8px;
+}
+
+.inlineCode {
+  font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  font-size: 0.92em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+}
+
+.codeBlock {
+  margin-top: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: none;
+}
+
+.codeLanguage {
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.codePre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+
+  code {
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
 }
 
 .modelIndicator {
@@ -180,15 +281,58 @@
   text-align: right;
 }
 
+.messageUser .blockquote {
+  border-left-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.messageUser .inlineCode {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .divider {
-  margin: 0 0 16px 0;
+  margin: auto 0 16px 0;
   border-color: var(--border-secondary);
+  flex-shrink: 0;
 }
 
 .inputArea {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 0;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
+.selectionContext {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.16);
+  color: var(--text-secondary);
+}
+
+.selectionContextLabel {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.selectionContextValue {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inputAreaFooter {

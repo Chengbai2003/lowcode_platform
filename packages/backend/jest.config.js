@@ -23,7 +23,7 @@ module.exports = {
 
   // TypeScript 转换器
   transform: {
-    '^.+\\.(t|j)s$': 'ts-jest',
+    '^.+\\.(t|j)s$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json' }],
   },
 
   // 模块文件扩展名
@@ -46,13 +46,6 @@ module.exports = {
 
   // 超时设置
   testTimeout: 30000,
-
-  // 全局变量
-  globals: {
-    'ts-jest': {
-      tsconfig: '<rootDir>/tsconfig.json',
-    },
-  },
 
   // 预置条件
   setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],

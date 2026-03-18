@@ -14,10 +14,17 @@ export interface AIModelConfig {
   isAvailable?: boolean;
 }
 
-// AI响应接口
-export interface AIResponse {
+export interface AgentConversationMessage {
+  role: string;
+  content: string;
+}
+
+// Agent 编辑响应接口（当前仍返回整页 schema）
+export interface AgentEditResponse {
+  mode: 'schema';
   content: string;
   schema?: A2UISchema;
+  warnings?: string[];
   suggestions?: string[];
   usage?: {
     promptTokens: number;
@@ -26,27 +33,33 @@ export interface AIResponse {
   };
 }
 
-// AI请求接口
-export interface AIRequest {
-  prompt: string;
+// Agent 编辑请求接口
+export interface AgentEditRequest {
+  instruction: string;
   modelId?: string; // 指定使用的模型 ID
-  context?: {
-    currentSchema?: A2UISchema;
-    conversationHistory?: Array<{ role: string; content: string }>;
-  };
+  provider?: string;
+  pageId?: string;
+  version?: number;
+  selectedId?: string;
+  draftSchema?: A2UISchema;
+  conversationHistory?: AgentConversationMessage[];
   options?: {
     temperature?: number;
     maxTokens?: number;
   };
+  stream?: boolean;
 }
+
+export type AIRequest = AgentEditRequest;
+export type AIResponse = AgentEditResponse;
 
 // AI服务接口
 export interface AIService {
   name: string;
   isAvailable(): boolean | Promise<boolean>;
-  generateResponse(request: AIRequest): Promise<AIResponse>;
+  generateResponse(request: AgentEditRequest): Promise<AgentEditResponse>;
   streamResponse?(
-    request: AIRequest,
+    request: AgentEditRequest,
     onMessage: (chunk: string) => void,
     onError?: (error: any) => void,
   ): Promise<void>;

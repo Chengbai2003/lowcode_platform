@@ -113,8 +113,8 @@ export type { RendererProps, A2UIComponent } from './renderer';
 export { LowcodeEditor, AIAssistant } from './editor';
 export type { LowcodeEditorProps } from './editor';
 
-// API Secret management
-export { setApiSecret, getApiSecret } from './editor';
+// API management
+export { setApiSecret, setApiBaseURL, getApiBaseURL } from './editor';
 
 // Store exports
 export {

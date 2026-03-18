@@ -46,6 +46,8 @@ export type {
   AIModelConfig,
   AIResponse,
   AIRequest,
+  AgentEditRequest,
+  AgentEditResponse,
   AIService,
   AIServiceError,
 } from './ai-assistant/types/ai-types';

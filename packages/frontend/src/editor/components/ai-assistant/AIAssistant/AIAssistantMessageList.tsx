@@ -3,6 +3,7 @@ import { Button, Tag } from 'antd';
 import { LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import type { A2UISchema } from '../../../../types';
 import type { AIMessage } from './AIAssistant.types';
+import { MarkdownContent } from './MarkdownContent';
 import styles from './AIAssistant.module.scss';
 
 interface AIAssistantMessageListProps {
@@ -29,7 +30,9 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
             <span className={styles.errorMessage}>❌ {message.content}</span>
           ) : (
             <div className={styles.messageContent}>
-              <div className={styles.messageText}>{message.content}</div>
+              <div className={styles.messageText}>
+                <MarkdownContent content={message.content} />
+              </div>
 
               {message.modelUsed && (
                 <div className={styles.modelIndicator}>

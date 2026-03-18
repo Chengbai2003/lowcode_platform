@@ -4,6 +4,7 @@ import { SendOutlined, BulbOutlined, SettingOutlined, DatabaseOutlined } from '@
 import type { A2UISchema } from '../../../../types';
 import { validateAndAutoFixA2UISchema } from '../../../../schema/schemaValidation';
 import { componentRegistry } from '../../../../components';
+import { builtInComponents } from '../../../../renderer';
 import { AIConfig } from '../AIConfig/AIConfig';
 import type { AIModelConfig } from '../types/ai-types';
 import { useAIModels } from './useAIModels';
@@ -13,12 +14,18 @@ import styles from './AIAssistant.module.scss';
 
 interface AIAssistantProps {
   currentSchema: A2UISchema | null;
+  pageId?: string;
+  pageVersion?: number | null;
+  selectedId?: string | null;
   onSchemaUpdate?: (schema: A2UISchema) => void;
   onError?: (error: string) => void;
 }
 
 export const AIAssistant: React.FC<AIAssistantProps> = ({
   currentSchema,
+  pageId,
+  pageVersion,
+  selectedId,
   onSchemaUpdate,
   onError,
 }) => {
@@ -36,6 +43,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     useAIAssistantChat({
       currentSchema,
       currentModel,
+      pageId,
+      pageVersion,
+      selectedId,
       models,
       loadModels,
       ensureModelsLoaded,
@@ -44,11 +54,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
   const applySchema = useCallback(
     (schema: A2UISchema) => {
-      const whitelist = Object.keys(componentRegistry);
+      const whitelist = Array.from(
+        new Set([...Object.keys(builtInComponents), ...Object.keys(componentRegistry)]),
+      );
       const result = validateAndAutoFixA2UISchema(schema, whitelist);
 
       if (result.fixes.length > 0) {
-        console.log('AI Schema Auto-fixed:', result.fixes);
         message.info(`已自动修复 ${result.fixes.length} 处 AI 生成错误`);
       }
 
@@ -65,6 +76,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     },
     [onSchemaUpdate],
   );
+
+  const selectedComponent =
+    selectedId && currentSchema ? currentSchema.components[selectedId] : null;
 
   const modelSelectContent = (
     <div className={styles.modelSelectContent}>
@@ -113,6 +127,14 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         <Divider className={styles.divider} />
 
         <div className={styles.inputArea}>
+          {selectedComponent && (
+            <div className={styles.selectionContext}>
+              <span className={styles.selectionContextLabel}>当前选中</span>
+              <span className={styles.selectionContextValue}>
+                {selectedComponent.type} ({selectedId})
+              </span>
+            </div>
+          )}
           <Input.TextArea
             value={inputValue}
             onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputValue(e.target.value)}

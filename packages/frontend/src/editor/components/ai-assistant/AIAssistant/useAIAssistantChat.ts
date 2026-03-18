@@ -14,6 +14,9 @@ import type { AIMessage } from './AIAssistant.types';
 interface UseAIAssistantChatProps {
   currentSchema: A2UISchema | null;
   currentModel: string;
+  pageId?: string;
+  pageVersion?: number | null;
+  selectedId?: string | null;
   models: AIModelConfig[];
   loadModels: () => Promise<void>;
   ensureModelsLoaded: () => Promise<void>;
@@ -23,6 +26,9 @@ interface UseAIAssistantChatProps {
 export const useAIAssistantChat = ({
   currentSchema,
   currentModel,
+  pageId,
+  pageVersion,
+  selectedId,
   models,
   loadModels,
   ensureModelsLoaded,
@@ -63,18 +69,19 @@ export const useAIAssistantChat = ({
 
   useEffect(() => {
     loadModels().catch((error) => {
-      console.error('Failed to load models:', error);
+      const errorMessage = error instanceof Error ? error.message : '加载模型失败';
+      onError?.(errorMessage);
     });
     setMessages([
       {
         id: 'welcome',
         type: 'system',
         content:
-          '🤖 AI助手已就绪！\n\n我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量',
+          'AI助手已就绪！\n\n我可以帮你：\n• 根据描述生成页面结构\n• 优化现有Schema\n• 提供设计建议\n• 分析代码质量',
         timestamp: new Date(),
       },
     ]);
-  }, [loadModels]);
+  }, [loadModels, onError]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -140,89 +147,27 @@ export const useAIAssistantChat = ({
 
     try {
       const aiService = serverAIService;
-      let fullContent = '';
+      const response = await aiService.generateResponse({
+        instruction: userContent,
+        modelId: currentModel,
+        pageId,
+        version: pageVersion ?? undefined,
+        selectedId: selectedId ?? undefined,
+        draftSchema: currentSchema || undefined,
+        conversationHistory: nextSessionMessagesAfterUser.map((item) => ({
+          role: item.role,
+          content: item.content,
+        })),
+      });
 
-      let prompt = userContent;
-      const modelId = currentModel;
-      const lowerInput = userContent.toLowerCase();
+      const fullContent = response.content;
+      const aiSchema = response.schema;
 
-      if (
-        lowerInput.includes('分析') ||
-        lowerInput.includes('analyze') ||
-        lowerInput.includes('检查')
-      ) {
-        if (currentSchema) {
-          prompt = `请分析以下页面结构并提供改进建议：\n\`\`\`json\n${JSON.stringify(
-            currentSchema,
-            null,
-            2,
-          )}\n\`\`\`\n\n用户关注点：${userContent}`;
-        }
-      } else if (
-        lowerInput.includes('优化') ||
-        lowerInput.includes('optimize') ||
-        lowerInput.includes('改进')
-      ) {
-        if (currentSchema) {
-          prompt = `请优化以下页面结构，并返回优化后的 Schema（JSON格式）。\n\`\`\`json\n${JSON.stringify(
-            currentSchema,
-            null,
-            2,
-          )}\n\`\`\`\n\n优化需求：${userContent}`;
-        }
-      }
-
-      if (aiService.streamResponse) {
-        await aiService.streamResponse(
-          {
-            prompt,
-            modelId,
-            context: { currentSchema: currentSchema || undefined },
-          },
-          (chunk: string) => {
-            fullContent += chunk;
-            setMessages((prev) =>
-              prev.map((msg) => {
-                if (msg.id === aiMessageId) {
-                  return {
-                    ...msg,
-                    content: fullContent,
-                    status: 'success',
-                  };
-                }
-                return msg;
-              }),
-            );
-          },
-          (error: Error) => {
-            throw error;
-          },
-        );
-      } else {
-        const response = await aiService.generateResponse({
-          prompt,
-          modelId,
-          context: { currentSchema: currentSchema || undefined },
-        });
-        fullContent = response.content;
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === aiMessageId ? { ...msg, content: fullContent, status: 'success' } : msg,
-          ),
-        );
-      }
-
-      let aiSchema: A2UISchema | undefined;
-      try {
-        const jsonMatch =
-          fullContent.match(/```json\n([\s\S]*?)\n```/) || fullContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const jsonStr = jsonMatch[1] || jsonMatch[0];
-          aiSchema = JSON.parse(jsonStr);
-        }
-      } catch {
-        // Ignore parse error
-      }
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === aiMessageId ? { ...msg, content: fullContent, status: 'success' } : msg,
+        ),
+      );
 
       setMessages((prev) =>
         prev.map((msg) => {
@@ -288,6 +233,9 @@ export const useAIAssistantChat = ({
     models.length,
     currentModel,
     currentSchema,
+    pageId,
+    pageVersion,
+    selectedId,
     ensureModelsLoaded,
     currentSession,
     createNewSession,

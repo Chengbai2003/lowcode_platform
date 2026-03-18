@@ -39,6 +39,10 @@ interface AIConfigProps {
 }
 
 type ViewMode = 'list' | 'edit' | 'add';
+type AIConfigFormValues = Pick<
+  AIModelConfig,
+  'name' | 'provider' | 'model' | 'apiKey' | 'baseURL' | 'maxTokens' | 'temperature'
+>;
 
 export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigChange }) => {
   const [form] = Form.useForm();
@@ -93,7 +97,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigCh
 
   const handleSave = async () => {
     try {
-      const values = await form.validateFields();
+      const values = (await form.validateFields()) as AIConfigFormValues;
 
       if (viewMode === 'add') {
         // 新增模型
@@ -125,7 +129,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigCh
           maxTokens: values.maxTokens,
           temperature: values.temperature,
           isAvailable: true,
-        } as any);
+        });
         message.success('模型更新成功！');
       }
 
@@ -133,8 +137,9 @@ export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigCh
       loadModels();
       setViewMode('list');
       setEditingModel(null);
-    } catch (error: any) {
-      message.error(`保存失败: ${error.message || '未知错误'}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error(`保存失败: ${errorMessage}`);
     }
   };
 
@@ -190,14 +195,15 @@ export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigCh
 
       // 测试简单的请求
       await service.generateResponse({
-        prompt: '你好',
+        instruction: '你好',
         modelId: model.id,
         options: { maxTokens: 50 },
       });
 
       message.success(`${model.name} 连接测试成功！`);
-    } catch (error: any) {
-      message.error(`连接测试失败：${error.message || '未知错误'}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误';
+      message.error(`连接测试失败：${errorMessage}`);
     } finally {
       setTesting(null);
     }

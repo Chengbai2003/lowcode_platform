@@ -285,3 +285,14 @@
 :global(.lowcode-component-wrapper) {
   cursor: pointer;
 }
+
+:global(.lowcode-json-selection-block) {
+  background: rgba(16, 185, 129, 0.12);
+  border-top: 1px solid rgba(16, 185, 129, 0.18);
+  border-bottom: 1px solid rgba(16, 185, 129, 0.18);
+}
+
+:global(.lowcode-json-selection-glyph) {
+  border-left: 3px solid #10b981;
+  margin-left: 2px;
+}

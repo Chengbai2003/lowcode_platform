@@ -5,21 +5,28 @@
 
 type RequestOptionsMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
+const DEFAULT_API_BASE_URL =
+  (import.meta.env?.VITE_API_BASE_URL as string) ||
+  ((globalThis as { __LOWCODE_API_URL__?: string }).__LOWCODE_API_URL__ as string | undefined) ||
+  'http://localhost:3001';
+const DEFAULT_API_SECRET = import.meta.env?.VITE_API_SECRET as string | undefined;
+
 export interface RequestOptions {
   method?: RequestOptionsMethod;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   signal?: AbortSignal;
+}
+
+interface HttpClientError extends Error {
+  status?: number;
 }
 
 export class HttpClient {
   private apiSecret: string;
   private baseURL: string;
 
-  constructor(
-    baseURL: string = '',
-    defaultSecret: string = 'dev-secret-token-change-in-production',
-  ) {
+  constructor(baseURL: string = '', defaultSecret: string = '') {
     this.baseURL = baseURL;
     this.apiSecret = defaultSecret;
   }
@@ -29,6 +36,14 @@ export class HttpClient {
    */
   setApiSecret(token: string) {
     this.apiSecret = token;
+  }
+
+  setBaseURL(baseURL: string) {
+    this.baseURL = baseURL;
+  }
+
+  getBaseURL() {
+    return this.baseURL;
   }
 
   /**
@@ -73,7 +88,7 @@ export class HttpClient {
         // 忽略 JSON 解析错误
       }
 
-      const error = new Error(errorMessage) as any;
+      const error: HttpClientError = new Error(errorMessage);
       error.status = response.status;
       throw error;
     }
@@ -131,5 +146,5 @@ export class HttpClient {
   }
 }
 
-// 导出一个默认的单例供全局直接使用
-export const fetchApp = new HttpClient();
+// 导出一个默认的单例供全局直接使用，确保直接 import 组件时也能拿到正确配置
+export const fetchApp = new HttpClient(DEFAULT_API_BASE_URL, DEFAULT_API_SECRET ?? '');

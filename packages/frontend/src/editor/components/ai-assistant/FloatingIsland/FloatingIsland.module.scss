@@ -5,7 +5,7 @@
 .floatingButtonWrapper {
   position: fixed;
   bottom: 80px;
-  right: calc(320px + 24px); // 面板宽度 + 间距，让按钮在面板左侧
+  right: 24px;
   z-index: $z-tooltip;
 }
 
@@ -38,15 +38,17 @@
   z-index: $z-tooltip; // 最高层级
   display: flex;
   flex-direction: column;
-  width: 320px;
+  width: min(550px, calc(100vw - 48px));
   max-width: calc(100vw - 48px);
-  max-height: 480px;
+  min-width: 0;
+  max-height: calc(100vh - 48px);
   background: $bg-base;
   border-radius: $radius-xl;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
   border: 1px solid rgba($primary, 0.2);
   overflow: hidden;
   cursor: grab;
+  min-height: 0;
 
   &:active {
     cursor: grabbing;
@@ -166,8 +168,36 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  min-height: 320px;
-  max-height: 480px;
+  min-height: 0;
+  max-height: none;
+  height: 100%;
+}
+
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  z-index: 2;
+  background:
+    linear-gradient(135deg, transparent 0 45%, rgba($primary, 0.38) 45% 55%, transparent 55%),
+    linear-gradient(135deg, transparent 0 62%, rgba($primary, 0.54) 62% 72%, transparent 72%),
+    linear-gradient(135deg, transparent 0 78%, rgba($primary, 0.72) 78% 88%, transparent 88%);
+}
+
+@media (max-width: 768px) {
+  .floatingButtonWrapper {
+    right: 24px;
+  }
+
+  .floatingIsland {
+    width: calc(100vw - 24px);
+    right: 12px;
+    bottom: 12px;
+    max-width: calc(100vw - 24px);
+  }
 }
 
 // 聊天视图 - 匹配 lowcode: h-80 overflow-y-auto bg-slate-50

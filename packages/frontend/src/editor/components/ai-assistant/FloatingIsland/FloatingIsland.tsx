@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bot, X, History, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import type { A2UISchema } from '../../../../types';
@@ -8,6 +8,9 @@ import styles from './FloatingIsland.module.scss';
 
 interface FloatingIslandProps {
   currentSchema?: A2UISchema | null;
+  pageId?: string;
+  pageVersion?: number | null;
+  selectedId?: string | null;
   onSchemaUpdate?: (schema: A2UISchema) => void;
   onError?: (error: string) => void;
   isPreviewMode?: boolean;
@@ -15,6 +18,9 @@ interface FloatingIslandProps {
 
 export const FloatingIsland: React.FC<FloatingIslandProps> = ({
   currentSchema = null,
+  pageId,
+  pageVersion,
+  selectedId,
   onSchemaUpdate,
   onError,
   isPreviewMode = false,
@@ -25,6 +31,32 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
   const setHistoryDrawerOpen = useEditorStore((state) => state.setHistoryDrawerOpen);
 
   const dragControls = useDragControls();
+  const resizeStartRef = useRef<{
+    width: number;
+    height: number;
+    pointerX: number;
+    pointerY: number;
+  } | null>(null);
+  const [panelSize, setPanelSize] = useState(() => {
+    if (typeof window === 'undefined') {
+      return { width: 550, height: 620 };
+    }
+
+    try {
+      const raw = window.localStorage.getItem('lowcode-floating-island-size');
+      if (!raw) {
+        return { width: 550, height: 620 };
+      }
+
+      const parsed = JSON.parse(raw) as Partial<{ width: number; height: number }>;
+      return {
+        width: typeof parsed.width === 'number' ? parsed.width : 550,
+        height: typeof parsed.height === 'number' ? parsed.height : 620,
+      };
+    } catch {
+      return { width: 550, height: 620 };
+    }
+  });
 
   useEffect(() => {
     if (isPreviewMode && isOpen) {
@@ -32,8 +64,54 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
     }
   }, [isPreviewMode, isOpen, setIsOpen]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem('lowcode-floating-island-size', JSON.stringify(panelSize));
+  }, [panelSize]);
+
   const handleHistoryClick = () => {
     setHistoryDrawerOpen(true);
+  };
+
+  const handleResizePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    resizeStartRef.current = {
+      width: panelSize.width,
+      height: panelSize.height,
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+    };
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const start = resizeStartRef.current;
+      if (!start) {
+        return;
+      }
+
+      const nextWidth = start.width + (start.pointerX - moveEvent.clientX);
+      const nextHeight = start.height + (start.pointerY - moveEvent.clientY);
+      const maxWidth = Math.max(420, window.innerWidth - 48);
+      const maxHeight = Math.max(520, window.innerHeight - 48);
+
+      setPanelSize({
+        width: Math.min(Math.max(nextWidth, 480), maxWidth),
+        height: Math.min(Math.max(nextHeight, 520), maxHeight),
+      });
+    };
+
+    const handlePointerUp = () => {
+      resizeStartRef.current = null;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
   };
 
   if (isPreviewMode) {
@@ -70,6 +148,10 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         dragListener={false}
         dragMomentum={false}
         className={styles.floatingIsland}
+        style={{
+          width: `min(${panelSize.width}px, calc(100vw - 48px))`,
+          height: `min(${panelSize.height}px, calc(100vh - 48px))`,
+        }}
       >
         {/* 头部 */}
         <div className={styles.header} onPointerDown={(e) => dragControls.start(e)}>
@@ -98,10 +180,20 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
         <div className={styles.content}>
           <AIAssistant
             currentSchema={currentSchema}
+            pageId={pageId}
+            pageVersion={pageVersion}
+            selectedId={selectedId}
             onSchemaUpdate={onSchemaUpdate}
             onError={onError}
           />
         </div>
+
+        <div
+          className={styles.resizeHandle}
+          onPointerDown={handleResizePointerDown}
+          aria-label="调整助手面板大小"
+          role="separator"
+        />
       </motion.div>
     </AnimatePresence>
   );

@@ -22,9 +22,15 @@ import styles from './Header.module.scss';
 const DEFAULT_PROJECT_NAME = '未命名项目 01';
 
 interface EditorHeaderProps {
+  projectName?: string;
+  pageId?: string;
+  pageVersion?: number | null;
   previewTheme: 'light' | 'dark';
   onThemeChange: (theme: 'light' | 'dark') => void;
   onCompile: () => void;
+  onSave?: () => void;
+  isSaving?: boolean;
+  canSave?: boolean;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -36,9 +42,15 @@ interface EditorHeaderProps {
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
+  projectName = DEFAULT_PROJECT_NAME,
+  pageId,
+  pageVersion,
   previewTheme,
   onThemeChange,
   onCompile,
+  onSave,
+  isSaving = false,
+  canSave = false,
   onUndo,
   onRedo,
   canUndo,
@@ -76,8 +88,9 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
         </div>
         <div className={styles.divider}></div>
         <div className={styles.projectName}>
-          <span>{DEFAULT_PROJECT_NAME}</span>
+          <span>{projectName}</span>
           <Edit2 size={14} />
+          {pageVersion ? <span>v{pageVersion}</span> : null}
         </div>
       </div>
 
@@ -92,10 +105,15 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
           <span>模板</span>
         </button>
         <div className={styles.divider}></div>
-        {/* 保存按钮 - TODO: 实现保存功能 */}
-        <button className={styles.actionButton} disabled title="保存功能开发中">
+        {/* 保存按钮 */}
+        <button
+          className={styles.actionButton}
+          onClick={onSave}
+          disabled={!canSave || isSaving}
+          title={pageId ? `保存页面 ${pageId}` : '当前页面未配置 pageId'}
+        >
           <Save size={18} />
-          <span>保存</span>
+          <span>{isSaving ? '保存中' : '保存'}</span>
         </button>
         <div className={styles.divider}></div>
         <div className={styles.historyControls}>
@@ -136,7 +154,7 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
           <button title="切换主题（已禁用）" onClick={handleThemeToggle} disabled>
             <Moon size={18} />
           </button>
-          {/* TODO: 实现帮助功能 */}
+          {/* 帮助入口 */}
           <button title="帮助" disabled>
             <HelpCircle size={18} />
           </button>
