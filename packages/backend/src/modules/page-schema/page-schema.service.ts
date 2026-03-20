@@ -1,28 +1,11 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { MAX_SCHEMA_SIZE_BYTES, SavePageSchemaDto } from './dto/save-page-schema.dto';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { SavePageSchemaDto } from './dto/save-page-schema.dto';
 import {
   PageRecord,
   PageSchemaRepository,
   PageSchemaSnapshotRecord,
 } from './repositories/page-schema.repository';
-
-interface A2UIComponentShape {
-  id?: string;
-  type?: string;
-  props?: Record<string, unknown>;
-  childrenIds?: unknown[];
-  events?: Record<string, unknown>;
-}
-
-interface A2UISchemaShape {
-  rootId: string;
-  components: Record<string, A2UIComponentShape>;
-}
+import { assertValidPageSchema } from './schema-validation';
 
 export interface SavedPageSchemaResult {
   pageId: string;
@@ -40,7 +23,7 @@ export class PageSchemaService {
   constructor(private readonly repository: PageSchemaRepository) {}
 
   async saveSchema(pageId: string, dto: SavePageSchemaDto): Promise<SavedPageSchemaResult> {
-    this.assertValidSchema(dto.schema);
+    assertValidPageSchema(dto.schema);
 
     const existingPage = this.repository.getPage(pageId);
     const currentVersion = existingPage?.currentVersion ?? 0;
@@ -127,63 +110,5 @@ export class PageSchemaService {
       ...schema,
       version,
     };
-  }
-
-  private assertValidSchema(schema: unknown): asserts schema is A2UISchemaShape {
-    if (!schema || typeof schema !== 'object' || Array.isArray(schema)) {
-      throw new BadRequestException('Schema must be an object');
-    }
-
-    const serialized = JSON.stringify(schema);
-    if (Buffer.byteLength(serialized, 'utf-8') > MAX_SCHEMA_SIZE_BYTES) {
-      throw new BadRequestException(`Schema must not exceed ${MAX_SCHEMA_SIZE_BYTES} bytes`);
-    }
-
-    const typedSchema = schema as Partial<A2UISchemaShape>;
-    const rootId = typedSchema.rootId;
-    const components = typedSchema.components;
-
-    if (typeof rootId !== 'string' || !rootId.trim()) {
-      throw new BadRequestException('Schema rootId is required');
-    }
-
-    if (!components || typeof components !== 'object' || Array.isArray(components)) {
-      throw new BadRequestException('Schema components must be an object');
-    }
-
-    if (!(rootId in components)) {
-      throw new BadRequestException(`Schema rootId ${rootId} does not exist in components`);
-    }
-
-    for (const [componentId, component] of Object.entries(components)) {
-      if (!component || typeof component !== 'object' || Array.isArray(component)) {
-        throw new BadRequestException(`Component ${componentId} must be an object`);
-      }
-
-      const typedComponent = component as A2UIComponentShape;
-      if (typeof typedComponent.type !== 'string' || !typedComponent.type.trim()) {
-        throw new BadRequestException(`Component ${componentId} type is required`);
-      }
-
-      if (typedComponent.id !== undefined && typedComponent.id !== componentId) {
-        throw new BadRequestException(
-          `Component ${componentId} id must match its key when provided`,
-        );
-      }
-
-      if (typedComponent.childrenIds !== undefined && !Array.isArray(typedComponent.childrenIds)) {
-        throw new BadRequestException(`Component ${componentId} childrenIds must be an array`);
-      }
-
-      if (Array.isArray(typedComponent.childrenIds)) {
-        for (const childId of typedComponent.childrenIds) {
-          if (typeof childId !== 'string' || !(childId in components)) {
-            throw new BadRequestException(
-              `Component ${componentId} references missing child ${String(childId)}`,
-            );
-          }
-        }
-      }
-    }
   }
 }

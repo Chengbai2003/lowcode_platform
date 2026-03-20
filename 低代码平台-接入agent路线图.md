@@ -512,6 +512,16 @@
 
 让模型只能通过工具编辑页面。
 
+### 本阶段已完成（2026-03-20）
+
+- 后端 `agent-tools` 模块已落地，包含 `PatchApplyService` / `PatchValidationService` / `PatchAutoFixService`
+- 后端已实现 `ToolRegistryService` 和 `ToolExecutionService`
+- 后端已注册读工具 4 个、写工具 5 个、守门工具 3 个
+- 后端已提供 `POST /agent/patch/preview` 作为手工 patch 验证入口
+- patch 错误已统一为 `code/message/details?/traceId` 语义，并接入全局异常过滤器顶层字段
+- 前端已补齐镜像 patch 类型、`patchAdapter` 和 `createPatchCommand`
+- 当前 `/agent/edit` 仍保持 schema 模式，未在 Phase 3 切换为 patch 主响应
+
 ### 主要任务
 
 - 定义 patch DTO
@@ -539,15 +549,15 @@
 
 ### 验收标准
 
-- [ ] patch DTO 被固定，且覆盖 `insertComponent`
-- [ ] patch DTO 被固定，且覆盖 `updateProps`
-- [ ] patch DTO 被固定，且覆盖 `bindEvent`
-- [ ] patch DTO 被固定，且覆盖 `removeComponent`
-- [ ] patch DTO 被固定，且覆盖 `moveComponent`
-- [ ] 每个写工具都能在不依赖 LLM 的情况下独立调用成功
-- [ ] patch 应用后，schema 仍能通过 validate
-- [ ] 非法 patch 会被明确拒绝，并返回统一错误结构
-- [ ] 前端可以使用同一份 patch DTO 应用到本地 schema
+- [x] patch DTO 被固定，且覆盖 `insertComponent`
+- [x] patch DTO 被固定，且覆盖 `updateProps`
+- [x] patch DTO 被固定，且覆盖 `bindEvent`
+- [x] patch DTO 被固定，且覆盖 `removeComponent`
+- [x] patch DTO 被固定，且覆盖 `moveComponent`
+- [x] 每个写工具都能在不依赖 LLM 的情况下独立调用成功
+- [x] patch 应用后，schema 仍能通过 validate
+- [x] 非法 patch 会被明确拒绝，并返回统一错误结构
+- [x] 前端可以使用同一份 patch DTO 应用到本地 schema
 
 ### 可独立停靠条件
 
@@ -557,15 +567,15 @@
 
 ### 最小验证机制
 
-- [ ] 手工 patch 验证：更新按钮文案
-- [ ] 手工 patch 验证：给按钮绑定事件
-- [ ] 手工 patch 验证：在容器下插入一个输入框
-- [ ] 最小自动化测试：每个写工具至少 1 个单测
-- [ ] 最小自动化测试：`validate_patch` 至少 1 个单测
-- [ ] 最小自动化测试：`auto_fix_patch` 至少 1 个单测
-- [ ] 最小自动化测试：patch -> schema 应用测试至少 1 个
+- [x] 手工 patch 验证：更新按钮文案（通过 `POST /agent/patch/preview` e2e）
+- [x] 手工 patch 验证：给按钮绑定事件（通过 `POST /agent/patch/preview` e2e）
+- [x] 手工 patch 验证：在容器下插入一个输入框（通过 `POST /agent/patch/preview` e2e）
+- [x] 最小自动化测试：每个写工具至少 1 个单测
+- [x] 最小自动化测试：`validate_patch` 至少 1 个单测
+- [x] 最小自动化测试：`auto_fix_patch` 至少 1 个单测
+- [x] 最小自动化测试：patch -> schema 应用测试至少 1 个
 - [ ] 前端联调验证：把后端返回的 patch 应用到编辑器，预览和属性面板一致（人工验收：Playwright 可做）
-- [ ] 错误验证：对不存在的 `componentId` 返回明确错误
+- [x] 错误验证：对不存在的 `componentId` 返回明确错误
 
 ---
 
@@ -1992,12 +2002,13 @@ export function applyPatchToSchema(schema: A2UISchema, patch: EditorPatchOperati
 
 ### P3. 工具层
 
-- 定义 `EditorPatchOperationDto`
-- 实现读工具 4 个
-- 实现写工具 5 个
-- 实现 `validate_patch`
-- 实现 `auto_fix_patch`
-- 统一 tool error DTO
+- 定义 `EditorPatchOperationDto` ✅
+- 实现读工具 4 个 ✅
+- 实现写工具 5 个 ✅
+- 实现 `validate_patch` ✅
+- 实现 `auto_fix_patch` ✅
+- 实现 `preview_patch` ✅
+- 统一 tool error DTO ✅
 
 ### P4. Agent 层
 

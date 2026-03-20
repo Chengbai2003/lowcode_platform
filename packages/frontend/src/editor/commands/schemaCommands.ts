@@ -1,5 +1,7 @@
 import type { A2UISchema } from '../../types';
 import type { Command, CommandOptions } from '../store/history';
+import type { EditorPatchOperation } from '../types/patch';
+import { applyPatchToSchema } from '../services/patchAdapter';
 
 // ============================================
 // Schema 变更命令
@@ -82,6 +84,16 @@ export function createUpdateSchemaCommand(
     applyOnExecute: config.applyOnExecute,
     timestamp: Date.now(),
   });
+}
+
+export function createPatchCommand(
+  oldSchema: A2UISchema,
+  patch: readonly EditorPatchOperation[],
+  onChange: SchemaChangeCallback,
+  description: string = '应用 Patch',
+): UpdateSchemaCommand {
+  const nextSchema = applyPatchToSchema(oldSchema, patch);
+  return createUpdateSchemaCommand(oldSchema, nextSchema, onChange, description);
 }
 
 // ============================================

@@ -15,11 +15,13 @@ import { Request, Response } from 'express';
 
 interface ErrorResponse {
   statusCode: number;
+  code?: string;
   message: string;
   error: string;
   timestamp: string;
   path: string;
   details?: any;
+  traceId?: string;
 }
 
 @Catch(HttpException)
@@ -37,11 +39,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
     // 构建标准错误响应
     const errorResponse: ErrorResponse = {
       statusCode: status,
+      code: this.getErrorCode(exceptionResponse),
       message: this.getErrorMessage(exceptionResponse),
       error: this.getErrorName(status),
       timestamp: new Date().toISOString(),
       path: request.url,
       details: this.getErrorDetails(exceptionResponse),
+      traceId: this.getTraceId(exceptionResponse, request),
     };
 
     // 记录错误日志
@@ -80,10 +84,42 @@ export class HttpExceptionFilter implements ExceptionFilter {
     return statusNames[status] || 'Unknown Error';
   }
 
+  private getErrorCode(exceptionResponse: string | object): string | undefined {
+    if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      return (exceptionResponse as any).code;
+    }
+    return undefined;
+  }
+
+  private getTraceId(exceptionResponse: string | object, request: Request): string | undefined {
+    if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+      const traceId = (exceptionResponse as any).traceId;
+      if (typeof traceId === 'string' && traceId.trim()) {
+        return traceId;
+      }
+    }
+
+    const requestId = (request as Request & { requestId?: string }).requestId;
+    return requestId;
+  }
+
   private getErrorDetails(exceptionResponse: string | object): any {
     if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
-      const { message, statusCode, error, ...details } = exceptionResponse as any;
-      return Object.keys(details).length > 0 ? details : undefined;
+      const { message, statusCode, error, code, traceId, details, ...rest } = exceptionResponse as {
+        message?: string;
+        statusCode?: number;
+        error?: string;
+        code?: string;
+        traceId?: string;
+        details?: unknown;
+        [key: string]: unknown;
+      };
+
+      if (details !== undefined) {
+        return details;
+      }
+
+      return Object.keys(rest).length > 0 ? rest : undefined;
     }
     return undefined;
   }

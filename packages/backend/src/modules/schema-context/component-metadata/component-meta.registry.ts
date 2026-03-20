@@ -627,6 +627,10 @@ export class ComponentMetaRegistry {
     return Array.from(this.registry.keys());
   }
 
+  getAll(): BackendComponentMeta[] {
+    return Array.from(this.registry.values());
+  }
+
   getDisplayName(type: string): string | undefined {
     return this.resolve(type)?.displayName;
   }
