@@ -299,7 +299,14 @@ export class PatchValidationService {
       }
     }
 
-    const orphanIds = Object.keys(schema.components).filter((id) => !visited.has(id));
+    const orphanIds = Object.keys(schema.components).filter((id) => {
+      if (visited.has(id)) {
+        return false;
+      }
+
+      return !this.isDetachedHiddenDataNode(schema.components[id]);
+    });
+
     if (orphanIds.length > 0) {
       throw new AgentToolException({
         code: 'SCHEMA_INVALID',
@@ -308,6 +315,25 @@ export class PatchValidationService {
         details: { orphanIds },
       });
     }
+  }
+
+  private isDetachedHiddenDataNode(
+    component: A2UISchema['components'][string] | undefined,
+  ): boolean {
+    if (!component || component.type !== 'Div') {
+      return false;
+    }
+
+    const props = component.props;
+    if (
+      !props ||
+      props.visible !== false ||
+      !Object.prototype.hasOwnProperty.call(props, 'initialValue')
+    ) {
+      return false;
+    }
+
+    return (component.childrenIds?.length ?? 0) === 0;
   }
 
   private isDescendant(schema: A2UISchema, candidateId: string, ancestorId: string): boolean {

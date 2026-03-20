@@ -18,8 +18,11 @@ export interface RequestOptions {
   signal?: AbortSignal;
 }
 
-interface HttpClientError extends Error {
+export interface HttpClientError extends Error {
   status?: number;
+  code?: string;
+  details?: Record<string, unknown>;
+  traceId?: string;
 }
 
 export class HttpClient {
@@ -80,16 +83,28 @@ export class HttpClient {
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      let errorCode: string | undefined;
+      let errorDetails: Record<string, unknown> | undefined;
+      let traceId: string | undefined;
 
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
+        errorCode = typeof errorData.code === 'string' ? errorData.code : undefined;
+        errorDetails =
+          errorData.details && typeof errorData.details === 'object'
+            ? errorData.details
+            : undefined;
+        traceId = typeof errorData.traceId === 'string' ? errorData.traceId : undefined;
       } catch {
         // 忽略 JSON 解析错误
       }
 
       const error: HttpClientError = new Error(errorMessage);
       error.status = response.status;
+      error.code = errorCode;
+      error.details = errorDetails;
+      error.traceId = traceId;
       throw error;
     }
 

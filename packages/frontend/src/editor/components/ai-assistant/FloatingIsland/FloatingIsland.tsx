@@ -3,6 +3,7 @@ import { Bot, X, History, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import type { A2UISchema } from '../../../../types';
 import { AIAssistant } from '../AIAssistant/AIAssistant';
+import type { AgentPatchApplyHandler } from '../types/ai-types';
 import { useEditorStore } from '../../../store/editor-store';
 import styles from './FloatingIsland.module.scss';
 
@@ -12,6 +13,7 @@ interface FloatingIslandProps {
   pageVersion?: number | null;
   selectedId?: string | null;
   onSchemaUpdate?: (schema: A2UISchema) => void;
+  onPatchApply?: AgentPatchApplyHandler;
   onError?: (error: string) => void;
   isPreviewMode?: boolean;
 }
@@ -22,6 +24,7 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
   pageVersion,
   selectedId,
   onSchemaUpdate,
+  onPatchApply,
   onError,
   isPreviewMode = false,
 }) => {
@@ -184,6 +187,7 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
             pageVersion={pageVersion}
             selectedId={selectedId}
             onSchemaUpdate={onSchemaUpdate}
+            onPatchApply={onPatchApply}
             onError={onError}
           />
         </div>

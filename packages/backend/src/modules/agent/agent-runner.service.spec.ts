@@ -358,4 +358,81 @@ describe('AgentRunnerService', () => {
       ),
     ).rejects.toBeInstanceOf(AgentToolException);
   });
+
+  it('logs real tool errors before the agent finishes with an empty patch', async () => {
+    const { runner, aiService, toolExecutionService } = createRunner();
+    const logger = {
+      log: jest.fn(),
+      error: jest.fn(),
+    };
+    (runner as any).logger = logger;
+
+    toolExecutionService.executeTool.mockImplementation(async (name, _input, _context) => {
+      if (name === 'update_component_props') {
+        throw new AgentToolException({
+          code: 'SCHEMA_INVALID',
+          message: 'Schema contains orphaned components after patch application',
+          traceId: 'agent-request-5',
+          details: { orphanIds: ['ticketDetail', 'ticketLogs'] },
+        });
+      }
+
+      if (name === 'auto_fix_patch') {
+        return { data: { patch: [] } };
+      }
+
+      if (name === 'preview_patch') {
+        return { data: { patch: [] } };
+      }
+
+      return { data: {} };
+    });
+
+    aiService.runToolCalling.mockImplementation(async (input) => {
+      await input
+        .executeTool('update_component_props', {
+          componentId: 'button',
+          props: { children: 'pass' },
+        })
+        .catch(() => undefined);
+      return {
+        text: 'done',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [
+          {
+            stepNumber: 0,
+            finishReason: 'stop',
+            toolCalls: [{ toolName: 'update_component_props' }],
+          },
+        ],
+        toolCallCount: 1,
+      };
+    });
+
+    await expect(
+      runner.runEdit(
+        {
+          instruction: '把通过按钮文本改为 pass',
+          pageId: 'page-1',
+          version: 3,
+          responseMode: 'patch',
+        },
+        'request-5',
+      ),
+    ).rejects.toBeInstanceOf(AgentToolException);
+
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'tool error name=update_component_props write=true code=SCHEMA_INVALID message=Schema contains orphaned components after patch application',
+      ),
+      expect.any(String),
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('"orphanIds":["ticketDetail","ticketLogs"]'),
+      expect.any(String),
+    );
+  });
 });

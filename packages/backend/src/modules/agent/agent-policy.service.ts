@@ -19,6 +19,7 @@ export interface AgentRunMetrics {
 }
 
 const PATCH_ENABLED_PROVIDERS = new Set(['openai', 'anthropic']);
+const AGENT_TIMEOUT_MS = 60_000;
 
 @Injectable()
 export class AgentPolicyService {
@@ -31,7 +32,7 @@ export class AgentPolicyService {
     return {
       maxSteps: 6,
       maxToolCalls: 8,
-      timeoutMs: 15_000,
+      timeoutMs: AGENT_TIMEOUT_MS,
       maxPatchOps: 6,
       maxDistinctTargets: 4,
     };

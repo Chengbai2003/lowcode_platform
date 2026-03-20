@@ -71,11 +71,19 @@ export class AgentRunnerService {
           this.logger.log(
             `[${traceId}] tool execute name=${name} write=${isWriteOperation} input=${this.summarizeToolInput(input)}`,
           );
-          const toolResult = await this.toolExecutionService.executeTool(name, input, context);
-          this.logger.log(
-            `[${traceId}] tool result name=${name} write=${isWriteOperation} patchDelta=${toolResult.patchDelta?.length ?? 0} totalPatch=${context.accumulatedPatch.length}`,
-          );
-          return toolResult.data ?? { ok: true };
+          try {
+            const toolResult = await this.toolExecutionService.executeTool(name, input, context);
+            this.logger.log(
+              `[${traceId}] tool result name=${name} write=${isWriteOperation} patchDelta=${toolResult.patchDelta?.length ?? 0} totalPatch=${context.accumulatedPatch.length}`,
+            );
+            return toolResult.data ?? { ok: true };
+          } catch (error) {
+            this.logger.error(
+              `[${traceId}] tool error name=${name} write=${isWriteOperation} ${this.summarizeToolError(error)}`,
+              error instanceof Error ? error.stack : undefined,
+            );
+            throw error;
+          }
         },
         onStepFinish: (event) => {
           metrics.stepCount = Math.max(metrics.stepCount, event.stepNumber + 1);
@@ -212,6 +220,7 @@ export class AgentRunnerService {
       '禁止生成 customScript。',
       `可用组件类型: ${componentList.join(', ') || '未知'}`,
       `允许的事件 Action 类型: ${allowedActionTypes.join(', ')}`,
+      "feedback 动作必须使用 content/level 字段，例如 { type: 'feedback', kind: 'message', content: '操作成功', level: 'success' }；不要使用 message/type_/messageType。",
       '如果你已经完成修改，就停止继续调用工具。',
     ].join('\n');
   }
@@ -328,6 +337,38 @@ export class AgentRunnerService {
       return serialized.length > 240 ? `${serialized.slice(0, 240)}...(truncated)` : serialized;
     } catch {
       return '[unserializable-input]';
+    }
+  }
+
+  private summarizeToolError(error: unknown): string {
+    if (error instanceof AgentToolException) {
+      const response = error.getResponse() as {
+        code?: string;
+        message?: string;
+        details?: Record<string, unknown>;
+        traceId?: string;
+      };
+      const details = this.summarizeUnknownValue(response.details);
+      return `code=${response.code ?? 'UNKNOWN'} message=${response.message ?? 'Unknown tool error'} details=${details}`;
+    }
+
+    if (error instanceof Error) {
+      return `message=${error.message}`;
+    }
+
+    return `message=${this.summarizeUnknownValue(error)}`;
+  }
+
+  private summarizeUnknownValue(value: unknown): string {
+    try {
+      const serialized = JSON.stringify(value);
+      if (!serialized) {
+        return 'null';
+      }
+
+      return serialized.length > 240 ? `${serialized.slice(0, 240)}...(truncated)` : serialized;
+    } catch {
+      return '[unserializable-value]';
     }
   }
 }

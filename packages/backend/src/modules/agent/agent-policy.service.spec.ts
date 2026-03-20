@@ -103,6 +103,7 @@ describe('AgentPolicyService', () => {
     } catch (error) {
       expect(getErrorCode(error)).toBe('AGENT_TIMEOUT');
       expect(((error as AgentToolException).getResponse() as any).details).toMatchObject({
+        timeoutMs: 60_000,
         stepCount: 3,
         toolCallCount: 4,
       });

@@ -117,9 +117,9 @@ ${actionsList}
     "onClick": [
       { "type": "if", "condition": "{{formData.valid}}", "then": [
         { "type": "apiCall", "url": "/api/submit", "method": "POST", "body": "{{formData}}" },
-        { "type": "message", "content": "提交成功", "messageType": "success" }
+        { "type": "feedback", "kind": "message", "content": "提交成功", "level": "success" }
       ], "else": [
-        { "type": "message", "content": "请填写必填项", "messageType": "error" }
+        { "type": "feedback", "kind": "message", "content": "请填写必填项", "level": "error" }
       ]}
     ]
   }

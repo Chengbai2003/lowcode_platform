@@ -29,6 +29,51 @@ function createSchema(): A2UISchema {
   };
 }
 
+function createSchemaWithDetachedHiddenDataNodes(): A2UISchema {
+  return {
+    version: 2,
+    rootId: 'root',
+    components: {
+      ticketDetail: {
+        id: 'ticketDetail',
+        type: 'Div',
+        props: {
+          visible: false,
+          initialValue: {
+            code: 'TASK-001',
+            status: '处理中',
+          },
+        },
+        childrenIds: [],
+      },
+      ticketLogs: {
+        id: 'ticketLogs',
+        type: 'Div',
+        props: {
+          visible: false,
+          initialValue: [{ key: '1', action: '提交申请' }],
+        },
+        childrenIds: [],
+      },
+      root: {
+        id: 'root',
+        type: 'Page',
+        childrenIds: ['headerActions'],
+      },
+      headerActions: {
+        id: 'headerActions',
+        type: 'Space',
+        childrenIds: ['btn-pass'],
+      },
+      'btn-pass': {
+        id: 'btn-pass',
+        type: 'Button',
+        props: { children: '通过' },
+      },
+    },
+  };
+}
+
 async function expectToolError(callback: () => void, code: string, message?: string) {
   try {
     callback();
@@ -77,6 +122,22 @@ describe('PatchValidationService', () => {
 
     expect(() =>
       service.validatePatchAgainstSchema(baseSchema, patch, resultSchema, 'trace-1'),
+    ).not.toThrow();
+  });
+
+  it('allows detached hidden data nodes that are outside of the root subtree', () => {
+    const baseSchema = createSchemaWithDetachedHiddenDataNodes();
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'updateProps',
+        componentId: 'btn-pass',
+        props: { children: 'pass' },
+      },
+    ];
+    const resultSchema = applyService.applyPatch(baseSchema, patch);
+
+    expect(() =>
+      service.validatePatchAgainstSchema(baseSchema, patch, resultSchema, 'trace-hidden'),
     ).not.toThrow();
   });
 
@@ -144,6 +205,42 @@ describe('PatchValidationService', () => {
       },
       'PATCH_INVALID',
       'root',
+    );
+  });
+
+  it('still rejects actual orphan components after applying a patch', async () => {
+    const schemaWithOrphan: A2UISchema = {
+      version: 2,
+      rootId: 'root',
+      components: {
+        ...createSchema().components,
+        orphan: {
+          id: 'orphan',
+          type: 'Div',
+          props: { children: 'dangling' },
+          childrenIds: [],
+        },
+      },
+    };
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: { children: '继续提交' },
+      },
+    ];
+
+    await expectToolError(
+      () => {
+        service.validatePatchAgainstSchema(
+          schemaWithOrphan,
+          patch,
+          schemaWithOrphan,
+          'trace-orphan',
+        );
+      },
+      'SCHEMA_INVALID',
+      'orphaned components',
     );
   });
 

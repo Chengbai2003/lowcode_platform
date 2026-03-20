@@ -1,11 +1,7 @@
 import { type ApiEnvelope, unwrapApiEnvelope } from '../../../lib/apiResponse';
+import { toAIServiceError } from '../../../lib/aiError';
 import { fetchApp } from '../../../lib/httpClient';
-import {
-  AIService,
-  type AgentEditRequest,
-  type AgentEditResponse,
-  AIServiceError,
-} from '../types/ai-types';
+import { AIService, type AgentEditRequest, type AgentEditResponse } from '../types/ai-types';
 
 class ServerAIService implements AIService {
   name = 'ServerAIService';
@@ -43,14 +39,7 @@ class ServerAIService implements AIService {
       );
       return unwrapApiEnvelope(response);
     } catch (error) {
-      if (error instanceof AIServiceError) {
-        throw error;
-      }
-      throw new AIServiceError(
-        error instanceof Error ? error.message : 'Unknown error occurred',
-        'NETWORK_ERROR',
-        error,
-      );
+      throw toAIServiceError(error);
     }
   }
 }

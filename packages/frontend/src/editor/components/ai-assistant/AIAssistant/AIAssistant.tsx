@@ -6,7 +6,7 @@ import { validateAndAutoFixA2UISchema } from '../../../../schema/schemaValidatio
 import { componentRegistry } from '../../../../components';
 import { builtInComponents } from '../../../../renderer';
 import { AIConfig } from '../AIConfig/AIConfig';
-import type { AIModelConfig } from '../types/ai-types';
+import type { AIModelConfig, AgentPatchApplyHandler } from '../types/ai-types';
 import { useAIModels } from './useAIModels';
 import { useAIAssistantChat } from './useAIAssistantChat';
 import { AIAssistantMessageList } from './AIAssistantMessageList';
@@ -18,6 +18,7 @@ interface AIAssistantProps {
   pageVersion?: number | null;
   selectedId?: string | null;
   onSchemaUpdate?: (schema: A2UISchema) => void;
+  onPatchApply?: AgentPatchApplyHandler;
   onError?: (error: string) => void;
 }
 
@@ -27,6 +28,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   pageVersion,
   selectedId,
   onSchemaUpdate,
+  onPatchApply,
   onError,
 }) => {
   const [configVisible, setConfigVisible] = useState(false);
@@ -49,6 +51,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       models,
       loadModels,
       ensureModelsLoaded,
+      onPatchApply,
       onError,
     });
 

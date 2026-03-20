@@ -50,6 +50,18 @@ export interface AgentEditPatchResponse {
 // Agent 编辑响应接口（Phase 4 双模兼容）
 export type AgentEditResponse = AgentEditSchemaResponse | AgentEditPatchResponse;
 
+export interface AgentPatchApplyPayload {
+  instruction: string;
+  patch: EditorPatchOperation[];
+  resolvedSelectedId?: string;
+  warnings?: string[];
+  traceId: string;
+}
+
+export type AgentPatchApplyHandler = (
+  payload: AgentPatchApplyPayload,
+) => Promise<A2UISchema | null> | A2UISchema | null;
+
 // Agent 编辑请求接口
 export interface AgentEditRequest {
   instruction: string;
@@ -84,15 +96,26 @@ export interface AIService {
 }
 
 // 错误类型
+export type AIServiceErrorCode =
+  | 'API_KEY_MISSING'
+  | 'MODEL_NOT_AVAILABLE'
+  | 'RATE_LIMIT'
+  | 'NETWORK_ERROR'
+  | 'INVALID_RESPONSE'
+  | 'PAGE_NOT_FOUND'
+  | 'PAGE_VERSION_CONFLICT'
+  | 'NODE_NOT_FOUND'
+  | 'NODE_AMBIGUOUS'
+  | 'PATCH_INVALID'
+  | 'SCHEMA_INVALID'
+  | 'AGENT_TIMEOUT'
+  | 'AGENT_POLICY_BLOCKED'
+  | 'PATCH_APPLY_FAILED';
+
 export class AIServiceError extends Error {
   constructor(
     message: string,
-    public code:
-      | 'API_KEY_MISSING'
-      | 'MODEL_NOT_AVAILABLE'
-      | 'RATE_LIMIT'
-      | 'NETWORK_ERROR'
-      | 'INVALID_RESPONSE',
+    public code: AIServiceErrorCode,
     public details?: any,
   ) {
     super(message);

@@ -81,7 +81,41 @@ describe('PatchAutoFixService', () => {
       event: 'onClick',
       actions: [],
     });
-    expect(result.warnings).toEqual([]);
+    expect(result.warnings).toContain('Normalized action payloads for button_submit.onClick');
+  });
+
+  it('normalizes feedback alias fields to renderer-compatible keys', () => {
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'bindEvent',
+        componentId: 'button_submit',
+        event: 'onClick',
+        actions: [
+          {
+            type: 'feedback',
+            message: '登录成功',
+            type_: 'success',
+          },
+        ],
+      },
+    ];
+
+    const result = service.autoFix(patch);
+
+    expect(result.patch[0]).toEqual({
+      op: 'bindEvent',
+      componentId: 'button_submit',
+      event: 'onClick',
+      actions: [
+        {
+          type: 'feedback',
+          kind: 'message',
+          content: '登录成功',
+          level: 'success',
+        },
+      ],
+    });
+    expect(result.warnings).toContain('Normalized action payloads for button_submit.onClick');
   });
 
   it('leaves already valid patch operations unchanged', () => {

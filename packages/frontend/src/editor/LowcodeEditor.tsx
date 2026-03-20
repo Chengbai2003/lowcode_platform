@@ -23,11 +23,13 @@ import {
 import { ComponentTree } from './components/TreeView/ComponentTree';
 import { useFloatingIslandHotkey } from './hooks/useFloatingIslandHotkey';
 import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
+import { createPatchCommand } from './commands/schemaCommands';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
 import { useSelectionStore } from './store/editor-store';
 import { createDefaultReactiveSchema } from './templates/reactiveSchema';
 import { pageSchemaApi } from './services/pageSchemaApi';
+import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
 import styles from './LowcodeEditor.module.scss';
 
 /**
@@ -193,11 +195,19 @@ function LowcodeEditorInner({
     [onChange, syncSchemaVersion],
   );
 
-  const { updateSchema, forceUpdateSchema, undo, redo, canUndo, canRedo, historySize } =
-    useSchemaHistoryStore(schema, handleSchemaUpdate, {
-      enableMerge: true,
-      mergeWindow: 500,
-    });
+  const {
+    updateSchema,
+    forceUpdateSchema,
+    executeSchemaCommand,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    historySize,
+  } = useSchemaHistoryStore(schema, handleSchemaUpdate, {
+    enableMerge: true,
+    mergeWindow: 500,
+  });
 
   // 处理 Schema 变化（记录历史）
   const handleSchemaChange = useCallback(
@@ -354,6 +364,58 @@ function LowcodeEditorInner({
       return true;
     },
     [allComponents, forceUpdateSchema, onError, syncSchemaVersion],
+  );
+
+  const describeAIPatch = useCallback((instruction: string, patchCount: number) => {
+    const trimmed = instruction.trim();
+    const summary = trimmed.length > 24 ? `${trimmed.slice(0, 24)}...` : trimmed;
+    return patchCount > 0 ? `AI 修改：${summary || '应用 patch'}` : 'AI 修改';
+  }, []);
+
+  const handleAIPatchApply = useCallback(
+    async ({
+      instruction,
+      patch,
+      resolvedSelectedId,
+      warnings,
+    }: AgentPatchApplyPayload): Promise<A2UISchema | null> => {
+      try {
+        const baseSchema = syncSchemaVersion(schema);
+        const command = createPatchCommand(
+          baseSchema,
+          patch,
+          handleSchemaUpdate,
+          describeAIPatch(instruction, patch.length),
+        );
+
+        executeSchemaCommand(command);
+        const nextSchema = command.getNewSchema();
+
+        if (resolvedSelectedId && nextSchema.components[resolvedSelectedId]) {
+          selectComponent(resolvedSelectedId);
+        }
+
+        if (warnings && warnings.length > 0) {
+          message.info(`AI 修改已应用，并返回 ${warnings.length} 条提示`);
+        }
+
+        return nextSchema;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'AI patch 应用失败';
+        onError?.(errorMessage);
+        message.error(errorMessage);
+        return null;
+      }
+    },
+    [
+      describeAIPatch,
+      executeSchemaCommand,
+      handleSchemaUpdate,
+      onError,
+      schema,
+      selectComponent,
+      syncSchemaVersion,
+    ],
   );
 
   const isA2UISchema = (value: unknown): value is A2UISchema => {
@@ -544,6 +606,7 @@ function LowcodeEditorInner({
               pageVersion={pageVersion}
               selectedId={selectedId}
               onSchemaUpdate={handleAISchemaUpdate}
+              onPatchApply={handleAIPatchApply}
               onError={onError}
               isPreviewMode={isPreviewMode}
             />
