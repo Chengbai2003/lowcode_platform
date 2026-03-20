@@ -34,6 +34,7 @@ class ServerAIService implements AIService {
         temperature: request.options?.temperature,
         maxTokens: request.options?.maxTokens,
         stream: request.stream,
+        responseMode: request.responseMode ?? 'schema',
       };
 
       const response = await fetchApp.post<AgentEditResponse | ApiEnvelope<AgentEditResponse>>(

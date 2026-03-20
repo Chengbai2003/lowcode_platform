@@ -21,6 +21,7 @@ describe('ServerAIService', () => {
       data: {
         mode: 'schema',
         content: '{"rootId":"root","components":{"root":{"id":"root","type":"Button"}}}',
+        traceId: 'agent-trace',
       },
     });
 
@@ -66,6 +67,7 @@ describe('ServerAIService', () => {
       temperature: 0.2,
       maxTokens: 1024,
       stream: undefined,
+      responseMode: 'schema',
     });
   });
 });

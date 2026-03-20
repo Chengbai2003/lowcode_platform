@@ -3,6 +3,16 @@ import { FocusContextResult } from '../../schema-context/types/focus-context.typ
 import { A2UISchema } from '../../schema-context/types/schema.types';
 import { EditorPatchOperation } from './editor-patch.types';
 
+export type ToolVisibility = 'agent' | 'internal';
+
+export interface ToolInputSchema {
+  type: 'object';
+  description?: string;
+  properties?: Record<string, unknown>;
+  required?: string[];
+  additionalProperties?: boolean;
+}
+
 export interface ToolExecutionContext {
   pageId?: string;
   version?: number;
@@ -37,6 +47,9 @@ export type ToolDataResult =
 
 export interface ToolDefinition {
   name: string;
+  description: string;
+  inputSchema: ToolInputSchema;
+  visibility: ToolVisibility;
   execute: (
     input: Record<string, unknown>,
     context: ToolExecutionContext,

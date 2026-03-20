@@ -1,4 +1,5 @@
 import type { A2UISchema } from '../../../../types';
+import type { EditorPatchOperation } from '../../../types/patch';
 
 // AI模型配置接口
 export interface AIModelConfig {
@@ -19,19 +20,35 @@ export interface AgentConversationMessage {
   content: string;
 }
 
-// Agent 编辑响应接口（当前仍返回整页 schema）
-export interface AgentEditResponse {
+export type AgentResponseMode = 'schema' | 'patch';
+
+export interface AgentEditSchemaResponse {
   mode: 'schema';
   content: string;
   schema?: A2UISchema;
   warnings?: string[];
   suggestions?: string[];
+  traceId: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   };
 }
+
+export interface AgentEditPatchResponse {
+  mode: 'patch';
+  pageId?: string;
+  baseVersion?: number;
+  resolvedVersion?: number;
+  resolvedSelectedId?: string;
+  patch: EditorPatchOperation[];
+  warnings?: string[];
+  traceId: string;
+}
+
+// Agent 编辑响应接口（Phase 4 双模兼容）
+export type AgentEditResponse = AgentEditSchemaResponse | AgentEditPatchResponse;
 
 // Agent 编辑请求接口
 export interface AgentEditRequest {
@@ -48,6 +65,7 @@ export interface AgentEditRequest {
     maxTokens?: number;
   };
   stream?: boolean;
+  responseMode?: AgentResponseMode;
 }
 
 export type AIRequest = AgentEditRequest;

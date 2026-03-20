@@ -25,12 +25,12 @@ export class AgentController {
 
   @Post('edit')
   @HttpCode(HttpStatus.OK)
-  async edit(@Body() dto: AgentEditRequestDto) {
+  async edit(@Body() dto: AgentEditRequestDto, @Req() request: Request & { requestId?: string }) {
     if (!dto.instruction?.trim()) {
       throw new BadRequestException('instruction is required');
     }
 
-    return this.agentService.edit(dto);
+    return this.agentService.edit(dto, request.requestId);
   }
 
   @Post('patch/preview')

@@ -90,10 +90,8 @@ describe('ToolExecutionService', () => {
     const patchValidationService = new PatchValidationService(metaRegistry, patchApplyService);
     const patchAutoFixService = new PatchAutoFixService();
     const toolRegistry = new ToolRegistryService(
-      pageSchemaServiceMock as PageSchemaService,
       contextAssemblerMock as ContextAssemblerService,
       metaRegistry,
-      patchApplyService,
       patchAutoFixService,
       patchValidationService,
     );

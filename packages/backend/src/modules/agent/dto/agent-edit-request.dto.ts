@@ -79,4 +79,9 @@ export class AgentEditRequestDto {
   @IsBoolean()
   @IsOptional()
   stream?: boolean;
+
+  @IsString()
+  @IsIn(['schema', 'patch'])
+  @IsOptional()
+  responseMode?: 'schema' | 'patch';
 }

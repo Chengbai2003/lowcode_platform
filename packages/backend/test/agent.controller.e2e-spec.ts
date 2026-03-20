@@ -3,18 +3,23 @@ import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { AIService } from '../src/modules/ai/ai.service';
+import { ModelConfigService } from '../src/modules/ai/model-config.service';
 import { AgentController } from '../src/modules/agent/agent.controller';
+import { AgentLegacySchemaService } from '../src/modules/agent/agent-legacy-schema.service';
+import { AgentPolicyService } from '../src/modules/agent/agent-policy.service';
+import { AgentRunnerService } from '../src/modules/agent/agent-runner.service';
 import { AgentService } from '../src/modules/agent/agent.service';
 import { PatchApplyService } from '../src/modules/agent-tools/patch-apply.service';
 import { PatchAutoFixService } from '../src/modules/agent-tools/patch-auto-fix.service';
 import { PatchValidationService } from '../src/modules/agent-tools/patch-validation.service';
 import { ToolExecutionService } from '../src/modules/agent-tools/tool-execution.service';
 import { ToolRegistryService } from '../src/modules/agent-tools/tool-registry.service';
-import { ContextAssemblerService } from '../src/modules/schema-context';
+import { ContextAssemblerService, FocusContextResult } from '../src/modules/schema-context';
 import { ComponentMetaRegistry } from '../src/modules/schema-context/component-metadata/component-meta.registry';
 import { PageSchemaService } from '../src/modules/page-schema/page-schema.service';
 
-describe('AgentController patch preview (e2e)', () => {
+describe('AgentController (e2e)', () => {
   let app: INestApplication;
   const TEST_SECRET = 'test-secret';
 
@@ -25,6 +30,7 @@ describe('AgentController patch preview (e2e)', () => {
       snapshotId: 'page-1-v4',
       savedAt: '2026-03-20T00:00:00.000Z',
       schema: {
+        version: 4,
         rootId: 'root',
         components: {
           root: {
@@ -47,12 +53,127 @@ describe('AgentController patch preview (e2e)', () => {
     }),
   };
 
-  const contextAssemblerMock: Pick<ContextAssemblerService, 'assemble'> = {
-    assemble: jest.fn(),
+  const aiServiceMock: Pick<AIService, 'chat' | 'runToolCalling'> = {
+    chat: jest.fn(),
+    runToolCalling: jest.fn(),
+  };
+
+  const contextAssemblerMock: jest.Mocked<Pick<ContextAssemblerService, 'assemble'>> = {
+    assemble: jest.fn(async (input: any): Promise<FocusContextResult> => {
+      const baseSchema =
+        input.draftSchema ??
+        ({
+          version: 4,
+          rootId: 'root',
+          components: {
+            root: { id: 'root', type: 'Page', childrenIds: ['form'] },
+            form: { id: 'form', type: 'Form', childrenIds: ['button'] },
+            button: { id: 'button', type: 'Button', props: { children: '旧文案' } },
+          },
+        } as any);
+
+      if (input.selectedId === 'button') {
+        return {
+          mode: 'focused',
+          schema: baseSchema,
+          componentList: ['Page', 'Form', 'Button', 'Input'],
+          context: {
+            focusNode: {
+              id: 'button',
+              type: 'Button',
+              props: { children: '旧文案' },
+            },
+            parent: {
+              id: 'form',
+              type: 'Form',
+              childrenIds: ['button'],
+            },
+            ancestors: [{ id: 'root', type: 'Page', depth: 0 }],
+            children: [],
+            siblings: [],
+            subtree: {
+              button: {
+                id: 'button',
+                type: 'Button',
+                props: { children: '旧文案' },
+              },
+            },
+            schemaStats: {
+              totalComponents: 3,
+              maxDepth: 2,
+              rootId: 'root',
+              version: 4,
+            },
+            estimatedTokens: 16,
+          },
+        } as FocusContextResult;
+      }
+
+      if (input.selectedId === 'form') {
+        return {
+          mode: 'focused',
+          schema: baseSchema,
+          componentList: ['Page', 'Form', 'Button', 'Input'],
+          context: {
+            focusNode: {
+              id: 'form',
+              type: 'Form',
+              childrenIds: ['button'],
+            },
+            parent: {
+              id: 'root',
+              type: 'Page',
+              childrenIds: ['form'],
+            },
+            ancestors: [],
+            children: [{ id: 'button', type: 'Button', props: { children: '旧文案' } }],
+            siblings: [],
+            subtree: {
+              form: {
+                id: 'form',
+                type: 'Form',
+                childrenIds: ['button'],
+              },
+              button: {
+                id: 'button',
+                type: 'Button',
+                props: { children: '旧文案' },
+              },
+            },
+            schemaStats: {
+              totalComponents: 3,
+              maxDepth: 2,
+              rootId: 'root',
+              version: 4,
+            },
+            estimatedTokens: 20,
+          },
+        } as FocusContextResult;
+      }
+
+      return {
+        mode: 'candidates',
+        schema: baseSchema,
+        componentList: ['Page', 'Form', 'Button', 'Input'],
+        candidates: [
+          { id: 'button', type: 'Button', score: 0.8, reason: '文本匹配', matchType: 'prop_value' },
+        ],
+      } as FocusContextResult;
+    }),
   };
 
   beforeEach(async () => {
     process.env.API_SECRET = TEST_SECRET;
+    jest.clearAllMocks();
+
+    (aiServiceMock.chat as jest.Mock).mockResolvedValue({
+      content: '{"rootId":"root","components":{"root":{"id":"root","type":"Page"}}}',
+      usage: {
+        promptTokens: 5,
+        completionTokens: 6,
+        totalTokens: 11,
+      },
+    });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AgentController],
@@ -77,26 +198,15 @@ describe('AgentController patch preview (e2e)', () => {
         {
           provide: ToolRegistryService,
           useFactory: (
-            pageSchemaService: PageSchemaService,
             contextAssembler: ContextAssemblerService,
             registry: ComponentMetaRegistry,
-            applyService: PatchApplyService,
             autoFixService: PatchAutoFixService,
             validationService: PatchValidationService,
           ) =>
-            new ToolRegistryService(
-              pageSchemaService,
-              contextAssembler,
-              registry,
-              applyService,
-              autoFixService,
-              validationService,
-            ),
+            new ToolRegistryService(contextAssembler, registry, autoFixService, validationService),
           inject: [
-            PageSchemaService,
             ContextAssemblerService,
             ComponentMetaRegistry,
-            PatchApplyService,
             PatchAutoFixService,
             PatchValidationService,
           ],
@@ -111,20 +221,33 @@ describe('AgentController patch preview (e2e)', () => {
           inject: [PageSchemaService, ContextAssemblerService, ToolRegistryService],
         },
         {
-          provide: AgentService,
-          useValue: { edit: jest.fn() },
+          provide: AIService,
+          useValue: aiServiceMock,
         },
         {
           provide: ConfigService,
           useValue: {
-            get: jest.fn((key: string) => {
+            get: jest.fn((key: string, fallback?: unknown) => {
               if (key === 'API_SECRET') {
                 return TEST_SECRET;
               }
-              return undefined;
+              if (key === 'ai.defaultProvider') {
+                return 'openai';
+              }
+              return fallback;
             }),
           },
         },
+        {
+          provide: ModelConfigService,
+          useValue: {
+            getModel: jest.fn(),
+          },
+        },
+        AgentLegacySchemaService,
+        AgentPolicyService,
+        AgentRunnerService,
+        AgentService,
       ],
     }).compile();
 
@@ -141,10 +264,187 @@ describe('AgentController patch preview (e2e)', () => {
   });
 
   afterEach(async () => {
-    jest.clearAllMocks();
     if (app) {
       await app.close();
     }
+  });
+
+  it('defaults /agent/edit to schema mode', () => {
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '生成一个页面',
+        pageId: 'page-1',
+        version: 4,
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('schema');
+        expect(res.body.traceId).toMatch(/^agent-/);
+      });
+  });
+
+  it('returns patch response for updateProps in patch mode', () => {
+    (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
+      await input.executeTool('update_component_props', {
+        componentId: 'button',
+        props: { children: '提交' },
+      });
+      return {
+        text: 'done',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [
+          {
+            stepNumber: 0,
+            finishReason: 'stop',
+            toolCalls: [{ toolName: 'update_component_props' }],
+          },
+        ],
+        toolCallCount: 1,
+      };
+    });
+
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把按钮改成提交',
+        pageId: 'page-1',
+        version: 4,
+        selectedId: 'button',
+        responseMode: 'patch',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('patch');
+        expect(res.body.resolvedSelectedId).toBe('button');
+        expect(res.body.patch).toEqual([
+          {
+            op: 'updateProps',
+            componentId: 'button',
+            props: { children: '提交' },
+          },
+        ]);
+      });
+  });
+
+  it('returns patch response for bindEvent in patch mode', () => {
+    (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
+      await input.executeTool('bind_event', {
+        componentId: 'button',
+        event: 'onClick',
+        actions: [{ type: 'apiCall', url: '/api/save', method: 'POST' }],
+      });
+      return {
+        text: 'done',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [{ stepNumber: 0, finishReason: 'stop', toolCalls: [{ toolName: 'bind_event' }] }],
+        toolCallCount: 1,
+      };
+    });
+
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '给按钮绑定保存事件',
+        pageId: 'page-1',
+        version: 4,
+        selectedId: 'button',
+        responseMode: 'patch',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('patch');
+        expect(res.body.patch[0]).toEqual({
+          op: 'bindEvent',
+          componentId: 'button',
+          event: 'onClick',
+          actions: [{ type: 'apiCall', url: '/api/save', method: 'POST' }],
+        });
+      });
+  });
+
+  it('returns PAGE_VERSION_CONFLICT when patch mode version is stale', () => {
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把按钮改成提交',
+        pageId: 'page-1',
+        version: 3,
+        selectedId: 'button',
+        responseMode: 'patch',
+      })
+      .expect(409)
+      .expect((res: request.Response) => {
+        expect(res.body.code).toBe('PAGE_VERSION_CONFLICT');
+      });
+  });
+
+  it('returns NODE_AMBIGUOUS when candidates are too close', () => {
+    (contextAssemblerMock.assemble as jest.Mock).mockResolvedValueOnce({
+      mode: 'candidates',
+      schema: {
+        version: 4,
+        rootId: 'root',
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: ['form'] },
+          form: { id: 'form', type: 'Form', childrenIds: ['button'] },
+          button: { id: 'button', type: 'Button', props: { children: '旧文案' } },
+        },
+      },
+      componentList: ['Page', 'Form', 'Button'],
+      candidates: [
+        {
+          id: 'button-a',
+          type: 'Button',
+          score: 0.46,
+          reason: '文本匹配',
+          matchType: 'prop_value',
+        },
+        { id: 'button-b', type: 'Button', score: 0.4, reason: '文本匹配', matchType: 'prop_value' },
+      ],
+    });
+
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把那个按钮改成提交',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'patch',
+      })
+      .expect(422)
+      .expect((res: request.Response) => {
+        expect(res.body.code).toBe('NODE_AMBIGUOUS');
+        expect(res.body.details.candidates).toHaveLength(2);
+      });
+  });
+
+  it('returns AGENT_POLICY_BLOCKED when provider is not enabled for patch mode', () => {
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把按钮改成提交',
+        pageId: 'page-1',
+        version: 4,
+        provider: 'ollama',
+        responseMode: 'patch',
+      })
+      .expect(422)
+      .expect((res: request.Response) => {
+        expect(res.body.code).toBe('AGENT_POLICY_BLOCKED');
+      });
   });
 
   it('previews updateProps successfully', () => {
@@ -224,7 +524,7 @@ describe('AgentController patch preview (e2e)', () => {
       });
   });
 
-  it('returns PAGE_VERSION_CONFLICT when version is stale', () => {
+  it('returns PAGE_VERSION_CONFLICT when patch preview version is stale', () => {
     return request(app.getHttpServer())
       .post('/agent/patch/preview')
       .set('Authorization', `Bearer ${TEST_SECRET}`)

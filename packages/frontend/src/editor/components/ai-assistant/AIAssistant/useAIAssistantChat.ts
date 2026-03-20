@@ -158,7 +158,15 @@ export const useAIAssistantChat = ({
           role: item.role,
           content: item.content,
         })),
+        responseMode: 'schema',
       });
+
+      if (response.mode !== 'schema') {
+        throw new AIServiceError('当前聊天链路尚未接入 patch 响应模式', 'INVALID_RESPONSE', {
+          mode: response.mode,
+          traceId: response.traceId,
+        });
+      }
 
       const fullContent = response.content;
       const aiSchema = response.schema;
