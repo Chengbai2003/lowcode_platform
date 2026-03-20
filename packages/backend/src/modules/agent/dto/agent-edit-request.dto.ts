@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -14,15 +15,17 @@ import {
 
 class AgentConversationMessageDto {
   @IsString()
-  role!: string;
+  @IsIn(['user', 'assistant'])
+  role!: 'user' | 'assistant';
 
   @IsString()
+  @MaxLength(4000)
   content!: string;
 }
 
 export class AgentEditRequestDto {
   @IsString()
-  @MaxLength(10000)
+  @MaxLength(2000)
   instruction!: string;
 
   @IsString()

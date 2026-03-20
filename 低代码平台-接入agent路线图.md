@@ -24,15 +24,19 @@
 
 当前项目**还没有**真正具备：
 
-- 后端持有页面 schema snapshot
-- 基于 `pageId/version` 的页面读取与并发保护
 - 面向 Agent 的 function calling 工具层
 - 基于工具调用的 bounded Agent orchestrator
 - “Agent 只返回 patch，不直接返回整页 schema”的闭环
 
+已完成但仍在演进中：
+
+- 后端持有页面 schema snapshot（Phase 1 已完成）
+- 基于 `pageId/version` 的页面读取与并发保护（Phase 1 已完成）
+- 后端 `schema-context` 模块：页面理解与局部上下文能力（Phase 2 已完成，2026-03-19）
+
 因此，现阶段更准确的描述应该是：
 
-> 项目已经完成了“前端 AI 助手 + Schema 生成/应用”的第一版产品壳子，但还没有完成“后端页面快照 + function calling + patch 化编辑”的 Agent 架构。
+> 项目已经完成了”前端 AI 助手 + Schema 生成/应用”的第一版产品壳子，后端已具备页面快照存储和页面理解/上下文切片能力，但还没有完成”function calling + patch 化编辑”的 Agent 架构。
 
 ---
 
@@ -88,18 +92,7 @@
 
 ### 未完成但必须补齐
 
-#### 1. 后端页面 schema 权威存储
-
-当前页面 schema 主要在前端内存和本地存储中，不在后端形成统一权威版本。
-
-这会带来几个问题：
-
-- 每次 AI 请求都可能需要传整份大 JSON
-- 后端工具无法基于统一页面状态工作
-- 多端 / 多标签页 / 多用户协同时无法做版本校验
-- “选中某个组件后让 AI 修改它”难以稳定落到后端工具体系
-
-#### 2. patch 协议还没有成为 AI 主输出
+#### 1. patch 协议还没有成为 AI 主输出
 
 当前 AI 结果更接近“返回整份 schema”，而不是“返回受控 patch”。
 
@@ -463,52 +456,52 @@
 
 ---
 
-## 阶段 2：resolved schema 与局部上下文能力
+## 阶段 2：resolved schema 与局部上下文能力（已完成 ✅ 2026-03-19）
 
 ### 目标
 
-让后端具备“读懂页面”和“理解当前焦点组件”的能力。
+让后端具备”读懂页面”和”理解当前焦点组件”的能力。
+
+### 本阶段已完成
+
+- 后端 `schema-context` 模块（SchemaResolver / SchemaSlicer / NodeLocator / ContextAssembler）
+- 后端组件元数据注册表（48 个组件类型 + 22 个别名，含中文 displayName、textProps、category）
+- Agent 编辑请求已集成 FocusContext 和组件类型列表（`buildSystemPrompt` 终于传入 `componentList`）
+- 选中组件时 LLM 可获得父节点、祖先链、兄弟、子树上下文
+- 未选中时可通过 instruction 关键词匹配返回候选节点列表（支持中文分词）
+- 大页面预算裁剪（progressive degradation，maxOutputBytes=8192）
+- 41 个单元测试全部通过（7 个测试套件）
+- 3 个测试 fixture（登录表单 ~11 组件、列表页 ~19 组件、大页面 200+ 组件）
 
 ### 主要任务
 
-- 实现 `SchemaResolverService`
-- 实现 `SchemaSlicerService`
-- 实现 `NodeLocatorService`
-- 实现 `ContextAssemblerService`
-- 支持 `selectedId` 作为优先焦点
-- 支持 instruction 驱动的候选节点定位
-
-### 完成标准
-
-- 后端根据 `pageId + selectedId` 能稳定生成局部上下文
-- 即使不传 `selectedId`，也能根据 instruction 找出候选节点
+- ~~实现 `SchemaResolverService`~~ ✅
+- ~~实现 `SchemaSlicerService`~~ ✅
+- ~~实现 `NodeLocatorService`~~ ✅
+- ~~实现 `ContextAssemblerService`~~ ✅
+- ~~支持 `selectedId` 作为优先焦点~~ ✅
+- ~~支持 instruction 驱动的候选节点定位~~ ✅
 
 ### 验收标准
 
-- [ ] 给定 `pageId + selectedId`，后端能稳定返回固定结构的 `FocusContext`
-- [ ] `FocusContext` 至少包含：当前节点、父节点、祖先链、子节点、兄弟节点
-- [ ] 不传 `selectedId` 时，后端能返回候选节点列表，而不是让模型直接盲猜
-- [ ] 对同一份页面 schema，同样输入应返回稳定一致的切片结果
-- [ ] 大页面下切片结果有大小上限，不会无限膨胀
-
-### 可独立停靠条件
-
-- 即使还没接 Agent，后端也已经具备“页面理解层”
-- 这阶段可以单独对外作为内部调试 API 或开发工具能力
-- 后续工具层和 Agent 只需要消费固定上下文结构，不需要再重复写页面遍历逻辑
+- [x] 给定 `pageId + selectedId`，后端能稳定返回固定结构的 `FocusContext`
+- [x] `FocusContext` 至少包含：当前节点、父节点、祖先链、子节点、兄弟节点
+- [x] 不传 `selectedId` 时，后端能返回候选节点列表，而不是让模型直接盲猜
+- [x] 对同一份页面 schema，同样输入应返回稳定一致的切片结果
+- [x] 大页面下切片结果有大小上限，不会无限膨胀
 
 ### 最小验证机制
 
-- [ ] 固定样例页验证：登录表单页
-- [ ] 固定样例页验证：列表页
+- [x] 固定样例页验证：登录表单页
+- [x] 固定样例页验证：列表页
 - [ ] 固定样例页验证：Dashboard 页
-- [ ] 最小自动化测试：`SchemaSlicerService` 单测
-- [ ] 最小自动化测试：`NodeLocatorService` 单测
-- [ ] 最小自动化测试：`ContextAssemblerService` 单测
-- [ ] 断言：选中按钮能拿到父 `Form`
-- [ ] 断言：不选中时输入“提交按钮”能返回候选
-- [ ] 断言：候选结果带 `score/reason`
-- [ ] 规模验证：大页面上下文输出不超过约定阈值
+- [x] 最小自动化测试：`SchemaSlicerService` 单测
+- [x] 最小自动化测试：`NodeLocatorService` 单测
+- [x] 最小自动化测试：`ContextAssemblerService` 单测
+- [x] 断言：选中按钮能拿到父 `Form`
+- [x] 断言：不选中时输入”提交按钮”能返回候选
+- [x] 断言：候选结果带 `score/reason`
+- [x] 规模验证：大页面上下文输出不超过约定阈值
 - [ ] 人工验收：对照样例页检查返回的上下文结构是否符合预期（人工验收：建议手动）
 
 ---
@@ -770,15 +763,15 @@
 
 这张表用于项目推进、排期和验收时快速对齐。
 
-| Phase   | 目标                                   | 主要输入                                 | 主要输出                                                   | 最小 Demo                              | 自动化验证                        | 人工验收                   | 主要阻塞项                           | 建议工期 |
-| ------- | -------------------------------------- | ---------------------------------------- | ---------------------------------------------------------- | -------------------------------------- | --------------------------------- | -------------------------- | ------------------------------------ | -------- |
-| Phase 0 | 对齐当前模式与目标模式                 | 当前前端 AI 助手、现有后端 AI 接口       | 统一接口命名、固定 DTO 草案、清晰文档                      | 从浮动岛发起一次当前 AI 请求并成功返回 | 前端调用层测试                    | 建议手动                   | 当前 AI 调用入口分散、接口命名不统一 | 0.5-1 周 |
-| Phase 1 | 建立后端页面快照基础设施               | 编辑器 schema、后端存储能力              | `pages` / `page_schema_snapshots`、保存/读取接口、版本机制 | 保存页面后刷新仍可读回                 | service 单测 + controller e2e     | Playwright 可做            | 数据库存储尚未真正接入               | 1-1.5 周 |
-| Phase 2 | 建立页面理解与上下文层                 | 页面 snapshot、`selectedId`、instruction | `FocusContext`、节点候选、稳定切片结果                     | 给定 `selectedId` 返回局部上下文       | slicer / locator / assembler 单测 | 建议手动                   | 页面结构遍历规则、候选评分规则       | 1-1.5 周 |
-| Phase 3 | 建立工具层与 patch 协议                | page schema、context、patch DTO          | 读工具、写工具、guard 工具、统一 patch                     | 手工构造 patch 并在前端应用成功        | tool 单测 + patch 应用测试        | Playwright 可做            | patch 语义与前端 command 映射未固定  | 1-1.5 周 |
-| Phase 4 | 建立 bounded Agent 与 function calling | page schema、context、tools              | `POST /agent/edit`、AgentRunner、policy、traceId           | 自然语言返回局部 patch                 | runner 单测 + agent e2e           | 建议手动                   | function calling 策略、稳定性控制    | 1-2 周   |
-| Phase 5 | 接入前端编辑器形成用户闭环             | Agent API、patch adapter、history        | 选中组件 AI 修改、版本冲突提示、undo/redo 闭环             | 选中按钮后 AI 改文案并可撤销           | patch adapter / history 测试      | Playwright 可做            | 前端状态与后端版本同步               | 1-1.5 周 |
-| Phase 6 | 增强体验与可观测性                     | Agent 闭环、trace 基础                   | diff、stream、轨迹、metrics、replay、评测集                | 用户能看到阶段、diff 和 trace          | 评测样本回归测试                  | Playwright 可做 + 手动复盘 | 观测数据采集、回放结构设计           | 1-2 周   |
+| Phase   | 目标                                   | 主要输入                                 | 主要输出                                                   | 最小 Demo                              | 自动化验证                                     | 人工验收                   | 主要阻塞项                           | 建议工期            |
+| ------- | -------------------------------------- | ---------------------------------------- | ---------------------------------------------------------- | -------------------------------------- | ---------------------------------------------- | -------------------------- | ------------------------------------ | ------------------- |
+| Phase 0 | 对齐当前模式与目标模式                 | 当前前端 AI 助手、现有后端 AI 接口       | 统一接口命名、固定 DTO 草案、清晰文档                      | 从浮动岛发起一次当前 AI 请求并成功返回 | 前端调用层测试                                 | 建议手动                   | 当前 AI 调用入口分散、接口命名不统一 | 0.5-1 周            |
+| Phase 1 | 建立后端页面快照基础设施               | 编辑器 schema、后端存储能力              | `pages` / `page_schema_snapshots`、保存/读取接口、版本机制 | 保存页面后刷新仍可读回                 | service 单测 + controller e2e                  | Playwright 可做            | 数据库存储尚未真正接入               | 1-1.5 周            |
+| Phase 2 | 建立页面理解与上下文层 ✅ 2026-03-19   | 页面 snapshot、`selectedId`、instruction | `FocusContext`、节点候选、稳定切片结果                     | 给定 `selectedId` 返回局部上下文       | slicer / locator / assembler 单测（41 个通过） | 建议手动                   | ~~页面结构遍历规则、候选评分规则~~   | ~~1-1.5 周~~ 已完成 |
+| Phase 3 | 建立工具层与 patch 协议                | page schema、context、patch DTO          | 读工具、写工具、guard 工具、统一 patch                     | 手工构造 patch 并在前端应用成功        | tool 单测 + patch 应用测试                     | Playwright 可做            | patch 语义与前端 command 映射未固定  | 1-1.5 周            |
+| Phase 4 | 建立 bounded Agent 与 function calling | page schema、context、tools              | `POST /agent/edit`、AgentRunner、policy、traceId           | 自然语言返回局部 patch                 | runner 单测 + agent e2e                        | 建议手动                   | function calling 策略、稳定性控制    | 1-2 周              |
+| Phase 5 | 接入前端编辑器形成用户闭环             | Agent API、patch adapter、history        | 选中组件 AI 修改、版本冲突提示、undo/redo 闭环             | 选中按钮后 AI 改文案并可撤销           | patch adapter / history 测试                   | Playwright 可做            | 前端状态与后端版本同步               | 1-1.5 周            |
+| Phase 6 | 增强体验与可观测性                     | Agent 闭环、trace 基础                   | diff、stream、轨迹、metrics、replay、评测集                | 用户能看到阶段、diff 和 trace          | 评测样本回归测试                               | Playwright 可做 + 手动复盘 | 观测数据采集、回放结构设计           | 1-2 周              |
 
 ### 建议验收人
 
@@ -913,30 +906,37 @@ playwright/
 
 ### 第一优先级
 
-建立后端页面快照能力：
+定义 patch 协议与工具层（Phase 3）：
 
-- `pages`
-- `page_schema_snapshots`
-- `PUT/GET /pages/:pageId/schema`
-- `SchemaSnapshotService`
-
-### 第二优先级
-
-定义 patch 协议，并确认 patch 如何映射到前端 command/history。
+- 定义 `EditorPatchOperationDto`（insertComponent / updateProps / bindEvent / removeComponent / moveComponent）
+- 实现读工具：`get_page_schema`、`get_focus_context`、`find_node_candidates`、`get_component_meta`
+- 实现写工具：`update_component_props`、`insert_component`、`bind_event`、`remove_component`、`move_component`
+- 实现守门工具：`validate_patch`、`auto_fix_patch`
+- 确认 patch 如何映射到前端 command/history
 
 这一步会决定后面 Agent 的输出边界。
 
+### 第二优先级
+
+实现 bounded Agent 与 function calling（Phase 4）：
+
+- 重构 `AgentService` 为基于 function calling 的 `AgentRunner`
+- Agent 只通过工具和 patch 工作，不直接输出整页 schema
+- 加最大步数、工具调用次数、超时控制
+- 返回 `traceId` 和统一错误码
+
 ### 第三优先级
 
-实现最小版 Agent 编辑接口：
+前端最小接入（Phase 5）：
 
-- 输入 `pageId/version/selectedId/instruction`
-- 后端先不做完整 ReAct
-- 先做“读取页面 + 定位节点 + 单步生成 patch + validate”
+- 前端保存时同步 schema 到后端
+- AI 请求改为调用 `/agent/edit`，传 `pageId/version/selectedId/instruction`
+- 把后端 patch 映射到 command/history
+- 版本冲突提示
 
 也就是说：
 
-> 不要一上来做全套智能 Agent，先把“后端持页 + patch 输出 + 前端可应用”这条最短闭环打通。
+> Phase 1（页面快照）和 Phase 2（页面理解）已完成，下一步把”patch 输出 + function calling + 前端可应用”这条闭环打通。
 
 ---
 
@@ -1978,14 +1978,17 @@ export function applyPatchToSchema(schema: A2UISchema, patch: EditorPatchOperati
 - 保存前接入 schema validate
 - 增加版本冲突错误返回
 
-### P2. 上下文层
+### P2. 上下文层 ✅ 2026-03-19
 
-- 实现 `SchemaResolverService`
-- 实现 `SchemaSlicerService`
-- 实现 `NodeLocatorService`
-- 实现 `ContextAssemblerService`
-- 支持 `selectedId` 优先解析
-- 支持 instruction 候选检索
+- ~~实现 `SchemaResolverService`~~ ✅
+- ~~实现 `SchemaSlicerService`~~ ✅
+- ~~实现 `NodeLocatorService`~~ ✅
+- ~~实现 `ContextAssemblerService`~~ ✅
+- ~~支持 `selectedId` 优先解析~~ ✅
+- ~~支持 instruction 候选检索~~ ✅
+- 后端组件元数据注册表（48 类型 + 22 别名） ✅
+- Agent 编辑请求集成 FocusContext 和组件类型列表 ✅
+- 41 个单元测试通过 ✅
 
 ### P3. 工具层
 

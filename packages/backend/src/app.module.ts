@@ -10,6 +10,7 @@ import { AiModule } from './modules/ai/ai.module';
 import { CommonModule } from './modules/common/common.module';
 import { CompilerModule } from './modules/compiler/compiler.module';
 import { PageSchemaModule } from './modules/page-schema/page-schema.module';
+import { SchemaContextModule } from './modules/schema-context';
 import appConfig from './config/app.config';
 import aiConfig from './config/ai.config';
 import databaseConfig from './config/database.config';
@@ -44,6 +45,7 @@ import databaseConfig from './config/database.config';
     AgentModule,
     CompilerModule,
     PageSchemaModule,
+    SchemaContextModule,
   ],
   controllers: [],
   providers: [],
