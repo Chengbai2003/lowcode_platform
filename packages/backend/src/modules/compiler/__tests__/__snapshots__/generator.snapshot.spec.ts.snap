@@ -1,0 +1,56 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`compiler generator snapshots matches snapshot: basic-action-list 1`] = `
+"import React, { useState } from "react";
+import { Button, Page, message } from "antd";
+export default function GeneratedPage() {
+  const handleBtnNotifyClick = () => {
+    message.success("操作成功");
+  };
+
+  return <Page><Button type="primary" onClick={handleBtnNotifyClick}>通知</Button></Page>;
+}"
+`;
+
+exports[`compiler generator snapshots matches snapshot: component-sources 1`] = `
+"import React, { useState } from "react";
+import { Card, Page, message } from "antd";
+import { Button } from "@custom/ui";
+export default function GeneratedPage() {
+  return <Page><Card>统计卡片</Card><Button>刷新</Button></Page>;
+}"
+`;
+
+exports[`compiler generator snapshots matches snapshot: field-binding 1`] = `
+"import React, { useState } from "react";
+import { Input, Page, message } from "antd";
+export default function GeneratedPage() {
+  const [userName, setUserName] = useState("Alice");
+
+  return <Page><Input defaultValue="Alice" placeholder="请输入用户名" value={userName} onChange={e => setUserName(e.target ? e.target.value : e)} /></Page>;
+}"
+`;
+
+exports[`compiler generator snapshots matches snapshot: nested-tree 1`] = `
+"import React, { useState } from "react";
+import { Button, Container, Page, Text, message } from "antd";
+export default function GeneratedPage() {
+  return <Page className="p-[24px]"><Container className="flex flex-col gap-[12px]"><Text>审批中心</Text><Button type="primary">确认</Button></Container></Page>;
+}"
+`;
+
+exports[`compiler generator snapshots matches snapshot: simple-button 1`] = `
+"import React, { useState } from "react";
+import { Button, Page, message } from "antd";
+export default function GeneratedPage() {
+  return <Page><Button type="primary">提交</Button></Page>;
+}"
+`;
+
+exports[`compiler generator snapshots matches snapshot: style-class-merge 1`] = `
+"import React, { useState } from "react";
+import { Div, Page, message } from "antd";
+export default function GeneratedPage() {
+  return <Page><Div className="banner-shell mb-[16] flex text-[#1f2937]">系统公告</Div></Page>;
+}"
+`;
