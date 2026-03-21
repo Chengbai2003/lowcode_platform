@@ -9,6 +9,7 @@ import { ToolExecutionContext } from '../agent-tools/types/tool.types';
 import { FocusContextResult } from '../schema-context';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import {
+  buildCompactContextSections,
   formatFocusContext,
   formatPageOverview,
   MAX_HISTORY_MESSAGE_CHARS,
@@ -16,6 +17,8 @@ import {
   sanitizePromptText,
 } from './agent-prompt.utils';
 import { AgentPolicyService, AgentRunMetrics } from './agent-policy.service';
+import { AgentProgressReporter, NOOP_AGENT_PROGRESS_REPORTER } from './types/agent-progress.types';
+import { AgentRouteDecision } from './types/agent-edit.types';
 import { AgentEditPatchResponse } from './types/agent-edit.types';
 
 @Injectable()
@@ -29,12 +32,25 @@ export class AgentRunnerService {
     private readonly policyService: AgentPolicyService,
   ) {}
 
-  async runEdit(dto: AgentEditRequestDto, requestId?: string): Promise<AgentEditPatchResponse> {
+  async runEdit(
+    dto: AgentEditRequestDto,
+    requestId?: string,
+    options?: {
+      routeDecision?: AgentRouteDecision;
+      reporter?: AgentProgressReporter;
+    },
+  ): Promise<AgentEditPatchResponse> {
     const traceId = this.policyService.createTraceId(requestId);
     const metrics: AgentRunMetrics = { stepCount: 0, toolCallCount: 0 };
     const limits = this.policyService.getLimits();
+    const reporter = options?.reporter ?? NOOP_AGENT_PROGRESS_REPORTER;
 
     this.policyService.assertPatchRequestAllowed(dto, traceId);
+
+    await reporter.emitStatus({
+      stage: 'assembling_context',
+      label: '正在准备页面上下文',
+    });
 
     const context = await this.toolExecutionService.createExecutionContext(
       {
@@ -49,11 +65,26 @@ export class AgentRunnerService {
       `[${traceId}] run start mode=patch pageId=${dto.pageId} version=${dto.version ?? 'n/a'}`,
     );
 
-    const { resolvedSelectedId, focusContextResult } = await this.resolveTarget(dto, context);
+    await reporter.emitStatus({
+      stage: 'resolving_target',
+      label: '正在解析编辑目标',
+    });
+
+    const { resolvedSelectedId, focusContextResult } = await this.resolveTarget(
+      dto,
+      context,
+      options?.routeDecision?.prefetchedFocusContext,
+    );
     const prompt = this.buildPrompt(dto, focusContextResult, resolvedSelectedId);
 
     try {
       const agentTools = this.toolRegistry.listDefinitions('agent');
+
+      await reporter.emitStatus({
+        stage: 'calling_model',
+        label: '正在调用模型规划编辑步骤',
+        targetId: resolvedSelectedId,
+      });
 
       const result = await this.aiService.runToolCalling({
         system: this.buildSystemPrompt(focusContextResult.componentList),
@@ -93,6 +124,13 @@ export class AgentRunnerService {
         },
         onToolCallStart: (event) => {
           metrics.toolCallCount += 1;
+          void reporter.emitStatus({
+            stage: 'calling_tool',
+            label: `正在执行工具 ${event.toolCall.toolName}`,
+            toolName: event.toolCall.toolName,
+            stepNumber: event.stepNumber,
+            targetId: resolvedSelectedId,
+          });
         },
         onToolCallFinish: (event) => {
           this.logger.log(
@@ -104,11 +142,24 @@ export class AgentRunnerService {
       metrics.stepCount = Math.max(metrics.stepCount, result.steps.length);
       metrics.toolCallCount = Math.max(metrics.toolCallCount, result.toolCallCount);
 
+      await reporter.emitStatus({
+        stage: 'validating_output',
+        label: '正在校验和预览 patch',
+        targetId: resolvedSelectedId,
+      });
+
       const patch = await this.finalizePatch(context, traceId);
 
       this.logger.log(
         `[${traceId}] finish reason=${result.finishReason} steps=${metrics.stepCount} toolCalls=${metrics.toolCallCount} patchOps=${patch.length}`,
       );
+
+      await reporter.emitStatus({
+        stage: 'completed',
+        label: 'Patch 生成完成',
+        finishReason: result.finishReason,
+        targetId: resolvedSelectedId,
+      });
 
       return {
         mode: 'patch',
@@ -119,6 +170,12 @@ export class AgentRunnerService {
         patch,
         warnings: [...context.warnings],
         traceId,
+        route: options?.routeDecision?.route ?? {
+          requestedMode: dto.responseMode ?? 'patch',
+          resolvedMode: 'patch',
+          reason: 'manual_patch',
+          manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
+        },
       };
     } catch (error) {
       if (error instanceof AgentToolException) {
@@ -140,12 +197,11 @@ export class AgentRunnerService {
   private async resolveTarget(
     dto: AgentEditRequestDto,
     context: ToolExecutionContext,
+    prefetchedFocusContext?: FocusContextResult,
   ): Promise<{ resolvedSelectedId?: string; focusContextResult: FocusContextResult }> {
-    const initialResult = await this.toolExecutionService.getFocusContext(
-      context,
-      dto.selectedId,
-      dto.instruction,
-    );
+    const initialResult =
+      prefetchedFocusContext ??
+      (await this.toolExecutionService.getFocusContext(context, dto.selectedId, dto.instruction));
 
     if (dto.selectedId && initialResult.mode === 'focused' && initialResult.context) {
       this.logger.log(`[${context.traceId}] target resolved from selectedId=${dto.selectedId}`);
@@ -230,10 +286,7 @@ export class AgentRunnerService {
     focusContextResult: FocusContextResult,
     resolvedSelectedId?: string,
   ): string {
-    const chunks = [formatPageOverview(focusContextResult)];
-    if (focusContextResult.mode === 'focused' && focusContextResult.context) {
-      chunks.push(formatFocusContext(focusContextResult.context));
-    }
+    const chunks = buildCompactContextSections(focusContextResult);
 
     if (resolvedSelectedId) {
       chunks.push(`默认编辑目标组件: ${resolvedSelectedId}`);

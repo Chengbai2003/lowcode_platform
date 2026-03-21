@@ -1,6 +1,30 @@
 import { EditorPatchOperation } from '../../agent-tools/types/editor-patch.types';
+import { FocusContextResult } from '../../schema-context/types/focus-context.types';
 
-export type AgentResponseMode = 'schema' | 'patch';
+export type AgentResponseMode = 'auto' | 'schema' | 'patch';
+export type ResolvedAgentMode = 'schema' | 'patch';
+export type AgentRouteReason =
+  | 'manual_schema'
+  | 'manual_patch'
+  | 'missing_page_context'
+  | 'whole_page_generation_intent'
+  | 'selected_target'
+  | 'candidate_target'
+  | 'default_edit_with_page_context';
+
+export interface AgentRouteInfo {
+  requestedMode: AgentResponseMode;
+  resolvedMode: ResolvedAgentMode;
+  reason: AgentRouteReason;
+  manualOverride: boolean;
+}
+
+export interface AgentRouteDecision {
+  traceId: string;
+  route: AgentRouteInfo;
+  prefetchedFocusContext?: FocusContextResult;
+  requestedPageId?: string;
+}
 
 export interface AgentUsage {
   promptTokens: number;
@@ -18,6 +42,7 @@ export interface AgentEditSchemaResponse {
   version?: number;
   selectedId?: string;
   traceId: string;
+  route: AgentRouteInfo;
 }
 
 export interface AgentEditPatchResponse {
@@ -29,6 +54,7 @@ export interface AgentEditPatchResponse {
   patch: EditorPatchOperation[];
   warnings: string[];
   traceId: string;
+  route: AgentRouteInfo;
 }
 
 export type AgentEditResponse = AgentEditSchemaResponse | AgentEditPatchResponse;

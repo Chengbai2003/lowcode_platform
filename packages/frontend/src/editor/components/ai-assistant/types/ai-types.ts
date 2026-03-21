@@ -20,7 +20,42 @@ export interface AgentConversationMessage {
   content: string;
 }
 
-export type AgentResponseMode = 'schema' | 'patch';
+export type AgentResponseMode = 'auto' | 'schema' | 'patch';
+export type ResolvedAgentMode = 'schema' | 'patch';
+
+export interface AgentRouteInfo {
+  requestedMode: AgentResponseMode;
+  resolvedMode: ResolvedAgentMode;
+  reason:
+    | 'manual_schema'
+    | 'manual_patch'
+    | 'missing_page_context'
+    | 'whole_page_generation_intent'
+    | 'selected_target'
+    | 'candidate_target'
+    | 'default_edit_with_page_context';
+  manualOverride: boolean;
+}
+
+export type AgentProgressStage =
+  | 'routing'
+  | 'assembling_context'
+  | 'resolving_target'
+  | 'calling_model'
+  | 'calling_tool'
+  | 'validating_output'
+  | 'completed';
+
+export interface AgentMessageProgress {
+  stage: AgentProgressStage;
+  label: string;
+  detail?: string;
+  toolName?: string;
+  targetId?: string;
+  stepNumber?: number;
+  finishReason?: string;
+  traceId?: string;
+}
 
 export interface AgentEditSchemaResponse {
   mode: 'schema';
@@ -29,6 +64,7 @@ export interface AgentEditSchemaResponse {
   warnings?: string[];
   suggestions?: string[];
   traceId: string;
+  route: AgentRouteInfo;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -45,6 +81,7 @@ export interface AgentEditPatchResponse {
   patch: EditorPatchOperation[];
   warnings?: string[];
   traceId: string;
+  route: AgentRouteInfo;
 }
 
 // Agent 编辑响应接口（Phase 4 双模兼容）
@@ -83,6 +120,35 @@ export interface AgentEditRequest {
 export type AIRequest = AgentEditRequest;
 export type AIResponse = AgentEditResponse;
 
+export type AgentStreamEvent =
+  | { type: 'meta'; traceId: string }
+  | { type: 'route'; route: AgentRouteInfo }
+  | {
+      type: 'status';
+      stage: AgentProgressStage;
+      label: string;
+      detail?: string;
+      toolName?: string;
+      targetId?: string;
+      stepNumber?: number;
+      finishReason?: string;
+    }
+  | { type: 'result'; result: AgentEditResponse }
+  | {
+      type: 'error';
+      error: {
+        code?: string;
+        message: string;
+        details?: Record<string, unknown>;
+        traceId: string;
+      };
+    }
+  | { type: 'done'; success: boolean };
+
+export interface AgentStreamResponseResult {
+  terminal: 'result' | 'error';
+}
+
 // AI服务接口
 export interface AIService {
   name: string;
@@ -90,9 +156,10 @@ export interface AIService {
   generateResponse(request: AgentEditRequest): Promise<AgentEditResponse>;
   streamResponse?(
     request: AgentEditRequest,
-    onMessage: (chunk: string) => void,
-    onError?: (error: any) => void,
-  ): Promise<void>;
+    handlers: {
+      onEvent: (event: AgentStreamEvent) => void | Promise<void>;
+    },
+  ): Promise<AgentStreamResponseResult>;
 }
 
 // 错误类型

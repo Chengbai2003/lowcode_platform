@@ -92,10 +92,25 @@ export function formatFocusContext(ctx: FocusContext): string {
 
 export function formatCandidates(candidates: readonly NodeCandidate[]): string {
   const lines: string[] = ['## 可能的目标组件候选'];
-  for (const candidate of candidates) {
+  for (const candidate of candidates.slice(0, 3)) {
     lines.push(
       `- ${candidate.id} (${candidate.type}) [score=${candidate.score}]: ${candidate.reason}`,
     );
   }
   return lines.join('\n');
+}
+
+export function buildCompactContextSections(contextResult?: FocusContextResult): string[] {
+  if (!contextResult) {
+    return [];
+  }
+
+  const chunks = [formatPageOverview(contextResult)];
+  if (contextResult.mode === 'focused' && contextResult.context) {
+    chunks.push(formatFocusContext(contextResult.context));
+  } else if (contextResult.mode === 'candidates' && contextResult.candidates?.length) {
+    chunks.push(formatCandidates(contextResult.candidates));
+  }
+
+  return chunks;
 }

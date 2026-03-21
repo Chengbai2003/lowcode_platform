@@ -17,6 +17,14 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
   onApplySchema,
   endRef,
 }) => {
+  const formatRoute = (message: AIMessage) => {
+    if (!message.route) {
+      return null;
+    }
+
+    return `${message.route.requestedMode.toUpperCase()} -> ${message.route.resolvedMode.toUpperCase()}`;
+  };
+
   return (
     <div className={styles.messagesContainer}>
       {messages.map((message) => (
@@ -24,15 +32,51 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
           key={message.id}
           className={`${styles.message} ${styles[`message${message.type.charAt(0).toUpperCase() + message.type.slice(1)}`]}`}
         >
-          {message.status === 'loading' ? (
-            <LoadingOutlined className={styles.loadingIcon} />
-          ) : message.status === 'error' ? (
+          {message.status === 'error' ? (
             <span className={styles.errorMessage}>❌ {message.content}</span>
           ) : (
             <div className={styles.messageContent}>
-              <div className={styles.messageText}>
-                <MarkdownContent content={message.content} />
-              </div>
+              {message.status === 'loading' && (
+                <div className={styles.progressHeader}>
+                  <LoadingOutlined className={styles.loadingIcon} />
+                  <span>{message.progress?.label ?? '正在处理中...'}</span>
+                </div>
+              )}
+
+              {(message.route || message.progress || message.traceId) && (
+                <div className={styles.progressPanel}>
+                  {message.route && (
+                    <div className={styles.progressRow}>
+                      <span className={styles.progressLabel}>模式</span>
+                      <span>{formatRoute(message)}</span>
+                    </div>
+                  )}
+                  {message.progress && (
+                    <div className={styles.progressRow}>
+                      <span className={styles.progressLabel}>阶段</span>
+                      <span>{message.progress.label}</span>
+                    </div>
+                  )}
+                  {message.progress?.toolName && (
+                    <div className={styles.progressRow}>
+                      <span className={styles.progressLabel}>工具</span>
+                      <span>{message.progress.toolName}</span>
+                    </div>
+                  )}
+                  {(message.traceId || message.progress?.traceId) && (
+                    <div className={styles.progressRow}>
+                      <span className={styles.progressLabel}>Trace</span>
+                      <span>{message.traceId ?? message.progress?.traceId}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {message.content && (
+                <div className={styles.messageText}>
+                  <MarkdownContent content={message.content} />
+                </div>
+              )}
 
               {message.modelUsed && (
                 <div className={styles.modelIndicator}>

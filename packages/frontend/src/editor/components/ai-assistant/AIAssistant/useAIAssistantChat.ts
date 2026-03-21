@@ -6,11 +6,12 @@ import {
   type AISessionMessage,
   type AIMessageActionResult,
 } from '../../../../types';
-import { agentEditApi } from '../../../services/agentEditApi';
 import {
   AIServiceError,
+  type AgentEditResponse,
+  type AgentMessageProgress,
+  type AgentResponseMode,
   type AIModelConfig,
-  type AgentEditPatchResponse,
   type AgentPatchApplyHandler,
 } from '../types/ai-types';
 import { serverAIService } from '../api/ServerAIService';
@@ -26,6 +27,7 @@ interface UseAIAssistantChatProps {
   models: AIModelConfig[];
   loadModels: () => Promise<void>;
   ensureModelsLoaded: () => Promise<void>;
+  responseMode: AgentResponseMode;
   onPatchApply?: AgentPatchApplyHandler;
   onError?: (error: string) => void;
 }
@@ -39,6 +41,7 @@ export const useAIAssistantChat = ({
   models,
   loadModels,
   ensureModelsLoaded,
+  responseMode,
   onPatchApply,
   onError,
 }: UseAIAssistantChatProps) => {
@@ -116,24 +119,27 @@ export const useAIAssistantChat = ({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  const summarizePatchResponse = useCallback((response: AgentEditPatchResponse) => {
-    const summaryByOp: Record<string, string> = {
-      insertComponent: '插入组件',
-      updateProps: '更新组件属性',
-      bindEvent: '绑定组件事件',
-      removeComponent: '删除组件',
-      moveComponent: '移动组件',
-    };
-    const operationSummary = response.patch
-      .map((operation) => summaryByOp[operation.op] ?? operation.op)
-      .join('、');
-    const warningSummary =
-      response.warnings && response.warnings.length > 0
-        ? `\n\n提示：${response.warnings.join('；')}`
-        : '';
+  const summarizePatchResponse = useCallback(
+    (response: Extract<AgentEditResponse, { mode: 'patch' }>) => {
+      const summaryByOp: Record<string, string> = {
+        insertComponent: '插入组件',
+        updateProps: '更新组件属性',
+        bindEvent: '绑定组件事件',
+        removeComponent: '删除组件',
+        moveComponent: '移动组件',
+      };
+      const operationSummary = response.patch
+        .map((operation) => summaryByOp[operation.op] ?? operation.op)
+        .join('、');
+      const warningSummary =
+        response.warnings && response.warnings.length > 0
+          ? `\n\n提示：${response.warnings.join('；')}`
+          : '';
 
-    return `已应用 ${response.patch.length} 个 patch：${operationSummary}${warningSummary}`;
-  }, []);
+      return `已应用 ${response.patch.length} 个 patch：${operationSummary}${warningSummary}`;
+    },
+    [],
+  );
 
   const presentStructuredError = useCallback((error: AIServiceError) => {
     if (error.code === 'PAGE_VERSION_CONFLICT') {
@@ -162,13 +168,35 @@ export const useAIAssistantChat = ({
     }
   }, []);
 
+  const updateAssistantMessage = useCallback(
+    (messageId: string, updater: (message: AIMessage) => AIMessage) => {
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== messageId) {
+            return msg;
+          }
+          return updater(msg);
+        }),
+      );
+    },
+    [],
+  );
+
+  const createProgress = useCallback(
+    (progress: Omit<AgentMessageProgress, 'traceId'>, traceId?: string): AgentMessageProgress => ({
+      ...progress,
+      traceId,
+    }),
+    [],
+  );
+
   const sendMessage = useCallback(async () => {
     if (!inputValue.trim() || loading) return;
 
     if (models.length === 0) {
       try {
         await ensureModelsLoaded();
-      } catch (error) {
+      } catch {
         message.error('加载模型列表失败，请重试');
         return;
       }
@@ -205,111 +233,188 @@ export const useAIAssistantChat = ({
     setSessionMessages(nextSessionMessagesAfterUser);
 
     const aiMessageId = `ai-${Date.now()}`;
-    const aiMessage: AIMessage = {
-      id: aiMessageId,
-      type: 'ai',
-      content: '',
-      timestamp: new Date(),
-      status: 'loading',
-      modelUsed: currentModel,
-    };
-
-    setMessages((prev) => [...prev, aiMessage]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: aiMessageId,
+        type: 'ai',
+        content: '',
+        timestamp: new Date(),
+        status: 'loading',
+        modelUsed: currentModel,
+        progress: {
+          stage: 'routing',
+          label: '正在准备请求',
+        },
+      },
+    ]);
 
     try {
       const conversationHistory = nextSessionMessagesAfterUser.map((item) => ({
         role: item.role,
         content: item.content,
       }));
-      const shouldUsePatchMode =
+      const patchModeAvailable =
         Boolean(pageId) &&
         pageVersion !== null &&
         pageVersion !== undefined &&
         Boolean(onPatchApply);
+      const requestedResponseMode: AgentResponseMode =
+        responseMode === 'patch' && !patchModeAvailable
+          ? 'schema'
+          : responseMode === 'auto' && !patchModeAvailable
+            ? 'schema'
+            : responseMode;
 
       let fullContent = '';
       let aiSchema: A2UISchema | undefined;
       let actionResult: AIMessageActionResult | undefined;
+      let traceId: string | undefined;
+      let terminalReceived = false;
+      let structuredStreamError: AIServiceError | null = null;
 
-      if (shouldUsePatchMode) {
-        const patchResponse = await agentEditApi.editPatch({
-          instruction: userContent,
-          modelId: currentModel,
-          pageId,
-          version: pageVersion ?? undefined,
-          selectedId: selectedId ?? undefined,
-          draftSchema: currentSchema || undefined,
-          conversationHistory,
-        });
-        const nextSchema = await onPatchApply?.({
-          instruction: userContent,
-          patch: patchResponse.patch,
-          resolvedSelectedId: patchResponse.resolvedSelectedId,
-          warnings: patchResponse.warnings,
-          traceId: patchResponse.traceId,
-        });
+      const requestPayload = {
+        instruction: userContent,
+        modelId: currentModel,
+        pageId,
+        version: pageVersion ?? undefined,
+        selectedId: selectedId ?? undefined,
+        draftSchema: currentSchema || undefined,
+        conversationHistory,
+        responseMode: requestedResponseMode,
+      } as const;
 
-        if (!nextSchema) {
-          throw new AIServiceError('AI patch 应用失败', 'PATCH_APPLY_FAILED', {
-            traceId: patchResponse.traceId,
-          });
-        }
+      const applyAgentResponse = async (response: AgentEditResponse) => {
+        traceId = response.traceId;
 
-        fullContent = summarizePatchResponse(patchResponse);
-        actionResult = {
-          type: 'batch_update',
-          componentId: patchResponse.resolvedSelectedId,
-          schemaSnapshot: nextSchema,
-        };
-        message.success('AI 修改已应用');
-      } else {
-        const aiService = serverAIService;
-        const response = await aiService.generateResponse({
-          instruction: userContent,
-          modelId: currentModel,
-          pageId,
-          version: pageVersion ?? undefined,
-          selectedId: selectedId ?? undefined,
-          draftSchema: currentSchema || undefined,
-          conversationHistory,
-          responseMode: 'schema',
-        });
-
-        if (response.mode !== 'schema') {
-          throw new AIServiceError('当前聊天链路尚未接入 patch 响应模式', 'INVALID_RESPONSE', {
-            mode: response.mode,
+        if (response.mode === 'patch') {
+          const nextSchema = await onPatchApply?.({
+            instruction: userContent,
+            patch: response.patch,
+            resolvedSelectedId: response.resolvedSelectedId,
+            warnings: response.warnings,
             traceId: response.traceId,
           });
+
+          if (!nextSchema) {
+            throw new AIServiceError('AI patch 应用失败', 'PATCH_APPLY_FAILED', {
+              traceId: response.traceId,
+            });
+          }
+
+          fullContent = summarizePatchResponse(response);
+          actionResult = {
+            type: 'batch_update',
+            componentId: response.resolvedSelectedId,
+            schemaSnapshot: nextSchema,
+          };
+          message.success('AI 修改已应用');
+        } else {
+          fullContent = response.content;
+          aiSchema = response.schema;
+          actionResult = aiSchema
+            ? {
+                type: 'component_update',
+                componentId: aiSchema.rootId,
+                schemaSnapshot: aiSchema,
+              }
+            : undefined;
+
+          if (aiSchema) {
+            message.success('Schema 生成完毕！');
+          }
         }
 
-        fullContent = response.content;
-        aiSchema = response.schema;
-        actionResult = aiSchema
-          ? {
-              type: 'component_update',
-              componentId: aiSchema.rootId,
-              schemaSnapshot: aiSchema,
-            }
-          : undefined;
+        updateAssistantMessage(aiMessageId, (messageItem) => ({
+          ...messageItem,
+          content: fullContent,
+          schema: aiSchema,
+          status: 'success',
+          route: response.route,
+          traceId: response.traceId,
+          progress: createProgress(
+            {
+              stage: 'completed',
+              label: '处理完成',
+            },
+            response.traceId,
+          ),
+        }));
+      };
 
-        if (aiSchema) {
-          message.success('Schema 生成完毕！');
+      try {
+        await serverAIService.streamResponse?.(requestPayload, {
+          onEvent: async (event) => {
+            switch (event.type) {
+              case 'meta':
+                traceId = event.traceId;
+                updateAssistantMessage(aiMessageId, (messageItem) => ({
+                  ...messageItem,
+                  traceId: event.traceId,
+                  progress: {
+                    ...(messageItem.progress ?? { stage: 'routing', label: '正在准备请求' }),
+                    traceId: event.traceId,
+                  },
+                }));
+                break;
+              case 'route':
+                updateAssistantMessage(aiMessageId, (messageItem) => ({
+                  ...messageItem,
+                  route: event.route,
+                }));
+                break;
+              case 'status':
+                updateAssistantMessage(aiMessageId, (messageItem) => ({
+                  ...messageItem,
+                  progress: createProgress(
+                    {
+                      stage: event.stage,
+                      label: event.label,
+                      detail: event.detail,
+                      toolName: event.toolName,
+                      targetId: event.targetId,
+                      stepNumber: event.stepNumber,
+                      finishReason: event.finishReason,
+                    },
+                    messageItem.traceId ?? traceId,
+                  ),
+                }));
+                break;
+              case 'result':
+                terminalReceived = true;
+                await applyAgentResponse(event.result);
+                break;
+              case 'error':
+                terminalReceived = true;
+                structuredStreamError = new AIServiceError(
+                  event.error.message,
+                  (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                  {
+                    traceId: event.error.traceId,
+                    ...(event.error.details ? { details: event.error.details } : {}),
+                  },
+                );
+                break;
+              case 'done':
+                break;
+            }
+          },
+        });
+
+        if (structuredStreamError) {
+          throw structuredStreamError;
+        }
+      } catch (streamError) {
+        if (!terminalReceived) {
+          const response = await serverAIService.generateResponse({
+            ...requestPayload,
+            stream: false,
+          });
+          await applyAgentResponse(response);
+        } else {
+          throw streamError;
         }
       }
-
-      setMessages((prev) =>
-        prev.map((msg) => {
-          if (msg.id === aiMessageId) {
-            return {
-              ...msg,
-              content: fullContent,
-              schema: aiSchema,
-              status: 'success',
-            };
-          }
-          return msg;
-        }),
-      );
 
       const assistantSessionMessage: AISessionMessage = {
         id: generateMessageId(),
@@ -317,6 +422,11 @@ export const useAIAssistantChat = ({
         content: fullContent,
         timestamp: Date.now(),
         actionResult,
+        metadata: traceId
+          ? {
+              traceId,
+            }
+          : undefined,
       };
 
       const nextSessionMessagesAfterAssistant = [
@@ -327,7 +437,7 @@ export const useAIAssistantChat = ({
         updateCurrentSessionMessages(nextSessionMessagesAfterAssistant, session);
       }
       setSessionMessages(nextSessionMessagesAfterAssistant);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof AIServiceError) {
         presentStructuredError(error);
       }
@@ -361,10 +471,13 @@ export const useAIAssistantChat = ({
     currentSession,
     createNewSession,
     updateCurrentSessionMessages,
+    responseMode,
     onPatchApply,
     onError,
     presentStructuredError,
     summarizePatchResponse,
+    updateAssistantMessage,
+    createProgress,
   ]);
 
   return {

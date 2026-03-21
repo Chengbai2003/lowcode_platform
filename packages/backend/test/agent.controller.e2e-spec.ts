@@ -8,6 +8,7 @@ import { ModelConfigService } from '../src/modules/ai/model-config.service';
 import { AgentController } from '../src/modules/agent/agent.controller';
 import { AgentLegacySchemaService } from '../src/modules/agent/agent-legacy-schema.service';
 import { AgentPolicyService } from '../src/modules/agent/agent-policy.service';
+import { AgentRoutingService } from '../src/modules/agent/agent-routing.service';
 import { AgentRunnerService } from '../src/modules/agent/agent-runner.service';
 import { AgentService } from '../src/modules/agent/agent.service';
 import { PatchApplyService } from '../src/modules/agent-tools/patch-apply.service';
@@ -162,6 +163,23 @@ describe('AgentController (e2e)', () => {
     }),
   };
 
+  const parseSseEvents = (raw: string) =>
+    raw
+      .split(/\r?\n\r?\n/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const eventLine = chunk.split(/\r?\n/).find((line) => line.startsWith('event:'));
+        const dataLines = chunk
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice('data:'.length).trim());
+        return {
+          event: eventLine?.slice('event:'.length).trim(),
+          data: dataLines.length > 0 ? JSON.parse(dataLines.join('\n')) : undefined,
+        };
+      });
+
   beforeEach(async () => {
     process.env.API_SECRET = TEST_SECRET;
     jest.clearAllMocks();
@@ -246,6 +264,7 @@ describe('AgentController (e2e)', () => {
         },
         AgentLegacySchemaService,
         AgentPolicyService,
+        AgentRoutingService,
         AgentRunnerService,
         AgentService,
       ],
@@ -282,6 +301,28 @@ describe('AgentController (e2e)', () => {
       .expect((res: request.Response) => {
         expect(res.body.mode).toBe('schema');
         expect(res.body.traceId).toMatch(/^agent-/);
+        expect(res.body.route.resolvedMode).toBe('schema');
+      });
+  });
+
+  it('routes auto mode to schema for whole-page generation intent', () => {
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '生成一个登录页',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'auto',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('schema');
+        expect(res.body.route).toMatchObject({
+          requestedMode: 'auto',
+          resolvedMode: 'schema',
+          reason: 'whole_page_generation_intent',
+        });
       });
   });
 
@@ -322,6 +363,7 @@ describe('AgentController (e2e)', () => {
       .expect((res: request.Response) => {
         expect(res.body.mode).toBe('patch');
         expect(res.body.resolvedSelectedId).toBe('button');
+        expect(res.body.route.resolvedMode).toBe('patch');
         expect(res.body.patch).toEqual([
           {
             op: 'updateProps',
@@ -329,6 +371,50 @@ describe('AgentController (e2e)', () => {
             props: { children: '提交' },
           },
         ]);
+      });
+  });
+
+  it('routes auto mode to patch for focused edit intent', () => {
+    (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
+      await input.executeTool('update_component_props', {
+        componentId: 'button',
+        props: { children: '提交' },
+      });
+      return {
+        text: 'done',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [
+          {
+            stepNumber: 0,
+            finishReason: 'stop',
+            toolCalls: [{ toolName: 'update_component_props' }],
+          },
+        ],
+        toolCallCount: 1,
+      };
+    });
+
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把这个按钮改成提交',
+        pageId: 'page-1',
+        version: 4,
+        selectedId: 'button',
+        responseMode: 'auto',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('patch');
+        expect(res.body.route).toMatchObject({
+          requestedMode: 'auto',
+          resolvedMode: 'patch',
+          reason: 'selected_target',
+        });
       });
   });
 
@@ -445,6 +531,114 @@ describe('AgentController (e2e)', () => {
       .expect((res: request.Response) => {
         expect(res.body.code).toBe('AGENT_POLICY_BLOCKED');
       });
+  });
+
+  it('streams patch mode progress events', async () => {
+    (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
+      await input.executeTool('update_component_props', {
+        componentId: 'button',
+        props: { children: '提交' },
+      });
+      return {
+        text: 'done',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [
+          {
+            stepNumber: 0,
+            finishReason: 'stop',
+            toolCalls: [{ toolName: 'update_component_props' }],
+          },
+        ],
+        toolCallCount: 1,
+      };
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/agent/edit/stream')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把这个按钮改成提交',
+        pageId: 'page-1',
+        version: 4,
+        selectedId: 'button',
+        responseMode: 'auto',
+      })
+      .buffer(true)
+      .parse((res, callback) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => callback(null, body));
+      });
+
+    const events = parseSseEvents(response.body as string);
+    expect(events.map((event) => event.event)).toContain('meta');
+    expect(events.map((event) => event.event)).toContain('route');
+    expect(events.map((event) => event.event)).toContain('status');
+    expect(events.map((event) => event.event)).toContain('result');
+    expect(events.at(-1)?.event).toBe('done');
+    expect(events.find((event) => event.event === 'route')?.data.route.resolvedMode).toBe('patch');
+  });
+
+  it('streams schema mode progress events', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/agent/edit/stream')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '生成一个登录页',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'auto',
+      })
+      .buffer(true)
+      .parse((res, callback) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => callback(null, body));
+      });
+
+    const events = parseSseEvents(response.body as string);
+    expect(events.map((event) => event.event)).toContain('meta');
+    expect(events.map((event) => event.event)).toContain('route');
+    expect(events.map((event) => event.event)).toContain('result');
+    expect(events.at(-1)?.event).toBe('done');
+    expect(events.find((event) => event.event === 'route')?.data.route.resolvedMode).toBe('schema');
+  });
+
+  it('streams structured errors for stale patch requests', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/agent/edit/stream')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '把这个按钮改成提交',
+        pageId: 'page-1',
+        version: 3,
+        selectedId: 'button',
+        responseMode: 'patch',
+      })
+      .buffer(true)
+      .parse((res, callback) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => callback(null, body));
+      });
+
+    const events = parseSseEvents(response.body as string);
+    const errorEvent = events.find((event) => event.event === 'error');
+    expect(errorEvent?.data.error.code).toBe('PAGE_VERSION_CONFLICT');
+    expect(errorEvent?.data.error.traceId).toBeTruthy();
+    expect(events.at(-1)?.event).toBe('done');
   });
 
   it('previews updateProps successfully', () => {

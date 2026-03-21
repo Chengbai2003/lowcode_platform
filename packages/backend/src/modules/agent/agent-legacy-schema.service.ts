@@ -5,13 +5,13 @@ import { ChatRequestDto } from '../ai/dto/chat-request.dto';
 import { ContextAssemblerService, FocusContextResult } from '../schema-context';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import {
-  formatCandidates,
-  formatFocusContext,
-  formatPageOverview,
+  buildCompactContextSections,
   MAX_HISTORY_MESSAGE_CHARS,
   MAX_INSTRUCTION_PROMPT_CHARS,
   sanitizePromptText,
 } from './agent-prompt.utils';
+import { AgentProgressReporter, NOOP_AGENT_PROGRESS_REPORTER } from './types/agent-progress.types';
+import { AgentRouteDecision } from './types/agent-edit.types';
 import { AgentEditSchemaResponse } from './types/agent-edit.types';
 
 @Injectable()
@@ -21,18 +21,33 @@ export class AgentLegacySchemaService {
     private readonly contextAssembler: ContextAssemblerService,
   ) {}
 
-  async edit(dto: AgentEditRequestDto, traceId: string): Promise<AgentEditSchemaResponse> {
+  async edit(
+    dto: AgentEditRequestDto,
+    traceId: string,
+    options?: {
+      routeDecision?: AgentRouteDecision;
+      reporter?: AgentProgressReporter;
+    },
+  ): Promise<AgentEditSchemaResponse> {
     const hasSchemaSource = dto.draftSchema || dto.pageId;
+    const reporter = options?.reporter ?? NOOP_AGENT_PROGRESS_REPORTER;
 
     let contextResult: FocusContextResult | undefined;
+    await reporter.emitStatus({
+      stage: 'assembling_context',
+      label: '正在组装页面上下文',
+    });
+
     if (hasSchemaSource) {
-      contextResult = await this.contextAssembler.assemble({
-        pageId: dto.pageId,
-        version: dto.version,
-        draftSchema: dto.draftSchema,
-        selectedId: dto.selectedId,
-        instruction: dto.instruction,
-      });
+      contextResult =
+        options?.routeDecision?.prefetchedFocusContext ??
+        (await this.contextAssembler.assemble({
+          pageId: dto.pageId,
+          version: dto.version,
+          draftSchema: dto.draftSchema,
+          selectedId: dto.selectedId,
+          instruction: dto.instruction,
+        }));
     }
 
     const messages = this.buildMessages(dto, contextResult);
@@ -44,12 +59,22 @@ export class AgentLegacySchemaService {
       maxTokens: dto.maxTokens,
     };
 
+    await reporter.emitStatus({
+      stage: 'calling_model',
+      label: '正在调用模型生成 Schema',
+    });
+
     const result = await this.aiService.chat(request);
     const parsedSchema = this.tryParseSchema(result.content);
     const warnings =
       parsedSchema === undefined
         ? ['Model output did not contain a parseable A2UI schema JSON']
         : [];
+
+    await reporter.emitStatus({
+      stage: 'completed',
+      label: 'Schema 生成完成',
+    });
 
     return {
       mode: 'schema',
@@ -61,6 +86,12 @@ export class AgentLegacySchemaService {
       version: dto.version,
       selectedId: dto.selectedId,
       traceId,
+      route: options?.routeDecision?.route ?? {
+        requestedMode: dto.responseMode ?? 'schema',
+        resolvedMode: 'schema',
+        reason: 'manual_schema',
+        manualOverride: (dto.responseMode ?? 'schema') !== 'auto',
+      },
     };
   }
 
@@ -73,7 +104,13 @@ export class AgentLegacySchemaService {
 
 如果提供了页面概览、焦点上下文或候选节点，请严格基于这些结构理解用户意图。
 优先修改焦点组件及其直接相关结构，尽量保持未提及区域不变，并返回修改后的完整 A2UI Schema JSON。
-当前阶段不要返回 patch，不要返回 markdown，不要附加解释文字。`;
+当前阶段不要返回 patch，不要返回 markdown，不要附加解释文字。
+务必满足以下 Schema 约束：
+- version 必须是 number，不能是字符串
+- 每个 components[key] 节点都必须包含 id，且 id === key
+- Text / Title / Paragraph / Button 的展示文案放在 props.children，不要使用 props.content
+- feedback 动作必须使用 content / level / kind 字段，不要使用 message / type_ / messageType
+- 输出前自行检查 rootId 与 childrenIds 引用是否都存在。`;
 
     const history = (dto.conversationHistory || [])
       .filter((message) => message.role === 'user' || message.role === 'assistant')
@@ -83,15 +120,8 @@ export class AgentLegacySchemaService {
         content: sanitizePromptText(message.content, MAX_HISTORY_MESSAGE_CHARS),
       }));
 
-    const contextChunks: string[] = [];
-    if (contextResult) {
-      contextChunks.push(formatPageOverview(contextResult));
-      if (contextResult.mode === 'focused' && contextResult.context) {
-        contextChunks.push(formatFocusContext(contextResult.context));
-      } else if (contextResult.mode === 'candidates' && contextResult.candidates?.length) {
-        contextChunks.push(formatCandidates(contextResult.candidates));
-      }
-    } else {
+    const contextChunks = buildCompactContextSections(contextResult);
+    if (contextChunks.length === 0) {
       contextChunks.push('当前没有现成页面 Schema，请根据用户指令生成完整页面 Schema。');
     }
 

@@ -123,8 +123,13 @@ describe('AgentLegacySchemaService', () => {
     });
 
     const request = aiService.chat.mock.calls[0][0];
+    const systemPrompt = request.messages[0].content;
     const userMessage = request.messages[request.messages.length - 1].content;
 
+    expect(systemPrompt).toContain('version 必须是 number');
+    expect(systemPrompt).toContain('id === key');
+    expect(systemPrompt).toContain('props.children');
+    expect(systemPrompt).toContain('content / level / kind');
     expect(userMessage).toContain('## 页面概览');
     expect(userMessage).toContain('## 当前焦点组件');
     expect(userMessage).toContain('btn_submit');

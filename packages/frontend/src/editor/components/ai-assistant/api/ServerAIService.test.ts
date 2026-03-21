@@ -4,6 +4,7 @@ import { serverAIService } from './ServerAIService';
 const { fetchAppMock } = vi.hoisted(() => ({
   fetchAppMock: {
     post: vi.fn(),
+    streamRequest: vi.fn(),
   },
 }));
 
@@ -14,6 +15,7 @@ vi.mock('../../../lib/httpClient', () => ({
 describe('ServerAIService', () => {
   beforeEach(() => {
     fetchAppMock.post.mockReset();
+    fetchAppMock.streamRequest.mockReset();
   });
 
   it('sends the unified agent edit request to /api/v1/agent/edit', async () => {
@@ -22,6 +24,12 @@ describe('ServerAIService', () => {
         mode: 'schema',
         content: '{"rootId":"root","components":{"root":{"id":"root","type":"Button"}}}',
         traceId: 'agent-trace',
+        route: {
+          requestedMode: 'schema',
+          resolvedMode: 'schema',
+          reason: 'manual_schema',
+          manualOverride: true,
+        },
       },
     });
 
@@ -69,5 +77,66 @@ describe('ServerAIService', () => {
       stream: undefined,
       responseMode: 'schema',
     });
+  });
+
+  it('parses structured agent SSE events from /api/v1/agent/edit/stream', async () => {
+    const payload = [
+      'event: meta',
+      'data: {"type":"meta","traceId":"agent-trace"}',
+      '',
+      'event: route',
+      'data: {"type":"route","route":{"requestedMode":"auto","resolvedMode":"patch","reason":"selected_target","manualOverride":false}}',
+      '',
+      'event: result',
+      'data: {"type":"result","result":{"mode":"patch","patch":[],"warnings":[],"traceId":"agent-trace","route":{"requestedMode":"auto","resolvedMode":"patch","reason":"selected_target","manualOverride":false}}}',
+      '',
+      'event: done',
+      'data: {"type":"done","success":true}',
+      '',
+    ].join('\n');
+
+    fetchAppMock.streamRequest.mockResolvedValue({
+      body: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(payload));
+          controller.close();
+        },
+      }),
+    });
+
+    const events: Array<{ type: string }> = [];
+    const result = await serverAIService.streamResponse(
+      {
+        instruction: '把按钮改成提交',
+        responseMode: 'auto',
+      },
+      {
+        onEvent: async (event) => {
+          events.push({ type: event.type });
+        },
+      },
+    );
+
+    expect(fetchAppMock.streamRequest).toHaveBeenCalledWith('/api/v1/agent/edit/stream', {
+      instruction: '把按钮改成提交',
+      modelId: undefined,
+      provider: undefined,
+      pageId: undefined,
+      version: undefined,
+      selectedId: undefined,
+      draftSchema: undefined,
+      conversationHistory: undefined,
+      temperature: undefined,
+      maxTokens: undefined,
+      stream: true,
+      responseMode: 'auto',
+    });
+    expect(events).toEqual([
+      { type: 'meta' },
+      { type: 'route' },
+      { type: 'result' },
+      { type: 'done' },
+    ]);
+    expect(result).toEqual({ terminal: 'result' });
   });
 });

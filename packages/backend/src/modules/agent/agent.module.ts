@@ -5,6 +5,7 @@ import { PageSchemaModule } from '../page-schema/page-schema.module';
 import { SchemaContextModule } from '../schema-context';
 import { AgentLegacySchemaService } from './agent-legacy-schema.service';
 import { AgentPolicyService } from './agent-policy.service';
+import { AgentRoutingService } from './agent-routing.service';
 import { AgentRunnerService } from './agent-runner.service';
 import { AgentController } from './agent.controller';
 import { AgentService } from './agent.service';
@@ -12,7 +13,13 @@ import { AgentService } from './agent.service';
 @Module({
   imports: [AiModule, PageSchemaModule, SchemaContextModule, AgentToolsModule],
   controllers: [AgentController],
-  providers: [AgentService, AgentLegacySchemaService, AgentPolicyService, AgentRunnerService],
+  providers: [
+    AgentService,
+    AgentLegacySchemaService,
+    AgentPolicyService,
+    AgentRoutingService,
+    AgentRunnerService,
+  ],
   exports: [AgentService],
 })
 export class AgentModule {}

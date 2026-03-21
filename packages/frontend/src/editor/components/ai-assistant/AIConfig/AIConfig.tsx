@@ -26,7 +26,7 @@ import {
 } from '@ant-design/icons';
 import { aiApi } from '../api/ai-api';
 import { serverAIService } from '../api/ServerAIService';
-import type { AIModelConfig } from '../types/ai-types';
+import type { AgentResponseMode, AIModelConfig } from '../types/ai-types';
 import styles from './AIConfig.module.scss';
 
 const { Option } = Select;
@@ -36,6 +36,9 @@ interface AIConfigProps {
   visible: boolean;
   onClose: () => void;
   onConfigChange?: (modelId: string) => void;
+  responseMode: AgentResponseMode;
+  onResponseModeChange: (mode: AgentResponseMode) => void;
+  patchModeAvailable: boolean;
 }
 
 type ViewMode = 'list' | 'edit' | 'add';
@@ -44,7 +47,14 @@ type AIConfigFormValues = Pick<
   'name' | 'provider' | 'model' | 'apiKey' | 'baseURL' | 'maxTokens' | 'temperature'
 >;
 
-export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigChange }) => {
+export const AIConfig: React.FC<AIConfigProps> = ({
+  visible,
+  onClose,
+  onConfigChange,
+  responseMode,
+  onResponseModeChange,
+  patchModeAvailable,
+}) => {
   const [form] = Form.useForm();
   const [models, setModels] = useState<AIModelConfig[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
@@ -494,7 +504,29 @@ export const AIConfig: React.FC<AIConfigProps> = ({ visible, onClose, onConfigCh
       }
       className={styles.aiConfigModal}
     >
-      <div className={styles.aiConfig}>{viewMode === 'list' ? renderList() : renderForm()}</div>
+      <div className={styles.aiConfig}>
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Text strong>响应模式</Text>
+            <Select value={responseMode} onChange={onResponseModeChange}>
+              <Option value="auto">Auto</Option>
+              <Option value="schema">Schema</Option>
+              <Option value="patch" disabled={!patchModeAvailable}>
+                Patch
+              </Option>
+            </Select>
+            {!patchModeAvailable && (
+              <Alert
+                type="info"
+                showIcon
+                message="当前环境将退化为 Schema"
+                description="缺少 pageId/version 或 patch apply handler，Auto 模式下会自动回落到 Schema。"
+              />
+            )}
+          </Space>
+        </Card>
+        {viewMode === 'list' ? renderList() : renderForm()}
+      </div>
     </Modal>
   );
 };

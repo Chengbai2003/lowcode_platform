@@ -6,7 +6,7 @@ import { validateAndAutoFixA2UISchema } from '../../../../schema/schemaValidatio
 import { componentRegistry } from '../../../../components';
 import { builtInComponents } from '../../../../renderer';
 import { AIConfig } from '../AIConfig/AIConfig';
-import type { AIModelConfig, AgentPatchApplyHandler } from '../types/ai-types';
+import type { AgentPatchApplyHandler, AgentResponseMode, AIModelConfig } from '../types/ai-types';
 import { useAIModels } from './useAIModels';
 import { useAIAssistantChat } from './useAIAssistantChat';
 import { AIAssistantMessageList } from './AIAssistantMessageList';
@@ -32,6 +32,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   onError,
 }) => {
   const [configVisible, setConfigVisible] = useState(false);
+  const [responseMode, setResponseMode] = useState<AgentResponseMode>('auto');
   const {
     models,
     currentModel,
@@ -40,6 +41,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     ensureModelsLoaded,
     currentModelName,
   } = useAIModels();
+
+  const patchModeAvailable =
+    Boolean(pageId) && pageVersion !== null && pageVersion !== undefined && Boolean(onPatchApply);
 
   const { messages, inputValue, setInputValue, loading, sendMessage, messagesEndRef } =
     useAIAssistantChat({
@@ -51,6 +55,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
       models,
       loadModels,
       ensureModelsLoaded,
+      responseMode,
       onPatchApply,
       onError,
     });
@@ -82,6 +87,12 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
 
   const selectedComponent =
     selectedId && currentSchema ? currentSchema.components[selectedId] : null;
+
+  React.useEffect(() => {
+    if (!patchModeAvailable && responseMode === 'patch') {
+      setResponseMode('auto');
+    }
+  }, [patchModeAvailable, responseMode]);
 
   const modelSelectContent = (
     <div className={styles.modelSelectContent}>
@@ -210,6 +221,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           loadModels();
         }}
         onConfigChange={(modelId: string) => setCurrentModel(modelId)}
+        responseMode={responseMode}
+        onResponseModeChange={setResponseMode}
+        patchModeAvailable={patchModeAvailable}
       />
     </div>
   );
