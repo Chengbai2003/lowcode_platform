@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { A2UISchema } from '../schema-context/types/schema.types';
 import { EditorPatchOperation } from './types/editor-patch.types';
 import { EditorAction } from './types/editor-action.types';
 
@@ -7,8 +8,23 @@ export class PatchAutoFixService {
   autoFix(patch: readonly EditorPatchOperation[]): {
     patch: EditorPatchOperation[];
     warnings: string[];
+  };
+  autoFix(
+    patch: readonly EditorPatchOperation[],
+    schema: A2UISchema,
+  ): {
+    patch: EditorPatchOperation[];
+    warnings: string[];
+  };
+  autoFix(
+    patch: readonly EditorPatchOperation[],
+    schema?: A2UISchema,
+  ): {
+    patch: EditorPatchOperation[];
+    warnings: string[];
   } {
     const warnings: string[] = [];
+    let workingSchema = schema ? this.cloneSchema(schema) : undefined;
 
     const normalizedPatch = patch.map((operation) => {
       switch (operation.op) {
@@ -17,9 +33,20 @@ export class PatchAutoFixService {
             operation.component && typeof operation.component === 'object'
               ? { ...operation.component }
               : {};
+          const normalizedProps = this.ensureRecord(component.props);
+          const buttonPropsNormalization = this.normalizeButtonDangerProps(
+            typeof component.type === 'string' ? component.type : undefined,
+            normalizedProps,
+          );
+          if (buttonPropsNormalization.changed) {
+            warnings.push(
+              `Normalized Button danger prop for inserted component ${String(component.id ?? 'unknown')}`,
+            );
+          }
 
           const normalizedComponent = {
             ...component,
+            props: buttonPropsNormalization.props,
             childrenIds: this.ensureDistinctStringArray(component.childrenIds),
             events: this.ensureRecord(component.events),
           };
@@ -30,10 +57,34 @@ export class PatchAutoFixService {
             warnings.push(`Normalized insert index for component under ${operation.parentId}`);
           }
 
+          workingSchema = this.appendInsertedComponent(workingSchema, normalizedComponent);
+
           return {
             ...operation,
             index: normalizedIndex,
             component: normalizedComponent,
+          };
+        }
+        case 'updateProps': {
+          const normalizedProps = this.ensureRecord(operation.props);
+          const componentType = workingSchema?.components[operation.componentId]?.type;
+          const buttonPropsNormalization = this.normalizeButtonDangerProps(
+            componentType,
+            normalizedProps,
+          );
+          if (buttonPropsNormalization.changed) {
+            warnings.push(`Normalized Button danger prop for ${operation.componentId}`);
+          }
+
+          workingSchema = this.mergeUpdatedProps(
+            workingSchema,
+            operation.componentId,
+            buttonPropsNormalization.props,
+          );
+
+          return {
+            ...operation,
+            props: buttonPropsNormalization.props,
           };
         }
         case 'bindEvent': {
@@ -200,6 +251,92 @@ export class PatchAutoFixService {
     }
 
     return { ...(value as Record<string, unknown>) };
+  }
+
+  private normalizeButtonDangerProps(
+    componentType: string | undefined,
+    props: Record<string, unknown>,
+  ): {
+    props: Record<string, unknown>;
+    changed: boolean;
+  } {
+    if (componentType !== 'Button' || props.type !== 'danger') {
+      return {
+        props,
+        changed: false,
+      };
+    }
+
+    const nextProps = { ...props };
+    delete nextProps.type;
+    nextProps.danger = true;
+
+    return {
+      props: nextProps,
+      changed: true,
+    };
+  }
+
+  private appendInsertedComponent(
+    schema: A2UISchema | undefined,
+    component: Record<string, unknown>,
+  ): A2UISchema | undefined {
+    if (!schema) {
+      return schema;
+    }
+
+    const id = typeof component.id === 'string' ? component.id : undefined;
+    const type = typeof component.type === 'string' ? component.type : undefined;
+    if (!id || !type) {
+      return schema;
+    }
+
+    return {
+      ...schema,
+      components: {
+        ...schema.components,
+        [id]: {
+          id,
+          type,
+          props: this.ensureRecord(component.props),
+          childrenIds: this.ensureDistinctStringArray(component.childrenIds),
+          events: this.ensureRecord(component.events),
+        },
+      },
+    };
+  }
+
+  private mergeUpdatedProps(
+    schema: A2UISchema | undefined,
+    componentId: string,
+    props: Record<string, unknown>,
+  ): A2UISchema | undefined {
+    if (!schema) {
+      return schema;
+    }
+
+    const component = schema.components[componentId];
+    if (!component) {
+      return schema;
+    }
+
+    return {
+      ...schema,
+      components: {
+        ...schema.components,
+        [componentId]: {
+          ...component,
+          props: {
+            ...(component.props ?? {}),
+            ...props,
+          },
+        },
+      },
+    };
+  }
+
+  private cloneSchema(schema: A2UISchema): A2UISchema {
+    return JSON.parse(JSON.stringify(schema)) as A2UISchema;
   }
 
   private firstDefined(...values: unknown[]): unknown {

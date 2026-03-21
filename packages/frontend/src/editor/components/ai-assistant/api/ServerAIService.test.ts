@@ -87,8 +87,11 @@ describe('ServerAIService', () => {
       'event: route',
       'data: {"type":"route","route":{"requestedMode":"auto","resolvedMode":"patch","reason":"selected_target","manualOverride":false}}',
       '',
+      'event: content_delta',
+      'data: {"type":"content_delta","mode":"answer","delta":"你好"}',
+      '',
       'event: result',
-      'data: {"type":"result","result":{"mode":"patch","patch":[],"warnings":[],"traceId":"agent-trace","route":{"requestedMode":"auto","resolvedMode":"patch","reason":"selected_target","manualOverride":false}}}',
+      'data: {"type":"result","result":{"mode":"patch","patch":[],"previewSchema":{"rootId":"root","components":{"root":{"id":"root","type":"Page"}}},"previewSummary":"本次修改共 0 个 patch。","changeGroups":[],"risk":{"level":"low","reasons":["局部低范围修改"],"patchOps":0,"distinctTargets":0,"requiresConfirmation":false},"requiresConfirmation":false,"warnings":[],"traceId":"agent-trace","route":{"requestedMode":"auto","resolvedMode":"patch","reason":"selected_target","manualOverride":false}}}',
       '',
       'event: done',
       'data: {"type":"done","success":true}',
@@ -134,6 +137,7 @@ describe('ServerAIService', () => {
     expect(events).toEqual([
       { type: 'meta' },
       { type: 'route' },
+      { type: 'content_delta' },
       { type: 'result' },
       { type: 'done' },
     ]);

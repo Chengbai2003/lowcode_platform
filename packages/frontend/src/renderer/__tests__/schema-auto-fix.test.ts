@@ -115,4 +115,21 @@ describe('autoFixSchema', () => {
     expect(fixes).toContain('组件 text1: 将 props.content 迁移为 props.children');
     expect(fixes).toContain('组件 button1: 将 props.content 迁移为 props.children');
   });
+
+  it('should normalize Button danger alias to danger=true', () => {
+    const raw = {
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['button1'] },
+        button1: { id: 'button1', type: 'Button', props: { children: '删除', type: 'danger' } },
+      },
+    };
+
+    const { fixed, fixes } = autoFixSchema(raw, whitelist);
+
+    expect(fixed.components['button1'].props).toEqual({ children: '删除', danger: true });
+    expect(fixes).toContain(
+      '组件 button1: 将 Button 的 props.type="danger" 修正为 props.danger=true',
+    );
+  });
 });

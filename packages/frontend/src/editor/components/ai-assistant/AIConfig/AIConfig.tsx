@@ -510,6 +510,7 @@ export const AIConfig: React.FC<AIConfigProps> = ({
             <Text strong>响应模式</Text>
             <Select value={responseMode} onChange={onResponseModeChange}>
               <Option value="auto">Auto</Option>
+              <Option value="answer">Answer</Option>
               <Option value="schema">Schema</Option>
               <Option value="patch" disabled={!patchModeAvailable}>
                 Patch
@@ -519,8 +520,8 @@ export const AIConfig: React.FC<AIConfigProps> = ({
               <Alert
                 type="info"
                 showIcon
-                message="当前环境将退化为 Schema"
-                description="缺少 pageId/version 或 patch apply handler，Auto 模式下会自动回落到 Schema。"
+                message="当前环境不可直接应用 Patch"
+                description="缺少 pageId/version 或 patch apply handler 时，Auto 仍可进行问答或 Schema 生成，但不会进入 Patch 应用链路。"
               />
             )}
           </Space>

@@ -20,15 +20,21 @@ export interface AgentConversationMessage {
   content: string;
 }
 
-export type AgentResponseMode = 'auto' | 'schema' | 'patch';
-export type ResolvedAgentMode = 'schema' | 'patch';
+export type AgentResponseMode = 'auto' | 'answer' | 'schema' | 'patch';
+export type ResolvedAgentMode = 'answer' | 'schema' | 'patch';
 
 export interface AgentRouteInfo {
   requestedMode: AgentResponseMode;
   resolvedMode: ResolvedAgentMode;
   reason:
+    | 'manual_answer'
     | 'manual_schema'
     | 'manual_patch'
+    | 'llm_intent_answer'
+    | 'llm_intent_schema'
+    | 'llm_intent_patch'
+    | 'general_question_intent'
+    | 'page_question_intent'
     | 'missing_page_context'
     | 'whole_page_generation_intent'
     | 'selected_target'
@@ -57,6 +63,29 @@ export interface AgentMessageProgress {
   traceId?: string;
 }
 
+export interface AgentClarificationCandidate {
+  id: string;
+  type: string;
+  score: number;
+  reason: string;
+  displayLabel: string;
+  secondaryLabel: string;
+  pathLabel?: string;
+}
+
+export interface AgentEditAnswerResponse {
+  mode: 'answer';
+  content: string;
+  warnings?: string[];
+  traceId: string;
+  route: AgentRouteInfo;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+}
+
 export interface AgentEditSchemaResponse {
   mode: 'schema';
   content: string;
@@ -72,6 +101,30 @@ export interface AgentEditSchemaResponse {
   };
 }
 
+export type AgentPatchRiskLevel = 'low' | 'medium' | 'high';
+export type AgentPatchChangeKind = 'content' | 'props' | 'event' | 'structure';
+
+export interface AgentPatchChangeEntry {
+  op: EditorPatchOperation['op'];
+  targetId: string;
+  summary: string;
+}
+
+export interface AgentPatchChangeGroup {
+  kind: AgentPatchChangeKind;
+  label: string;
+  count: number;
+  entries: AgentPatchChangeEntry[];
+}
+
+export interface AgentPatchRiskAssessment {
+  level: AgentPatchRiskLevel;
+  reasons: string[];
+  patchOps: number;
+  distinctTargets: number;
+  requiresConfirmation: boolean;
+}
+
 export interface AgentEditPatchResponse {
   mode: 'patch';
   pageId?: string;
@@ -79,13 +132,33 @@ export interface AgentEditPatchResponse {
   resolvedVersion?: number;
   resolvedSelectedId?: string;
   patch: EditorPatchOperation[];
+  previewSchema: A2UISchema;
+  previewSummary: string;
+  changeGroups: AgentPatchChangeGroup[];
+  risk: AgentPatchRiskAssessment;
+  requiresConfirmation: boolean;
+  warnings?: string[];
+  traceId: string;
+  route: AgentRouteInfo;
+}
+
+export interface AgentEditClarificationResponse {
+  mode: 'clarification';
+  content: string;
+  question: string;
+  clarificationId: string;
+  candidates: AgentClarificationCandidate[];
   warnings?: string[];
   traceId: string;
   route: AgentRouteInfo;
 }
 
 // Agent 编辑响应接口（Phase 4 双模兼容）
-export type AgentEditResponse = AgentEditSchemaResponse | AgentEditPatchResponse;
+export type AgentEditResponse =
+  | AgentEditAnswerResponse
+  | AgentEditSchemaResponse
+  | AgentEditPatchResponse
+  | AgentEditClarificationResponse;
 
 export interface AgentPatchApplyPayload {
   instruction: string;
@@ -132,6 +205,11 @@ export type AgentStreamEvent =
       targetId?: string;
       stepNumber?: number;
       finishReason?: string;
+    }
+  | {
+      type: 'content_delta';
+      mode: 'answer' | 'schema';
+      delta: string;
     }
   | { type: 'result'; result: AgentEditResponse }
   | {

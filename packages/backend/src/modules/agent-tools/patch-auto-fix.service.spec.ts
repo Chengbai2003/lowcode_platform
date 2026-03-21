@@ -1,5 +1,6 @@
 import { PatchAutoFixService } from './patch-auto-fix.service';
 import { EditorPatchOperation } from './types/editor-patch.types';
+import { A2UISchema } from '../schema-context/types/schema.types';
 
 describe('PatchAutoFixService', () => {
   let service: PatchAutoFixService;
@@ -116,6 +117,67 @@ describe('PatchAutoFixService', () => {
       ],
     });
     expect(result.warnings).toContain('Normalized action payloads for button_submit.onClick');
+  });
+
+  it('normalizes Button danger alias in updateProps with schema context', () => {
+    const schema: A2UISchema = {
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['button_submit'] },
+        button_submit: {
+          id: 'button_submit',
+          type: 'Button',
+          props: { type: 'primary', children: '删除' },
+        },
+      },
+    };
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'updateProps',
+        componentId: 'button_submit',
+        props: { type: 'danger' },
+      },
+    ];
+
+    const result = service.autoFix(patch, schema);
+
+    expect(result.patch[0]).toEqual({
+      op: 'updateProps',
+      componentId: 'button_submit',
+      props: { danger: true },
+    });
+    expect(result.warnings).toContain('Normalized Button danger prop for button_submit');
+  });
+
+  it('normalizes Button danger alias in inserted components', () => {
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'insertComponent',
+        parentId: 'actions',
+        component: {
+          id: 'button_delete',
+          type: 'Button',
+          props: { children: '删除', type: 'danger' },
+        },
+      },
+    ];
+
+    const result = service.autoFix(patch);
+
+    expect(result.patch[0]).toEqual({
+      op: 'insertComponent',
+      parentId: 'actions',
+      component: {
+        id: 'button_delete',
+        type: 'Button',
+        props: { children: '删除', danger: true },
+        childrenIds: [],
+        events: {},
+      },
+    });
+    expect(result.warnings).toContain(
+      'Normalized Button danger prop for inserted component button_delete',
+    );
   });
 
   it('leaves already valid patch operations unchanged', () => {

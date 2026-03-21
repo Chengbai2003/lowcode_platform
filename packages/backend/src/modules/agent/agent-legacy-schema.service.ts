@@ -61,10 +61,20 @@ export class AgentLegacySchemaService {
 
     await reporter.emitStatus({
       stage: 'calling_model',
-      label: '正在调用模型生成 Schema',
+      label: this.buildSchemaGenerationLabel(dto.instruction),
     });
 
-    const result = await this.aiService.chat(request);
+    const result = dto.stream
+      ? await this.aiService.streamChatText(request)
+      : await this.aiService.chat(request);
+
+    if (dto.stream) {
+      await reporter.emitStatus({
+        stage: 'validating_output',
+        label: '正在校验 Schema 结果',
+      });
+    }
+
     const parsedSchema = this.tryParseSchema(result.content);
     const warnings =
       parsedSchema === undefined
@@ -109,6 +119,7 @@ export class AgentLegacySchemaService {
 - version 必须是 number，不能是字符串
 - 每个 components[key] 节点都必须包含 id，且 id === key
 - Text / Title / Paragraph / Button 的展示文案放在 props.children，不要使用 props.content
+- Button 的红色/危险样式使用 props.danger = true，不要把 props.type 写成 danger
 - feedback 动作必须使用 content / level / kind 字段，不要使用 message / type_ / messageType
 - 输出前自行检查 rootId 与 childrenIds 引用是否都存在。`;
 
@@ -215,5 +226,14 @@ export class AgentLegacySchemaService {
     }
 
     return undefined;
+  }
+
+  private buildSchemaGenerationLabel(instruction: string): string {
+    const normalized = sanitizePromptText(instruction, 24).replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return '正在准备生成页面结构';
+    }
+
+    return `正在准备生成：${normalized}`;
   }
 }

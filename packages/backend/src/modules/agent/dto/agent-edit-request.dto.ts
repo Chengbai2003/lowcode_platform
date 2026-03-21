@@ -81,7 +81,7 @@ export class AgentEditRequestDto {
   stream?: boolean;
 
   @IsString()
-  @IsIn(['auto', 'schema', 'patch'])
+  @IsIn(['auto', 'answer', 'schema', 'patch'])
   @IsOptional()
-  responseMode?: 'auto' | 'schema' | 'patch';
+  responseMode?: 'auto' | 'answer' | 'schema' | 'patch';
 }

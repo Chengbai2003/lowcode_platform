@@ -6,20 +6,46 @@ import { ToolExecutionService } from '../agent-tools/tool-execution.service';
 import { ToolRegistryService } from '../agent-tools/tool-registry.service';
 import { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
 import { ToolExecutionContext } from '../agent-tools/types/tool.types';
-import { FocusContextResult } from '../schema-context';
+import { ComponentMetaRegistry } from '../schema-context';
+import type {
+  A2UIComponent,
+  A2UISchema,
+  FocusContextResult,
+  NodeCandidate,
+} from '../schema-context';
+import { buildAncestorChain, buildParentMap } from '../schema-context/utils/parent-map.builder';
+import { buildPatchPresentation } from './agent-preview.utils';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import {
   buildCompactContextSections,
-  formatFocusContext,
-  formatPageOverview,
   MAX_HISTORY_MESSAGE_CHARS,
   MAX_INSTRUCTION_PROMPT_CHARS,
   sanitizePromptText,
 } from './agent-prompt.utils';
 import { AgentPolicyService, AgentRunMetrics } from './agent-policy.service';
 import { AgentProgressReporter, NOOP_AGENT_PROGRESS_REPORTER } from './types/agent-progress.types';
-import { AgentRouteDecision } from './types/agent-edit.types';
-import { AgentEditPatchResponse } from './types/agent-edit.types';
+import {
+  AgentClarificationCandidate,
+  AgentEditClarificationResponse,
+  AgentEditPatchResponse,
+  AgentRouteDecision,
+} from './types/agent-edit.types';
+
+const CLARIFICATION_CANDIDATE_LIMIT = 3;
+const DEFAULT_LABEL_PROPS = [
+  'children',
+  'title',
+  'label',
+  'placeholder',
+  'message',
+  'description',
+  'header',
+  'tab',
+  'name',
+  'text',
+] as const;
+const MAX_LABEL_CHARS = 32;
+const MAX_PATH_SEGMENT_CHARS = 18;
 
 @Injectable()
 export class AgentRunnerService {
@@ -30,6 +56,7 @@ export class AgentRunnerService {
     private readonly toolExecutionService: ToolExecutionService,
     private readonly toolRegistry: ToolRegistryService,
     private readonly policyService: AgentPolicyService,
+    private readonly componentMetaRegistry: ComponentMetaRegistry,
   ) {}
 
   async runEdit(
@@ -39,7 +66,7 @@ export class AgentRunnerService {
       routeDecision?: AgentRouteDecision;
       reporter?: AgentProgressReporter;
     },
-  ): Promise<AgentEditPatchResponse> {
+  ): Promise<AgentEditPatchResponse | AgentEditClarificationResponse> {
     const traceId = this.policyService.createTraceId(requestId);
     const metrics: AgentRunMetrics = { stepCount: 0, toolCallCount: 0 };
     const limits = this.policyService.getLimits();
@@ -70,11 +97,22 @@ export class AgentRunnerService {
       label: '正在解析编辑目标',
     });
 
-    const { resolvedSelectedId, focusContextResult } = await this.resolveTarget(
+    const targetResolution = await this.resolveTarget(
       dto,
       context,
+      traceId,
       options?.routeDecision?.prefetchedFocusContext,
+      options?.routeDecision,
     );
+    if ('clarificationResponse' in targetResolution) {
+      await reporter.emitStatus({
+        stage: 'completed',
+        label: '需要用户澄清目标组件',
+      });
+      return targetResolution.clarificationResponse;
+    }
+
+    const { resolvedSelectedId, focusContextResult } = targetResolution;
     const prompt = this.buildPrompt(dto, focusContextResult, resolvedSelectedId);
 
     try {
@@ -148,7 +186,10 @@ export class AgentRunnerService {
         targetId: resolvedSelectedId,
       });
 
-      const patch = await this.finalizePatch(context, traceId);
+      const { patch, previewSchema, previewSummary, changeGroups, risk } = await this.finalizePatch(
+        context,
+        traceId,
+      );
 
       this.logger.log(
         `[${traceId}] finish reason=${result.finishReason} steps=${metrics.stepCount} toolCalls=${metrics.toolCallCount} patchOps=${patch.length}`,
@@ -156,7 +197,7 @@ export class AgentRunnerService {
 
       await reporter.emitStatus({
         stage: 'completed',
-        label: 'Patch 生成完成',
+        label: 'Patch 预览完成',
         finishReason: result.finishReason,
         targetId: resolvedSelectedId,
       });
@@ -168,6 +209,11 @@ export class AgentRunnerService {
         resolvedVersion: context.resolvedVersion,
         resolvedSelectedId,
         patch,
+        previewSchema,
+        previewSummary,
+        changeGroups,
+        risk,
+        requiresConfirmation: risk.requiresConfirmation,
         warnings: [...context.warnings],
         traceId,
         route: options?.routeDecision?.route ?? {
@@ -197,8 +243,13 @@ export class AgentRunnerService {
   private async resolveTarget(
     dto: AgentEditRequestDto,
     context: ToolExecutionContext,
+    traceId: string,
     prefetchedFocusContext?: FocusContextResult,
-  ): Promise<{ resolvedSelectedId?: string; focusContextResult: FocusContextResult }> {
+    routeDecision?: AgentRouteDecision,
+  ): Promise<
+    | { resolvedSelectedId?: string; focusContextResult: FocusContextResult }
+    | { clarificationResponse: AgentEditClarificationResponse }
+  > {
     const initialResult =
       prefetchedFocusContext ??
       (await this.toolExecutionService.getFocusContext(context, dto.selectedId, dto.instruction));
@@ -251,19 +302,30 @@ export class AgentRunnerService {
       };
     }
 
-    throw new AgentToolException({
-      code: 'NODE_AMBIGUOUS',
-      message: 'Instruction matches multiple possible components',
-      traceId: context.traceId,
-      details: {
-        candidates: candidates.slice(0, 3).map((candidate) => ({
-          id: candidate.id,
-          type: candidate.type,
-          score: candidate.score,
-          reason: candidate.reason,
-        })),
+    const clarificationCandidates = this.buildClarificationCandidates(
+      candidates.slice(0, CLARIFICATION_CANDIDATE_LIMIT),
+      initialResult.schema,
+    );
+
+    return {
+      clarificationResponse: {
+        mode: 'clarification',
+        content: `我找到了多个可能的目标组件：${clarificationCandidates
+          .map((candidate) => this.buildClarificationSummary(candidate))
+          .join('、')}。请选择你要修改的对象。`,
+        question: '请选择要继续编辑的目标组件',
+        clarificationId: `${traceId}-clarify`,
+        candidates: clarificationCandidates,
+        warnings: [],
+        traceId,
+        route: routeDecision?.route ?? {
+          requestedMode: dto.responseMode ?? 'patch',
+          resolvedMode: 'patch',
+          reason: 'candidate_target',
+          manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
+        },
       },
-    });
+    };
   }
 
   private buildSystemPrompt(componentList: readonly string[]): string {
@@ -277,6 +339,7 @@ export class AgentRunnerService {
       `可用组件类型: ${componentList.join(', ') || '未知'}`,
       `允许的事件 Action 类型: ${allowedActionTypes.join(', ')}`,
       "feedback 动作必须使用 content/level 字段，例如 { type: 'feedback', kind: 'message', content: '操作成功', level: 'success' }；不要使用 message/type_/messageType。",
+      'Button 的红色/危险样式请设置 props.danger=true；不要把 Button.props.type 写成 danger，type 仅用于 default/primary/dashed/link/text。',
       '如果你已经完成修改，就停止继续调用工具。',
     ].join('\n');
   }
@@ -321,12 +384,19 @@ export class AgentRunnerService {
   private async finalizePatch(
     context: ToolExecutionContext,
     traceId: string,
-  ): Promise<EditorPatchOperation[]> {
+  ): Promise<{
+    patch: EditorPatchOperation[];
+    previewSchema: ToolExecutionContext['workingSchema'];
+    previewSummary: string;
+    changeGroups: ReturnType<typeof buildPatchPresentation>['changeGroups'];
+    risk: ReturnType<typeof buildPatchPresentation>['risk'];
+  }> {
     const rawPatch = context.accumulatedPatch.map((operation) => ({ ...operation }));
     this.policyService.assertPatchProduced(rawPatch, traceId);
     this.policyService.assertPatchWithinLimits(rawPatch, traceId);
 
     const guardContext = this.createGuardContext(context);
+    const baseSchema = guardContext.workingSchema;
     const autoFixResult = await this.toolExecutionService.executeTool(
       'auto_fix_patch',
       { patch: rawPatch },
@@ -356,7 +426,19 @@ export class AgentRunnerService {
     );
 
     context.warnings.splice(0, context.warnings.length, ...guardContext.warnings);
-    return previewPatch;
+    const previewArtifacts = buildPatchPresentation(
+      baseSchema,
+      guardContext.workingSchema,
+      previewPatch,
+    );
+
+    return {
+      patch: previewPatch,
+      previewSchema: guardContext.workingSchema,
+      previewSummary: previewArtifacts.previewSummary,
+      changeGroups: previewArtifacts.changeGroups,
+      risk: previewArtifacts.risk,
+    };
   }
 
   private createGuardContext(context: ToolExecutionContext): ToolExecutionContext {
@@ -423,5 +505,147 @@ export class AgentRunnerService {
     } catch {
       return '[unserializable-value]';
     }
+  }
+
+  private buildClarificationCandidates(
+    candidates: readonly NodeCandidate[],
+    schema: A2UISchema,
+  ): AgentClarificationCandidate[] {
+    const parentMap = buildParentMap(schema.components);
+    return candidates.map((candidate) => {
+      const component = schema.components[candidate.id];
+      const secondaryLabel = this.getTypeLabel(candidate.type);
+      const displayLabel =
+        this.extractComponentLabel(component) ??
+        this.buildFallbackDisplayLabel(candidate, schema, parentMap, secondaryLabel);
+
+      return {
+        id: candidate.id,
+        type: candidate.type,
+        score: candidate.score,
+        reason: candidate.reason,
+        displayLabel,
+        secondaryLabel,
+        pathLabel: component
+          ? this.buildCandidatePathLabel(component.id, schema, parentMap)
+          : undefined,
+      };
+    });
+  }
+
+  private buildClarificationSummary(candidate: AgentClarificationCandidate): string {
+    return candidate.pathLabel
+      ? `${candidate.displayLabel}（${candidate.pathLabel}）`
+      : candidate.displayLabel;
+  }
+
+  private extractComponentLabel(component?: A2UIComponent): string | undefined {
+    if (!component?.props) {
+      return undefined;
+    }
+
+    const labelProps = Array.from(
+      new Set([...this.componentMetaRegistry.getTextProps(component.type), ...DEFAULT_LABEL_PROPS]),
+    );
+
+    for (const propName of labelProps) {
+      const normalized = this.normalizeDisplayText(component.props[propName], MAX_LABEL_CHARS);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    return undefined;
+  }
+
+  private buildFallbackDisplayLabel(
+    candidate: NodeCandidate,
+    schema: A2UISchema,
+    parentMap: ReadonlyMap<string, string>,
+    secondaryLabel: string,
+  ): string {
+    const parentId = parentMap.get(candidate.id);
+    if (!parentId) {
+      return secondaryLabel;
+    }
+
+    const siblingIds = schema.components[parentId]?.childrenIds ?? [];
+    const sameTypeSiblings = siblingIds.filter(
+      (siblingId) => schema.components[siblingId]?.type === candidate.type,
+    );
+    const siblingIndex = sameTypeSiblings.indexOf(candidate.id);
+    if (sameTypeSiblings.length > 1 && siblingIndex >= 0) {
+      return `${secondaryLabel} #${siblingIndex + 1}`;
+    }
+
+    return secondaryLabel;
+  }
+
+  private buildCandidatePathLabel(
+    componentId: string,
+    schema: A2UISchema,
+    parentMap: ReadonlyMap<string, string>,
+  ): string | undefined {
+    const ancestors = buildAncestorChain(componentId, parentMap, schema.components);
+    if (ancestors.length === 0) {
+      return undefined;
+    }
+
+    const segments = ancestors
+      .map((ancestor) => {
+        const component = schema.components[ancestor.id];
+        return this.buildPathSegmentLabel(component, ancestor.type);
+      })
+      .filter((segment): segment is string => Boolean(segment));
+
+    return segments.length > 0 ? segments.join(' > ') : undefined;
+  }
+
+  private buildPathSegmentLabel(component: A2UIComponent | undefined, type: string): string {
+    const label = this.extractComponentLabel(component);
+    if (label) {
+      return this.normalizeDisplayText(label, MAX_PATH_SEGMENT_CHARS) ?? label;
+    }
+
+    return this.getTypeLabel(type);
+  }
+
+  private getTypeLabel(type: string): string {
+    return this.componentMetaRegistry.getDisplayName(type) ?? type;
+  }
+
+  private normalizeDisplayText(value: unknown, maxLength: number): string | undefined {
+    if (typeof value === 'number') {
+      return String(value);
+    }
+
+    if (Array.isArray(value)) {
+      const normalizedParts = value
+        .map((item) => this.normalizeDisplayText(item, maxLength))
+        .filter((item): item is string => Boolean(item));
+      if (normalizedParts.length === 0) {
+        return undefined;
+      }
+      return this.truncateDisplayText(normalizedParts.join(' / '), maxLength);
+    }
+
+    if (typeof value !== 'string') {
+      return undefined;
+    }
+
+    const normalized = value.replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+      return undefined;
+    }
+
+    return this.truncateDisplayText(normalized, maxLength);
+  }
+
+  private truncateDisplayText(value: string, maxLength: number): string {
+    if (value.length <= maxLength) {
+      return value;
+    }
+
+    return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
   }
 }

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { AgentAnswerService } from './agent-answer.service';
 import { AgentLegacySchemaService } from './agent-legacy-schema.service';
 import { AgentRoutingService } from './agent-routing.service';
 import { AgentRunnerService } from './agent-runner.service';
@@ -9,6 +10,7 @@ import { AgentProgressReporter } from './types/agent-progress.types';
 @Injectable()
 export class AgentService {
   constructor(
+    private readonly answerService: AgentAnswerService,
     private readonly legacySchemaService: AgentLegacySchemaService,
     private readonly runnerService: AgentRunnerService,
     private readonly routingService: AgentRoutingService,
@@ -35,6 +37,10 @@ export class AgentService {
     );
 
     await reporter?.emitRoute(routeDecision.route);
+
+    if (routeDecision.route.resolvedMode === 'answer') {
+      return this.answerService.answer(dto, traceId, { routeDecision, reporter });
+    }
 
     if (routeDecision.route.resolvedMode === 'patch') {
       return this.runnerService.runEdit(dto, traceId, { routeDecision, reporter });

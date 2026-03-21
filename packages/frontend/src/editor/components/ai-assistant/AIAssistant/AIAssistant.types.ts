@@ -1,5 +1,31 @@
 import type { A2UISchema } from '../../../../types';
-import type { AgentMessageProgress, AgentRouteInfo } from '../types/ai-types';
+import type { EditorPatchOperation } from '../../../types/patch';
+import type {
+  AgentClarificationCandidate,
+  AgentMessageProgress,
+  AgentPatchChangeGroup,
+  AgentPatchRiskAssessment,
+  AgentRouteInfo,
+} from '../types/ai-types';
+
+export interface AIPatchPreviewState {
+  instruction: string;
+  patch: EditorPatchOperation[];
+  resolvedSelectedId?: string;
+  previewSchema: A2UISchema;
+  previewSummary: string;
+  changeGroups: AgentPatchChangeGroup[];
+  warnings: string[];
+  risk: AgentPatchRiskAssessment;
+  requiresConfirmation: boolean;
+}
+
+export interface AIClarificationState {
+  clarificationId: string;
+  instruction: string;
+  question: string;
+  candidates: AgentClarificationCandidate[];
+}
 
 export interface AIMessage {
   id: string;
@@ -13,4 +39,7 @@ export interface AIMessage {
   route?: AgentRouteInfo;
   progress?: AgentMessageProgress;
   traceId?: string;
+  patchPreview?: AIPatchPreviewState;
+  clarification?: AIClarificationState;
+  applyState?: 'pending' | 'applying' | 'applied' | 'failed';
 }

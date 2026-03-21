@@ -293,4 +293,36 @@ describe('ToolExecutionService', () => {
     expect(response.warnings).toContain('Normalized insert index for component under container');
     expect(response.schema.components.input_email).toBeDefined();
   });
+
+  it('normalizes Button danger alias when previewPatch autoFix is enabled', async () => {
+    const response = await service.previewPatch(
+      {
+        draftSchema: createSchema() as unknown as Record<string, unknown>,
+        autoFix: true,
+        patch: [
+          {
+            op: 'updateProps',
+            componentId: 'button',
+            props: {
+              type: 'danger',
+            },
+          },
+        ],
+      },
+      'trace-1',
+    );
+
+    expect(response.patch).toEqual([
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: {
+          danger: true,
+        },
+      },
+    ]);
+    expect(response.schema.components.button.props?.danger).toBe(true);
+    expect(response.schema.components.button.props?.type).toBeUndefined();
+    expect(response.warnings).toContain('Normalized Button danger prop for button');
+  });
 });

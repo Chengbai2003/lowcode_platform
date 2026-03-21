@@ -45,20 +45,28 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   const patchModeAvailable =
     Boolean(pageId) && pageVersion !== null && pageVersion !== undefined && Boolean(onPatchApply);
 
-  const { messages, inputValue, setInputValue, loading, sendMessage, messagesEndRef } =
-    useAIAssistantChat({
-      currentSchema,
-      currentModel,
-      pageId,
-      pageVersion,
-      selectedId,
-      models,
-      loadModels,
-      ensureModelsLoaded,
-      responseMode,
-      onPatchApply,
-      onError,
-    });
+  const {
+    messages,
+    inputValue,
+    setInputValue,
+    loading,
+    sendMessage,
+    applyPatchPreview,
+    resolveClarification,
+    messagesEndRef,
+  } = useAIAssistantChat({
+    currentSchema,
+    currentModel,
+    pageId,
+    pageVersion,
+    selectedId,
+    models,
+    loadModels,
+    ensureModelsLoaded,
+    responseMode,
+    onPatchApply,
+    onError,
+  });
 
   const applySchema = useCallback(
     (schema: A2UISchema) => {
@@ -135,6 +143,9 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
         <AIAssistantMessageList
           messages={messages}
           onApplySchema={applySchema}
+          onApplyPatchPreview={applyPatchPreview}
+          onResolveClarification={resolveClarification}
+          busy={loading}
           endRef={messagesEndRef}
         />
 

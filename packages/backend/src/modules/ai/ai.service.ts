@@ -42,6 +42,16 @@ export interface AIToolCallingResult {
   toolCallCount: number;
 }
 
+export interface AITextStreamResult {
+  content: string;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  finishReason: string;
+}
+
 function isAbortLikeError(error: unknown): error is Error {
   return (
     error instanceof Error &&
@@ -93,6 +103,29 @@ Respond ONLY with valid JSON. Do not include markdown formatting or explanations
         totalTokens: (result.usage as any)?.totalTokens || 0,
       },
       finishReason: result.finishReason,
+    };
+  }
+
+  async streamChatText(
+    dto: ChatRequestDto,
+    options?: {
+      onTextDelta?: (delta: string) => void | Promise<void>;
+    },
+  ): Promise<AITextStreamResult> {
+    const result = this.chatStream(dto);
+    let content = '';
+
+    for await (const delta of result.textStream) {
+      content += delta;
+      await options?.onTextDelta?.(delta);
+    }
+
+    const [finishReason, totalUsage] = await Promise.all([result.finishReason, result.totalUsage]);
+
+    return {
+      content,
+      usage: this.mapUsage(totalUsage),
+      finishReason,
     };
   }
 
@@ -341,5 +374,18 @@ Respond ONLY with valid JSON. Do not include markdown formatting or explanations
       name: provider.name,
       healthy: provider.available,
     }));
+  }
+
+  private mapUsage(rawUsage: any) {
+    const promptTokens = rawUsage?.promptTokens ?? rawUsage?.inputTokens ?? 0;
+    const completionTokens = rawUsage?.completionTokens ?? rawUsage?.outputTokens ?? 0;
+    const totalTokens =
+      rawUsage?.totalTokens ?? Number(promptTokens || 0) + Number(completionTokens || 0);
+
+    return {
+      promptTokens,
+      completionTokens,
+      totalTokens,
+    };
   }
 }

@@ -188,6 +188,7 @@ ${componentList.map((c) => `- ${c}`).join('\n')}
 7. 确保 childrenIds 引用的组件存在
 8. Text / Title / Paragraph / Button 的文本内容优先放在 props.children，不要使用 props.content
 9. feedback 动作必须使用 content / level / kind 字段，不要使用 message / type_ / messageType
+10. Button 如果要变成红色/危险样式，使用 props.danger = true；不要把 props.type 写成 "danger"
 `;
 
   return prompt;

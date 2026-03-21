@@ -330,9 +330,9 @@ export class ToolRegistryService {
           ['patch'],
         ),
         visibility: 'internal',
-        execute: async (input) => {
+        execute: async (input, context) => {
           const patch = this.asPatchArray(input.patch);
-          const result = this.patchAutoFixService.autoFix(patch);
+          const result = this.patchAutoFixService.autoFix(patch, context.workingSchema);
           return {
             data: { patch: result.patch },
             warnings: result.warnings,

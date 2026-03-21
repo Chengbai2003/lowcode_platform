@@ -14,7 +14,7 @@ describe('AgentLegacySchemaService', () => {
   };
 
   function createService(contextResult?: FocusContextResult) {
-    const aiService: jest.Mocked<Pick<AIService, 'chat'>> = {
+    const aiService: jest.Mocked<Pick<AIService, 'chat' | 'streamChatText'>> = {
       chat: jest.fn().mockResolvedValue({
         content: JSON.stringify(parsedSchema),
         usage: {
@@ -22,6 +22,15 @@ describe('AgentLegacySchemaService', () => {
           completionTokens: 5,
           totalTokens: 15,
         },
+      }),
+      streamChatText: jest.fn().mockResolvedValue({
+        content: JSON.stringify(parsedSchema),
+        usage: {
+          promptTokens: 10,
+          completionTokens: 5,
+          totalTokens: 15,
+        },
+        finishReason: 'stop',
       }),
     };
 
@@ -129,6 +138,7 @@ describe('AgentLegacySchemaService', () => {
     expect(systemPrompt).toContain('version 必须是 number');
     expect(systemPrompt).toContain('id === key');
     expect(systemPrompt).toContain('props.children');
+    expect(systemPrompt).toContain('props.danger = true');
     expect(systemPrompt).toContain('content / level / kind');
     expect(userMessage).toContain('## 页面概览');
     expect(userMessage).toContain('## 当前焦点组件');
@@ -222,5 +232,55 @@ describe('AgentLegacySchemaService', () => {
     const request = aiService.chat.mock.calls[0][0];
     const userMessage = request.messages[request.messages.length - 1].content;
     expect(userMessage).toContain('[truncated');
+  });
+
+  it('streams schema generation progress without exposing raw schema deltas', async () => {
+    const { service, aiService } = createService();
+    const reporter = {
+      emitMeta: jest.fn(),
+      emitRoute: jest.fn(),
+      emitStatus: jest.fn(),
+      emitContentDelta: jest.fn(),
+      emitResult: jest.fn(),
+      emitError: jest.fn(),
+      emitDone: jest.fn(),
+    };
+
+    aiService.streamChatText.mockImplementation(async (_request, options) => {
+      await options?.onTextDelta?.('{"rootId":"page_root",');
+      await options?.onTextDelta?.('"components":{"page_root":{"id":"page_root","type":"Page"}}}');
+      return {
+        content: JSON.stringify(parsedSchema),
+        usage: {
+          promptTokens: 10,
+          completionTokens: 5,
+          totalTokens: 15,
+        },
+        finishReason: 'stop',
+      };
+    });
+
+    const result = await service.edit(
+      {
+        instruction: '生成一个页面',
+        stream: true,
+      },
+      'agent-schema-stream',
+      {
+        reporter,
+      },
+    );
+
+    expect(aiService.streamChatText).toHaveBeenCalledTimes(1);
+    expect(reporter.emitContentDelta).not.toHaveBeenCalled();
+    expect(reporter.emitStatus).toHaveBeenCalledWith({
+      stage: 'calling_model',
+      label: '正在准备生成：生成一个页面',
+    });
+    expect(reporter.emitStatus).toHaveBeenCalledWith({
+      stage: 'validating_output',
+      label: '正在校验 Schema 结果',
+    });
+    expect(result.schema).toEqual(parsedSchema);
   });
 });

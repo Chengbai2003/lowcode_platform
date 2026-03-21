@@ -61,7 +61,14 @@ export class AgentController {
         throw new BadRequestException('instruction is required');
       }
 
-      const result = await this.agentService.edit(dto, request.requestId, reporter);
+      const result = await this.agentService.edit(
+        {
+          ...dto,
+          stream: true,
+        },
+        request.requestId,
+        reporter,
+      );
       await reporter.emitResult(result);
       await reporter.emitDone(true);
     } catch (error) {
@@ -92,6 +99,7 @@ export class AgentController {
       emitMeta: (traceId) => writeEvent('meta', { type: 'meta', traceId }),
       emitRoute: (route) => writeEvent('route', { type: 'route', route }),
       emitStatus: (event) => writeEvent('status', { type: 'status', ...event }),
+      emitContentDelta: (event) => writeEvent('content_delta', { type: 'content_delta', ...event }),
       emitResult: (result) => writeEvent('result', { type: 'result', result }),
       emitError: (error) => writeEvent('error', { type: 'error', error }),
       emitDone: (success) => writeEvent('done', { type: 'done', success }),

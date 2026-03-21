@@ -305,6 +305,151 @@
   text-align: left;
 }
 
+.patchPreviewCard,
+.clarificationCard {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.patchPreviewHeader,
+.changeGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.patchPreviewTitle,
+.clarificationTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.patchPreviewMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.patchReasonList,
+.changeGroupList,
+.changeEntryList,
+.patchWarningList,
+.clarificationList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.patchReasonItem,
+.changeEntry,
+.patchWarning {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.changeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(24, 144, 255, 0.05);
+  border: 1px solid rgba(24, 144, 255, 0.14);
+}
+
+.patchWarning {
+  color: #ad6800;
+  background: rgba(250, 173, 20, 0.08);
+  border: 1px solid rgba(250, 173, 20, 0.18);
+}
+
+.patchActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inlineStatusTag {
+  margin-inline-end: 0;
+}
+
+.clarificationOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.clarificationOption:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  background: rgba(24, 144, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.clarificationOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.clarificationLabel {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.clarificationMeta,
+.clarificationPath,
+.clarificationReason,
+.clarificationDebug {
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.clarificationReason {
+  color: var(--text-secondary);
+}
+
+.clarificationMeta {
+  color: var(--text-tertiary);
+}
+
+.clarificationPath {
+  color: var(--text-primary);
+}
+
+.clarificationDebug {
+  color: var(--text-tertiary);
+  font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  font-size: 11px;
+}
+
 .messageTime {
   font-size: 11px;
   color: var(--text-tertiary);

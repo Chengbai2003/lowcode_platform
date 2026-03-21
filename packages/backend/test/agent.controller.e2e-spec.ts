@@ -5,6 +5,7 @@ import request from 'supertest';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 import { AIService } from '../src/modules/ai/ai.service';
 import { ModelConfigService } from '../src/modules/ai/model-config.service';
+import { AgentAnswerService } from '../src/modules/agent/agent-answer.service';
 import { AgentController } from '../src/modules/agent/agent.controller';
 import { AgentLegacySchemaService } from '../src/modules/agent/agent-legacy-schema.service';
 import { AgentPolicyService } from '../src/modules/agent/agent-policy.service';
@@ -54,9 +55,10 @@ describe('AgentController (e2e)', () => {
     }),
   };
 
-  const aiServiceMock: Pick<AIService, 'chat' | 'runToolCalling'> = {
+  const aiServiceMock: Pick<AIService, 'chat' | 'runToolCalling' | 'streamChatText'> = {
     chat: jest.fn(),
     runToolCalling: jest.fn(),
+    streamChatText: jest.fn(),
   };
 
   const contextAssemblerMock: jest.Mocked<Pick<ContextAssemblerService, 'assemble'>> = {
@@ -192,6 +194,28 @@ describe('AgentController (e2e)', () => {
         totalTokens: 11,
       },
     });
+    (aiServiceMock.streamChatText as jest.Mock).mockImplementation(
+      async (
+        dto: { messages?: Array<{ content: string }> },
+        options?: { onTextDelta?: (delta: string) => Promise<void> | void },
+      ) => {
+        const content =
+          dto.messages?.[0]?.content?.includes('通用助手') ||
+          dto.messages?.[0]?.content?.includes('页面理解助手')
+            ? '这是一个流式回答。'
+            : '{"rootId":"root","components":{"root":{"id":"root","type":"Page"}}}';
+        await options?.onTextDelta?.(content);
+        return {
+          content,
+          usage: {
+            promptTokens: 5,
+            completionTokens: 6,
+            totalTokens: 11,
+          },
+          finishReason: 'stop',
+        };
+      },
+    );
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AgentController],
@@ -263,6 +287,7 @@ describe('AgentController (e2e)', () => {
           },
         },
         AgentLegacySchemaService,
+        AgentAnswerService,
         AgentPolicyService,
         AgentRoutingService,
         AgentRunnerService,
@@ -326,6 +351,37 @@ describe('AgentController (e2e)', () => {
       });
   });
 
+  it('routes page understanding questions to answer mode', () => {
+    (aiServiceMock.chat as jest.Mock).mockResolvedValue({
+      content: '这是一个包含表单和提交按钮的页面。',
+      usage: {
+        promptTokens: 5,
+        completionTokens: 6,
+        totalTokens: 11,
+      },
+    });
+
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '这个页面是做什么的？',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'auto',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('answer');
+        expect(res.body.content).toContain('页面');
+        expect(res.body.route).toMatchObject({
+          requestedMode: 'auto',
+          resolvedMode: 'answer',
+          reason: 'page_question_intent',
+        });
+      });
+  });
+
   it('returns patch response for updateProps in patch mode', () => {
     (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
       await input.executeTool('update_component_props', {
@@ -371,6 +427,11 @@ describe('AgentController (e2e)', () => {
             props: { children: '提交' },
           },
         ]);
+        expect(res.body.previewSchema.components.button.props.children).toBe('提交');
+        expect(res.body.previewSummary).toContain('patch');
+        expect(res.body.changeGroups).toHaveLength(1);
+        expect(res.body.risk.level).toBe('low');
+        expect(res.body.requiresConfirmation).toBe(false);
       });
   });
 
@@ -415,6 +476,7 @@ describe('AgentController (e2e)', () => {
           resolvedMode: 'patch',
           reason: 'selected_target',
         });
+        expect(res.body.previewSchema.components.button.props.children).toBe('提交');
       });
   });
 
@@ -455,6 +517,7 @@ describe('AgentController (e2e)', () => {
           event: 'onClick',
           actions: [{ type: 'apiCall', url: '/api/save', method: 'POST' }],
         });
+        expect(res.body.changeGroups[0].kind).toBe('event');
       });
   });
 
@@ -475,19 +538,31 @@ describe('AgentController (e2e)', () => {
       });
   });
 
-  it('returns NODE_AMBIGUOUS when candidates are too close', () => {
+  it('returns clarification response when candidates are too close', () => {
     (contextAssemblerMock.assemble as jest.Mock).mockResolvedValueOnce({
       mode: 'candidates',
       schema: {
         version: 4,
         rootId: 'root',
         components: {
-          root: { id: 'root', type: 'Page', childrenIds: ['form'] },
-          form: { id: 'form', type: 'Form', childrenIds: ['button'] },
-          button: { id: 'button', type: 'Button', props: { children: '旧文案' } },
+          root: { id: 'root', type: 'Page', childrenIds: ['card-primary', 'card-secondary'] },
+          'card-primary': {
+            id: 'card-primary',
+            type: 'Card',
+            props: { title: '主操作区' },
+            childrenIds: ['button-a'],
+          },
+          'card-secondary': {
+            id: 'card-secondary',
+            type: 'Card',
+            props: { title: '次操作区' },
+            childrenIds: ['button-b'],
+          },
+          'button-a': { id: 'button-a', type: 'Button', props: { children: '提交' } },
+          'button-b': { id: 'button-b', type: 'Button', props: { children: '保存' } },
         },
       },
-      componentList: ['Page', 'Form', 'Button'],
+      componentList: ['Page', 'Card', 'Button'],
       candidates: [
         {
           id: 'button-a',
@@ -509,10 +584,17 @@ describe('AgentController (e2e)', () => {
         version: 4,
         responseMode: 'patch',
       })
-      .expect(422)
+      .expect(200)
       .expect((res: request.Response) => {
-        expect(res.body.code).toBe('NODE_AMBIGUOUS');
-        expect(res.body.details.candidates).toHaveLength(2);
+        expect(res.body.mode).toBe('clarification');
+        expect(res.body.candidates).toHaveLength(2);
+        expect(res.body.candidates[0]).toMatchObject({
+          id: 'button-a',
+          displayLabel: '提交',
+          secondaryLabel: '按钮',
+          pathLabel: '页面 > 主操作区',
+        });
+        expect(res.body.question).toContain('目标组件');
       });
   });
 
@@ -608,9 +690,49 @@ describe('AgentController (e2e)', () => {
     const events = parseSseEvents(response.body as string);
     expect(events.map((event) => event.event)).toContain('meta');
     expect(events.map((event) => event.event)).toContain('route');
+    expect(events.map((event) => event.event)).not.toContain('content_delta');
+    expect(
+      events.find(
+        (event) =>
+          event.event === 'status' &&
+          event.data.stage === 'calling_model' &&
+          String(event.data.label).includes('正在准备生成'),
+      ),
+    ).toBeTruthy();
+    expect(
+      events.find((event) => event.event === 'status' && event.data.stage === 'validating_output'),
+    ).toBeTruthy();
     expect(events.map((event) => event.event)).toContain('result');
     expect(events.at(-1)?.event).toBe('done');
     expect(events.find((event) => event.event === 'route')?.data.route.resolvedMode).toBe('schema');
+  });
+
+  it('streams answer mode content events', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/agent/edit/stream')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '这个页面是做什么的？',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'auto',
+      })
+      .buffer(true)
+      .parse((res, callback) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => callback(null, body));
+      });
+
+    const events = parseSseEvents(response.body as string);
+    expect(events.map((event) => event.event)).toContain('content_delta');
+    expect(events.find((event) => event.event === 'result')?.data.result.content).toContain(
+      '流式回答',
+    );
+    expect(events.find((event) => event.event === 'route')?.data.route.resolvedMode).toBe('answer');
   });
 
   it('streams structured errors for stale patch requests', async () => {

@@ -148,6 +148,12 @@ export function autoFixSchema(
       fixes.push(`组件 ${id}: 将 props.content 迁移为 props.children`);
     }
 
+    if (comp.type === 'Button' && comp.props.type === 'danger') {
+      delete comp.props.type;
+      comp.props.danger = true;
+      fixes.push(`组件 ${id}: 将 Button 的 props.type="danger" 修正为 props.danger=true`);
+    }
+
     // 3d. 清理无效的 childrenIds 引用
     if (comp.childrenIds && Array.isArray(comp.childrenIds)) {
       const validChildrenIds = comp.childrenIds.filter((childId: unknown) => {

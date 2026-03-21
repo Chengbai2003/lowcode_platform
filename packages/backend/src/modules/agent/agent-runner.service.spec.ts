@@ -3,9 +3,10 @@ import { AIService } from '../ai/ai.service';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
 import { ToolRegistryService } from '../agent-tools/tool-registry.service';
 import { ToolExecutionContext } from '../agent-tools/types/tool.types';
-import { FocusContextResult } from '../schema-context';
 import { ModelConfigService } from '../ai/model-config.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
+import { ComponentMetaRegistry, FocusContextResult } from '../schema-context';
+import type { A2UISchema } from '../schema-context';
 import { AgentPolicyService } from './agent-policy.service';
 import { AgentRunnerService } from './agent-runner.service';
 
@@ -73,6 +74,30 @@ function createFocusedResult(componentId = 'button'): FocusContextResult {
   };
 }
 
+function createClarificationSchema(): A2UISchema {
+  return {
+    version: 3,
+    rootId: 'root',
+    components: {
+      root: { id: 'root', type: 'Page', childrenIds: ['card-primary', 'card-secondary'] },
+      'card-primary': {
+        id: 'card-primary',
+        type: 'Card',
+        props: { title: '主操作区' },
+        childrenIds: ['button-a'],
+      },
+      'card-secondary': {
+        id: 'card-secondary',
+        type: 'Card',
+        props: { title: '次操作区' },
+        childrenIds: ['button-b'],
+      },
+      'button-a': { id: 'button-a', type: 'Button', props: { children: '提交' } },
+      'button-b': { id: 'button-b', type: 'Button', props: { children: '保存' } },
+    },
+  };
+}
+
 describe('AgentRunnerService', () => {
   function createRunner() {
     const aiService: jest.Mocked<Pick<AIService, 'runToolCalling'>> = {
@@ -119,6 +144,16 @@ describe('AgentRunnerService', () => {
         }
 
         if (name === 'preview_patch') {
+          context.workingSchema = {
+            ...context.workingSchema,
+            components: {
+              ...context.workingSchema.components,
+              button: {
+                ...context.workingSchema.components.button,
+                props: { children: '提交' },
+              },
+            },
+          };
           return {
             data: { patch: input.patch },
             updatedWorkingSchema: context.workingSchema,
@@ -154,12 +189,14 @@ describe('AgentRunnerService', () => {
       configService as unknown as ConfigService,
       modelConfigService as unknown as ModelConfigService,
     );
+    const componentMetaRegistry = new ComponentMetaRegistry();
 
     const runner = new AgentRunnerService(
       aiService as unknown as AIService,
       toolExecutionService as unknown as ToolExecutionService,
       toolRegistry as unknown as ToolRegistryService,
       policyService,
+      componentMetaRegistry,
     );
 
     return {
@@ -206,6 +243,9 @@ describe('AgentRunnerService', () => {
 
     expect(toolExecutionService.createExecutionContext).toHaveBeenCalled();
     expect(result.mode).toBe('patch');
+    if (result.mode !== 'patch') {
+      throw new Error('expected patch response');
+    }
     expect(result.resolvedSelectedId).toBe('button');
     expect(result.patch).toEqual([
       {
@@ -214,6 +254,8 @@ describe('AgentRunnerService', () => {
         props: { children: '提交' },
       },
     ]);
+    expect(result.previewSchema.components.button.props?.children).toBe('提交');
+    expect(result.changeGroups).toHaveLength(1);
     expect(result.warnings).toContain('auto-fixed');
     expect(toolExecutionService.executeTool).toHaveBeenNthCalledWith(
       2,
@@ -229,6 +271,11 @@ describe('AgentRunnerService', () => {
       { patch: result.patch },
       expect.objectContaining({
         traceId: 'agent-request-1',
+      }),
+    );
+    expect(aiService.runToolCalling).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.stringContaining('props.danger=true'),
       }),
     );
   });
@@ -284,16 +331,20 @@ describe('AgentRunnerService', () => {
       'request-2',
     );
 
+    if (result.mode !== 'patch') {
+      throw new Error('expected patch response');
+    }
     expect(result.resolvedSelectedId).toBe('button');
     expect(toolExecutionService.getFocusContext).toHaveBeenCalledTimes(2);
   });
 
-  it('returns NODE_AMBIGUOUS when candidates are too close', async () => {
+  it('returns clarification response when candidates are too close', async () => {
     const { runner, toolExecutionService } = createRunner();
+    const clarificationSchema = createClarificationSchema();
     toolExecutionService.getFocusContext.mockResolvedValue({
       mode: 'candidates',
-      schema: createBaseContext().workingSchema,
-      componentList: ['Page', 'Button'],
+      schema: clarificationSchema,
+      componentList: ['Page', 'Card', 'Button'],
       candidates: [
         {
           id: 'button-a',
@@ -306,31 +357,35 @@ describe('AgentRunnerService', () => {
       ],
     } as any);
 
-    await expect(
-      runner.runEdit(
-        {
-          instruction: '把那个按钮改成提交',
-          pageId: 'page-1',
-          version: 3,
-          responseMode: 'patch',
-        },
-        'request-3',
-      ),
-    ).rejects.toBeInstanceOf(AgentToolException);
+    const result = await runner.runEdit(
+      {
+        instruction: '把那个按钮改成提交',
+        pageId: 'page-1',
+        version: 3,
+        responseMode: 'patch',
+      },
+      'request-3',
+    );
 
-    try {
-      await runner.runEdit(
-        {
-          instruction: '把那个按钮改成提交',
-          pageId: 'page-1',
-          version: 3,
-          responseMode: 'patch',
-        },
-        'request-3',
-      );
-    } catch (error) {
-      expect(((error as AgentToolException).getResponse() as any).code).toBe('NODE_AMBIGUOUS');
+    expect(result.mode).toBe('clarification');
+    if (result.mode !== 'clarification') {
+      throw new Error('expected clarification response');
     }
+    expect(result.candidates).toHaveLength(2);
+    expect(result.candidates[0]).toMatchObject({
+      id: 'button-a',
+      displayLabel: '提交',
+      secondaryLabel: '按钮',
+      pathLabel: '页面 > 主操作区',
+    });
+    expect(result.candidates[1]).toMatchObject({
+      id: 'button-b',
+      displayLabel: '保存',
+      secondaryLabel: '按钮',
+      pathLabel: '页面 > 次操作区',
+    });
+    expect(result.content).toContain('提交（页面 > 主操作区）');
+    expect(result.question).toContain('目标组件');
   });
 
   it('blocks runs that finish without producing a patch', async () => {
