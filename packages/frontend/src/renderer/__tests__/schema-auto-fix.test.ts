@@ -81,4 +81,38 @@ describe('autoFixSchema', () => {
     expect(fixed.components[fixed.rootId].type).toBe('Page');
     expect(fixes).toContain('创建缺失的根组件 (Page)');
   });
+
+  it('should coerce numeric string version to number', () => {
+    const raw = {
+      version: '5',
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page' },
+      },
+    };
+
+    const { fixed, fixes } = autoFixSchema(raw, whitelist);
+
+    expect(fixed.version).toBe(5);
+    expect(typeof fixed.version).toBe('number');
+    expect(fixes).toContain('修正 version 类型 ("5" -> 5)');
+  });
+
+  it('should migrate text-like content props to children', () => {
+    const raw = {
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['text1', 'button1'] },
+        text1: { id: 'text1', type: 'Text', props: { content: '欢迎使用' } },
+        button1: { id: 'button1', type: 'Button', props: { content: '提交' } },
+      },
+    };
+
+    const { fixed, fixes } = autoFixSchema(raw, whitelist);
+
+    expect(fixed.components['text1'].props).toEqual({ children: '欢迎使用' });
+    expect(fixed.components['button1'].props).toEqual({ children: '提交' });
+    expect(fixes).toContain('组件 text1: 将 props.content 迁移为 props.children');
+    expect(fixes).toContain('组件 button1: 将 props.content 迁移为 props.children');
+  });
 });

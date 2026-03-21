@@ -161,7 +161,7 @@ export function validateAndAutoFixA2UISchema(
 ): SharedSchemaAutoFixSuccess | SharedSchemaAutoFixFailure {
   const baseResult = z
     .object({
-      version: z.number().optional(),
+      version: z.union([z.number(), z.string()]).optional(),
       rootId: z.string().optional(),
       components: z.record(z.string(), z.any()).optional(),
     })

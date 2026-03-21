@@ -147,9 +147,10 @@ Schema 是一个扁平的组件映射表：
 \`\`\`typescript
 {
   rootId: string;           // 根组件 ID
-  version: string;          // Schema 版本
+  version: number;          // Schema 版本
   components: {
     [id: string]: {
+      id: string;           // 组件 ID，且必须与 components 的 key 一致
       type: string;         // 组件类型
       props: object;        // 组件属性
       childrenIds?: string[]; // 子组件 ID 列表
@@ -181,8 +182,12 @@ ${componentList.map((c) => `- ${c}`).join('\n')}
 1. 只输出有效的 JSON 格式
 2. 不要包含 Markdown 代码块标记
 3. 不要添加解释说明
-4. 确保所有组件 ID 唯一
-5. 确保 childrenIds 引用的组件存在
+4. version 必须是 number，不能输出字符串
+5. 每个组件对象都必须包含 id，且 id 必须与 components 的 key 完全一致
+6. 确保所有组件 ID 唯一
+7. 确保 childrenIds 引用的组件存在
+8. Text / Title / Paragraph / Button 的文本内容优先放在 props.children，不要使用 props.content
+9. feedback 动作必须使用 content / level / kind 字段，不要使用 message / type_ / messageType
 `;
 
   return prompt;
