@@ -1,4 +1,4 @@
-import type { A2UISchema } from '../../schema-context/types/schema.types';
+import type { A2UISchema } from '../schema.types';
 
 function createSchema(
   components: A2UISchema['components'],

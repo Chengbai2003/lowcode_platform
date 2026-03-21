@@ -3,7 +3,7 @@
  * 将 A2UI Flat Schema 编译为 React 组件代码字符串
  */
 
-import type { A2UISchema } from '../schema-context/types/schema.types';
+import type { A2UISchema } from './schema.types';
 import * as prettier from 'prettier';
 import { type CompileOptions, escapeJSX, isExpression, toCamelCase } from './helpers/codeHelpers';
 import { compileSchemaToCode } from './pipeline';

@@ -1,4 +1,4 @@
-import type { A2UISchema, A2UIComponent } from '../schema-context/types/schema.types';
+import type { A2UISchema, A2UIComponent } from './schema.types';
 import { compileStyle } from './styleCompiler';
 import {
   type CompileOptions,
