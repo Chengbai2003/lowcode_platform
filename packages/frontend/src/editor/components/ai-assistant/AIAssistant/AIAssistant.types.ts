@@ -1,10 +1,12 @@
 import type { A2UISchema } from '../../../../types';
 import type { EditorPatchOperation } from '../../../types/patch';
 import type {
+  AgentCollectionScope,
   AgentClarificationCandidate,
   AgentMessageProgress,
   AgentPatchChangeGroup,
   AgentPatchRiskAssessment,
+  AgentPatchScopeSummary,
   AgentRouteInfo,
 } from '../types/ai-types';
 
@@ -18,6 +20,7 @@ export interface AIPatchPreviewState {
   warnings: string[];
   risk: AgentPatchRiskAssessment;
   requiresConfirmation: boolean;
+  scopeSummary?: AgentPatchScopeSummary;
 }
 
 export interface AIClarificationState {
@@ -25,6 +28,14 @@ export interface AIClarificationState {
   instruction: string;
   question: string;
   candidates: AgentClarificationCandidate[];
+}
+
+export interface AIScopeConfirmationState {
+  scopeConfirmationId: string;
+  instruction: string;
+  question: string;
+  scope: AgentCollectionScope;
+  warnings: string[];
 }
 
 export interface AIMessage {
@@ -41,5 +52,6 @@ export interface AIMessage {
   traceId?: string;
   patchPreview?: AIPatchPreviewState;
   clarification?: AIClarificationState;
+  scopeConfirmation?: AIScopeConfirmationState;
   applyState?: 'pending' | 'applying' | 'applied' | 'failed';
 }

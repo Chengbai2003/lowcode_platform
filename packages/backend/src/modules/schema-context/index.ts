@@ -3,6 +3,7 @@ export { ContextAssemblerService } from './context-assembler.service';
 export { SchemaResolverService } from './schema-resolver.service';
 export { SchemaSlicerService } from './schema-slicer.service';
 export { NodeLocatorService } from './node-locator.service';
+export { CollectionTargetResolverService } from './collection-target-resolver.service';
 export { ComponentMetaRegistry } from './component-metadata/component-meta.registry';
 export type { A2UISchema, A2UIComponent } from './types/schema.types';
 export type {
@@ -16,3 +17,4 @@ export type {
 } from './types/focus-context.types';
 export type { SliceOptions } from './types/slice-options.types';
 export { DEFAULT_SLICE_OPTIONS } from './types/slice-options.types';
+export type { CollectionTargetResolution } from './collection-target-resolver.service';

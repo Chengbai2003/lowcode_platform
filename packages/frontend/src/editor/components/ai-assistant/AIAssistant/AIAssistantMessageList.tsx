@@ -16,6 +16,10 @@ interface AIAssistantMessageListProps {
     candidateId: string,
     candidateLabel: string,
   ) => Promise<void>;
+  onConfirmScope: (messageId: string) => Promise<void>;
+  onCancelScopeHighlight: () => void;
+  onRestoreScopeHighlight: (messageId: string) => void;
+  activeScopeSourceMessageId: string | null;
   busy: boolean;
   endRef: React.RefObject<HTMLDivElement>;
 }
@@ -25,6 +29,10 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
   onApplySchema,
   onApplyPatchPreview,
   onResolveClarification,
+  onConfirmScope,
+  onCancelScopeHighlight,
+  onRestoreScopeHighlight,
+  activeScopeSourceMessageId,
   busy,
   endRef,
 }) => {
@@ -46,6 +54,11 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
     medium: 'gold',
     high: 'red',
   } as const;
+
+  const formatScopeState = (messageId: string) =>
+    activeScopeSourceMessageId === messageId
+      ? '画布中已显示本次批量范围'
+      : '高亮已隐藏，但这次范围确认仍然有效';
 
   return (
     <div className={styles.messagesContainer}>
@@ -102,17 +115,52 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
 
               {message.patchPreview && (
                 <div className={styles.patchPreviewCard}>
-                  <div className={styles.patchPreviewHeader}>
-                    <span className={styles.patchPreviewTitle}>修改预览</span>
-                    <Tag color={riskColorMap[message.patchPreview.risk.level]}>
-                      {message.patchPreview.risk.level.toUpperCase()}
-                    </Tag>
-                  </div>
+                  {message.patchPreview.scopeSummary ? (
+                    <div className={styles.batchPatchFlowHeader}>
+                      <div className={styles.batchPatchFlowCopy}>
+                        <span className={styles.batchPatchFlowEyebrow}>批量修改预览</span>
+                        <span className={styles.patchPreviewTitle}>
+                          第 2 步：确认即将应用的修改
+                        </span>
+                        <span className={styles.batchPatchFlowDescription}>
+                          范围已经确认，下面展示这批组件将被统一修改的内容。
+                        </span>
+                      </div>
+                      <div className={styles.batchPatchFlowMeta}>
+                        <Tag color="cyan">范围已确认</Tag>
+                        <Tag color={riskColorMap[message.patchPreview.risk.level]}>
+                          {message.patchPreview.risk.level.toUpperCase()}
+                        </Tag>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.patchPreviewHeader}>
+                      <span className={styles.patchPreviewTitle}>修改预览</span>
+                      <Tag color={riskColorMap[message.patchPreview.risk.level]}>
+                        {message.patchPreview.risk.level.toUpperCase()}
+                      </Tag>
+                    </div>
+                  )}
                   <div className={styles.patchPreviewMeta}>
                     <span>目标：{message.patchPreview.resolvedSelectedId ?? '未显式指定'}</span>
                     <span>Patch 数：{message.patchPreview.patch.length}</span>
                     <span>影响目标：{message.patchPreview.risk.distinctTargets}</span>
+                    {message.patchPreview.scopeSummary && <span>批量范围已锁定</span>}
                   </div>
+                  {message.patchPreview.scopeSummary && (
+                    <div className={styles.scopeSummaryBar}>
+                      <span className={styles.scopeSummaryLabel}>批量摘要</span>
+                      <div className={styles.scopeSummaryStats}>
+                        <span className={styles.scopeSummaryChip}>
+                          {message.patchPreview.scopeSummary.targetCount} 个
+                          {message.patchPreview.scopeSummary.matchedDisplayName}
+                        </span>
+                        <span className={styles.scopeSummaryChip}>
+                          本次实际变更 {message.patchPreview.scopeSummary.changedTargetCount} 个
+                        </span>
+                      </div>
+                    </div>
+                  )}
                   <div className={styles.patchReasonList}>
                     {message.patchPreview.risk.reasons.map((reason, index) => (
                       <div key={`${message.id}-risk-${index}`} className={styles.patchReasonItem}>
@@ -149,6 +197,13 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
                       ))}
                     </div>
                   )}
+                  {message.patchPreview.scopeSummary && (
+                    <div className={styles.patchActionHint}>
+                      应用后会一次性更新
+                      {message.patchPreview.scopeSummary.changedTargetCount}{' '}
+                      个目标组件，并继续走现有 undo / redo 机制。
+                    </div>
+                  )}
                   <div className={styles.patchActions}>
                     <Button
                       type="primary"
@@ -161,7 +216,9 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
                         ? '已应用'
                         : message.patchPreview.requiresConfirmation
                           ? '确认并应用'
-                          : '应用修改'}
+                          : message.patchPreview.scopeSummary
+                            ? '应用这批修改'
+                            : '应用修改'}
                     </Button>
                     {message.applyState === 'failed' && (
                       <Tag color="red" className={styles.inlineStatusTag}>
@@ -172,6 +229,98 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
                       <Tag color="green" className={styles.inlineStatusTag}>
                         已应用
                       </Tag>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {message.scopeConfirmation && (
+                <div className={styles.scopeConfirmationCard}>
+                  <div className={styles.scopeConfirmationHeader}>
+                    <span className={styles.scopeConfirmationEyebrow}>批量范围确认</span>
+                    <Tag color={activeScopeSourceMessageId === message.id ? 'cyan' : 'default'}>
+                      {activeScopeSourceMessageId === message.id ? '画布已高亮' : '高亮已隐藏'}
+                    </Tag>
+                  </div>
+                  <div className={styles.scopeConfirmationStep}>
+                    第 1 步：确认范围；第 2 步：生成修改预览
+                  </div>
+                  <div className={styles.scopeConfirmationTitle}>
+                    {message.scopeConfirmation.question}
+                  </div>
+                  <div className={styles.scopeConfirmationDescription}>
+                    {formatScopeState(message.id)}
+                  </div>
+                  <div className={styles.scopeLegend}>
+                    <span className={styles.scopeLegendItem}>
+                      <span className={`${styles.scopeLegendSwatch} ${styles.scopeLegendRoot}`} />
+                      琥珀色虚线表示当前批量范围容器
+                    </span>
+                    <span className={styles.scopeLegendItem}>
+                      <span className={`${styles.scopeLegendSwatch} ${styles.scopeLegendTarget}`} />
+                      青色虚线表示即将被统一修改的目标组件
+                    </span>
+                  </div>
+                  <div className={styles.scopeConfirmationGrid}>
+                    <div className={styles.scopeInfoBlock}>
+                      <span className={styles.scopeInfoLabel}>当前容器</span>
+                      <span className={styles.scopeInfoValue}>
+                        {message.scopeConfirmation.scope.rootId}
+                      </span>
+                    </div>
+                    <div className={styles.scopeInfoBlock}>
+                      <span className={styles.scopeInfoLabel}>目标类型</span>
+                      <span className={styles.scopeInfoValue}>
+                        {message.scopeConfirmation.scope.matchedDisplayName}
+                      </span>
+                    </div>
+                    <div className={styles.scopeInfoBlock}>
+                      <span className={styles.scopeInfoLabel}>命中数量</span>
+                      <span className={styles.scopeInfoValue}>
+                        {message.scopeConfirmation.scope.targetCount} 个组件
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.scopeActionHint}>
+                    只有在你确认范围后，AI 才会生成 patch
+                    预览。隐藏高亮只影响视觉提示，不会让这次确认失效。
+                  </div>
+                  <div className={styles.scopeConfirmationHint}>
+                    组件树仍保持原始选中状态，这里只是额外叠加了一层 AI 范围预览。
+                  </div>
+                  {message.scopeConfirmation.warnings.length > 0 && (
+                    <div className={styles.patchWarningList}>
+                      {message.scopeConfirmation.warnings.map((warning, index) => (
+                        <div
+                          key={`${message.id}-scope-warning-${index}`}
+                          className={styles.patchWarning}
+                        >
+                          {warning}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className={styles.patchActions}>
+                    <Button
+                      type="primary"
+                      size="middle"
+                      disabled={busy}
+                      onClick={() => void onConfirmScope(message.id)}
+                    >
+                      确认范围并生成预览
+                    </Button>
+                    {activeScopeSourceMessageId === message.id ? (
+                      <Button size="middle" disabled={busy} onClick={onCancelScopeHighlight}>
+                        暂时隐藏高亮
+                      </Button>
+                    ) : (
+                      <Button
+                        size="middle"
+                        disabled={busy}
+                        onClick={() => onRestoreScopeHighlight(message.id)}
+                      >
+                        重新高亮范围
+                      </Button>
                     )}
                   </div>
                 </div>

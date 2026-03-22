@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ModelConfigService } from '../ai/model-config.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
+import { FocusContextResult } from '../schema-context';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 
 export interface AgentPolicyLimits {
@@ -18,8 +19,17 @@ export interface AgentRunMetrics {
   toolCallCount: number;
 }
 
+export type AgentPatchRunProfile =
+  | 'fast_path'
+  | 'simple_patch'
+  | 'normal_patch'
+  | 'complex_patch'
+  | 'batch_patch';
+
 const PATCH_ENABLED_PROVIDERS = new Set(['openai', 'anthropic']);
 const AGENT_TIMEOUT_MS = 60_000;
+const STRUCTURE_KEYWORDS = ['新增', '添加', '插入', '删除', '移除', '移动', '移到', '绑定', '事件'];
+const SIMPLE_UPDATE_KEYWORDS = ['改成', '改为', '换成', '变成', '隐藏', '显示', '文案', '标题'];
 
 @Injectable()
 export class AgentPolicyService {
@@ -28,14 +38,78 @@ export class AgentPolicyService {
     private readonly modelConfigService: ModelConfigService,
   ) {}
 
-  getLimits(): AgentPolicyLimits {
-    return {
-      maxSteps: 6,
-      maxToolCalls: 8,
+  getLimits(profile: AgentPatchRunProfile = 'normal_patch'): AgentPolicyLimits {
+    const base = {
       timeoutMs: AGENT_TIMEOUT_MS,
       maxPatchOps: 6,
       maxDistinctTargets: 4,
     };
+
+    switch (profile) {
+      case 'fast_path':
+        return {
+          ...base,
+          maxSteps: 1,
+          maxToolCalls: 2,
+        };
+      case 'simple_patch':
+        return {
+          ...base,
+          maxSteps: 4,
+          maxToolCalls: 4,
+        };
+      case 'complex_patch':
+        return {
+          ...base,
+          maxSteps: 8,
+          maxToolCalls: 10,
+        };
+      case 'batch_patch':
+        return {
+          ...base,
+          maxSteps: 4,
+          maxToolCalls: 3,
+          maxPatchOps: 10,
+          maxDistinctTargets: 10,
+        };
+      case 'normal_patch':
+      default:
+        return {
+          ...base,
+          maxSteps: 6,
+          maxToolCalls: 8,
+        };
+    }
+  }
+
+  selectPatchRunProfile(input: {
+    instruction: string;
+    selectedId?: string;
+    focusContextResult?: FocusContextResult;
+  }): AgentPatchRunProfile {
+    const normalizedInstruction = input.instruction.trim().toLowerCase();
+    const hasExplicitTarget =
+      Boolean(input.selectedId?.trim()) || input.focusContextResult?.mode === 'focused';
+    const hasCandidateAmbiguity =
+      input.focusContextResult?.mode === 'candidates' &&
+      (input.focusContextResult.candidates?.length ?? 0) > 1;
+
+    if (
+      hasExplicitTarget &&
+      SIMPLE_UPDATE_KEYWORDS.some((keyword) => normalizedInstruction.includes(keyword))
+    ) {
+      return 'fast_path';
+    }
+
+    if (STRUCTURE_KEYWORDS.some((keyword) => normalizedInstruction.includes(keyword))) {
+      return hasCandidateAmbiguity ? 'complex_patch' : 'normal_patch';
+    }
+
+    if (hasExplicitTarget) {
+      return 'simple_patch';
+    }
+
+    return hasCandidateAmbiguity ? 'complex_patch' : 'normal_patch';
   }
 
   createTraceId(requestId?: string): string {
@@ -91,8 +165,12 @@ export class AgentPolicyService {
     });
   }
 
-  assertPatchWithinLimits(patch: readonly EditorPatchOperation[], traceId: string) {
-    const limits = this.getLimits();
+  assertPatchWithinLimits(
+    patch: readonly EditorPatchOperation[],
+    traceId: string,
+    profile: AgentPatchRunProfile = 'normal_patch',
+  ) {
+    const limits = this.getLimits(profile);
     if (patch.length > limits.maxPatchOps) {
       throw new AgentToolException({
         code: 'AGENT_POLICY_BLOCKED',
@@ -121,7 +199,7 @@ export class AgentPolicyService {
     }
   }
 
-  throwTimeout(traceId: string, metrics: AgentRunMetrics) {
+  throwTimeout(traceId: string, metrics: AgentRunMetrics): never {
     const limits = this.getLimits();
     throw new AgentToolException({
       code: 'AGENT_TIMEOUT',
@@ -135,7 +213,7 @@ export class AgentPolicyService {
     });
   }
 
-  throwPolicyBlocked(traceId: string, reason: string, details?: Record<string, unknown>) {
+  throwPolicyBlocked(traceId: string, reason: string, details?: Record<string, unknown>): never {
     throw new AgentToolException({
       code: 'AGENT_POLICY_BLOCKED',
       message: reason,

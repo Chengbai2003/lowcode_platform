@@ -32,6 +32,9 @@ export interface AgentRouteInfo {
   resolvedMode: ResolvedAgentMode;
   reason: AgentRouteReason;
   manualOverride: boolean;
+  confidence?: number;
+  classifierSource?: 'llm' | 'rules' | 'llm_with_rule_fallback';
+  fallbackApplied?: boolean;
 }
 
 export interface AgentRouteDecision {
@@ -57,6 +60,22 @@ export interface AgentClarificationCandidate {
   pathLabel?: string;
 }
 
+export interface AgentCollectionScope {
+  rootId: string;
+  matchedType: string;
+  matchedDisplayName: string;
+  targetIds: string[];
+  targetCount: number;
+}
+
+export interface AgentPatchScopeSummary {
+  rootId: string;
+  matchedType: string;
+  matchedDisplayName: string;
+  targetCount: number;
+  changedTargetCount: number;
+}
+
 export interface AgentEditAnswerResponse {
   mode: 'answer';
   content: string;
@@ -64,6 +83,7 @@ export interface AgentEditAnswerResponse {
   usage?: AgentUsage;
   traceId: string;
   route: AgentRouteInfo;
+  cacheHit?: boolean;
 }
 
 export interface AgentEditSchemaResponse {
@@ -77,6 +97,7 @@ export interface AgentEditSchemaResponse {
   selectedId?: string;
   traceId: string;
   route: AgentRouteInfo;
+  cacheHit?: boolean;
 }
 
 export type AgentPatchRiskLevel = 'low' | 'medium' | 'high';
@@ -118,6 +139,19 @@ export interface AgentEditPatchResponse {
   warnings: string[];
   traceId: string;
   route: AgentRouteInfo;
+  retryCount?: number;
+  scopeSummary?: AgentPatchScopeSummary;
+}
+
+export interface AgentEditScopeConfirmationResponse {
+  mode: 'scope_confirmation';
+  content: string;
+  question: string;
+  scopeConfirmationId: string;
+  scope: AgentCollectionScope;
+  warnings: string[];
+  traceId: string;
+  route: AgentRouteInfo;
 }
 
 export interface AgentEditClarificationResponse {
@@ -135,4 +169,5 @@ export type AgentEditResponse =
   | AgentEditAnswerResponse
   | AgentEditSchemaResponse
   | AgentEditPatchResponse
-  | AgentEditClarificationResponse;
+  | AgentEditClarificationResponse
+  | AgentEditScopeConfirmationResponse;

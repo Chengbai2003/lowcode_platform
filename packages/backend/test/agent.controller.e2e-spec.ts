@@ -7,10 +7,14 @@ import { AIService } from '../src/modules/ai/ai.service';
 import { ModelConfigService } from '../src/modules/ai/model-config.service';
 import { AgentAnswerService } from '../src/modules/agent/agent-answer.service';
 import { AgentController } from '../src/modules/agent/agent.controller';
+import { AgentIdempotencyService } from '../src/modules/agent/agent-idempotency.service';
+import { AgentIntentClassifierService } from '../src/modules/agent/agent-intent-classifier.service';
 import { AgentLegacySchemaService } from '../src/modules/agent/agent-legacy-schema.service';
 import { AgentPolicyService } from '../src/modules/agent/agent-policy.service';
+import { AgentReadCacheService } from '../src/modules/agent/agent-read-cache.service';
 import { AgentRoutingService } from '../src/modules/agent/agent-routing.service';
 import { AgentRunnerService } from '../src/modules/agent/agent-runner.service';
+import { AgentSessionMemoryService } from '../src/modules/agent/agent-session-memory.service';
 import { AgentService } from '../src/modules/agent/agent.service';
 import { PatchApplyService } from '../src/modules/agent-tools/patch-apply.service';
 import { PatchAutoFixService } from '../src/modules/agent-tools/patch-auto-fix.service';
@@ -18,8 +22,51 @@ import { PatchValidationService } from '../src/modules/agent-tools/patch-validat
 import { ToolExecutionService } from '../src/modules/agent-tools/tool-execution.service';
 import { ToolRegistryService } from '../src/modules/agent-tools/tool-registry.service';
 import { ContextAssemblerService, FocusContextResult } from '../src/modules/schema-context';
+import { CollectionTargetResolverService } from '../src/modules/schema-context/collection-target-resolver.service';
 import { ComponentMetaRegistry } from '../src/modules/schema-context/component-metadata/component-meta.registry';
 import { PageSchemaService } from '../src/modules/page-schema/page-schema.service';
+import { AgentScopeConfirmationService } from '../src/modules/agent/agent-scope-confirmation.service';
+
+function createBatchSchema() {
+  return {
+    version: 4,
+    rootId: 'root',
+    components: {
+      root: {
+        id: 'root',
+        type: 'Page',
+        childrenIds: ['form'],
+      },
+      form: {
+        id: 'form',
+        type: 'Form',
+        childrenIds: ['form-item-a', 'form-item-b'],
+      },
+      'form-item-a': {
+        id: 'form-item-a',
+        type: 'FormItem',
+        props: { label: '用户名', labelWidth: 120 },
+        childrenIds: ['input-a'],
+      },
+      'form-item-b': {
+        id: 'form-item-b',
+        type: 'FormItem',
+        props: { label: '密码', labelWidth: 120 },
+        childrenIds: ['input-b'],
+      },
+      'input-a': {
+        id: 'input-a',
+        type: 'Input',
+        props: { placeholder: '请输入用户名' },
+      },
+      'input-b': {
+        id: 'input-b',
+        type: 'Input',
+        props: { placeholder: '请输入密码' },
+      },
+    },
+  };
+}
 
 describe('AgentController (e2e)', () => {
   let app: INestApplication;
@@ -223,6 +270,7 @@ describe('AgentController (e2e)', () => {
         PatchApplyService,
         PatchAutoFixService,
         ComponentMetaRegistry,
+        CollectionTargetResolverService,
         {
           provide: PageSchemaService,
           useValue: pageSchemaServiceMock,
@@ -242,13 +290,21 @@ describe('AgentController (e2e)', () => {
           useFactory: (
             contextAssembler: ContextAssemblerService,
             registry: ComponentMetaRegistry,
+            collectionTargetResolver: CollectionTargetResolverService,
             autoFixService: PatchAutoFixService,
             validationService: PatchValidationService,
           ) =>
-            new ToolRegistryService(contextAssembler, registry, autoFixService, validationService),
+            new ToolRegistryService(
+              contextAssembler,
+              registry,
+              collectionTargetResolver,
+              autoFixService,
+              validationService,
+            ),
           inject: [
             ContextAssemblerService,
             ComponentMetaRegistry,
+            CollectionTargetResolverService,
             PatchAutoFixService,
             PatchValidationService,
           ],
@@ -288,9 +344,14 @@ describe('AgentController (e2e)', () => {
         },
         AgentLegacySchemaService,
         AgentAnswerService,
+        AgentIdempotencyService,
+        AgentIntentClassifierService,
         AgentPolicyService,
+        AgentReadCacheService,
         AgentRoutingService,
+        AgentScopeConfirmationService,
         AgentRunnerService,
+        AgentSessionMemoryService,
         AgentService,
       ],
     }).compile();
@@ -435,6 +496,72 @@ describe('AgentController (e2e)', () => {
       });
   });
 
+  it('returns clarification for collection edits without a selected container', () => {
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '修改全部表单 label',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'patch',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('clarification');
+        expect(res.body.question).toContain('父级或祖先容器');
+        expect(res.body.candidates).toEqual([]);
+      });
+  });
+
+  it('returns scope confirmation before generating batch patch previews', () => {
+    (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
+      await input.executeTool('resolve_collection_scope', {
+        rootId: 'form',
+        instruction: '将当前表单下所有表单项 label 宽度设置为 200',
+      });
+      return {
+        text: 'scope planned',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [
+          {
+            stepNumber: 0,
+            finishReason: 'stop',
+            toolCalls: [{ toolName: 'resolve_collection_scope' }],
+          },
+        ],
+        toolCallCount: 1,
+      };
+    });
+
+    return request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '将当前表单下所有表单项 label 宽度设置为 200',
+        pageId: 'page-1',
+        version: 4,
+        selectedId: 'form',
+        sessionId: 'session-batch-e2e',
+        draftSchema: createBatchSchema(),
+        responseMode: 'patch',
+      })
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.mode).toBe('scope_confirmation');
+        expect(res.body.scope).toEqual({
+          rootId: 'form',
+          matchedType: 'FormItem',
+          matchedDisplayName: '表单项',
+          targetIds: ['form-item-a', 'form-item-b'],
+          targetCount: 2,
+        });
+      });
+  });
+
   it('routes auto mode to patch for focused edit intent', () => {
     (aiServiceMock.runToolCalling as jest.Mock).mockImplementation(async (input: any) => {
       await input.executeTool('update_component_props', {
@@ -521,7 +648,7 @@ describe('AgentController (e2e)', () => {
       });
   });
 
-  it('returns PAGE_VERSION_CONFLICT when patch mode version is stale', () => {
+  it('auto-recovers stale patch requests against the latest page version', () => {
     return request(app.getHttpServer())
       .post('/agent/edit')
       .set('Authorization', `Bearer ${TEST_SECRET}`)
@@ -532,9 +659,11 @@ describe('AgentController (e2e)', () => {
         selectedId: 'button',
         responseMode: 'patch',
       })
-      .expect(409)
+      .expect(200)
       .expect((res: request.Response) => {
-        expect(res.body.code).toBe('PAGE_VERSION_CONFLICT');
+        expect(res.body.mode).toBe('patch');
+        expect(res.body.retryCount).toBe(1);
+        expect(res.body.resolvedVersion).toBe(4);
       });
   });
 
@@ -735,7 +864,7 @@ describe('AgentController (e2e)', () => {
     expect(events.find((event) => event.event === 'route')?.data.route.resolvedMode).toBe('answer');
   });
 
-  it('streams structured errors for stale patch requests', async () => {
+  it('streams retry status and final result for stale patch requests', async () => {
     const response = await request(app.getHttpServer())
       .post('/agent/edit/stream')
       .set('Authorization', `Bearer ${TEST_SECRET}`)
@@ -757,9 +886,13 @@ describe('AgentController (e2e)', () => {
       });
 
     const events = parseSseEvents(response.body as string);
-    const errorEvent = events.find((event) => event.event === 'error');
-    expect(errorEvent?.data.error.code).toBe('PAGE_VERSION_CONFLICT');
-    expect(errorEvent?.data.error.traceId).toBeTruthy();
+    const retryEvent = events.find(
+      (event) => event.event === 'status' && event.data.stage === 'retrying',
+    );
+    const resultEvent = events.find((event) => event.event === 'result');
+    expect(retryEvent?.data.label).toContain('版本冲突');
+    expect(resultEvent?.data.result.mode).toBe('patch');
+    expect(resultEvent?.data.result.retryCount).toBe(1);
     expect(events.at(-1)?.event).toBe('done');
   });
 

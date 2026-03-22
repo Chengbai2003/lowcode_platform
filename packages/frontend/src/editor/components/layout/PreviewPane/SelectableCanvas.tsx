@@ -1,7 +1,7 @@
-import React, { useRef, useCallback, memo } from 'react';
+import React, { useRef, useCallback, memo, useEffect } from 'react';
 import { Renderer, LowcodeProvider } from '../../../../renderer';
 import type { A2UISchema, ComponentRegistry, A2UIComponent } from '../../../../types';
-import { useSelectionStore } from '../../../store/editor-store';
+import { useEditorStore, useSelectionStore } from '../../../store/editor-store';
 import { SelectionHighlight } from './SelectionHighlight';
 import { useComponentPosition } from './useComponentPosition';
 import { NoSchemaEmptyState } from '../../EmptyState';
@@ -29,13 +29,21 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
     const hoverId = useSelectionStore((state) => state.hoverId);
     const selectComponent = useSelectionStore((state) => state.selectComponent);
     const setHover = useSelectionStore((state) => state.setHover);
+    const aiScopeRootId = useEditorStore((state) => state.aiScopeRootId);
+    const aiScopeTargetIds = useEditorStore((state) => state.aiScopeTargetIds);
+    const clearAIScopeHighlight = useEditorStore((state) => state.clearAIScopeHighlight);
 
     // Track component positions
-    const { selectedPosition, hoverPosition } = useComponentPosition(
+    const { selectedPosition, hoverPosition, positionsById } = useComponentPosition(
       containerRef,
       selectedId,
       hoverId,
     );
+
+    const aiScopeRootPosition = aiScopeRootId ? (positionsById.get(aiScopeRootId) ?? null) : null;
+    const aiScopeTargetPositions = aiScopeTargetIds
+      .map((targetId) => positionsById.get(targetId) ?? null)
+      .filter((position): position is NonNullable<typeof position> => Boolean(position));
 
     // Get component name for label
     const getComponentName = useCallback(
@@ -118,6 +126,26 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
       [hoverId, resolveComponentIdFromTarget, setHover],
     );
 
+    useEffect(() => {
+      if (isPreviewMode || !schema) {
+        clearAIScopeHighlight();
+        return;
+      }
+
+      if (!aiScopeRootId) {
+        return;
+      }
+
+      const rootExists = Boolean(schema.components[aiScopeRootId]);
+      const allTargetsExist = aiScopeTargetIds.every((targetId) =>
+        Boolean(schema.components[targetId]),
+      );
+
+      if (!rootExists || !allTargetsExist) {
+        clearAIScopeHighlight();
+      }
+    }, [aiScopeRootId, aiScopeTargetIds, clearAIScopeHighlight, isPreviewMode, schema]);
+
     return (
       <div
         ref={containerRef}
@@ -152,6 +180,23 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
             variant="selected"
           />
         )}
+
+        {!isPreviewMode && aiScopeRootId && (
+          <SelectionHighlight
+            position={aiScopeRootPosition}
+            componentName="AI 范围容器"
+            variant="ai-root"
+          />
+        )}
+
+        {!isPreviewMode &&
+          aiScopeTargetPositions.map((position) => (
+            <SelectionHighlight
+              key={`ai-target-${position.id}`}
+              position={position}
+              variant="ai-target"
+            />
+          ))}
       </div>
     );
   },

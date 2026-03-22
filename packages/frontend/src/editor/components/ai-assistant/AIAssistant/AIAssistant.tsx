@@ -53,6 +53,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     sendMessage,
     applyPatchPreview,
     resolveClarification,
+    confirmScope,
+    clearScopeHighlight,
+    restoreScopeHighlight,
+    activeScopeSourceMessageId,
     messagesEndRef,
   } = useAIAssistantChat({
     currentSchema,
@@ -145,6 +149,10 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           onApplySchema={applySchema}
           onApplyPatchPreview={applyPatchPreview}
           onResolveClarification={resolveClarification}
+          onConfirmScope={confirmScope}
+          onCancelScopeHighlight={clearScopeHighlight}
+          onRestoreScopeHighlight={restoreScopeHighlight}
+          activeScopeSourceMessageId={activeScopeSourceMessageId}
           busy={loading}
           endRef={messagesEndRef}
         />

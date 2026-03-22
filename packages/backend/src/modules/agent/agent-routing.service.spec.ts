@@ -342,4 +342,49 @@ describe('AgentRoutingService', () => {
     });
     expect(decision.prefetchedFocusContext).toEqual(focused);
   });
+
+  it('falls back to rules when llm confidence is low', async () => {
+    const { service } = createService({
+      prefetchedFocusContext: {
+        mode: 'candidates',
+        schema: {
+          rootId: 'root',
+          components: {
+            root: { id: 'root', type: 'Page' },
+            button: { id: 'button', type: 'Button' },
+          },
+        } as any,
+        componentList: ['Page', 'Button'],
+        candidates: [
+          { id: 'button', type: 'Button', score: 0.8, reason: '文本匹配', matchType: 'keyword' },
+        ],
+      },
+      classification: {
+        mode: 'answer',
+        confidence: 0.51,
+        reason: '低置信分类',
+        needsPageContext: true,
+        needsTargetResolution: false,
+      },
+    });
+
+    const decision = await service.resolve(
+      {
+        instruction: '把按钮改成提交',
+        pageId: 'page-1',
+        version: 3,
+        responseMode: 'auto',
+      },
+      'agent-trace',
+    );
+
+    expect(decision.route).toMatchObject({
+      requestedMode: 'auto',
+      resolvedMode: 'patch',
+      reason: 'candidate_target',
+      classifierSource: 'llm_with_rule_fallback',
+      fallbackApplied: true,
+      confidence: 0.51,
+    });
+  });
 });

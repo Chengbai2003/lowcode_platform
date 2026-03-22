@@ -273,6 +273,30 @@
   line-height: 1.4;
 }
 
+.aiScopeRootHighlight,
+.aiScopeTargetHighlight {
+  @include transition-all;
+  pointer-events: none;
+}
+
+.aiRootLabel {
+  position: absolute;
+  top: -24px;
+  left: 0;
+  background: #f59e0b;
+  color: #1f2937;
+  font-size: 10px;
+  font-family: $font-family-mono;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  z-index: 1001;
+  line-height: 1.4;
+  box-shadow: 0 8px 20px rgba(245, 158, 11, 0.18);
+  letter-spacing: 0.02em;
+}
+
 /* Hover Highlight */
 .hoverHighlight {
   @include transition-all;

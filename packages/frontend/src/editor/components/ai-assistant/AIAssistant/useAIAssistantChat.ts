@@ -7,6 +7,7 @@ import {
   type AISessionMessage,
   type AIMessageActionResult,
 } from '../../../../types';
+import { useEditorStore } from '../../../store/editor-store';
 import {
   AIServiceError,
   type AgentEditPatchResponse,
@@ -42,6 +43,7 @@ interface SendMessageOptions {
 }
 
 const MAX_CONVERSATION_HISTORY_CHARS = 4000;
+const MAX_CONVERSATION_HISTORY_TURNS = 8;
 const TRUNCATION_SUFFIX = '...(truncated)';
 const STREAM_REVEAL_INTERVAL_MS = 40;
 const STREAM_REVEAL_CHARS_PER_TICK = 24;
@@ -50,6 +52,16 @@ function sanitizeConversationHistoryContent(content: string): string {
   return content.length <= MAX_CONVERSATION_HISTORY_CHARS
     ? content
     : `${content.slice(0, MAX_CONVERSATION_HISTORY_CHARS - TRUNCATION_SUFFIX.length)}${TRUNCATION_SUFFIX}`;
+}
+
+function buildConversationHistory(messages: AISessionMessage[]) {
+  return messages
+    .filter((item) => item.role === 'user' || item.role === 'assistant')
+    .slice(-MAX_CONVERSATION_HISTORY_TURNS)
+    .map((item) => ({
+      role: item.role,
+      content: sanitizeConversationHistoryContent(item.content),
+    }));
 }
 
 export const useAIAssistantChat = ({
@@ -69,13 +81,20 @@ export const useAIAssistantChat = ({
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [sessionMessages, setSessionMessages] = useState<AISessionMessage[]>([]);
+  const { currentSession, createNewSession, updateCurrentSessionMessages } = useSessionManager({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<AIMessage[]>([]);
   const sessionMessagesRef = useRef<AISessionMessage[]>([]);
+  const activeSessionRef = useRef<AISession | null>(currentSession ?? null);
   const pendingStreamChunksRef = useRef<Map<string, string>>(new Map());
   const streamRevealTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  const previousSelectedIdRef = useRef<string | null | undefined>(selectedId);
+  const previousPageIdRef = useRef(pageId);
+  const previousSchemaRootIdRef = useRef(currentSchema?.rootId);
 
-  const { currentSession, createNewSession, updateCurrentSessionMessages } = useSessionManager({});
+  const setAIScopeHighlight = useEditorStore((state) => state.setAIScopeHighlight);
+  const clearAIScopeHighlight = useEditorStore((state) => state.clearAIScopeHighlight);
+  const activeScopeSourceMessageId = useEditorStore((state) => state.aiScopeSourceMessageId);
 
   const formatErrorMessage = (error: unknown) => {
     if (error instanceof AIServiceError) {
@@ -122,14 +141,39 @@ export const useAIAssistantChat = ({
     sessionMessagesRef.current = sessionMessages;
   }, [sessionMessages]);
 
+  useEffect(() => {
+    if (currentSession) {
+      activeSessionRef.current = currentSession;
+    }
+  }, [currentSession]);
+
   useEffect(
     () => () => {
       streamRevealTimersRef.current.forEach((timer) => clearInterval(timer));
       streamRevealTimersRef.current.clear();
       pendingStreamChunksRef.current.clear();
+      clearAIScopeHighlight();
     },
-    [],
+    [clearAIScopeHighlight],
   );
+
+  useEffect(() => {
+    if (previousSelectedIdRef.current !== selectedId) {
+      clearAIScopeHighlight();
+      previousSelectedIdRef.current = selectedId;
+    }
+  }, [clearAIScopeHighlight, selectedId]);
+
+  useEffect(() => {
+    if (
+      previousPageIdRef.current !== pageId ||
+      previousSchemaRootIdRef.current !== currentSchema?.rootId
+    ) {
+      clearAIScopeHighlight();
+      previousPageIdRef.current = pageId;
+      previousSchemaRootIdRef.current = currentSchema?.rootId;
+    }
+  }, [clearAIScopeHighlight, currentSchema?.rootId, pageId]);
 
   useEffect(() => {
     loadModels().catch((error) => {
@@ -320,6 +364,187 @@ export const useAIAssistantChat = ({
     return summaryLines.join('\n\n');
   }, []);
 
+  const clearScopeHighlight = useCallback(() => {
+    clearAIScopeHighlight();
+  }, [clearAIScopeHighlight]);
+
+  const applyAgentResponse = useCallback(
+    ({
+      messageId,
+      instruction,
+      response,
+    }: {
+      messageId: string;
+      instruction: string;
+      response: AgentEditResponse;
+    }) => {
+      let fullContent = '';
+      let aiSchema: A2UISchema | undefined;
+      let actionResult: AIMessageActionResult | undefined;
+
+      switch (response.mode) {
+        case 'patch':
+          clearScopeHighlight();
+          fullContent = formatPatchPreviewContent(response);
+          updateAssistantMessage(messageId, (messageItem) => ({
+            ...messageItem,
+            content: fullContent,
+            status: 'success',
+            route: response.route,
+            traceId: response.traceId,
+            patchPreview: {
+              instruction,
+              patch: response.patch,
+              resolvedSelectedId: response.resolvedSelectedId,
+              previewSchema: response.previewSchema,
+              previewSummary: response.previewSummary,
+              changeGroups: response.changeGroups,
+              warnings: response.warnings ?? [],
+              risk: response.risk,
+              requiresConfirmation: response.requiresConfirmation,
+              scopeSummary: response.scopeSummary,
+            },
+            clarification: undefined,
+            scopeConfirmation: undefined,
+            applyState: 'pending',
+            progress: createProgress(
+              {
+                stage: 'completed',
+                label: '修改预览已生成',
+              },
+              response.traceId,
+            ),
+          }));
+          message.success('AI 修改预览已生成');
+          break;
+        case 'scope_confirmation':
+          fullContent = response.content;
+          setAIScopeHighlight({
+            rootId: response.scope.rootId,
+            targetIds: response.scope.targetIds,
+            sourceMessageId: messageId,
+          });
+          updateAssistantMessage(messageId, (messageItem) => ({
+            ...messageItem,
+            content: fullContent,
+            status: 'success',
+            route: response.route,
+            traceId: response.traceId,
+            patchPreview: undefined,
+            clarification: undefined,
+            scopeConfirmation: {
+              scopeConfirmationId: response.scopeConfirmationId,
+              instruction,
+              question: response.question,
+              scope: response.scope,
+              warnings: response.warnings ?? [],
+            },
+            applyState: undefined,
+            progress: createProgress(
+              {
+                stage: 'awaiting_scope_confirmation',
+                label: '已识别批量范围，等待确认',
+              },
+              response.traceId,
+            ),
+          }));
+          break;
+        case 'clarification':
+          clearScopeHighlight();
+          fullContent = response.content;
+          updateAssistantMessage(messageId, (messageItem) => ({
+            ...messageItem,
+            content: fullContent,
+            status: 'success',
+            route: response.route,
+            traceId: response.traceId,
+            patchPreview: undefined,
+            scopeConfirmation: undefined,
+            clarification: {
+              clarificationId: response.clarificationId,
+              instruction,
+              question: response.question,
+              candidates: response.candidates,
+            },
+            progress: createProgress(
+              {
+                stage: 'completed',
+                label: '需要用户澄清',
+              },
+              response.traceId,
+            ),
+          }));
+          break;
+        case 'answer':
+          clearScopeHighlight();
+          fullContent = response.content;
+          updateAssistantMessage(messageId, (messageItem) => ({
+            ...messageItem,
+            content: fullContent,
+            status: 'success',
+            route: response.route,
+            traceId: response.traceId,
+            patchPreview: undefined,
+            clarification: undefined,
+            scopeConfirmation: undefined,
+            progress: createProgress(
+              {
+                stage: 'completed',
+                label: '问答完成',
+              },
+              response.traceId,
+            ),
+          }));
+          break;
+        case 'schema':
+          clearScopeHighlight();
+          fullContent = formatSchemaResultContent(response);
+          aiSchema = response.schema;
+          actionResult = aiSchema
+            ? {
+                type: 'component_update',
+                componentId: aiSchema.rootId,
+                schemaSnapshot: aiSchema,
+              }
+            : undefined;
+
+          updateAssistantMessage(messageId, (messageItem) => ({
+            ...messageItem,
+            content: fullContent,
+            schema: aiSchema,
+            status: 'success',
+            route: response.route,
+            traceId: response.traceId,
+            patchPreview: undefined,
+            clarification: undefined,
+            scopeConfirmation: undefined,
+            progress: createProgress(
+              {
+                stage: 'completed',
+                label: 'Schema 生成完成',
+              },
+              response.traceId,
+            ),
+          }));
+
+          if (aiSchema) {
+            message.success('Schema 生成完毕！');
+          }
+          break;
+      }
+
+      return { fullContent, aiSchema, actionResult };
+    },
+    [
+      clearScopeHighlight,
+      createProgress,
+      formatPatchPreviewContent,
+      formatSchemaResultContent,
+      setAIScopeHighlight,
+      updateAssistantMessage,
+    ],
+  );
+
   const confirmHighRiskPatch = useCallback((messageItem: AIMessage) => {
     const reasons = messageItem.patchPreview?.risk.reasons.join('；') ?? '修改范围较大';
     return new Promise<boolean>((resolve) => {
@@ -418,6 +643,8 @@ export const useAIAssistantChat = ({
         return;
       }
 
+      clearScopeHighlight();
+
       if (models.length === 0) {
         try {
           await ensureModelsLoaded();
@@ -453,6 +680,7 @@ export const useAIAssistantChat = ({
       if (!session) {
         session = await createNewSession(userContent);
       }
+      activeSessionRef.current = session;
 
       const nextSessionMessagesAfterUser = [...sessionMessagesRef.current, userSessionMessage];
       if (session) {
@@ -478,10 +706,7 @@ export const useAIAssistantChat = ({
       ]);
 
       try {
-        const conversationHistory = nextSessionMessagesAfterUser.map((item) => ({
-          role: item.role,
-          content: sanitizeConversationHistoryContent(item.content),
-        }));
+        const conversationHistory = buildConversationHistory(nextSessionMessagesAfterUser);
         const patchModeAvailable =
           Boolean(pageId) &&
           pageVersion !== null &&
@@ -491,7 +716,6 @@ export const useAIAssistantChat = ({
           responseMode === 'patch' && !patchModeAvailable ? 'schema' : responseMode;
 
         let fullContent = '';
-        let aiSchema: A2UISchema | undefined;
         let actionResult: AIMessageActionResult | undefined;
         let traceId: string | undefined;
         let terminalReceived = false;
@@ -505,118 +729,10 @@ export const useAIAssistantChat = ({
           selectedId: selectedIdOverride ?? selectedId ?? undefined,
           draftSchema: currentSchema || undefined,
           conversationHistory,
+          sessionId: session?.id,
+          requestIdempotencyKey: session?.id ? `${session.id}:${userMessageId}` : userMessageId,
           responseMode: requestedResponseMode,
         } as const;
-
-        const applyAgentResponse = async (response: AgentEditResponse) => {
-          flushStreamContent(aiMessageId);
-          traceId = response.traceId;
-
-          switch (response.mode) {
-            case 'patch': {
-              fullContent = formatPatchPreviewContent(response);
-              updateAssistantMessage(aiMessageId, (messageItem) => ({
-                ...messageItem,
-                content: fullContent,
-                status: 'success',
-                route: response.route,
-                traceId: response.traceId,
-                patchPreview: {
-                  instruction: trimmedInstruction,
-                  patch: response.patch,
-                  resolvedSelectedId: response.resolvedSelectedId,
-                  previewSchema: response.previewSchema,
-                  previewSummary: response.previewSummary,
-                  changeGroups: response.changeGroups,
-                  warnings: response.warnings ?? [],
-                  risk: response.risk,
-                  requiresConfirmation: response.requiresConfirmation,
-                },
-                applyState: 'pending',
-                progress: createProgress(
-                  {
-                    stage: 'completed',
-                    label: '修改预览已生成',
-                  },
-                  response.traceId,
-                ),
-              }));
-              message.success('AI 修改预览已生成');
-              break;
-            }
-            case 'clarification':
-              fullContent = response.content;
-              updateAssistantMessage(aiMessageId, (messageItem) => ({
-                ...messageItem,
-                content: fullContent,
-                status: 'success',
-                route: response.route,
-                traceId: response.traceId,
-                clarification: {
-                  clarificationId: response.clarificationId,
-                  instruction: trimmedInstruction,
-                  question: response.question,
-                  candidates: response.candidates,
-                },
-                progress: createProgress(
-                  {
-                    stage: 'completed',
-                    label: '需要用户澄清',
-                  },
-                  response.traceId,
-                ),
-              }));
-              break;
-            case 'answer':
-              fullContent = response.content;
-              updateAssistantMessage(aiMessageId, (messageItem) => ({
-                ...messageItem,
-                content: fullContent,
-                status: 'success',
-                route: response.route,
-                traceId: response.traceId,
-                progress: createProgress(
-                  {
-                    stage: 'completed',
-                    label: '问答完成',
-                  },
-                  response.traceId,
-                ),
-              }));
-              break;
-            case 'schema':
-              fullContent = formatSchemaResultContent(response);
-              aiSchema = response.schema;
-              actionResult = aiSchema
-                ? {
-                    type: 'component_update',
-                    componentId: aiSchema.rootId,
-                    schemaSnapshot: aiSchema,
-                  }
-                : undefined;
-
-              updateAssistantMessage(aiMessageId, (messageItem) => ({
-                ...messageItem,
-                content: fullContent,
-                schema: aiSchema,
-                status: 'success',
-                route: response.route,
-                traceId: response.traceId,
-                progress: createProgress(
-                  {
-                    stage: 'completed',
-                    label: 'Schema 生成完成',
-                  },
-                  response.traceId,
-                ),
-              }));
-
-              if (aiSchema) {
-                message.success('Schema 生成完毕！');
-              }
-              break;
-          }
-        };
 
         try {
           await serverAIService.streamResponse?.(requestPayload, {
@@ -663,7 +779,16 @@ export const useAIAssistantChat = ({
                   break;
                 case 'result':
                   terminalReceived = true;
-                  await applyAgentResponse(event.result);
+                  {
+                    const applied = applyAgentResponse({
+                      messageId: aiMessageId,
+                      instruction: trimmedInstruction,
+                      response: event.result,
+                    });
+                    fullContent = applied.fullContent;
+                    actionResult = applied.actionResult;
+                    traceId = event.result.traceId;
+                  }
                   break;
                 case 'error':
                   terminalReceived = true;
@@ -692,7 +817,14 @@ export const useAIAssistantChat = ({
               ...requestPayload,
               stream: false,
             });
-            await applyAgentResponse(response);
+            const applied = applyAgentResponse({
+              messageId: aiMessageId,
+              instruction: trimmedInstruction,
+              response,
+            });
+            fullContent = applied.fullContent;
+            actionResult = applied.actionResult;
+            traceId = response.traceId;
           } else {
             throw streamError;
           }
@@ -722,6 +854,7 @@ export const useAIAssistantChat = ({
         setSessionMessages(nextSessionMessagesAfterAssistant);
       } catch (error: unknown) {
         flushStreamContent(aiMessageId);
+        clearScopeHighlight();
         if (error instanceof AIServiceError) {
           presentStructuredError(error);
         }
@@ -761,10 +894,12 @@ export const useAIAssistantChat = ({
       onPatchApply,
       formatPatchPreviewContent,
       formatSchemaResultContent,
+      clearScopeHighlight,
       flushStreamContent,
       enqueueStreamContent,
       clearStreamReveal,
       createProgress,
+      applyAgentResponse,
       updateAssistantMessage,
       presentStructuredError,
       onError,
@@ -791,6 +926,218 @@ export const useAIAssistantChat = ({
     [submitMessage],
   );
 
+  const confirmScope = useCallback(
+    async (messageId: string) => {
+      const messageItem = messagesRef.current.find((item) => item.id === messageId);
+      if (!messageItem?.scopeConfirmation || loading) {
+        return;
+      }
+
+      const activeSession = activeSessionRef.current;
+      const conversationHistory = buildConversationHistory(sessionMessagesRef.current);
+      const instruction = messageItem.scopeConfirmation.instruction;
+
+      updateAssistantMessage(messageId, (current) => ({
+        ...current,
+        status: 'loading',
+        progress: createProgress(
+          {
+            stage: 'calling_model',
+            label: '正在根据已确认范围生成 patch 预览',
+          },
+          current.traceId,
+        ),
+      }));
+      setLoading(true);
+
+      let fullContent = messageItem.content;
+      let actionResult: AIMessageActionResult | undefined;
+      let traceId = messageItem.traceId;
+      let terminalReceived = false;
+      let structuredStreamError: AIServiceError | null = null;
+
+      const requestPayload = {
+        instruction,
+        modelId: currentModel,
+        pageId,
+        version: pageVersion ?? undefined,
+        selectedId: selectedId ?? undefined,
+        draftSchema: currentSchema || undefined,
+        conversationHistory,
+        sessionId: activeSession?.id,
+        confirmedScopeId: messageItem.scopeConfirmation.scopeConfirmationId,
+        requestIdempotencyKey: activeSession?.id
+          ? `${activeSession.id}:${messageId}:scope:${messageItem.scopeConfirmation.scopeConfirmationId}`
+          : `${messageId}:scope:${messageItem.scopeConfirmation.scopeConfirmationId}`,
+        responseMode,
+      } as const;
+
+      try {
+        try {
+          await serverAIService.streamResponse?.(requestPayload, {
+            onEvent: async (event) => {
+              switch (event.type) {
+                case 'meta':
+                  traceId = event.traceId;
+                  updateAssistantMessage(messageId, (current) => ({
+                    ...current,
+                    traceId: event.traceId,
+                    progress: {
+                      ...(current.progress ?? {
+                        stage: 'calling_model',
+                        label: '正在根据已确认范围生成 patch 预览',
+                      }),
+                      traceId: event.traceId,
+                    },
+                  }));
+                  break;
+                case 'route':
+                  updateAssistantMessage(messageId, (current) => ({
+                    ...current,
+                    route: event.route,
+                  }));
+                  break;
+                case 'status':
+                  updateAssistantMessage(messageId, (current) => ({
+                    ...current,
+                    progress: createProgress(
+                      {
+                        stage: event.stage,
+                        label: event.label,
+                        detail: event.detail,
+                        toolName: event.toolName,
+                        targetId: event.targetId,
+                        stepNumber: event.stepNumber,
+                        finishReason: event.finishReason,
+                      },
+                      current.traceId ?? traceId,
+                    ),
+                  }));
+                  break;
+                case 'content_delta':
+                  break;
+                case 'result':
+                  terminalReceived = true;
+                  {
+                    const applied = applyAgentResponse({
+                      messageId,
+                      instruction,
+                      response: event.result,
+                    });
+                    fullContent = applied.fullContent;
+                    actionResult = applied.actionResult;
+                    traceId = event.result.traceId;
+                  }
+                  break;
+                case 'error':
+                  terminalReceived = true;
+                  structuredStreamError = new AIServiceError(
+                    event.error.message,
+                    (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                    {
+                      traceId: event.error.traceId,
+                      ...(event.error.details ? { details: event.error.details } : {}),
+                    },
+                  );
+                  break;
+                case 'done':
+                  break;
+              }
+            },
+          });
+
+          if (structuredStreamError) {
+            throw structuredStreamError;
+          }
+        } catch (streamError) {
+          if (!terminalReceived) {
+            const response = await serverAIService.generateResponse({
+              ...requestPayload,
+              stream: false,
+            });
+            const applied = applyAgentResponse({
+              messageId,
+              instruction,
+              response,
+            });
+            fullContent = applied.fullContent;
+            actionResult = applied.actionResult;
+            traceId = response.traceId;
+          } else {
+            throw streamError;
+          }
+        }
+
+        persistSessionMessages(
+          (prev) =>
+            prev.map((sessionMessage) =>
+              sessionMessage.id === messageId
+                ? {
+                    ...sessionMessage,
+                    content: fullContent,
+                    actionResult,
+                    metadata: traceId
+                      ? {
+                          ...(sessionMessage.metadata ?? {}),
+                          traceId,
+                          applyState: actionResult ? 'applied' : undefined,
+                        }
+                      : sessionMessage.metadata,
+                  }
+                : sessionMessage,
+            ),
+          activeSession,
+        );
+      } catch (error) {
+        clearScopeHighlight();
+        if (error instanceof AIServiceError) {
+          presentStructuredError(error);
+        }
+        const errorMessage = formatErrorMessage(error);
+        updateAssistantMessage(messageId, (current) => ({
+          ...current,
+          content: `${current.content}\n\n[ERROR: ${errorMessage}]`,
+          status: 'error',
+        }));
+        onError?.(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      loading,
+      currentModel,
+      pageId,
+      pageVersion,
+      selectedId,
+      currentSchema,
+      responseMode,
+      updateAssistantMessage,
+      createProgress,
+      applyAgentResponse,
+      persistSessionMessages,
+      clearScopeHighlight,
+      presentStructuredError,
+      onError,
+    ],
+  );
+
+  const restoreScopeHighlight = useCallback(
+    (messageId: string) => {
+      const messageItem = messagesRef.current.find((item) => item.id === messageId);
+      if (!messageItem?.scopeConfirmation) {
+        return;
+      }
+
+      setAIScopeHighlight({
+        rootId: messageItem.scopeConfirmation.scope.rootId,
+        targetIds: messageItem.scopeConfirmation.scope.targetIds,
+        sourceMessageId: messageId,
+      });
+    },
+    [setAIScopeHighlight],
+  );
+
   return {
     messages,
     inputValue,
@@ -799,6 +1146,10 @@ export const useAIAssistantChat = ({
     sendMessage,
     applyPatchPreview,
     resolveClarification,
+    confirmScope,
+    clearScopeHighlight,
+    restoreScopeHighlight,
+    activeScopeSourceMessageId,
     messagesEndRef,
   };
 };

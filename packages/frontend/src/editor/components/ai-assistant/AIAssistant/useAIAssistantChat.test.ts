@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { A2UISchema, AISession } from '../../../../types';
+import { useEditorStore } from '../../../store/editor-store';
 import { useAIAssistantChat } from './useAIAssistantChat';
 
 const { messageMock, modalMock, serverAIServiceMock, sessionManagerMock } = vi.hoisted(() => ({
@@ -87,6 +88,17 @@ describe('useAIAssistantChat', () => {
     sessionManagerMock.createNewSession.mockReset();
     sessionManagerMock.updateCurrentSessionMessages.mockReset();
     sessionManagerMock.createNewSession.mockResolvedValue(createdSession);
+    useEditorStore.setState({
+      currentSessionId: null,
+      sessions: [],
+      aiScopeRootId: null,
+      aiScopeTargetIds: [],
+      aiScopeSourceMessageId: null,
+      isHistoryDrawerOpen: false,
+      isFloatingIslandOpen: false,
+      isLoading: false,
+      error: null,
+    });
   });
 
   it('uses streamed auto mode and keeps patch results in preview state until confirmed', async () => {
@@ -199,6 +211,8 @@ describe('useAIAssistantChat', () => {
         version: 3,
         selectedId: 'button',
         draftSchema: baseSchema,
+        sessionId: 'session-1',
+        requestIdempotencyKey: expect.stringContaining('session-1:'),
         responseMode: 'auto',
       }),
       expect.any(Object),
@@ -288,6 +302,7 @@ describe('useAIAssistantChat', () => {
     expect(serverAIServiceMock.streamResponse).toHaveBeenCalledWith(
       expect.objectContaining({
         responseMode: 'auto',
+        sessionId: 'session-1',
       }),
       expect.any(Object),
     );
@@ -424,6 +439,209 @@ describe('useAIAssistantChat', () => {
 
     const latestMessage = result.current.messages[result.current.messages.length - 1];
     expect(latestMessage.content).toContain('已定位到 Button(button-a)');
+  });
+
+  it('stores scope confirmation highlights and confirms batch patch generation in-place', async () => {
+    const batchSchema: A2UISchema = {
+      version: 3,
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['form'] },
+        form: { id: 'form', type: 'Form', childrenIds: ['form-item-a', 'form-item-b'] },
+        'form-item-a': {
+          id: 'form-item-a',
+          type: 'FormItem',
+          props: { label: '用户名', labelWidth: 120 },
+          childrenIds: ['input-a'],
+        },
+        'form-item-b': {
+          id: 'form-item-b',
+          type: 'FormItem',
+          props: { label: '密码', labelWidth: 120 },
+          childrenIds: ['input-b'],
+        },
+        'input-a': { id: 'input-a', type: 'Input', props: { placeholder: '请输入用户名' } },
+        'input-b': { id: 'input-b', type: 'Input', props: { placeholder: '请输入密码' } },
+      },
+    };
+
+    serverAIServiceMock.streamResponse
+      .mockImplementationOnce(async (_request: any, handlers: any) => {
+        await handlers.onEvent({ type: 'meta', traceId: 'agent-scope' });
+        await handlers.onEvent({
+          type: 'route',
+          route: {
+            requestedMode: 'auto',
+            resolvedMode: 'patch',
+            reason: 'selected_target',
+            manualOverride: false,
+          },
+        });
+        await handlers.onEvent({
+          type: 'result',
+          result: {
+            mode: 'scope_confirmation',
+            content: '已识别到当前容器下 2 个表单项，请先确认范围。',
+            question: '确认修改当前容器下的 2 个表单项',
+            scopeConfirmationId: 'scope-1',
+            scope: {
+              rootId: 'form',
+              matchedType: 'FormItem',
+              matchedDisplayName: '表单项',
+              targetIds: ['form-item-a', 'form-item-b'],
+              targetCount: 2,
+            },
+            warnings: ['范围高亮仅用于确认，不会改变组件树选中状态'],
+            traceId: 'agent-scope',
+            route: {
+              requestedMode: 'auto',
+              resolvedMode: 'patch',
+              reason: 'selected_target',
+              manualOverride: false,
+            },
+          },
+        });
+        await handlers.onEvent({ type: 'done', success: true });
+        return { terminal: 'result' };
+      })
+      .mockImplementationOnce(async (request: any, handlers: any) => {
+        expect(request.confirmedScopeId).toBe('scope-1');
+        expect(request.selectedId).toBe('form');
+        await handlers.onEvent({ type: 'meta', traceId: 'agent-batch-patch' });
+        await handlers.onEvent({
+          type: 'result',
+          result: {
+            mode: 'patch',
+            patch: [
+              { op: 'updateProps', componentId: 'form-item-a', props: { labelWidth: 200 } },
+              { op: 'updateProps', componentId: 'form-item-b', props: { labelWidth: 200 } },
+            ],
+            previewSchema: {
+              ...batchSchema,
+              components: {
+                ...batchSchema.components,
+                'form-item-a': {
+                  ...batchSchema.components['form-item-a'],
+                  props: { label: '用户名', labelWidth: 200 },
+                },
+                'form-item-b': {
+                  ...batchSchema.components['form-item-b'],
+                  props: { label: '密码', labelWidth: 200 },
+                },
+              },
+            },
+            previewSummary: '本次修改共 2 个 patch，涉及 2 个表单项。',
+            changeGroups: [
+              {
+                kind: 'props',
+                label: '属性',
+                count: 2,
+                entries: [
+                  {
+                    op: 'updateProps',
+                    targetId: 'form-item-a',
+                    summary: '更新表单项 labelWidth 为 200',
+                  },
+                  {
+                    op: 'updateProps',
+                    targetId: 'form-item-b',
+                    summary: '更新表单项 labelWidth 为 200',
+                  },
+                ],
+              },
+            ],
+            risk: {
+              level: 'low',
+              reasons: ['已限定在确认范围内'],
+              patchOps: 2,
+              distinctTargets: 2,
+              requiresConfirmation: false,
+            },
+            requiresConfirmation: false,
+            warnings: [],
+            resolvedSelectedId: 'form',
+            scopeSummary: {
+              rootId: 'form',
+              matchedType: 'FormItem',
+              matchedDisplayName: '表单项',
+              targetCount: 2,
+              changedTargetCount: 2,
+            },
+            traceId: 'agent-batch-patch',
+            route: {
+              requestedMode: 'auto',
+              resolvedMode: 'patch',
+              reason: 'selected_target',
+              manualOverride: false,
+            },
+          },
+        });
+        await handlers.onEvent({ type: 'done', success: true });
+        return { terminal: 'result' };
+      });
+
+    const loadModels = vi.fn().mockResolvedValue(undefined);
+    const ensureModelsLoaded = vi.fn().mockResolvedValue(undefined);
+    const models = [
+      { id: 'openai-default', name: 'OpenAI', provider: 'openai' as const, model: 'gpt-5.4' },
+    ];
+
+    const { result } = renderHook(() =>
+      useAIAssistantChat({
+        currentSchema: batchSchema,
+        currentModel: 'openai-default',
+        pageId: 'page-1',
+        pageVersion: 3,
+        selectedId: 'form',
+        models,
+        loadModels,
+        ensureModelsLoaded,
+        responseMode: 'auto',
+      }),
+    );
+
+    await act(async () => {
+      result.current.setInputValue('将当前表单下所有表单项 label 宽度设置为 200');
+    });
+
+    await act(async () => {
+      await result.current.sendMessage();
+    });
+
+    const scopeMessage = result.current.messages[result.current.messages.length - 1];
+    expect(scopeMessage.scopeConfirmation?.scope.targetIds).toEqual(['form-item-a', 'form-item-b']);
+    expect(useEditorStore.getState().aiScopeRootId).toBe('form');
+    expect(useEditorStore.getState().aiScopeTargetIds).toEqual(['form-item-a', 'form-item-b']);
+
+    await act(async () => {
+      result.current.clearScopeHighlight();
+    });
+
+    expect(useEditorStore.getState().aiScopeRootId).toBeNull();
+    expect(result.current.messages).toHaveLength(3);
+
+    await act(async () => {
+      result.current.restoreScopeHighlight(scopeMessage.id);
+    });
+
+    expect(useEditorStore.getState().aiScopeRootId).toBe('form');
+    expect(useEditorStore.getState().aiScopeTargetIds).toEqual(['form-item-a', 'form-item-b']);
+
+    await act(async () => {
+      await result.current.confirmScope(scopeMessage.id);
+    });
+
+    const latestMessage = result.current.messages[result.current.messages.length - 1];
+    expect(result.current.messages).toHaveLength(3);
+    expect(latestMessage.patchPreview?.scopeSummary).toEqual({
+      rootId: 'form',
+      matchedType: 'FormItem',
+      matchedDisplayName: '表单项',
+      targetCount: 2,
+      changedTargetCount: 2,
+    });
+    expect(latestMessage.scopeConfirmation).toBeUndefined();
+    expect(useEditorStore.getState().aiScopeRootId).toBeNull();
   });
 
   it('reveals streamed answer content incrementally before the final result arrives', async () => {

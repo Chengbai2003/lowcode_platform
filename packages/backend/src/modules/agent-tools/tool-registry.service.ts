@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { AgentToolException } from './agent-tool.exception';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
+import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 import { ContextAssemblerService } from '../schema-context/context-assembler.service';
 import { PatchAutoFixService } from './patch-auto-fix.service';
 import { PatchValidationService } from './patch-validation.service';
@@ -20,6 +22,7 @@ export class ToolRegistryService {
   constructor(
     private readonly contextAssembler: ContextAssemblerService,
     private readonly metaRegistry: ComponentMetaRegistry,
+    private readonly collectionTargetResolver: CollectionTargetResolverService,
     private readonly patchAutoFixService: PatchAutoFixService,
     private readonly patchValidationService: PatchValidationService,
   ) {
@@ -148,6 +151,43 @@ export class ToolRegistryService {
         },
       },
       {
+        name: 'resolve_collection_scope',
+        description: '在指定容器根节点下解析当前批量修改将命中的同类组件集合。',
+        inputSchema: this.createObjectSchema(
+          '解析批量修改范围。',
+          {
+            rootId: {
+              type: 'string',
+              description: '当前已选中的容器组件 ID。',
+            },
+            instruction: {
+              type: 'string',
+              description: '用户原始指令，用于识别目标组件类型。',
+            },
+          },
+          ['rootId'],
+        ),
+        visibility: 'agent',
+        execute: async (input, context) => {
+          const rootId = this.asOptionalString(input.rootId);
+          if (!rootId) {
+            throw new AgentToolException({
+              code: 'AGENT_POLICY_BLOCKED',
+              message: 'resolve_collection_scope requires rootId',
+              traceId: context.traceId,
+            });
+          }
+
+          return {
+            data: this.collectionTargetResolver.resolve({
+              rootId,
+              instruction: this.asOptionalString(input.instruction) ?? '',
+              schema: context.workingSchema,
+            }),
+          };
+        },
+      },
+      {
         name: 'insert_component',
         description: '在指定父组件下插入新组件。',
         inputSchema: this.createObjectSchema(
@@ -201,6 +241,67 @@ export class ToolRegistryService {
             componentId: this.asRequiredString(input.componentId),
             props: this.asRecord(input.props),
           }),
+      },
+      {
+        name: 'update_components_props',
+        description: '对一组同类型组件批量做统一 props 浅合并更新。',
+        inputSchema: this.createObjectSchema(
+          '批量更新组件属性。',
+          {
+            componentIds: {
+              type: 'array',
+              description: '目标组件 ID 列表。',
+              items: {
+                type: 'string',
+              },
+            },
+            props: {
+              type: 'object',
+              description: '要统一合并到每个组件 props 的键值对。',
+            },
+          },
+          ['componentIds', 'props'],
+        ),
+        visibility: 'agent',
+        execute: async (input, context) => {
+          const componentIds = [...new Set(this.asStringArray(input.componentIds))];
+          const props = this.asRecord(input.props);
+
+          if (componentIds.length === 0) {
+            throw new AgentToolException({
+              code: 'PATCH_INVALID',
+              message: 'update_components_props requires at least one componentId',
+              traceId: context.traceId,
+            });
+          }
+
+          const resolvedTypes = new Set(
+            componentIds.map((componentId) => context.workingSchema.components[componentId]?.type),
+          );
+          if (componentIds.some((componentId) => !context.workingSchema.components[componentId])) {
+            throw new AgentToolException({
+              code: 'NODE_NOT_FOUND',
+              message: 'update_components_props requires all componentIds to exist',
+              traceId: context.traceId,
+            });
+          }
+          if (resolvedTypes.size > 1) {
+            throw new AgentToolException({
+              code: 'AGENT_POLICY_BLOCKED',
+              message: 'update_components_props only supports same-type targets',
+              traceId: context.traceId,
+            });
+          }
+
+          return this.executeWriteTools(
+            context,
+            componentIds.map((componentId) => ({
+              op: 'updateProps' as const,
+              componentId,
+              props,
+            })),
+          );
+        },
       },
       {
         name: 'bind_event',
@@ -380,15 +481,22 @@ export class ToolRegistryService {
     context: ToolExecutionContext,
     operation: EditorPatchOperation,
   ): ToolExecutionResult {
-    this.patchValidationService.validatePatchShape([operation], context.traceId);
+    return this.executeWriteTools(context, [operation]);
+  }
+
+  private executeWriteTools(
+    context: ToolExecutionContext,
+    operations: EditorPatchOperation[],
+  ): ToolExecutionResult {
+    this.patchValidationService.validatePatchShape(operations, context.traceId);
     const nextSchema = this.patchValidationService.previewValidatedSchema(
       context.workingSchema,
-      [operation],
+      operations,
       context.traceId,
     );
 
     return {
-      patchDelta: [operation],
+      patchDelta: operations,
       updatedWorkingSchema: nextSchema,
     };
   }
@@ -415,6 +523,16 @@ export class ToolRegistryService {
     }
 
     return value as Record<string, unknown>;
+  }
+
+  private asStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter(
+      (item): item is string => typeof item === 'string' && item.trim().length > 0,
+    );
   }
 
   private asActionList(value: unknown): EditorActionList {

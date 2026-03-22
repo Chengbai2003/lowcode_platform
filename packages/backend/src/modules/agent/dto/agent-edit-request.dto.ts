@@ -55,6 +55,21 @@ export class AgentEditRequestDto {
   conversationHistory?: AgentConversationMessageDto[];
 
   @IsString()
+  @MaxLength(200)
+  @IsOptional()
+  sessionId?: string;
+
+  @IsString()
+  @MaxLength(200)
+  @IsOptional()
+  requestIdempotencyKey?: string;
+
+  @IsString()
+  @MaxLength(200)
+  @IsOptional()
+  confirmedScopeId?: string;
+
+  @IsString()
   @MaxLength(50)
   @IsOptional()
   provider?: string;

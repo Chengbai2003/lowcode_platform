@@ -5,6 +5,7 @@ import { SchemaResolverService } from './schema-resolver.service';
 import { SchemaSlicerService } from './schema-slicer.service';
 import { NodeLocatorService } from './node-locator.service';
 import { ContextAssemblerService } from './context-assembler.service';
+import { CollectionTargetResolverService } from './collection-target-resolver.service';
 
 @Module({
   imports: [PageSchemaModule],
@@ -14,7 +15,13 @@ import { ContextAssemblerService } from './context-assembler.service';
     SchemaSlicerService,
     NodeLocatorService,
     ContextAssemblerService,
+    CollectionTargetResolverService,
   ],
-  exports: [ContextAssemblerService, SchemaResolverService, ComponentMetaRegistry],
+  exports: [
+    ContextAssemblerService,
+    SchemaResolverService,
+    ComponentMetaRegistry,
+    CollectionTargetResolverService,
+  ],
 })
 export class SchemaContextModule {}

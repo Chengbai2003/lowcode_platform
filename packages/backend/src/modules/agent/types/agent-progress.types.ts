@@ -4,8 +4,14 @@ export type AgentProgressStage =
   | 'routing'
   | 'assembling_context'
   | 'resolving_target'
+  | 'planning_scope'
   | 'calling_model'
   | 'calling_tool'
+  | 'observing'
+  | 'self_checking'
+  | 'retrying'
+  | 'cache_hit'
+  | 'awaiting_scope_confirmation'
   | 'validating_output'
   | 'completed';
 

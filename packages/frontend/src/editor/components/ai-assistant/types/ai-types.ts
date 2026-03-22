@@ -41,15 +41,24 @@ export interface AgentRouteInfo {
     | 'candidate_target'
     | 'default_edit_with_page_context';
   manualOverride: boolean;
+  confidence?: number;
+  classifierSource?: 'llm' | 'rules' | 'llm_with_rule_fallback';
+  fallbackApplied?: boolean;
 }
 
 export type AgentProgressStage =
   | 'routing'
   | 'assembling_context'
   | 'resolving_target'
+  | 'planning_scope'
   | 'calling_model'
   | 'calling_tool'
+  | 'observing'
+  | 'self_checking'
+  | 'retrying'
+  | 'cache_hit'
   | 'validating_output'
+  | 'awaiting_scope_confirmation'
   | 'completed';
 
 export interface AgentMessageProgress {
@@ -79,6 +88,7 @@ export interface AgentEditAnswerResponse {
   warnings?: string[];
   traceId: string;
   route: AgentRouteInfo;
+  cacheHit?: boolean;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -94,6 +104,7 @@ export interface AgentEditSchemaResponse {
   suggestions?: string[];
   traceId: string;
   route: AgentRouteInfo;
+  cacheHit?: boolean;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -140,6 +151,35 @@ export interface AgentEditPatchResponse {
   warnings?: string[];
   traceId: string;
   route: AgentRouteInfo;
+  retryCount?: number;
+  scopeSummary?: AgentPatchScopeSummary;
+}
+
+export interface AgentCollectionScope {
+  rootId: string;
+  matchedType: string;
+  matchedDisplayName: string;
+  targetIds: string[];
+  targetCount: number;
+}
+
+export interface AgentPatchScopeSummary {
+  rootId: string;
+  matchedType: string;
+  matchedDisplayName: string;
+  targetCount: number;
+  changedTargetCount: number;
+}
+
+export interface AgentEditScopeConfirmationResponse {
+  mode: 'scope_confirmation';
+  content: string;
+  question: string;
+  scopeConfirmationId: string;
+  scope: AgentCollectionScope;
+  warnings?: string[];
+  traceId: string;
+  route: AgentRouteInfo;
 }
 
 export interface AgentEditClarificationResponse {
@@ -158,7 +198,8 @@ export type AgentEditResponse =
   | AgentEditAnswerResponse
   | AgentEditSchemaResponse
   | AgentEditPatchResponse
-  | AgentEditClarificationResponse;
+  | AgentEditClarificationResponse
+  | AgentEditScopeConfirmationResponse;
 
 export interface AgentPatchApplyPayload {
   instruction: string;
@@ -182,6 +223,9 @@ export interface AgentEditRequest {
   selectedId?: string;
   draftSchema?: A2UISchema;
   conversationHistory?: AgentConversationMessage[];
+  sessionId?: string;
+  confirmedScopeId?: string;
+  requestIdempotencyKey?: string;
   options?: {
     temperature?: number;
     maxTokens?: number;

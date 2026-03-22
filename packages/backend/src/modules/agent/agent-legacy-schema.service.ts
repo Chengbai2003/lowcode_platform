@@ -4,6 +4,7 @@ import { AIService } from '../ai/ai.service';
 import { ChatRequestDto } from '../ai/dto/chat-request.dto';
 import { ContextAssemblerService, FocusContextResult } from '../schema-context';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
+import { AgentConversationContext } from './agent-session-memory.service';
 import {
   buildCompactContextSections,
   MAX_HISTORY_MESSAGE_CHARS,
@@ -27,6 +28,7 @@ export class AgentLegacySchemaService {
     options?: {
       routeDecision?: AgentRouteDecision;
       reporter?: AgentProgressReporter;
+      conversationContext?: AgentConversationContext;
     },
   ): Promise<AgentEditSchemaResponse> {
     const hasSchemaSource = dto.draftSchema || dto.pageId;
@@ -50,7 +52,7 @@ export class AgentLegacySchemaService {
         }));
     }
 
-    const messages = this.buildMessages(dto, contextResult);
+    const messages = this.buildMessages(dto, contextResult, options?.conversationContext);
     const request: ChatRequestDto = {
       messages,
       provider: dto.provider,
@@ -102,12 +104,14 @@ export class AgentLegacySchemaService {
         reason: 'manual_schema',
         manualOverride: (dto.responseMode ?? 'schema') !== 'auto',
       },
+      cacheHit: false,
     };
   }
 
   private buildMessages(
     dto: AgentEditRequestDto,
     contextResult?: FocusContextResult,
+    conversationContext?: AgentConversationContext,
   ): Array<{ role: string; content: string }> {
     const componentList = contextResult?.componentList ? [...contextResult.componentList] : [];
     const systemPrompt = `${buildSystemPrompt({ componentList })}
@@ -132,6 +136,9 @@ export class AgentLegacySchemaService {
       }));
 
     const contextChunks = buildCompactContextSections(contextResult);
+    if (conversationContext?.summary) {
+      contextChunks.push(`会话摘要:\n${conversationContext.summary}`);
+    }
     if (contextChunks.length === 0) {
       contextChunks.push('当前没有现成页面 Schema，请根据用户指令生成完整页面 Schema。');
     }

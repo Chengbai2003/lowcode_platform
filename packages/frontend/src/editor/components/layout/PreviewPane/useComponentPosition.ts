@@ -19,6 +19,7 @@ export function useComponentPosition(
 ): {
   selectedPosition: ComponentPosition | null;
   hoverPosition: ComponentPosition | null;
+  positionsById: Map<string, ComponentPosition>;
   refreshPositions: () => void;
 } {
   const [positions, setPositions] = useState<Map<string, ComponentPosition>>(new Map());
@@ -161,6 +162,7 @@ export function useComponentPosition(
   return {
     selectedPosition,
     hoverPosition,
+    positionsById: positions,
     refreshPositions: updatePositions,
   };
 }

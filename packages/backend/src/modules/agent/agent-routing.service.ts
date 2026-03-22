@@ -8,6 +8,8 @@ import {
   AgentResponseMode,
   AgentRouteDecision,
   AgentRouteReason,
+  AgentRouteInfo,
+  AgentIntentClassification,
   ResolvedAgentMode,
 } from './types/agent-edit.types';
 
@@ -85,6 +87,8 @@ const GENERAL_QUESTION_KEYWORDS = [
   'who are you',
 ];
 const QUESTION_SUFFIXES = ['吗', '么', '?', '？'];
+const HIGH_CONFIDENCE_THRESHOLD = 0.8;
+const LOW_CONFIDENCE_THRESHOLD = 0.55;
 
 @Injectable()
 export class AgentRoutingService {
@@ -115,24 +119,54 @@ export class AgentRoutingService {
       return this.createDecision(dto, traceId, requestedMode, 'patch', 'manual_patch');
     }
 
-    const llmDecision = await this.resolveByIntentClassifier(dto, traceId, requestedMode);
-    if (llmDecision) {
-      return llmDecision;
+    const classification = await this.intentClassifier.classify(dto, traceId);
+    if (classification) {
+      const llmDecision = await this.resolveByIntentClassifier(
+        dto,
+        traceId,
+        requestedMode,
+        classification,
+      );
+      if (llmDecision && classification.confidence >= HIGH_CONFIDENCE_THRESHOLD) {
+        return this.applyRouteMetadata(llmDecision, {
+          confidence: classification.confidence,
+          classifierSource: 'llm',
+          fallbackApplied: false,
+        });
+      }
+
+      const ruleDecision = await this.resolveByRules(dto, traceId, requestedMode);
+      if (
+        llmDecision &&
+        classification.confidence >= LOW_CONFIDENCE_THRESHOLD &&
+        llmDecision.route.resolvedMode === ruleDecision.route.resolvedMode
+      ) {
+        return this.applyRouteMetadata(llmDecision, {
+          confidence: classification.confidence,
+          classifierSource: 'llm',
+          fallbackApplied: false,
+        });
+      }
+
+      return this.applyRouteMetadata(ruleDecision, {
+        confidence: classification.confidence,
+        classifierSource: 'llm_with_rule_fallback',
+        fallbackApplied: true,
+      });
     }
 
-    return this.resolveByRules(dto, traceId, requestedMode);
+    return this.applyRouteMetadata(await this.resolveByRules(dto, traceId, requestedMode), {
+      classifierSource: 'rules',
+      fallbackApplied: false,
+    });
   }
 
   private async resolveByIntentClassifier(
     dto: AgentEditRequestDto,
     traceId: string,
     requestedMode: AgentResponseMode,
+    classification: AgentIntentClassification,
   ): Promise<AgentRouteDecision | undefined> {
-    const classification = await this.intentClassifier.classify(dto, traceId);
-    if (!classification) {
-      return undefined;
-    }
-
     if (classification.mode === 'patch') {
       if (!dto.pageId?.trim() || dto.version === undefined) {
         this.logger.warn(
@@ -165,6 +199,19 @@ export class AgentRoutingService {
       classification.mode === 'answer' ? 'llm_intent_answer' : 'llm_intent_schema',
       prefetchedFocusContext,
     );
+  }
+
+  private applyRouteMetadata(
+    decision: AgentRouteDecision,
+    metadata: Pick<AgentRouteInfo, 'confidence' | 'classifierSource' | 'fallbackApplied'>,
+  ): AgentRouteDecision {
+    return {
+      ...decision,
+      route: {
+        ...decision.route,
+        ...metadata,
+      },
+    };
   }
 
   private async resolveByRules(
@@ -285,12 +332,14 @@ export class AgentRoutingService {
     resolvedMode: ResolvedAgentMode,
     reason: AgentRouteReason,
     prefetchedFocusContext?: FocusContextResult,
+    metadata?: Partial<Pick<AgentRouteInfo, 'confidence' | 'classifierSource' | 'fallbackApplied'>>,
   ): AgentRouteDecision {
     const route: AgentRouteDecision['route'] = {
       requestedMode,
       resolvedMode,
       reason,
       manualOverride: requestedMode !== 'auto',
+      ...metadata,
     };
 
     this.logger.log(

@@ -88,6 +88,9 @@ describe('useEditorStore', () => {
     useEditorStore.setState({
       currentSessionId: null,
       sessions: [],
+      aiScopeRootId: null,
+      aiScopeTargetIds: [],
+      aiScopeSourceMessageId: null,
       isHistoryDrawerOpen: false,
       isFloatingIslandOpen: false,
       isLoading: false,
@@ -100,6 +103,8 @@ describe('useEditorStore', () => {
 
     expect(result.current.currentSessionId).toBeNull();
     expect(result.current.sessions).toEqual([]);
+    expect(result.current.aiScopeRootId).toBeNull();
+    expect(result.current.aiScopeTargetIds).toEqual([]);
     expect(result.current.isHistoryDrawerOpen).toBe(false);
     expect(result.current.isFloatingIslandOpen).toBe(false);
   });
@@ -209,5 +214,37 @@ describe('useEditorStore', () => {
     });
 
     expect(result.current.sessions).toHaveLength(0);
+  });
+
+  it('should manage AI scope highlight independently from selection state', () => {
+    const { result } = renderHook(() => useEditorStore());
+
+    useSelectionStore.setState({
+      selectedId: 'button-1',
+      hoverId: null,
+      selectedIds: ['button-1'],
+    });
+
+    act(() => {
+      result.current.setAIScopeHighlight({
+        rootId: 'form-1',
+        targetIds: ['item-1', 'item-2'],
+        sourceMessageId: 'msg-1',
+      });
+    });
+
+    expect(result.current.aiScopeRootId).toBe('form-1');
+    expect(result.current.aiScopeTargetIds).toEqual(['item-1', 'item-2']);
+    expect(result.current.aiScopeSourceMessageId).toBe('msg-1');
+    expect(useSelectionStore.getState().selectedId).toBe('button-1');
+    expect(useSelectionStore.getState().selectedIds).toEqual(['button-1']);
+
+    act(() => {
+      result.current.clearAIScopeHighlight();
+    });
+
+    expect(result.current.aiScopeRootId).toBeNull();
+    expect(result.current.aiScopeTargetIds).toEqual([]);
+    expect(result.current.aiScopeSourceMessageId).toBeNull();
   });
 });

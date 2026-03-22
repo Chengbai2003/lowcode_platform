@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AIService } from '../ai/ai.service';
 import { ChatRequestDto } from '../ai/dto/chat-request.dto';
 import { ContextAssemblerService, FocusContextResult } from '../schema-context';
+import { AgentConversationContext } from './agent-session-memory.service';
 import {
   buildCompactContextSections,
   MAX_HISTORY_MESSAGE_CHARS,
@@ -26,6 +27,7 @@ export class AgentAnswerService {
     options?: {
       routeDecision?: AgentRouteDecision;
       reporter?: AgentProgressReporter;
+      conversationContext?: AgentConversationContext;
     },
   ): Promise<AgentEditAnswerResponse> {
     const reporter = options?.reporter ?? NOOP_AGENT_PROGRESS_REPORTER;
@@ -51,7 +53,7 @@ export class AgentAnswerService {
     }
 
     const request: ChatRequestDto = {
-      messages: this.buildMessages(dto, contextResult),
+      messages: this.buildMessages(dto, contextResult, options?.conversationContext),
       provider: dto.provider,
       modelId: dto.modelId,
       temperature: dto.temperature,
@@ -91,12 +93,14 @@ export class AgentAnswerService {
         reason: 'manual_answer',
         manualOverride: (dto.responseMode ?? 'answer') !== 'auto',
       },
+      cacheHit: false,
     };
   }
 
   private buildMessages(
     dto: AgentEditRequestDto,
     contextResult?: FocusContextResult,
+    conversationContext?: AgentConversationContext,
   ): Array<{ role: string; content: string }> {
     const history = (dto.conversationHistory || [])
       .filter((message) => message.role === 'user' || message.role === 'assistant')
@@ -107,6 +111,9 @@ export class AgentAnswerService {
       }));
 
     const contextChunks = buildCompactContextSections(contextResult);
+    if (conversationContext?.summary) {
+      contextChunks.push(`会话摘要:\n${conversationContext.summary}`);
+    }
     const systemPrompt = contextResult
       ? [
           '你是一个低代码编辑器里的页面理解助手。',

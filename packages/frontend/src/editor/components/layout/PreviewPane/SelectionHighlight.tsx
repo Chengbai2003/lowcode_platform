@@ -5,7 +5,7 @@ import styles from './PreviewPane.module.scss';
 interface SelectionHighlightProps {
   position: ComponentPosition | null;
   componentName?: string;
-  variant: 'selected' | 'hover';
+  variant: 'selected' | 'hover' | 'ai-root' | 'ai-target';
 }
 
 /**
@@ -29,35 +29,64 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = memo(
       boxSizing: 'border-box',
     };
 
-    if (variant === 'selected') {
-      // 选中状态：蓝色实线边框 + 名称标签
-      return (
-        <div
-          style={{
-            ...highlightStyle,
-            border: '2px solid #1890ff',
-            borderRadius: '2px',
-            backgroundColor: 'rgba(24, 144, 255, 0.05)',
-          }}
-          className={styles.selectionHighlight}
-        >
-          {componentName && <div className={styles.componentLabel}>{componentName}</div>}
-        </div>
-      );
+    switch (variant) {
+      case 'selected':
+        return (
+          <div
+            style={{
+              ...highlightStyle,
+              border: '2px solid #1890ff',
+              borderRadius: '2px',
+              backgroundColor: 'rgba(24, 144, 255, 0.05)',
+            }}
+            className={styles.selectionHighlight}
+          >
+            {componentName && <div className={styles.componentLabel}>{componentName}</div>}
+          </div>
+        );
+      case 'ai-root':
+        return (
+          <div
+            style={{
+              ...highlightStyle,
+              border: '2px dashed #f59e0b',
+              borderRadius: '10px',
+              backgroundColor: 'rgba(245, 158, 11, 0.08)',
+              boxShadow: '0 0 0 1px rgba(245, 158, 11, 0.14), 0 12px 28px rgba(245, 158, 11, 0.12)',
+            }}
+            className={styles.aiScopeRootHighlight}
+          >
+            {componentName && <div className={styles.aiRootLabel}>{componentName}</div>}
+          </div>
+        );
+      case 'ai-target':
+        return (
+          <div
+            style={{
+              ...highlightStyle,
+              border: '2px dashed #0891b2',
+              borderRadius: '8px',
+              backgroundColor: 'rgba(8, 145, 178, 0.08)',
+              boxShadow:
+                '0 0 0 1px rgba(8, 145, 178, 0.12), inset 0 0 0 1px rgba(8, 145, 178, 0.08)',
+            }}
+            className={styles.aiScopeTargetHighlight}
+          />
+        );
+      case 'hover':
+      default:
+        return (
+          <div
+            style={{
+              ...highlightStyle,
+              border: '1px dashed #1890ff',
+              borderRadius: '2px',
+              backgroundColor: 'transparent',
+            }}
+            className={styles.hoverHighlight}
+          />
+        );
     }
-
-    // 悬停状态：蓝色虚线边框
-    return (
-      <div
-        style={{
-          ...highlightStyle,
-          border: '1px dashed #1890ff',
-          borderRadius: '2px',
-          backgroundColor: 'transparent',
-        }}
-        className={styles.hoverHighlight}
-      />
-    );
   },
 );
 

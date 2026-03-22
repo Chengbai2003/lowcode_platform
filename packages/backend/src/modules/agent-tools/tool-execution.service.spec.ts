@@ -1,4 +1,5 @@
 import { ContextAssemblerService } from '../schema-context';
+import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import { A2UISchema } from '../schema-context/types/schema.types';
 import { PageSchemaService } from '../page-schema/page-schema.service';
@@ -38,12 +39,17 @@ function createSchema(): A2UISchema {
       group: {
         id: 'group',
         type: 'Container',
-        childrenIds: ['child-input'],
+        childrenIds: ['child-input', 'child-input-2'],
       },
       'child-input': {
         id: 'child-input',
         type: 'Input',
         props: { placeholder: 'Name' },
+      },
+      'child-input-2': {
+        id: 'child-input-2',
+        type: 'Input',
+        props: { placeholder: 'Email' },
       },
     },
   };
@@ -86,12 +92,14 @@ describe('ToolExecutionService', () => {
     };
 
     const metaRegistry = new ComponentMetaRegistry();
+    const collectionTargetResolver = new CollectionTargetResolverService(metaRegistry);
     const patchApplyService = new PatchApplyService();
     const patchValidationService = new PatchValidationService(metaRegistry, patchApplyService);
     const patchAutoFixService = new PatchAutoFixService();
     const toolRegistry = new ToolRegistryService(
       contextAssemblerMock as ContextAssemblerService,
       metaRegistry,
+      collectionTargetResolver,
       patchAutoFixService,
       patchValidationService,
     );
@@ -122,6 +130,26 @@ describe('ToolExecutionService', () => {
     expect(context.workingSchema.components.button.props?.children).toBe('立即提交');
   });
 
+  it('expands update_components_props into multiple updateProps operations', async () => {
+    const context = await createContext();
+
+    await service.executeTool(
+      'update_components_props',
+      {
+        componentIds: ['child-input', 'child-input-2'],
+        props: { disabled: true },
+      },
+      context,
+    );
+
+    expect(context.accumulatedPatch).toEqual([
+      { op: 'updateProps', componentId: 'child-input', props: { disabled: true } },
+      { op: 'updateProps', componentId: 'child-input-2', props: { disabled: true } },
+    ]);
+    expect(context.workingSchema.components['child-input'].props?.disabled).toBe(true);
+    expect(context.workingSchema.components['child-input-2'].props?.disabled).toBe(true);
+  });
+
   it('rejects update_component_props for missing targets', async () => {
     const context = await createContext();
 
@@ -134,6 +162,26 @@ describe('ToolExecutionService', () => {
         ),
       'NODE_NOT_FOUND',
     );
+  });
+
+  it('expands update_components_props into multiple updateProps operations', async () => {
+    const context = await createContext();
+
+    await service.executeTool(
+      'update_components_props',
+      {
+        componentIds: ['child-input', 'child-input-2'],
+        props: { disabled: true },
+      },
+      context,
+    );
+
+    expect(context.accumulatedPatch).toEqual([
+      { op: 'updateProps', componentId: 'child-input', props: { disabled: true } },
+      { op: 'updateProps', componentId: 'child-input-2', props: { disabled: true } },
+    ]);
+    expect(context.workingSchema.components['child-input'].props?.disabled).toBe(true);
+    expect(context.workingSchema.components['child-input-2'].props?.disabled).toBe(true);
   });
 
   it('executes insert_component successfully', async () => {
