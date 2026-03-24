@@ -20,7 +20,13 @@ import type {
 } from '../schema-context';
 import { buildAncestorChain, buildParentMap } from '../schema-context/utils/parent-map.builder';
 import { buildPatchPresentation } from './agent-preview.utils';
+import { AgentIntentConfirmationService } from './agent-intent-confirmation.service';
+import {
+  AgentIntentNormalizationService,
+  NormalizedIntentOption,
+} from './agent-intent-normalization.service';
 import { AgentScopeConfirmationService } from './agent-scope-confirmation.service';
+import { AgentTraceService } from './agent-trace.service';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import { AgentConversationContext } from './agent-session-memory.service';
 import {
@@ -35,8 +41,10 @@ import {
   AgentCollectionScope,
   AgentClarificationCandidate,
   AgentEditClarificationResponse,
+  AgentEditIntentConfirmationResponse,
   AgentEditPatchResponse,
   AgentEditScopeConfirmationResponse,
+  AgentIntentConfirmationOption,
   AgentPatchScopeSummary,
   AgentRouteDecision,
 } from './types/agent-edit.types';
@@ -81,7 +89,10 @@ export class AgentRunnerService {
     private readonly policyService: AgentPolicyService,
     private readonly componentMetaRegistry: ComponentMetaRegistry,
     private readonly collectionTargetResolver: CollectionTargetResolverService,
+    private readonly intentNormalizationService: AgentIntentNormalizationService,
+    private readonly intentConfirmationService: AgentIntentConfirmationService,
     private readonly scopeConfirmationService: AgentScopeConfirmationService,
+    private readonly traceService: AgentTraceService,
   ) {}
 
   async runEdit(
@@ -93,13 +104,17 @@ export class AgentRunnerService {
       conversationContext?: AgentConversationContext;
     },
   ): Promise<
-    AgentEditPatchResponse | AgentEditClarificationResponse | AgentEditScopeConfirmationResponse
+    | AgentEditPatchResponse
+    | AgentEditClarificationResponse
+    | AgentEditScopeConfirmationResponse
+    | AgentEditIntentConfirmationResponse
   > {
     const traceId = this.policyService.createTraceId(requestId);
     const metrics: AgentRunMetrics = { stepCount: 0, toolCallCount: 0 };
     const reporter = options?.reporter ?? NOOP_AGENT_PROGRESS_REPORTER;
     let retryCount = 0;
-    const isCollectionIntent = this.hasCollectionIntent(dto.instruction);
+    const hasConfirmedIntent = Boolean(dto.confirmedIntentId?.trim());
+    const isCollectionIntent = hasConfirmedIntent || this.hasCollectionIntent(dto.instruction);
 
     this.policyService.assertPatchRequestAllowed(dto, traceId);
 
@@ -119,6 +134,10 @@ export class AgentRunnerService {
     if (dto.confirmedScopeId?.trim()) {
       if (!dto.sessionId?.trim()) {
         this.policyService.throwPolicyBlocked(traceId, '批量范围确认已失效，请重新发起批量修改');
+      }
+    } else if (hasConfirmedIntent) {
+      if (!dto.sessionId?.trim()) {
+        this.policyService.throwPolicyBlocked(traceId, '语义确认已失效，请重新发起批量修改');
       }
     } else if (isCollectionIntent) {
       const collectionClarification = this.buildCollectionContainerClarification(
@@ -171,6 +190,50 @@ export class AgentRunnerService {
     }
 
     if (isCollectionIntent) {
+      if (hasConfirmedIntent) {
+        return this.runConfirmedIntentScopePlanning(
+          dto,
+          context,
+          traceId,
+          resolvedSelectedId,
+          reporter,
+          options?.routeDecision,
+        );
+      }
+
+      const normalization = resolvedSelectedId
+        ? this.intentNormalizationService.normalize({
+            instruction: dto.instruction,
+            rootId: resolvedSelectedId,
+            schema: context.workingSchema,
+          })
+        : { status: 'no_match' as const };
+
+      if (normalization.status === 'normalized') {
+        return this.planBatchScopeForIntent(
+          dto,
+          context,
+          traceId,
+          resolvedSelectedId,
+          reporter,
+          options?.routeDecision,
+          normalization.option,
+          '已识别集合语义，正在确认批量范围',
+        );
+      }
+
+      if (normalization.status === 'confirmation_required') {
+        return this.createIntentConfirmationResponse(
+          dto,
+          context,
+          traceId,
+          resolvedSelectedId,
+          reporter,
+          options?.routeDecision,
+          normalization.options,
+        );
+      }
+
       return this.runBatchScopePlanning(
         dto,
         context,
@@ -243,6 +306,7 @@ export class AgentRunnerService {
                 name,
                 input,
                 context,
+                traceId,
                 reporter,
                 () => {
                   retryCount += 1;
@@ -558,6 +622,213 @@ export class AgentRunnerService {
     };
   }
 
+  private async createIntentConfirmationResponse(
+    dto: AgentEditRequestDto,
+    context: ToolExecutionContext,
+    traceId: string,
+    resolvedSelectedId: string | undefined,
+    reporter: AgentProgressReporter,
+    routeDecision: AgentRouteDecision | undefined,
+    options: NormalizedIntentOption[],
+  ): Promise<AgentEditIntentConfirmationResponse> {
+    if (!resolvedSelectedId || !dto.sessionId?.trim()) {
+      this.policyService.throwPolicyBlocked(traceId, '语义确认需要有效的会话与容器范围');
+    }
+
+    const pendingIntent = this.intentConfirmationService.create({
+      sessionId: dto.sessionId,
+      instruction: dto.instruction,
+      pageId: dto.pageId,
+      rootId: resolvedSelectedId,
+      options,
+      traceId,
+    });
+    const responseOptions: AgentIntentConfirmationOption[] = pendingIntent.options.map((option) => ({
+      intentId: option.intentId,
+      label: option.label,
+      description: option.description,
+    }));
+
+    await reporter.emitStatus({
+      stage: 'awaiting_intent_confirmation',
+      label: '已识别到多种可能语义，等待确认',
+      targetId: resolvedSelectedId,
+      detail: responseOptions.map((option) => option.label).join(' / '),
+    });
+
+    return {
+      mode: 'intent_confirmation',
+      content: `我还需要先确认你的意思。当前“${dto.instruction.trim()}”在这个容器里可能对应多种集合语义，请先选择你要统一修改的那一类组件。`,
+      question: '请先确认你说的是哪一类组件',
+      intentConfirmationId: pendingIntent.intentConfirmationId,
+      options: responseOptions,
+      warnings: [...context.warnings],
+      traceId,
+      route: routeDecision?.route ?? {
+        requestedMode: dto.responseMode ?? 'patch',
+        resolvedMode: 'patch',
+        reason: 'manual_patch',
+        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
+      },
+    };
+  }
+
+  private async runConfirmedIntentScopePlanning(
+    dto: AgentEditRequestDto,
+    context: ToolExecutionContext,
+    traceId: string,
+    resolvedSelectedId: string | undefined,
+    reporter: AgentProgressReporter,
+    routeDecision: AgentRouteDecision | undefined,
+  ): Promise<AgentEditScopeConfirmationResponse> {
+    const confirmedIntentId = dto.confirmedIntentId?.trim();
+    const sessionId = dto.sessionId?.trim();
+    if (!confirmedIntentId || !sessionId || !resolvedSelectedId) {
+      this.policyService.throwPolicyBlocked(traceId, '语义确认参数不完整，请重新发起批量修改');
+    }
+
+    const confirmedIntent = this.intentConfirmationService.getConfirmedOption(sessionId, confirmedIntentId);
+    if (!confirmedIntent) {
+      this.policyService.throwPolicyBlocked(traceId, '语义确认已失效，请重新发起批量修改');
+    }
+
+    if (dto.instruction.trim() !== confirmedIntent.pending.instruction) {
+      this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
+      this.policyService.throwPolicyBlocked(traceId, '语义确认与当前指令不一致，请重新发起批量修改');
+    }
+
+    if (dto.pageId !== confirmedIntent.pending.pageId) {
+      this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
+      this.policyService.throwPolicyBlocked(traceId, '语义确认对应的页面已变化，请重新发起批量修改');
+    }
+
+    if (
+      dto.selectedId?.trim() !== confirmedIntent.pending.rootId ||
+      resolvedSelectedId !== confirmedIntent.pending.rootId
+    ) {
+      this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
+      this.policyService.throwPolicyBlocked(traceId, '当前选中容器已变化，请重新发起批量修改');
+    }
+
+    this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
+
+    return this.planBatchScopeForIntent(
+      dto,
+      context,
+      traceId,
+      resolvedSelectedId,
+      reporter,
+      routeDecision,
+      confirmedIntent.option,
+      '正在根据已确认语义解析批量范围',
+    );
+  }
+
+  private async planBatchScopeForIntent(
+    dto: AgentEditRequestDto,
+    context: ToolExecutionContext,
+    traceId: string,
+    resolvedSelectedId: string | undefined,
+    reporter: AgentProgressReporter,
+    routeDecision: AgentRouteDecision | undefined,
+    intent: Pick<NormalizedIntentOption, 'targetType' | 'label'>,
+    label: string,
+  ): Promise<AgentEditScopeConfirmationResponse> {
+    if (!resolvedSelectedId || !dto.sessionId?.trim()) {
+      this.policyService.throwPolicyBlocked(traceId, '批量修改需要有效的会话与容器范围');
+    }
+
+    await reporter.emitStatus({
+      stage: 'planning_scope',
+      label,
+      targetId: resolvedSelectedId,
+      detail: `语义: ${intent.label}`,
+    });
+
+    const toolResult = await this.executeToolWithRetry(
+      'resolve_collection_scope',
+      {
+        rootId: resolvedSelectedId,
+        instruction: dto.instruction,
+        targetType: intent.targetType,
+      },
+      context,
+      traceId,
+      reporter,
+    );
+    const resolvedScope = toolResult.data as CollectionTargetResolution | undefined;
+    if (!resolvedScope || resolvedScope.status !== 'matched') {
+      this.policyService.throwPolicyBlocked(
+        traceId,
+        this.describeCollectionResolutionFailure(
+          resolvedScope ?? {
+            status: 'no_match',
+            rootId: resolvedSelectedId,
+            reason: `未找到 ${intent.label}`,
+          },
+        ),
+      );
+    }
+
+    await reporter.emitStatus({
+      stage: 'awaiting_scope_confirmation',
+      label: '已识别批量范围，等待用户确认',
+      targetId: resolvedSelectedId,
+      detail: `${resolvedScope.targetCount} 个 ${resolvedScope.matchedDisplayName}`,
+    });
+
+    return this.createScopeConfirmationResponse(
+      dto,
+      traceId,
+      resolvedSelectedId,
+      routeDecision,
+      context,
+      resolvedScope,
+    );
+  }
+
+  private async createScopeConfirmationResponse(
+    dto: AgentEditRequestDto,
+    traceId: string,
+    resolvedSelectedId: string,
+    routeDecision: AgentRouteDecision | undefined,
+    context: ToolExecutionContext,
+    resolvedScope: Extract<CollectionTargetResolution, { status: 'matched' }>,
+  ): Promise<AgentEditScopeConfirmationResponse> {
+    const scope: AgentCollectionScope = {
+      rootId: resolvedScope.rootId,
+      matchedType: resolvedScope.matchedType,
+      matchedDisplayName: resolvedScope.matchedDisplayName,
+      targetIds: [...resolvedScope.componentIds],
+      targetCount: resolvedScope.targetCount,
+    };
+
+    const pendingScope = this.scopeConfirmationService.create({
+      sessionId: dto.sessionId!,
+      instruction: dto.instruction,
+      pageId: dto.pageId,
+      rootId: resolvedSelectedId,
+      scope,
+      traceId,
+    });
+
+    return {
+      mode: 'scope_confirmation',
+      content: `已识别到当前容器下 ${scope.targetCount} 个${scope.matchedDisplayName}，请先确认这批组件是否就是你要统一修改的范围。`,
+      question: `确认修改当前容器下的 ${scope.targetCount} 个${scope.matchedDisplayName}`,
+      scopeConfirmationId: pendingScope.scopeConfirmationId,
+      scope,
+      warnings: [...context.warnings],
+      traceId,
+      route: routeDecision?.route ?? {
+        requestedMode: dto.responseMode ?? 'patch',
+        resolvedMode: 'patch',
+        reason: 'manual_patch',
+        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
+      },
+    };
+  }
+
   private async runBatchScopePlanning(
     dto: AgentEditRequestDto,
     context: ToolExecutionContext,
@@ -624,7 +895,7 @@ export class AgentRunnerService {
             }
           }
 
-          const toolResult = await this.executeToolWithRetry(name, input, context, reporter);
+          const toolResult = await this.executeToolWithRetry(name, input, context, traceId, reporter);
           if (name === 'resolve_collection_scope') {
             resolvedScope = toolResult.data as CollectionTargetResolution | undefined;
           }
@@ -664,45 +935,21 @@ export class AgentRunnerService {
       );
     }
 
-    const scope: AgentCollectionScope = {
-      rootId: resolvedScope.rootId,
-      matchedType: resolvedScope.matchedType,
-      matchedDisplayName: resolvedScope.matchedDisplayName,
-      targetIds: [...resolvedScope.componentIds],
-      targetCount: resolvedScope.targetCount,
-    };
-
-    const pendingScope = this.scopeConfirmationService.create({
-      sessionId: dto.sessionId,
-      instruction: dto.instruction,
-      pageId: dto.pageId,
-      rootId: resolvedSelectedId,
-      scope,
-      traceId,
-    });
-
     await reporter.emitStatus({
       stage: 'awaiting_scope_confirmation',
       label: '已识别批量范围，等待用户确认',
       targetId: resolvedSelectedId,
-      detail: `${scope.targetCount} 个 ${scope.matchedDisplayName}`,
+      detail: `${resolvedScope.targetCount} 个 ${resolvedScope.matchedDisplayName}`,
     });
 
-    return {
-      mode: 'scope_confirmation',
-      content: `已识别到当前容器下 ${scope.targetCount} 个${scope.matchedDisplayName}，请先确认这批组件是否就是你要统一修改的范围。`,
-      question: `确认修改当前容器下的 ${scope.targetCount} 个${scope.matchedDisplayName}`,
-      scopeConfirmationId: pendingScope.scopeConfirmationId,
-      scope,
-      warnings: [...context.warnings],
+    return this.createScopeConfirmationResponse(
+      dto,
       traceId,
-      route: routeDecision?.route ?? {
-        requestedMode: dto.responseMode ?? 'patch',
-        resolvedMode: 'patch',
-        reason: 'manual_patch',
-        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
-      },
-    };
+      resolvedSelectedId,
+      routeDecision,
+      context,
+      resolvedScope,
+    );
   }
 
   private async runConfirmedBatchPatch(
@@ -804,7 +1051,7 @@ export class AgentRunnerService {
             this.assertBatchToolTargets(traceId, input, pendingScope.scope);
           }
 
-          const toolResult = await this.executeToolWithRetry(name, input, context, reporter, () => {
+          const toolResult = await this.executeToolWithRetry(name, input, context, traceId, reporter, () => {
             retryCount += 1;
           });
           return toolResult.data ?? { ok: true };
@@ -1024,6 +1271,7 @@ export class AgentRunnerService {
       'auto_fix_patch',
       { patch: rawPatch },
       guardContext,
+      traceId,
       reporter,
       onRetry,
     );
@@ -1048,6 +1296,7 @@ export class AgentRunnerService {
       'preview_patch',
       { patch: autoFixedPatch },
       guardContext,
+      traceId,
       reporter,
       onRetry,
     );
@@ -1133,6 +1382,7 @@ export class AgentRunnerService {
         errorCode === 'PAGE_VERSION_CONFLICT' &&
         dto.pageId
       ) {
+        this.traceService.markVersionConflict(traceId);
         await reporter.emitStatus({
           stage: 'retrying',
           label: '检测到版本冲突，正在基于最新页面重试',
@@ -1188,6 +1438,7 @@ export class AgentRunnerService {
             props: { [textProp]: textUpdate },
           },
           context,
+          traceId,
           reporter,
         );
         this.logger.log(`[${traceId}] fast-path text update target=${resolvedSelectedId}`);
@@ -1210,6 +1461,7 @@ export class AgentRunnerService {
           props: { visible: visibility },
         },
         context,
+        traceId,
         reporter,
       );
       this.logger.log(`[${traceId}] fast-path visibility update target=${resolvedSelectedId}`);
@@ -1223,11 +1475,38 @@ export class AgentRunnerService {
     name: string,
     input: Record<string, unknown>,
     context: ToolExecutionContext,
+    traceId: string,
     reporter?: AgentProgressReporter,
     onRetry?: () => void,
   ) {
+    const executeOnce = async () => {
+      const startedAt = Date.now();
+      try {
+        const result = await this.toolExecutionService.executeTool(name, input, context);
+        this.traceService.recordToolCall(traceId, {
+          toolName: name,
+          toolInput: input,
+          toolOutput: result.data ?? result.patchDelta ?? { ok: true },
+          success: true,
+          durationMs: Date.now() - startedAt,
+        });
+        return result;
+      } catch (error) {
+        const parsedError = this.parseToolError(error);
+        this.traceService.recordToolCall(traceId, {
+          toolName: name,
+          toolInput: input,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          errorCode: parsedError.code,
+          errorMessage: parsedError.message,
+        });
+        throw error;
+      }
+    };
+
     try {
-      return await this.toolExecutionService.executeTool(name, input, context);
+      return await executeOnce();
     } catch (error) {
       if (!READ_RETRYABLE_TOOLS.has(name)) {
         throw error;
@@ -1239,8 +1518,33 @@ export class AgentRunnerService {
         toolName: name,
       });
       onRetry?.();
-      return this.toolExecutionService.executeTool(name, input, context);
+      return executeOnce();
     }
+  }
+
+  private parseToolError(error: unknown): { code?: string; message: string } {
+    if (error instanceof AgentToolException) {
+      const response = error.getResponse() as { code?: string; message?: string } | string;
+      if (typeof response === 'string') {
+        return {
+          message: response,
+        };
+      }
+      return {
+        code: response.code,
+        message: response.message ?? error.message,
+      };
+    }
+
+    if (error instanceof Error) {
+      return {
+        message: error.message,
+      };
+    }
+
+    return {
+      message: 'Unknown tool error',
+    };
   }
 
   private normalizeFinalPatch(
