@@ -1,446 +1,328 @@
-# A2UI 低代码平台 — 项目文档
+# A2UI 低代码平台项目综述
 
-> **最后更新时间**：2026-03-19
-> **当前版本**：v0.2.5-alpha
-> **架构状态**：2 包 Monorepo（frontend + backend）
-> **完成度**：Sprint 3 Phase 1 进行中
-
----
-
-## 一、项目概览
-
-这是一个基于 **Google A2UI（Agent to User Interface）协议** 的 **AI 驱动低代码平台**，采用精简的 2 包 Monorepo 架构。
-
-| 包名                         | 定位                                        | 核心技术                            |
-| ---------------------------- | ------------------------------------------- | ----------------------------------- |
-| `@lowcode-platform/frontend` | 前端整合包（类型 + 渲染器 + 组件 + 编辑器） | React 18 + Zustand + Ant Design 5   |
-| `@lowcode-platform/backend`  | 后端服务包（AI 服务 + 编译器）              | NestJS + Babel AST + 多 AI Provider |
-
-**技术栈**：React 18 · TypeScript · Ant Design 5 · Vite · Zustand · NestJS · Anthropic/OpenAI/Ollama
-
-**核心价值链**：
-
-```
-用户描述需求 → AI 对话 → 生成 A2UI Schema
-                         ↓              ↓
-                    Renderer        Compiler
-                         ↓              ↓
-                   实时预览 UI    导出 React 代码
-```
-
-**差异化优势**：
-
-- **遵循 Google A2UI 协议**：采用扁平 ID→Component 映射（非嵌套树）
-- **AI 对话优先**：自然语言交互代替传统拖拽
-- **双输出通道**：同一份 Schema 既可实时渲染预览，又可编译为标准 React 代码
-- **企业级安全**：表达式沙箱 + URL 白名单 + 后端 API 鉴权
+> **最后更新时间**：2026-03-24  
+> **仓库形态**：2 包 Monorepo（`packages/frontend` + `packages/backend`）  
+> **当前实现状态**：Agent Phase 6.4 已完成，页面快照数据库化仍待继续推进
 
 ---
 
-## 二、核心架构深度解析
+## 一、项目一句话定位
 
-### 2.1 扁平化 Schema 设计（A2UI 协议）
+这是一个围绕 **A2UI Schema** 构建的 **AI 驱动低代码平台**：  
+前端负责编辑器、画布预览、属性面板与 AI 助手交互；后端负责页面快照、Schema 上下文切片、Patch 工具链、Bounded Agent 编排，以及 AI 模型接入。
 
-**传统嵌套树 vs 扁平 Map**：
+当前项目已经不只是“让 AI 生成一整页 JSON”，而是进入了：
 
-```typescript
-// ❌ 传统嵌套树（AI 生成容易出错）
-{
-  type: 'Container',
-  children: [
-    { type: 'Button', children: [...] },  // 嵌套层级深
-  ]
-}
+> **基于页面快照、选中组件和工具调用的受控页面编辑 Agent**
 
-// ✅ A2UI 扁平 Map（AI 友好）
-{
-  rootId: 'root',
-  components: {
-    'root': { type: 'Container', childrenIds: ['btn1'] },
-    'btn1': { type: 'Button', parentId: 'root' }
-  }
-}
-```
+但距离路线图里的最终目标仍有一个关键差距：
 
-**优势**：
-
-- **O(1) 查找效率**：直接 `components[id]` 访问
-- **增量更新友好**：修改单个组件只需更新一个 entry
-- **AI 生成准确率高**：无需处理复杂嵌套结构
-
-### 2.2 DSL 执行引擎（10 种 Action）
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  DSLExecutor                         │
-│  ┌─────────────────────────────────────────────┐    │
-│  │  Action Registry (Handler 映射表)            │    │
-│  │  setValue → dataActions.setValue            │    │
-│  │  apiCall  → asyncActions.apiCall            │    │
-│  │  if/loop  → flowActions.if/loop             │    │
-│  └─────────────────────────────────────────────┘    │
-│                       ↓                              │
-│  ┌─────────────────────────────────────────────┐    │
-│  │  ExecutionContext (运行时上下文)             │    │
-│  │  - data/state/formData                      │    │
-│  │  - dispatch/getState (Redux)                │    │
-│  │  - ui/api/navigate (服务注入)                │    │
-│  └─────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────┘
-```
-
-**嵌套 Action 支持**：
-
-```typescript
-// if/loop 支持 Action[] 嵌套
-{
-  type: 'if',
-  condition: '{{formData.valid}}',
-  then: [
-    { type: 'apiCall', url: '/api/submit' },
-    { type: 'feedback', level: 'success' }
-  ],
-  else: [
-    { type: 'feedback', level: 'error' }
-  ]
-}
-```
-
-### 2.3 安全表达式引擎
-
-**设计决策**：拒绝 `eval` / `new Function`，使用 **jsep AST 解析 + 白名单求值**。
-
-```
-{{input1.value + input2.value}}
-         ↓
-    jsep 解析 AST
-         ↓
-    ┌─────────────────────────────────┐
-    │  evaluateNode(ast, context)      │
-    │                                  │
-    │  1. Identifier → 查 context/白名单│
-    │  2. MemberExpression → 安全访问  │
-    │  3. CallExpression → 检查白名单  │
-    │  4. 拦截 __proto__/constructor  │
-    └─────────────────────────────────┘
-         ↓
-    返回求值结果
-```
-
-**安全措施**：
-
-- **原型链保护**：拦截 `__proto__`、`prototype`、`constructor`
-- **白名单全局对象**：仅 Math、JSON、Date、parseInt 等
-- **多语句拒绝**：Compound 节点只执行第一个表达式
-- **AST 缓存**：LRU 缓存避免重复解析
-
-### 2.4 响应式运行时（ReactiveRuntime）
-
-**核心设计**：类似 Vue 3 的依赖追踪，使用 Proxy + 微任务批量更新。
-
-```
-┌─────────────────────────────────────────────────────┐
-│               ReactiveRuntime                        │
-│                                                      │
-│  data/state/formData/components (内部状态)           │
-│         ↓                                            │
-│  ┌─────────────────┐    ┌─────────────────┐        │
-│  │ TrackingScope   │←───│ SnapshotManager │        │
-│  │ (依赖追踪)       │    │ (不可变快照)     │        │
-│  └─────────────────┘    └─────────────────┘        │
-│         ↓                      ↓                     │
-│  createTrackingProxy()   getSnapshot()              │
-│  (只读代理，收集依赖)      (React 安全读取)           │
-│                                                      │
-│  subscribe() → 兼容 useSyncExternalStore            │
-└─────────────────────────────────────────────────────┘
-```
-
-**批量更新流程**：
-
-```typescript
-runtime.set('input1', 'value1'); // 立即写入
-runtime.set('input2', 'value2'); // 立即写入
-// 微任务调度 → 批量通知 → React 重渲染
-```
-
-### 2.5 编译器（Schema → React 代码）
-
-**AST 驱动编译流程**：
-
-```
-A2UI Schema
-     ↓
-┌─────────────────────────────────────────────┐
-│ generator.ts (入口)                          │
-│   1. 全局收集 Field → useState 声明          │
-│   2. 收集组件 import                         │
-└─────────────────────────────────────────────┘
-     ↓
-┌─────────────────────────────────────────────┐
-│ jsxBuilder.ts                               │
-│   - 递归构建 JSX Element AST                 │
-│   - Field 双向绑定 → value/onChange          │
-│   - 事件 → ArrowFunction AST                 │
-└─────────────────────────────────────────────┘
-     ↓
-┌─────────────────────────────────────────────┐
-│ @babel/generator                            │
-│   - AST → 代码字符串                         │
-│   - jsescOption.minimal: 中文保护            │
-└─────────────────────────────────────────────┘
-     ↓
-Prettier 格式化 → 输出 React 组件
-```
-
-**关键特性**：
-
-- **全局 Field 收集**：一次遍历提取所有 useState，避免条件性 Hook
-- **循环引用检测**：visited Set 标记，生成注释而非报错
-- **样式双轨输出**：可映射的转 Tailwind，复杂值保留内联 style
+> **页面快照目前已具备接口与版本机制，但底层仍以文件存储为主，尚未切到正式数据库表（`pages` / `page_schema_snapshots`）**
 
 ---
 
-## 三、前端核心模块详解
+## 二、当前仓库真实状态
 
-### 3.1 渲染器（Renderer）
+### 1. 前端编辑器主链路已成型
 
-| 文件                    | 职责         | 关键技术                           |
-| ----------------------- | ------------ | ---------------------------------- |
-| `Renderer.tsx`          | 主渲染器入口 | useMemo 稳定引用                   |
-| `EventDispatcher.ts`    | 事件分发中心 | 持有 DSLExecutor + ReactiveRuntime |
-| `ComponentRenderer.tsx` | 组件渲染器   | useSyncExternalStore 响应式更新    |
+当前前端已经具备完整的低代码编辑器基础设施：
 
-**渲染流程**：
+- 画布预览、组件树、属性面板、模板
+- 命令历史与撤销 / 重做
+- 本地 Schema 校验与 auto-fix
+- Patch 应用器与 `createPatchCommand`
+- AI 浮动岛、聊天区、历史记录、模型设置
 
-```
-Schema 变化
-     ↓
-flattenSchemaValues() → 扁平化初始数据
-     ↓
-EventDispatcher 初始化 → ReactiveRuntime 初始化
-     ↓
-ComponentRenderer 递归渲染
-     ↓
-createTrackingProxy() → 收集依赖
-     ↓
-数据变化 → runtime.set() → flush → React 重渲染
-```
+这意味着：**前端不再需要整体重构**，后续 Agent 能力主要是在现有编辑器之上继续增强，而不是推倒重来。
 
-### 3.2 状态管理架构
+### 2. 页面快照接口已经具备，但持久化仍是过渡实现
 
-**混合架构**：Zustand（编辑器）+ Redux（运行时兼容层）
+后端已经有：
 
-```
-┌─────────────────────────────────────────────────┐
-│                 Zustand Stores                   │
-│  ┌───────────────┐  ┌───────────────┐          │
-│  │ editor-store  │  │ history.ts    │          │
-│  │ - selectedId  │  │ - undoStack   │          │
-│  │ - sessions    │  │ - redoStack   │          │
-│  └───────────────┘  └───────────────┘          │
-└─────────────────────────────────────────────────┘
-                       ↓ 兼容层
-┌─────────────────────────────────────────────────┐
-│                 Redux Store                      │
-│  componentSlice (运行时组件数据)                  │
-│  - 兼容旧代码路径                                 │
-│  - 逐步迁移到 ReactiveRuntime                    │
-└─────────────────────────────────────────────────┘
-```
+- `PageSchemaModule`
+- `PUT /pages/:pageId/schema`
+- `GET /pages/:pageId/schema`
+- `GET /pages/:pageId/schema?version=xx`
+- 基于 `pageId + version` 的版本递增与冲突校验
 
-**Undo/Redo 实现**：Command Pattern
+但当前 `PageSchemaRepository` 仍通过 `page-schema-store.json` 做文件持久化；按现有开发命令，默认文件通常位于 `packages/backend/page-schema-store.json`。这属于**Phase 1 的过渡落地**，还不是路线图里最终建议的数据库化快照存储。
 
-```typescript
-interface Command {
-  execute(): void; // 执行
-  undo(): void; // 撤销
-  redo(): void; // 重做
-  description: string;
-}
+### 3. `schema-context` 和 patch 工具链已经落地
 
-// 示例：更新属性命令
-class UpdatePropsCommand implements Command {
-  execute() {
-    /* 应用新属性 */
-  }
-  undo() {
-    /* 恢复旧属性 */
-  }
-  redo() {
-    /* 重新应用新属性 */
-  }
-}
-```
+路线图里从“读懂页面”到“把修改收敛成 patch”的中层能力，现在已经具备：
 
-### 3.3 属性面板（PropertyPanel）
+- `schema-context`：页面理解、焦点组件切片、候选节点定位
+- `agent-tools`：读工具、写工具、校验工具、auto-fix、patch preview
+- `collection-target-resolver`：集合编辑目标解析
+- 前端 `patchAdapter`：将后端 patch 映射到本地编辑命令体系
 
-**动态表单生成**：根据组件元数据 `.meta.ts` 动态渲染编辑器。
+这部分能力说明项目已经不再依赖“整页 Schema 替换”作为唯一 AI 修改方式。
 
-```typescript
-// Button.meta.ts
-export const ButtonMeta: ComponentMeta = {
-  type: 'Button',
-  properties: [
-    { name: 'type', type: 'select', options: ['default', 'primary'] },
-    { name: 'children', type: 'text', defaultValue: '按钮' },
-    { name: 'disabled', type: 'boolean', defaultValue: false },
-  ],
-  events: ['onClick'],
-};
-```
+### 4. Bounded Agent 主链路已推进到 Phase 6.4
 
-**编辑器类型映射**：
+结合最近代码与测试，当前 Agent 能力已经覆盖：
 
-| 类型      | 编辑器组件     | 适用场景 |
-| --------- | -------------- | -------- |
-| `string`  | Input.TextArea | 文本内容 |
-| `number`  | InputNumber    | 数值配置 |
-| `boolean` | Switch         | 开关选项 |
-| `select`  | Select         | 枚举选择 |
-| `color`   | ColorPicker    | 颜色配置 |
-| `json`    | Monaco Editor  | 复杂对象 |
+- `auto / answer / schema / patch` 模式路由
+- `POST /agent/edit` 与 `POST /agent/edit/stream`
+- 流式 SSE 状态事件
+- Patch 预览与结构化错误返回
+- 节点歧义澄清（clarification）
+- 批量范围确认（scope confirmation）
+- 集合编辑语义确认（intent confirmation）
+- 会话级短记忆、只读缓存、patch 幂等复用
+- Trace、Replay、Metrics Summary 调试链路
+
+也就是说，当前仓库已经从路线图早期的“AI Schema 生成器”推进到了：
+
+> **一个具备受限工具调用、状态流、确认链路与调试可观测性的页面编辑 Agent**
 
 ---
 
-## 四、后端核心模块详解
+## 三、当前推荐理解方式：不是理想图，而是“已落地 + 未补齐”
 
-### 4.1 AI 服务架构
+### 已落地的部分
 
-```
-┌─────────────────────────────────────────────────┐
-│                 AI Module                        │
-│                                                  │
-│  ┌───────────────┐  ┌───────────────────────┐  │
-│  │ ai.controller │  │ prompt-builder.ts      │  │
-│  │ POST /chat    │  │ - 注入 Action 类型说明 │  │
-│  │               │  │ - 注入组件列表         │  │
-│  └───────────────┘  └───────────────────────┘  │
-│         ↓                                        │
-│  ┌───────────────────────────────────────────┐  │
-│  │ ai-provider.factory.ts                     │  │
-│  │ - OpenAI / Anthropic / Ollama              │  │
-│  │ - Vercel AI SDK 6 统一接口                 │  │
-│  └───────────────────────────────────────────┘  │
-│         ↓                                        │
-│  流式 SSE 响应 → 前端 AI Assistant              │
-└─────────────────────────────────────────────────┘
-```
+#### 前端
 
-**多 Provider 支持**：
+- `LowcodeEditor` 已承接 `pageId` / `pageVersion`
+- `pageSchemaApi` 已接入页面保存与读取
+- `AIAssistant` 已接入后端 Agent
+- `useAIAssistantChat` 已支持：
+  - auto / answer / schema / patch
+  - SSE 流式回退
+  - clarification / intent confirmation / scope confirmation
+  - patch 预览与本地应用
+  - trace 信息聚合展示
 
-```typescript
-// 环境变量配置
-OPENAI_API_KEY=sk-xxx
-ANTHROPIC_API_KEY=sk-xxx
-OLLAMA_BASE_URL=http://localhost:11434
-```
+#### 后端
 
-### 4.2 编译器模块
+- `page-schema` 模块：页面快照接口与版本冲突保护
+- `schema-context` 模块：焦点上下文与候选定位
+- `agent-tools` 模块：读写工具、preview、validate、auto-fix
+- `agent` 模块：Agent 编排、路由、会话记忆、trace、metrics、replay
+- `ai` 模块：多 Provider 模型接入
+- `compiler` 模块：Schema → React 代码导出
 
-**API 端点**：
+### 尚未真正完成的部分
 
-```
-POST /api/v1/compiler/export
-Request:  { schema: A2UISchema, options?: CompileOptions }
-Response: { code: string }
-```
+#### 1. 页面快照数据库化
 
-**安全措施**：
+路线图里建议的：
 
-| 措施               | 实现                      | 说明                  |
-| ------------------ | ------------------------- | --------------------- |
-| 表达式路径白名单   | `isValidExpressionPath()` | 只允许合法标识符      |
-| URL 开放重定向防护 | `sanitizeUrl()`           | 拒绝 javascript: 协议 |
-| AST 代码生成       | Babel types               | 从根源消除 XSS        |
+- `pages`
+- `page_schema_snapshots`
+
+目前还没有真正落到数据库层；现阶段更像是**“具备接口和版本语义的文件快照存储”**。
+
+#### 2. 更完整的 Agent 评测 / 观测闭环
+
+虽然当前已有：
+
+- trace
+- replay
+- metrics
+- Phase 6.4 样本回归测试
+
+但仍缺：
+
+- 更系统的评测数据集管理
+- 更长期的指标归档
+- 前端可视化 replay / trace 详情页
+
+#### 3. 更正式的工程化与发布链路
+
+当前已有基本 lint / format / test 脚本，但仍待继续推进：
+
+- GitHub Actions / CI
+- 发布与版本策略
+- 文档与环境配置进一步标准化
 
 ---
 
-## 五、组件库（49 个组件元数据）
+## 四、与路线图的对照关系
 
-### 5.1 分类统计
+基于 `低代码平台-接入agent路线图.md`，当前状态可概括为：
 
-| 分类     | 组件数量 | 代表组件                    |
-| -------- | -------- | --------------------------- |
-| 表单     | 10       | Button, Input, Select, Form |
-| 布局     | 4        | Container, Space, Divider   |
-| 数据展示 | 4        | Table, Card, Tabs           |
-| 反馈     | 3        | Modal, Alert, Typography    |
+| 阶段 | 路线图目标 | 当前状态 |
+| --- | --- | --- |
+| Phase 0 | 对齐当前实现与目标架构 | 已完成 |
+| Phase 1 | 页面快照基础设施 | **部分完成**：接口、版本机制、文件持久化已落地；数据库化未完成 |
+| Phase 2 | resolved schema 与局部上下文能力 | 已完成 |
+| Phase 3 | 工具层与 patch 协议 | 已完成 |
+| Phase 4 | bounded Agent 与 function calling | 已完成 |
+| Phase 5 | 前端 patch 主链路接入 | 已完成 |
+| Phase 6.1 | 模式路由与前端状态流 | 已完成 |
+| Phase 6.2 | 结果预览、澄清与安全护栏 | 已完成 |
+| Phase 6.3 | 稳定性与效率优化 | 已完成 |
+| Phase 6.4 | 语义确认、回放、评测闭环 | **当前已完成第一轮落地** |
 
-### 5.2 元数据系统
+最重要的现实判断是：
 
-每个组件可配置 `.meta.ts` 文件：
+> 当前项目在 Agent 能力上已经明显领先于最初“后端持页能力”的成熟度。  
+> 也就是说，**Agent 主链路已经跑起来了，但页面快照底层存储还需要继续从文件方案升级到正式存储方案。**
 
-```typescript
-export const InputMeta: ComponentMeta = {
-  type: 'Input',
-  displayName: '输入框',
-  category: 'form',
-  icon: 'Input',
-  properties: [
-    { name: 'placeholder', type: 'string', defaultValue: '请输入' },
-    { name: 'disabled', type: 'boolean', defaultValue: false },
-    { name: 'field', type: 'string', description: '双向绑定字段名' },
-  ],
-  events: ['onChange', 'onFocus', 'onBlur'],
-};
+---
+
+## 五、当前系统的核心执行链路
+
+### 1. 页面保存链路
+
+```text
+前端编辑器
+  -> pageSchemaApi.savePageSchema
+  -> PUT /pages/:pageId/schema
+  -> PageSchemaService
+  -> PageSchemaRepository（当前为 file-backed store）
+  -> 返回 pageId / version / snapshotId
+```
+
+### 2. Agent 编辑链路
+
+```text
+用户输入 instruction + 当前 selectedId
+  -> useAIAssistantChat
+  -> ServerAIService
+  -> /agent/edit 或 /agent/edit/stream
+  -> AgentRoutingService 判断 answer/schema/patch
+  -> AgentRunnerService 调用 schema-context / tools
+  -> 生成 patch / clarification / intent_confirmation / scope_confirmation
+  -> 前端接收结果并决定渲染消息、确认、预览或应用 patch
+```
+
+### 3. 批量编辑确认链路
+
+```text
+用户说“把所有字段……”
+  -> intent normalization
+  -> 多义时返回 intent_confirmation
+  -> 用户确认“表单项 / 输入框”
+  -> resolve_collection_scope
+  -> scope_confirmation
+  -> 用户确认范围
+  -> 进入 batch patch 生成
+```
+
+### 4. 调试与观测链路
+
+```text
+Agent 请求
+  -> trace 记录 route / status / tool / result / error
+  -> GET /agent/traces/:traceId
+  -> GET /agent/traces/:traceId/replay
+  -> GET /agent/metrics/summary
 ```
 
 ---
 
-## 六、安全特性
+## 六、当前最值得关注的模块
 
-### 6.1 表达式沙箱
+### 后端
 
-| 措施           | 实现                            |
-| -------------- | ------------------------------- |
-| AST 解析       | jsep 替代 eval                  |
-| 白名单全局对象 | Math, JSON, Date 等             |
-| 原型链保护     | 拦截 `__proto__`, `constructor` |
-| 多语句拒绝     | Compound 节点只执行首表达式     |
+- `packages/backend/src/modules/page-schema`
+  - 页面保存、读取、版本控制
+- `packages/backend/src/modules/schema-context`
+  - 焦点切片、候选定位、上下文组装
+- `packages/backend/src/modules/agent-tools`
+  - Patch 工具层与守门工具
+- `packages/backend/src/modules/agent`
+  - 路由、会话、trace、metrics、replay、confirmation 逻辑
+- `packages/backend/src/modules/ai`
+  - Provider 接入与模型调用封装
+- `packages/backend/src/modules/compiler`
+  - Schema 编译导出
 
-### 6.2 后端防护
+### 前端
 
-| 措施              | 状态 | 说明                       |
-| ----------------- | ---- | -------------------------- |
-| Bearer Token 认证 | ✅   | 所有 AI 接口启用 AuthGuard |
-| API Key 过滤      | ✅   | sanitizeModel() 移除密钥   |
-| 限流保护          | ✅   | 10次/秒，100次/分钟        |
-| CORS 控制         | ✅   | 环境变量驱动               |
-
----
-
-## 七、测试覆盖
-
-| 包       | 框架   | 覆盖范围                           |
-| -------- | ------ | ---------------------------------- |
-| frontend | Vitest | DSL 引擎、表达式解析、响应式运行时 |
-| backend  | Jest   | AI 服务、编译器、Controller        |
-
-**关键测试文件**：
-
-- `renderer/__tests__/` — DSL 引擎测试
-- `renderer/executor/__tests__/` — 表达式沙箱测试
-- `renderer/reactive/__tests__/` — 响应式运行时测试
+- `packages/frontend/src/editor/LowcodeEditor.tsx`
+  - 页面状态、保存、patch 应用主入口
+- `packages/frontend/src/editor/services/pageSchemaApi.ts`
+  - 页面快照接口访问
+- `packages/frontend/src/editor/services/patchAdapter.ts`
+  - 后端 patch → 本地 schema 变更
+- `packages/frontend/src/editor/components/ai-assistant/AIAssistant`
+  - AI 助手 UI
+- `packages/frontend/src/editor/components/ai-assistant/AIAssistant/useAIAssistantChat.ts`
+  - Agent 请求、SSE、确认链路、trace 聚合
+- `packages/frontend/src/editor/components/ai-assistant/api/ServerAIService.ts`
+  - `/agent/edit` / `/agent/edit/stream` 调用层
 
 ---
 
-## 八、常用命令
+## 七、接下来最合理的工作重点
+
+如果继续沿着路线图推进，最优先的不是再堆更多 Agent 技巧，而是补齐**底层持页能力的最终形态**：
+
+### P0：把页面快照从文件存储切到正式数据库
+
+原因：
+
+- 当前 Agent 已经依赖 `pageId + version`
+- 文件存储能做开发验证，但不足以支撑更真实的多人/多页面场景
+- trace、replay、metrics 的价值，最终也要建立在更稳定的页面快照基线之上
+
+### P1：补强评测集与长期指标
+
+建议继续推进：
+
+- 固定样本集
+- 成功率 / 失败率 / 澄清率统计
+- 常见误判归因
+
+### P1：前端增加更可视化的 trace / replay 浏览能力
+
+当前后端接口已经有了，但前端还可以继续做：
+
+- trace 详情查看
+- replay 时间线
+- 指标面板
+
+---
+
+## 八、当前项目的总体判断
+
+### 亮点
+
+- 已经从“AI 生成整页 Schema”进化到“后端受控 Agent 编辑”
+- Patch 链路、工具层、SSE 状态流、确认链路和调试能力都已形成闭环
+- 前后端边界较清晰：前端负责体验与本地命令承接，后端负责上下文、工具与编排
+
+### 风险
+
+- 页面快照还不是正式数据库化方案
+- 可观测性虽然已有接口，但更适合内部调试，离完整产品化还差一层 UI
+- 文档与实现推进较快，容易出现路线图、README、项目综述不同步
+
+### 结论
+
+当前项目已经具备一个**可运行、可验证、可继续扩展的 Agent 编辑内核**。  
+从路线图角度看，最值得保持的方向是：
+
+> **继续巩固 page snapshot 基线，逐步把当前已落地的 Agent 能力从“工程验证可用”推进到“产品级稳定可用”。**
+
+---
+
+## 九、常用命令
 
 ```bash
 # 安装依赖
 pnpm install
 
-# 启动开发服务器
-pnpm dev                    # 前端 5173 + 后端 3000
-pnpm --filter @lowcode-platform/frontend dev
-pnpm --filter @lowcode-platform/backend dev
+# 启动前端
+pnpm dev
+
+# 启动后端
+pnpm dev:backend
 
 # 构建
 pnpm build
+pnpm build:backend
 
-# 测试
-pnpm test
+# 类型检查
+pnpm type-check
+
+# 测试（按包执行）
+pnpm --filter @lowcode-platform/frontend test
+pnpm --filter @lowcode-platform/backend test
 
 # 代码质量
 pnpm lint
@@ -449,31 +331,8 @@ pnpm format
 
 ---
 
-## 九、架构决策记录
+## 十、建议一起阅读的文档
 
-| 决策        | 选择                 | 理由                         |
-| ----------- | -------------------- | ---------------------------- |
-| Schema 结构 | 扁平 Map             | AI 生成准确，增量更新简单    |
-| 状态管理    | Zustand + Redux 混用 | 历史原因，逐步统一到 Zustand |
-| 持久化      | IndexedDB            | 浏览器原生，无需后端         |
-| 表达式引擎  | jsep + 自定义求值    | 安全可控，避免 eval 风险     |
-| 编译器位置  | 后端 NestJS          | 可扩展为云端编译             |
-| AI SDK      | Vercel AI SDK 6      | 多 Provider 统一接口         |
-
----
-
-## 十、综合评分
-
-| 维度       |  评分   | 说明                                       |
-| ---------- | :-----: | ------------------------------------------ |
-| 架构设计   |  **9**  | 2 包精简架构，依赖清晰                     |
-| 功能完整度 | **8.5** | DSL 引擎强大，核心功能完备                 |
-| 代码质量   |  **7**  | 注释详尽，但 any 过度使用                  |
-| 安全性     |  **9**  | 表达式沙箱 + 编译器安全 + 后端鉴权         |
-| 测试覆盖   | **8.5** | 单元测试覆盖，E2E 待加强                   |
-| 工程化     |  **7**  | ESLint + Prettier + Husky，CI/CD 待建设    |
-| **综合**   | **8.5** | **安全基线达标 + 架构精简 + 核心功能完备** |
-
----
-
-**文档更新时间**：2026-03-19 · **Sprint 3 Phase 1 进行中**
+- `README.md`：对外说明、快速开始、关键接口与当前能力
+- `低代码平台-接入agent路线图.md`：完整路线图与阶段目标
+- `低代码平台-Agent-Phase6.4-执行计划.md`：Phase 6.4 的设计与实施记录
