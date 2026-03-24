@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { HttpException, Injectable } from '@nestjs/common';
 import { AgentAnswerService } from './agent-answer.service';
 import { AgentIdempotencyService } from './agent-idempotency.service';
 import { AgentLegacySchemaService } from './agent-legacy-schema.service';
@@ -6,6 +6,7 @@ import { AgentReadCacheService } from './agent-read-cache.service';
 import { AgentRoutingService } from './agent-routing.service';
 import { AgentRunnerService } from './agent-runner.service';
 import { AgentSessionMemoryService } from './agent-session-memory.service';
+import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import {
   AgentEditAnswerResponse,
@@ -13,7 +14,8 @@ import {
   AgentEditResponse,
   AgentEditSchemaResponse,
 } from './types/agent-edit.types';
-import { AgentProgressReporter } from './types/agent-progress.types';
+import { AgentErrorEventPayload, AgentProgressReporter } from './types/agent-progress.types';
+import { AgentTraceService } from './agent-trace.service';
 
 @Injectable()
 export class AgentService {
@@ -25,12 +27,13 @@ export class AgentService {
     private readonly sessionMemoryService: AgentSessionMemoryService,
     private readonly readCacheService: AgentReadCacheService,
     private readonly idempotencyService: AgentIdempotencyService,
+    private readonly traceService: AgentTraceService,
   ) {}
 
   async edit(
     dto: AgentEditRequestDto,
     requestId?: string,
-    reporter?: AgentProgressReporter,
+    downstreamReporter?: AgentProgressReporter,
   ): Promise<AgentEditResponse> {
     const traceId = this.routingService.createTraceId(requestId);
     const conversationContext = this.sessionMemoryService.prepare(dto);
@@ -38,89 +41,103 @@ export class AgentService {
       ...dto,
       conversationHistory: conversationContext.recentHistory,
     };
+    this.traceService.startTrace(traceId, normalizedDto);
+    const reporter = this.traceService.decorateReporter(traceId, downstreamReporter);
 
-    await reporter?.emitMeta(traceId);
-    await reporter?.emitStatus({
+    await reporter.emitMeta(traceId);
+    await reporter.emitStatus({
       stage: 'routing',
       label: '正在判定响应模式',
     });
 
-    const routeDecision = await this.routingService.resolve(
-      {
-        ...normalizedDto,
-        responseMode: normalizedDto.responseMode ?? 'schema',
-      },
-      traceId,
-    );
-
-    await reporter?.emitRoute(routeDecision.route);
-
-    const cachedReadResponse = this.readCacheService.get(normalizedDto, routeDecision);
-    if (cachedReadResponse) {
-      await reporter?.emitStatus({
-        stage: 'cache_hit',
-        label: '命中缓存结果',
-      });
-      const reused = this.attachRouteAndTrace(
-        cachedReadResponse,
+    try {
+      const routeDecision = await this.routingService.resolve(
+        {
+          ...normalizedDto,
+          responseMode: normalizedDto.responseMode ?? 'schema',
+        },
         traceId,
-        routeDecision.route,
-        true,
       );
-      this.sessionMemoryService.remember(normalizedDto, reused);
-      return reused;
-    }
 
-    if (routeDecision.route.resolvedMode === 'patch') {
-      const cachedPatchResponse = this.idempotencyService.get(normalizedDto);
-      if (cachedPatchResponse) {
-        await reporter?.emitStatus({
+      await reporter.emitRoute(routeDecision.route);
+
+      const cachedReadResponse = this.readCacheService.get(normalizedDto, routeDecision);
+      if (cachedReadResponse) {
+        await reporter.emitStatus({
           stage: 'cache_hit',
-          label: '复用最近一次 patch 预览',
+          label: '命中缓存结果',
         });
-        const reused = this.attachPatchRouteAndTrace(
-          cachedPatchResponse,
+        const reused = this.attachRouteAndTrace(
+          cachedReadResponse,
           traceId,
           routeDecision.route,
+          true,
         );
         this.sessionMemoryService.remember(normalizedDto, reused);
+        await reporter.emitResult(reused);
+        await reporter.emitDone(true);
         return reused;
       }
-    }
 
-    let result: AgentEditResponse;
-    if (routeDecision.route.resolvedMode === 'answer') {
-      result = await this.answerService.answer(normalizedDto, traceId, {
-        routeDecision,
-        reporter,
-        conversationContext,
-      });
-    } else if (routeDecision.route.resolvedMode === 'patch') {
-      result = await this.runnerService.runEdit(normalizedDto, traceId, {
-        routeDecision,
-        reporter,
-        conversationContext,
-      });
-    } else {
-      result = await this.legacySchemaService.edit(normalizedDto, traceId, {
-        routeDecision,
-        reporter,
-        conversationContext,
-      });
-    }
+      if (routeDecision.route.resolvedMode === 'patch') {
+        const cachedPatchResponse = this.idempotencyService.get(normalizedDto);
+        if (cachedPatchResponse) {
+          await reporter.emitStatus({
+            stage: 'cache_hit',
+            label: '复用最近一次 patch 预览',
+          });
+          const reused = this.attachPatchRouteAndTrace(
+            cachedPatchResponse,
+            traceId,
+            routeDecision.route,
+          );
+          this.sessionMemoryService.remember(normalizedDto, reused);
+          await reporter.emitResult(reused);
+          await reporter.emitDone(true);
+          return reused;
+        }
+      }
 
-    if (result.mode === 'answer' || result.mode === 'schema') {
-      this.readCacheService.set(
-        normalizedDto,
-        routeDecision,
-        result as AgentEditAnswerResponse | AgentEditSchemaResponse,
-      );
-    } else if (result.mode === 'patch') {
-      this.idempotencyService.set(normalizedDto, result as AgentEditPatchResponse);
-    }
+      let result: AgentEditResponse;
+      if (routeDecision.route.resolvedMode === 'answer') {
+        result = await this.answerService.answer(normalizedDto, traceId, {
+          routeDecision,
+          reporter,
+          conversationContext,
+        });
+      } else if (routeDecision.route.resolvedMode === 'patch') {
+        result = await this.runnerService.runEdit(normalizedDto, traceId, {
+          routeDecision,
+          reporter,
+          conversationContext,
+        });
+      } else {
+        result = await this.legacySchemaService.edit(normalizedDto, traceId, {
+          routeDecision,
+          reporter,
+          conversationContext,
+        });
+      }
 
-    this.sessionMemoryService.remember(normalizedDto, result);
-    return result;
+      if (result.mode === 'answer' || result.mode === 'schema') {
+        this.readCacheService.set(
+          normalizedDto,
+          routeDecision,
+          result as AgentEditAnswerResponse | AgentEditSchemaResponse,
+        );
+      } else if (result.mode === 'patch') {
+        this.idempotencyService.set(normalizedDto, result as AgentEditPatchResponse);
+      }
+
+      this.sessionMemoryService.remember(normalizedDto, result);
+      await reporter.emitResult(result);
+      await reporter.emitDone(true);
+      return result;
+    } catch (error) {
+      await reporter.emitError(this.toErrorEvent(error, traceId));
+      await reporter.emitDone(false);
+      throw error;
+    }
   }
 
   private attachRouteAndTrace<T extends AgentEditAnswerResponse | AgentEditSchemaResponse>(
@@ -146,6 +163,58 @@ export class AgentService {
       ...response,
       traceId,
       route,
+    };
+  }
+
+  private toErrorEvent(error: unknown, fallbackTraceId: string): AgentErrorEventPayload {
+    if (error instanceof AgentToolException) {
+      const response = error.getResponse() as {
+        code?: string;
+        message?: string;
+        details?: Record<string, unknown>;
+        traceId?: string;
+      };
+      return {
+        code: response.code,
+        message: response.message ?? 'Agent request failed',
+        details: response.details,
+        traceId: response.traceId ?? fallbackTraceId,
+      };
+    }
+
+    if (error instanceof HttpException) {
+      const response = error.getResponse();
+      if (typeof response === 'string') {
+        return {
+          message: response,
+          traceId: fallbackTraceId,
+        };
+      }
+      const payload = response as {
+        message?: string | string[];
+        code?: string;
+        details?: Record<string, unknown>;
+      };
+      return {
+        code: payload.code,
+        message: Array.isArray(payload.message)
+          ? payload.message.join('; ')
+          : (payload.message ?? error.message),
+        details: payload.details,
+        traceId: fallbackTraceId,
+      };
+    }
+
+    if (error instanceof Error) {
+      return {
+        message: error.message,
+        traceId: fallbackTraceId,
+      };
+    }
+
+    return {
+      message: 'Unknown agent error',
+      traceId: fallbackTraceId,
     };
   }
 }

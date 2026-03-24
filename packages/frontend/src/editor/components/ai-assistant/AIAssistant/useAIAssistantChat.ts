@@ -221,6 +221,85 @@ export const useAIAssistantChat = ({
     [],
   );
 
+  const appendTraceProgress = useCallback(
+    (
+      messageId: string,
+      progress: Omit<AgentMessageProgress, 'traceId'>,
+      traceId?: string,
+    ) => {
+      updateAssistantMessage(messageId, (messageItem) => {
+        const nextProgress = createProgress(progress, messageItem.traceId ?? traceId);
+        const previousStages = messageItem.traceSummary?.stages ?? [];
+        const previousStage = previousStages[previousStages.length - 1];
+        const shouldAppendStage =
+          !previousStage ||
+          previousStage.stage !== nextProgress.stage ||
+          previousStage.label !== nextProgress.label ||
+          previousStage.toolName !== nextProgress.toolName ||
+          previousStage.detail !== nextProgress.detail;
+        const toolCalls = nextProgress.toolName
+          ? [
+              ...(messageItem.traceSummary?.toolCalls ?? []),
+              {
+                toolName: nextProgress.toolName,
+                label: nextProgress.label,
+                detail: nextProgress.detail,
+                stepNumber: nextProgress.stepNumber,
+                success: true,
+              },
+            ].slice(-6)
+          : (messageItem.traceSummary?.toolCalls ?? []);
+
+        return {
+          ...messageItem,
+          traceId: messageItem.traceId ?? traceId,
+          progress: nextProgress,
+          traceSummary: {
+            stages: shouldAppendStage ? [...previousStages, nextProgress].slice(-8) : previousStages,
+            toolCalls,
+            finishReason: nextProgress.finishReason ?? messageItem.traceSummary?.finishReason,
+            errorCode: messageItem.traceSummary?.errorCode,
+          },
+        };
+      });
+    },
+    [createProgress, updateAssistantMessage],
+  );
+
+  const attachTraceMeta = useCallback(
+    (messageId: string, traceId: string) => {
+      updateAssistantMessage(messageId, (messageItem) => ({
+        ...messageItem,
+        traceId,
+        traceSummary: messageItem.traceSummary ?? {
+          stages: [],
+          toolCalls: [],
+        },
+        progress: {
+          ...(messageItem.progress ?? { stage: 'routing', label: '正在准备请求' }),
+          traceId,
+        },
+      }));
+    },
+    [updateAssistantMessage],
+  );
+
+  const attachTraceError = useCallback(
+    (messageId: string, errorCode?: string, traceId?: string) => {
+      updateAssistantMessage(messageId, (messageItem) => ({
+        ...messageItem,
+        traceId: messageItem.traceId ?? traceId,
+        traceSummary: {
+          stages: messageItem.traceSummary?.stages ?? [],
+          toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+          finishReason: messageItem.traceSummary?.finishReason,
+          errorCode: errorCode ?? messageItem.traceSummary?.errorCode,
+        },
+      }));
+    },
+    [updateAssistantMessage],
+  );
+
   const persistSessionMessages = useCallback(
     (
       updater: (messages: AISessionMessage[]) => AISessionMessage[],
@@ -405,6 +484,7 @@ export const useAIAssistantChat = ({
               scopeSummary: response.scopeSummary,
             },
             clarification: undefined,
+            intentConfirmation: undefined,
             scopeConfirmation: undefined,
             applyState: 'pending',
             progress: createProgress(
@@ -414,8 +494,49 @@ export const useAIAssistantChat = ({
               },
               response.traceId,
             ),
+            traceSummary: {
+              stages: messageItem.traceSummary?.stages ?? [],
+              toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+              finishReason: messageItem.traceSummary?.finishReason ?? 'result_received',
+              errorCode: undefined,
+            },
           }));
           message.success('AI 修改预览已生成');
+          break;
+        case 'intent_confirmation':
+          clearScopeHighlight();
+          fullContent = response.content;
+          updateAssistantMessage(messageId, (messageItem) => ({
+            ...messageItem,
+            content: fullContent,
+            status: 'success',
+            route: response.route,
+            traceId: response.traceId,
+            patchPreview: undefined,
+            clarification: undefined,
+            intentConfirmation: {
+              intentConfirmationId: response.intentConfirmationId,
+              instruction,
+              question: response.question,
+              options: response.options,
+              warnings: response.warnings ?? [],
+            },
+            scopeConfirmation: undefined,
+            applyState: undefined,
+            progress: createProgress(
+              {
+                stage: 'awaiting_intent_confirmation',
+                label: '需要先确认你的意思',
+              },
+              response.traceId,
+            ),
+            traceSummary: {
+              stages: messageItem.traceSummary?.stages ?? [],
+              toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+              finishReason: messageItem.traceSummary?.finishReason,
+              errorCode: undefined,
+            },
+          }));
           break;
         case 'scope_confirmation':
           fullContent = response.content;
@@ -432,6 +553,7 @@ export const useAIAssistantChat = ({
             traceId: response.traceId,
             patchPreview: undefined,
             clarification: undefined,
+            intentConfirmation: undefined,
             scopeConfirmation: {
               scopeConfirmationId: response.scopeConfirmationId,
               instruction,
@@ -447,6 +569,12 @@ export const useAIAssistantChat = ({
               },
               response.traceId,
             ),
+            traceSummary: {
+              stages: messageItem.traceSummary?.stages ?? [],
+              toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+              finishReason: messageItem.traceSummary?.finishReason,
+              errorCode: undefined,
+            },
           }));
           break;
         case 'clarification':
@@ -459,6 +587,7 @@ export const useAIAssistantChat = ({
             route: response.route,
             traceId: response.traceId,
             patchPreview: undefined,
+            intentConfirmation: undefined,
             scopeConfirmation: undefined,
             clarification: {
               clarificationId: response.clarificationId,
@@ -473,6 +602,12 @@ export const useAIAssistantChat = ({
               },
               response.traceId,
             ),
+            traceSummary: {
+              stages: messageItem.traceSummary?.stages ?? [],
+              toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+              finishReason: messageItem.traceSummary?.finishReason,
+              errorCode: undefined,
+            },
           }));
           break;
         case 'answer':
@@ -486,6 +621,7 @@ export const useAIAssistantChat = ({
             traceId: response.traceId,
             patchPreview: undefined,
             clarification: undefined,
+            intentConfirmation: undefined,
             scopeConfirmation: undefined,
             progress: createProgress(
               {
@@ -494,6 +630,12 @@ export const useAIAssistantChat = ({
               },
               response.traceId,
             ),
+            traceSummary: {
+              stages: messageItem.traceSummary?.stages ?? [],
+              toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+              finishReason: messageItem.traceSummary?.finishReason ?? 'result_received',
+              errorCode: undefined,
+            },
           }));
           break;
         case 'schema':
@@ -517,6 +659,7 @@ export const useAIAssistantChat = ({
             traceId: response.traceId,
             patchPreview: undefined,
             clarification: undefined,
+            intentConfirmation: undefined,
             scopeConfirmation: undefined,
             progress: createProgress(
               {
@@ -525,6 +668,12 @@ export const useAIAssistantChat = ({
               },
               response.traceId,
             ),
+            traceSummary: {
+              stages: messageItem.traceSummary?.stages ?? [],
+              toolCalls: messageItem.traceSummary?.toolCalls ?? [],
+              finishReason: messageItem.traceSummary?.finishReason ?? 'result_received',
+              errorCode: undefined,
+            },
           }));
 
           if (aiSchema) {
@@ -702,6 +851,10 @@ export const useAIAssistantChat = ({
             stage: 'routing',
             label: '正在准备请求',
           },
+          traceSummary: {
+            stages: [],
+            toolCalls: [],
+          },
         },
       ]);
 
@@ -740,14 +893,7 @@ export const useAIAssistantChat = ({
               switch (event.type) {
                 case 'meta':
                   traceId = event.traceId;
-                  updateAssistantMessage(aiMessageId, (messageItem) => ({
-                    ...messageItem,
-                    traceId: event.traceId,
-                    progress: {
-                      ...(messageItem.progress ?? { stage: 'routing', label: '正在准备请求' }),
-                      traceId: event.traceId,
-                    },
-                  }));
+                  attachTraceMeta(aiMessageId, event.traceId);
                   break;
                 case 'route':
                   updateAssistantMessage(aiMessageId, (messageItem) => ({
@@ -756,21 +902,19 @@ export const useAIAssistantChat = ({
                   }));
                   break;
                 case 'status':
-                  updateAssistantMessage(aiMessageId, (messageItem) => ({
-                    ...messageItem,
-                    progress: createProgress(
-                      {
-                        stage: event.stage,
-                        label: event.label,
-                        detail: event.detail,
-                        toolName: event.toolName,
-                        targetId: event.targetId,
-                        stepNumber: event.stepNumber,
-                        finishReason: event.finishReason,
-                      },
-                      messageItem.traceId ?? traceId,
-                    ),
-                  }));
+                  appendTraceProgress(
+                    aiMessageId,
+                    {
+                      stage: event.stage,
+                      label: event.label,
+                      detail: event.detail,
+                      toolName: event.toolName,
+                      targetId: event.targetId,
+                      stepNumber: event.stepNumber,
+                      finishReason: event.finishReason,
+                    },
+                    traceId,
+                  );
                   break;
                 case 'content_delta':
                   if (event.mode === 'answer') {
@@ -792,6 +936,7 @@ export const useAIAssistantChat = ({
                   break;
                 case 'error':
                   terminalReceived = true;
+                  attachTraceError(aiMessageId, event.error.code, event.error.traceId);
                   structuredStreamError = new AIServiceError(
                     event.error.message,
                     (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
@@ -926,6 +1071,194 @@ export const useAIAssistantChat = ({
     [submitMessage],
   );
 
+  const confirmIntent = useCallback(
+    async (messageId: string, intentId: string) => {
+      const messageItem = messagesRef.current.find((item) => item.id === messageId);
+      if (!messageItem?.intentConfirmation || loading) {
+        return;
+      }
+
+      const activeSession = activeSessionRef.current;
+      const conversationHistory = buildConversationHistory(sessionMessagesRef.current);
+      const instruction = messageItem.intentConfirmation.instruction;
+
+      updateAssistantMessage(messageId, (current) => ({
+        ...current,
+        status: 'loading',
+        progress: createProgress(
+          {
+            stage: 'planning_scope',
+            label: '正在根据已确认语义解析批量范围',
+          },
+          current.traceId,
+        ),
+      }));
+      setLoading(true);
+
+      let fullContent = messageItem.content;
+      let actionResult: AIMessageActionResult | undefined;
+      let traceId = messageItem.traceId;
+      let terminalReceived = false;
+      let structuredStreamError: AIServiceError | null = null;
+
+      const requestPayload = {
+        instruction,
+        modelId: currentModel,
+        pageId,
+        version: pageVersion ?? undefined,
+        selectedId: selectedId ?? undefined,
+        draftSchema: currentSchema || undefined,
+        conversationHistory,
+        sessionId: activeSession?.id,
+        confirmedIntentId: intentId,
+        requestIdempotencyKey: activeSession?.id
+          ? `${activeSession.id}:${messageId}:intent:${intentId}`
+          : `${messageId}:intent:${intentId}`,
+        responseMode,
+      } as const;
+
+      try {
+        try {
+          await serverAIService.streamResponse?.(requestPayload, {
+            onEvent: async (event) => {
+              switch (event.type) {
+                case 'meta':
+                  traceId = event.traceId;
+                  attachTraceMeta(messageId, event.traceId);
+                  break;
+                case 'route':
+                  updateAssistantMessage(messageId, (current) => ({
+                    ...current,
+                    route: event.route,
+                  }));
+                  break;
+                case 'status':
+                  appendTraceProgress(
+                    messageId,
+                    {
+                      stage: event.stage,
+                      label: event.label,
+                      detail: event.detail,
+                      toolName: event.toolName,
+                      targetId: event.targetId,
+                      stepNumber: event.stepNumber,
+                      finishReason: event.finishReason,
+                    },
+                    traceId,
+                  );
+                  break;
+                case 'content_delta':
+                  break;
+                case 'result':
+                  terminalReceived = true;
+                  {
+                    const applied = applyAgentResponse({
+                      messageId,
+                      instruction,
+                      response: event.result,
+                    });
+                    fullContent = applied.fullContent;
+                    actionResult = applied.actionResult;
+                    traceId = event.result.traceId;
+                  }
+                  break;
+                case 'error':
+                  terminalReceived = true;
+                  attachTraceError(messageId, event.error.code, event.error.traceId);
+                  structuredStreamError = new AIServiceError(
+                    event.error.message,
+                    (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                    {
+                      traceId: event.error.traceId,
+                      ...(event.error.details ? { details: event.error.details } : {}),
+                    },
+                  );
+                  break;
+                case 'done':
+                  break;
+              }
+            },
+          });
+
+          if (structuredStreamError) {
+            throw structuredStreamError;
+          }
+        } catch (streamError) {
+          if (!terminalReceived) {
+            const response = await serverAIService.generateResponse({
+              ...requestPayload,
+              stream: false,
+            });
+            const applied = applyAgentResponse({
+              messageId,
+              instruction,
+              response,
+            });
+            fullContent = applied.fullContent;
+            actionResult = applied.actionResult;
+            traceId = response.traceId;
+          } else {
+            throw streamError;
+          }
+        }
+
+        persistSessionMessages(
+          (prev) =>
+            prev.map((sessionMessage) =>
+              sessionMessage.id === messageId
+                ? {
+                    ...sessionMessage,
+                    content: fullContent,
+                    actionResult,
+                    metadata: traceId
+                      ? {
+                          ...(sessionMessage.metadata ?? {}),
+                          traceId,
+                          applyState: actionResult ? 'applied' : undefined,
+                        }
+                      : sessionMessage.metadata,
+                  }
+                : sessionMessage,
+            ),
+          activeSession,
+        );
+      } catch (error) {
+        clearScopeHighlight();
+        if (error instanceof AIServiceError) {
+          presentStructuredError(error);
+        }
+        const errorMessage = formatErrorMessage(error);
+        updateAssistantMessage(messageId, (current) => ({
+          ...current,
+          content: `${current.content}\n\n[ERROR: ${errorMessage}]`,
+          status: 'error',
+        }));
+        onError?.(errorMessage);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      loading,
+      currentModel,
+      pageId,
+      pageVersion,
+      selectedId,
+      currentSchema,
+      responseMode,
+      updateAssistantMessage,
+      createProgress,
+      applyAgentResponse,
+      persistSessionMessages,
+      clearScopeHighlight,
+      presentStructuredError,
+      onError,
+      attachTraceMeta,
+      appendTraceProgress,
+      attachTraceError,
+    ],
+  );
+
   const confirmScope = useCallback(
     async (messageId: string) => {
       const messageItem = messagesRef.current.find((item) => item.id === messageId);
@@ -979,17 +1312,7 @@ export const useAIAssistantChat = ({
               switch (event.type) {
                 case 'meta':
                   traceId = event.traceId;
-                  updateAssistantMessage(messageId, (current) => ({
-                    ...current,
-                    traceId: event.traceId,
-                    progress: {
-                      ...(current.progress ?? {
-                        stage: 'calling_model',
-                        label: '正在根据已确认范围生成 patch 预览',
-                      }),
-                      traceId: event.traceId,
-                    },
-                  }));
+                  attachTraceMeta(messageId, event.traceId);
                   break;
                 case 'route':
                   updateAssistantMessage(messageId, (current) => ({
@@ -998,21 +1321,19 @@ export const useAIAssistantChat = ({
                   }));
                   break;
                 case 'status':
-                  updateAssistantMessage(messageId, (current) => ({
-                    ...current,
-                    progress: createProgress(
-                      {
-                        stage: event.stage,
-                        label: event.label,
-                        detail: event.detail,
-                        toolName: event.toolName,
-                        targetId: event.targetId,
-                        stepNumber: event.stepNumber,
-                        finishReason: event.finishReason,
-                      },
-                      current.traceId ?? traceId,
-                    ),
-                  }));
+                  appendTraceProgress(
+                    messageId,
+                    {
+                      stage: event.stage,
+                      label: event.label,
+                      detail: event.detail,
+                      toolName: event.toolName,
+                      targetId: event.targetId,
+                      stepNumber: event.stepNumber,
+                      finishReason: event.finishReason,
+                    },
+                    traceId,
+                  );
                   break;
                 case 'content_delta':
                   break;
@@ -1031,6 +1352,7 @@ export const useAIAssistantChat = ({
                   break;
                 case 'error':
                   terminalReceived = true;
+                  attachTraceError(messageId, event.error.code, event.error.traceId);
                   structuredStreamError = new AIServiceError(
                     event.error.message,
                     (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
@@ -1146,6 +1468,7 @@ export const useAIAssistantChat = ({
     sendMessage,
     applyPatchPreview,
     resolveClarification,
+    confirmIntent,
     confirmScope,
     clearScopeHighlight,
     restoreScopeHighlight,

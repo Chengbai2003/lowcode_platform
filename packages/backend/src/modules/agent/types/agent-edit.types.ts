@@ -76,6 +76,12 @@ export interface AgentPatchScopeSummary {
   changedTargetCount: number;
 }
 
+export interface AgentIntentConfirmationOption {
+  intentId: string;
+  label: string;
+  description: string;
+}
+
 export interface AgentEditAnswerResponse {
   mode: 'answer';
   content: string;
@@ -154,6 +160,17 @@ export interface AgentEditScopeConfirmationResponse {
   route: AgentRouteInfo;
 }
 
+export interface AgentEditIntentConfirmationResponse {
+  mode: 'intent_confirmation';
+  content: string;
+  question: string;
+  intentConfirmationId: string;
+  options: AgentIntentConfirmationOption[];
+  warnings: string[];
+  traceId: string;
+  route: AgentRouteInfo;
+}
+
 export interface AgentEditClarificationResponse {
   mode: 'clarification';
   content: string;
@@ -170,4 +187,5 @@ export type AgentEditResponse =
   | AgentEditSchemaResponse
   | AgentEditPatchResponse
   | AgentEditClarificationResponse
-  | AgentEditScopeConfirmationResponse;
+  | AgentEditScopeConfirmationResponse
+  | AgentEditIntentConfirmationResponse;

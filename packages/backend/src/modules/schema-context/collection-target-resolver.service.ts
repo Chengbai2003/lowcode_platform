@@ -41,8 +41,9 @@ export class CollectionTargetResolverService {
 
   resolve(input: {
     rootId: string;
-    instruction: string;
+    instruction?: string;
     schema: A2UISchema;
+    targetType?: string;
   }): CollectionTargetResolution {
     const rootNode = input.schema.components[input.rootId];
     if (!rootNode) {
@@ -70,7 +71,11 @@ export class CollectionTargetResolverService {
       };
     }
 
-    const matchedTypes = this.findMatchedTypes(descendants, input.instruction);
+    if (input.targetType?.trim()) {
+      return this.resolveExplicitTargetType(input.rootId, descendants, input.targetType.trim());
+    }
+
+    const matchedTypes = this.findMatchedTypes(descendants, input.instruction ?? '');
     if (matchedTypes.length === 0) {
       return {
         status: 'no_match',
@@ -118,6 +123,54 @@ export class CollectionTargetResolverService {
       componentIds: match.componentIds,
       targetCount: match.componentIds.length,
       matchReason: `在容器 ${input.rootId} 下识别到 ${match.componentIds.length} 个 ${match.displayName}`,
+    };
+  }
+
+  private resolveExplicitTargetType(
+    rootId: string,
+    descendants: Array<{ id: string; type: string }>,
+    targetType: string,
+  ): CollectionTargetResolution {
+    const componentIds = descendants
+      .filter((node) => node.type === targetType)
+      .map((node) => node.id);
+    const displayName = this.componentMetaRegistry.getDisplayName(targetType) ?? targetType;
+
+    if (componentIds.length === 0) {
+      return {
+        status: 'no_match',
+        rootId,
+        reason: `当前容器内未找到 ${displayName}`,
+      };
+    }
+
+    if (componentIds.length < MIN_BATCH_TARGETS) {
+      return {
+        status: 'no_match',
+        rootId,
+        reason: `当前容器内仅找到 ${componentIds.length} 个 ${displayName}，不足以构成批量修改`,
+      };
+    }
+
+    if (componentIds.length > MAX_BATCH_TARGETS) {
+      return {
+        status: 'over_limit',
+        rootId,
+        matchedType: targetType,
+        matchedDisplayName: displayName,
+        targetCount: componentIds.length,
+        reason: `当前容器内共有 ${componentIds.length} 个 ${displayName}，已超过批量修改上限 ${MAX_BATCH_TARGETS}`,
+      };
+    }
+
+    return {
+      status: 'matched',
+      rootId,
+      matchedType: targetType,
+      matchedDisplayName: displayName,
+      componentIds,
+      targetCount: componentIds.length,
+      matchReason: `在容器 ${rootId} 下识别到 ${componentIds.length} 个 ${displayName}`,
     };
   }
 

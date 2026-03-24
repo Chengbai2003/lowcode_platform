@@ -16,6 +16,7 @@ interface AIAssistantMessageListProps {
     candidateId: string,
     candidateLabel: string,
   ) => Promise<void>;
+  onConfirmIntent: (messageId: string, intentId: string) => Promise<void>;
   onConfirmScope: (messageId: string) => Promise<void>;
   onCancelScopeHighlight: () => void;
   onRestoreScopeHighlight: (messageId: string) => void;
@@ -29,6 +30,7 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
   onApplySchema,
   onApplyPatchPreview,
   onResolveClarification,
+  onConfirmIntent,
   onConfirmScope,
   onCancelScopeHighlight,
   onRestoreScopeHighlight,
@@ -102,6 +104,48 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
                     <div className={styles.progressRow}>
                       <span className={styles.progressLabel}>Trace</span>
                       <span>{message.traceId ?? message.progress?.traceId}</span>
+                    </div>
+                  )}
+                  {message.traceSummary && message.traceSummary.stages.length > 0 && (
+                    <div className={styles.traceSummaryBlock}>
+                      <span className={styles.traceSummaryTitle}>阶段时间线</span>
+                      <div className={styles.traceSummaryChips}>
+                        {message.traceSummary.stages.slice(-4).map((stage, index) => (
+                          <span
+                            key={`${message.id}-stage-${stage.stage}-${index}`}
+                            className={styles.traceSummaryChip}
+                          >
+                            {stage.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {message.traceSummary && message.traceSummary.toolCalls.length > 0 && (
+                    <div className={styles.traceSummaryBlock}>
+                      <span className={styles.traceSummaryTitle}>最近工具</span>
+                      <div className={styles.traceSummaryChips}>
+                        {message.traceSummary.toolCalls.slice(-3).map((toolCall, index) => (
+                          <span
+                            key={`${message.id}-tool-${toolCall.toolName}-${index}`}
+                            className={styles.traceSummaryChip}
+                          >
+                            {toolCall.toolName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {message.traceSummary?.errorCode && (
+                    <div className={styles.progressRow}>
+                      <span className={styles.progressLabel}>错误码</span>
+                      <span>{message.traceSummary.errorCode}</span>
+                    </div>
+                  )}
+                  {message.traceSummary?.finishReason && (
+                    <div className={styles.progressRow}>
+                      <span className={styles.progressLabel}>结束原因</span>
+                      <span>{message.traceSummary.finishReason}</span>
                     </div>
                   )}
                 </div>
@@ -323,6 +367,50 @@ export const AIAssistantMessageList: React.FC<AIAssistantMessageListProps> = ({
                       </Button>
                     )}
                   </div>
+                </div>
+              )}
+
+              {message.intentConfirmation && (
+                <div className={styles.intentConfirmationCard}>
+                  <div className={styles.scopeConfirmationHeader}>
+                    <span className={styles.scopeConfirmationEyebrow}>语义确认</span>
+                    <Tag color="gold">先确认意思</Tag>
+                  </div>
+                  <div className={styles.scopeConfirmationStep}>
+                    第 1 步：确认你说的对象；第 2 步：确认批量范围
+                  </div>
+                  <div className={styles.scopeConfirmationTitle}>
+                    {message.intentConfirmation.question}
+                  </div>
+                  <div className={styles.scopeConfirmationDescription}>
+                    这里只确认你说的“字段 / 输入框 / 表单项”具体指哪一类组件，还不会直接应用修改。
+                  </div>
+                  <div className={styles.intentOptionList}>
+                    {message.intentConfirmation.options.map((option) => (
+                      <button
+                        key={`${message.id}-${option.intentId}`}
+                        type="button"
+                        className={styles.intentOption}
+                        disabled={busy}
+                        onClick={() => void onConfirmIntent(message.id, option.intentId)}
+                      >
+                        <span className={styles.intentOptionLabel}>{option.label}</span>
+                        <span className={styles.intentOptionDescription}>{option.description}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {message.intentConfirmation.warnings.length > 0 && (
+                    <div className={styles.patchWarningList}>
+                      {message.intentConfirmation.warnings.map((warning, index) => (
+                        <div
+                          key={`${message.id}-intent-warning-${index}`}
+                          className={styles.patchWarning}
+                        >
+                          {warning}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

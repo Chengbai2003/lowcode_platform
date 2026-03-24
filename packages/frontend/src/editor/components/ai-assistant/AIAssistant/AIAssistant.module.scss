@@ -261,6 +261,39 @@
   color: var(--text-tertiary);
 }
 
+.traceSummaryBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(24, 144, 255, 0.18);
+}
+
+.traceSummaryTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.traceSummaryChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.traceSummaryChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(24, 144, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1;
+}
+
 @keyframes spin {
   0% {
     transform: rotate(0deg);
@@ -331,6 +364,65 @@
   flex-direction: column;
   gap: 12px;
   box-shadow: var(--shadow-md);
+}
+
+.intentConfirmationCard {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(250, 173, 20, 0.26);
+  background: linear-gradient(180deg, rgba(250, 173, 20, 0.08), var(--bg-primary));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.intentOptionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.intentOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(250, 173, 20, 0.24);
+  background: color-mix(in srgb, var(--bg-secondary) 86%, rgba(250, 173, 20, 0.08));
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  text-align: left;
+}
+
+.intentOption:hover:not(:disabled) {
+  border-color: rgba(250, 173, 20, 0.5);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.intentOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.intentOptionLabel {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.intentOptionDescription {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .scopeConfirmationHeader {

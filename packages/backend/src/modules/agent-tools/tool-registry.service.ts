@@ -164,6 +164,10 @@ export class ToolRegistryService {
               type: 'string',
               description: '用户原始指令，用于识别目标组件类型。',
             },
+            targetType: {
+              type: 'string',
+              description: '可选，显式指定已确认的目标组件类型。',
+            },
           },
           ['rootId'],
         ),
@@ -182,6 +186,7 @@ export class ToolRegistryService {
             data: this.collectionTargetResolver.resolve({
               rootId,
               instruction: this.asOptionalString(input.instruction) ?? '',
+              targetType: this.asOptionalString(input.targetType) ?? undefined,
               schema: context.workingSchema,
             }),
           };

@@ -70,6 +70,11 @@ export class AgentEditRequestDto {
   confirmedScopeId?: string;
 
   @IsString()
+  @MaxLength(200)
+  @IsOptional()
+  confirmedIntentId?: string;
+
+  @IsString()
   @MaxLength(50)
   @IsOptional()
   provider?: string;

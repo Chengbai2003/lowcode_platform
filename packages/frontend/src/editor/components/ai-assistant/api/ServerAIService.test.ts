@@ -50,6 +50,7 @@ describe('ServerAIService', () => {
       },
       conversationHistory: [{ role: 'user', content: 'hello' }],
       confirmedScopeId: 'scope-1',
+      confirmedIntentId: 'intent-1',
       options: {
         temperature: 0.2,
         maxTokens: 1024,
@@ -75,6 +76,7 @@ describe('ServerAIService', () => {
       conversationHistory: [{ role: 'user', content: 'hello' }],
       sessionId: undefined,
       confirmedScopeId: 'scope-1',
+      confirmedIntentId: 'intent-1',
       requestIdempotencyKey: undefined,
       temperature: 0.2,
       maxTokens: 1024,
@@ -135,6 +137,7 @@ describe('ServerAIService', () => {
       conversationHistory: undefined,
       sessionId: undefined,
       confirmedScopeId: undefined,
+      confirmedIntentId: undefined,
       requestIdempotencyKey: undefined,
       temperature: undefined,
       maxTokens: undefined,

@@ -3,11 +3,13 @@ import type { EditorPatchOperation } from '../../../types/patch';
 import type {
   AgentCollectionScope,
   AgentClarificationCandidate,
+  AgentIntentConfirmationOption,
   AgentMessageProgress,
   AgentPatchChangeGroup,
   AgentPatchRiskAssessment,
   AgentPatchScopeSummary,
   AgentRouteInfo,
+  AgentTraceSummary,
 } from '../types/ai-types';
 
 export interface AIPatchPreviewState {
@@ -38,6 +40,14 @@ export interface AIScopeConfirmationState {
   warnings: string[];
 }
 
+export interface AIIntentConfirmationState {
+  intentConfirmationId: string;
+  instruction: string;
+  question: string;
+  options: AgentIntentConfirmationOption[];
+  warnings: string[];
+}
+
 export interface AIMessage {
   id: string;
   type: 'user' | 'ai' | 'system';
@@ -50,8 +60,10 @@ export interface AIMessage {
   route?: AgentRouteInfo;
   progress?: AgentMessageProgress;
   traceId?: string;
+  traceSummary?: AgentTraceSummary;
   patchPreview?: AIPatchPreviewState;
   clarification?: AIClarificationState;
+  intentConfirmation?: AIIntentConfirmationState;
   scopeConfirmation?: AIScopeConfirmationState;
   applyState?: 'pending' | 'applying' | 'applied' | 'failed';
 }

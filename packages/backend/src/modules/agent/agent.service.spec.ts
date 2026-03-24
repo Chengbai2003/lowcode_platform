@@ -6,6 +6,7 @@ import { AgentRoutingService } from './agent-routing.service';
 import { AgentRunnerService } from './agent-runner.service';
 import { AgentSessionMemoryService } from './agent-session-memory.service';
 import { AgentService } from './agent.service';
+import { AgentTraceService } from './agent-trace.service';
 
 describe('AgentService', () => {
   it('routes answer mode requests to the answer service', async () => {
@@ -55,6 +56,7 @@ describe('AgentService', () => {
       get: jest.fn().mockReturnValue(undefined),
       set: jest.fn(),
     };
+    const traceService = new AgentTraceService();
 
     const service = new AgentService(
       answerService as unknown as AgentAnswerService,
@@ -64,6 +66,7 @@ describe('AgentService', () => {
       sessionMemoryService as unknown as AgentSessionMemoryService,
       readCacheService as unknown as AgentReadCacheService,
       idempotencyService as unknown as AgentIdempotencyService,
+      traceService,
     );
 
     const result = await service.edit(
@@ -127,6 +130,7 @@ describe('AgentService', () => {
       get: jest.fn().mockReturnValue(undefined),
       set: jest.fn(),
     };
+    const traceService = new AgentTraceService();
 
     const service = new AgentService(
       answerService as unknown as AgentAnswerService,
@@ -136,6 +140,7 @@ describe('AgentService', () => {
       sessionMemoryService as unknown as AgentSessionMemoryService,
       readCacheService as unknown as AgentReadCacheService,
       idempotencyService as unknown as AgentIdempotencyService,
+      traceService,
     );
 
     const result = await service.edit(
@@ -230,6 +235,7 @@ describe('AgentService', () => {
       get: jest.fn().mockReturnValue(undefined),
       set: jest.fn(),
     };
+    const traceService = new AgentTraceService();
 
     const service = new AgentService(
       answerService as unknown as AgentAnswerService,
@@ -239,6 +245,7 @@ describe('AgentService', () => {
       sessionMemoryService as unknown as AgentSessionMemoryService,
       readCacheService as unknown as AgentReadCacheService,
       idempotencyService as unknown as AgentIdempotencyService,
+      traceService,
     );
 
     const result = await service.edit(
@@ -320,6 +327,7 @@ describe('AgentService', () => {
       get: jest.fn().mockReturnValue(undefined),
       set: jest.fn(),
     };
+    const traceService = new AgentTraceService();
 
     const service = new AgentService(
       answerService as unknown as AgentAnswerService,
@@ -329,6 +337,7 @@ describe('AgentService', () => {
       sessionMemoryService as unknown as AgentSessionMemoryService,
       readCacheService as unknown as AgentReadCacheService,
       idempotencyService as unknown as AgentIdempotencyService,
+      traceService,
     );
 
     const result = await service.edit(
@@ -411,6 +420,7 @@ describe('AgentService', () => {
       }),
       set: jest.fn(),
     };
+    const traceService = new AgentTraceService();
 
     const service = new AgentService(
       answerService as unknown as AgentAnswerService,
@@ -420,6 +430,7 @@ describe('AgentService', () => {
       sessionMemoryService as unknown as AgentSessionMemoryService,
       readCacheService as unknown as AgentReadCacheService,
       idempotencyService as unknown as AgentIdempotencyService,
+      traceService,
     );
 
     const result = await service.edit(

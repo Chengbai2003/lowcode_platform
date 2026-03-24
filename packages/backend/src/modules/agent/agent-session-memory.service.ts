@@ -74,6 +74,8 @@ function buildAssistantMemoryContent(response: AgentEditResponse): string {
         : response.content.slice(0, 240);
     case 'clarification':
       return response.content;
+    case 'intent_confirmation':
+      return response.content;
     case 'scope_confirmation':
       return response.content;
     case 'patch':

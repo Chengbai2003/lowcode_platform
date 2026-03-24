@@ -58,6 +58,7 @@ export type AgentProgressStage =
   | 'retrying'
   | 'cache_hit'
   | 'validating_output'
+  | 'awaiting_intent_confirmation'
   | 'awaiting_scope_confirmation'
   | 'completed';
 
@@ -70,6 +71,21 @@ export interface AgentMessageProgress {
   stepNumber?: number;
   finishReason?: string;
   traceId?: string;
+}
+
+export interface AgentTraceToolCallSummary {
+  toolName: string;
+  label: string;
+  detail?: string;
+  stepNumber?: number;
+  success?: boolean;
+}
+
+export interface AgentTraceSummary {
+  stages: AgentMessageProgress[];
+  toolCalls: AgentTraceToolCallSummary[];
+  finishReason?: string;
+  errorCode?: string;
 }
 
 export interface AgentClarificationCandidate {
@@ -171,12 +187,29 @@ export interface AgentPatchScopeSummary {
   changedTargetCount: number;
 }
 
+export interface AgentIntentConfirmationOption {
+  intentId: string;
+  label: string;
+  description: string;
+}
+
 export interface AgentEditScopeConfirmationResponse {
   mode: 'scope_confirmation';
   content: string;
   question: string;
   scopeConfirmationId: string;
   scope: AgentCollectionScope;
+  warnings?: string[];
+  traceId: string;
+  route: AgentRouteInfo;
+}
+
+export interface AgentEditIntentConfirmationResponse {
+  mode: 'intent_confirmation';
+  content: string;
+  question: string;
+  intentConfirmationId: string;
+  options: AgentIntentConfirmationOption[];
   warnings?: string[];
   traceId: string;
   route: AgentRouteInfo;
@@ -199,7 +232,8 @@ export type AgentEditResponse =
   | AgentEditSchemaResponse
   | AgentEditPatchResponse
   | AgentEditClarificationResponse
-  | AgentEditScopeConfirmationResponse;
+  | AgentEditScopeConfirmationResponse
+  | AgentEditIntentConfirmationResponse;
 
 export interface AgentPatchApplyPayload {
   instruction: string;
@@ -225,6 +259,7 @@ export interface AgentEditRequest {
   conversationHistory?: AgentConversationMessage[];
   sessionId?: string;
   confirmedScopeId?: string;
+  confirmedIntentId?: string;
   requestIdempotencyKey?: string;
   options?: {
     temperature?: number;

@@ -2,9 +2,13 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
+  NotFoundException,
+  Param,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -15,6 +19,9 @@ import { AuthGuard } from '../../common/guards/auth.guard';
 import { PatchPreviewRequestDto } from '../agent-tools/dto/patch-preview-request.dto';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
+import { AgentMetricsService } from './agent-metrics.service';
+import { AgentReplayService } from './agent-replay.service';
+import { AgentTraceService } from './agent-trace.service';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import { AgentService } from './agent.service';
 import { AgentErrorEventPayload, AgentProgressReporter } from './types/agent-progress.types';
@@ -25,6 +32,9 @@ export class AgentController {
   constructor(
     private readonly agentService: AgentService,
     private readonly toolExecutionService: ToolExecutionService,
+    private readonly traceService: AgentTraceService,
+    private readonly replayService: AgentReplayService,
+    private readonly metricsService: AgentMetricsService,
   ) {}
 
   @Post('edit')
@@ -55,13 +65,15 @@ export class AgentController {
         ? request.requestId
         : `agent-${request.requestId}`
       : `agent-${Date.now().toString(36)}`;
+    let serviceInvoked = false;
 
     try {
       if (!dto.instruction?.trim()) {
         throw new BadRequestException('instruction is required');
       }
 
-      const result = await this.agentService.edit(
+      serviceInvoked = true;
+      await this.agentService.edit(
         {
           ...dto,
           stream: true,
@@ -69,14 +81,41 @@ export class AgentController {
         request.requestId,
         reporter,
       );
-      await reporter.emitResult(result);
-      await reporter.emitDone(true);
     } catch (error) {
-      await reporter.emitError(this.toErrorEvent(error, traceId));
-      await reporter.emitDone(false);
+      if (!serviceInvoked) {
+        await reporter.emitError(this.toErrorEvent(error, traceId));
+        await reporter.emitDone(false);
+      }
     } finally {
       response.end();
     }
+  }
+
+  @Get('traces/:traceId')
+  getTrace(@Param('traceId') traceId: string) {
+    const trace = this.traceService.getTrace(traceId);
+    if (!trace) {
+      throw new NotFoundException(`trace ${traceId} not found`);
+    }
+    return trace;
+  }
+
+  @Get('traces/:traceId/replay')
+  getReplay(@Param('traceId') traceId: string) {
+    const replay = this.replayService.getReplay(traceId);
+    if (!replay) {
+      throw new NotFoundException(`trace ${traceId} not found`);
+    }
+    return replay;
+  }
+
+  @Get('metrics/summary')
+  getMetricsSummary(@Query('from') from?: string, @Query('to') to?: string) {
+    const now = Date.now();
+    return this.metricsService.getSummary({
+      from: this.parseTimeQuery(from) ?? now - 24 * 60 * 60 * 1000,
+      to: this.parseTimeQuery(to) ?? now,
+    });
   }
 
   @Post('patch/preview')
@@ -152,5 +191,13 @@ export class AgentController {
       message: 'Unknown agent stream error',
       traceId: fallbackTraceId,
     };
+  }
+
+  private parseTimeQuery(value?: string) {
+    if (!value?.trim()) {
+      return undefined;
+    }
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? undefined : parsed;
   }
 }

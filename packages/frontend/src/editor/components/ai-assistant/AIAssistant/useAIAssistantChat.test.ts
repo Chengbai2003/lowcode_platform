@@ -644,6 +644,163 @@ describe('useAIAssistantChat', () => {
     expect(useEditorStore.getState().aiScopeRootId).toBeNull();
   });
 
+  it('confirms ambiguous intent in-place before entering scope confirmation', async () => {
+    const batchSchema: A2UISchema = {
+      version: 3,
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['form'] },
+        form: { id: 'form', type: 'Form', childrenIds: ['form-item-a', 'form-item-b'] },
+        'form-item-a': {
+          id: 'form-item-a',
+          type: 'FormItem',
+          props: { label: '用户名', labelWidth: 120 },
+          childrenIds: ['input-a'],
+        },
+        'form-item-b': {
+          id: 'form-item-b',
+          type: 'FormItem',
+          props: { label: '密码', labelWidth: 120 },
+          childrenIds: ['input-b'],
+        },
+        'input-a': { id: 'input-a', type: 'Input', props: { placeholder: '请输入用户名' } },
+        'input-b': { id: 'input-b', type: 'Input', props: { placeholder: '请输入密码' } },
+      },
+    };
+
+    serverAIServiceMock.streamResponse
+      .mockImplementationOnce(async (_request: any, handlers: any) => {
+        await handlers.onEvent({ type: 'meta', traceId: 'agent-intent' });
+        await handlers.onEvent({
+          type: 'status',
+          stage: 'awaiting_intent_confirmation',
+          label: '已识别到多种可能语义，等待确认',
+          detail: '表单项 / 输入框',
+        });
+        await handlers.onEvent({
+          type: 'result',
+          result: {
+            mode: 'intent_confirmation',
+            content: '请先确认你说的是哪一类组件。',
+            question: '请先确认你说的是哪一类组件',
+            intentConfirmationId: 'intent-confirm-1',
+            options: [
+              {
+                intentId: 'intent-1',
+                label: '表单项',
+                description: '统一修改表单项容器。',
+              },
+              {
+                intentId: 'intent-2',
+                label: '输入框',
+                description: '统一修改输入控件本身。',
+              },
+            ],
+            warnings: [],
+            traceId: 'agent-intent',
+            route: {
+              requestedMode: 'auto',
+              resolvedMode: 'patch',
+              reason: 'selected_target',
+              manualOverride: false,
+            },
+          },
+        });
+        await handlers.onEvent({ type: 'done', success: true });
+        return { terminal: 'result' };
+      })
+      .mockImplementationOnce(async (request: any, handlers: any) => {
+        expect(request.confirmedIntentId).toBe('intent-1');
+        expect(request.selectedId).toBe('form');
+        await handlers.onEvent({ type: 'meta', traceId: 'agent-intent-confirmed' });
+        await handlers.onEvent({
+          type: 'status',
+          stage: 'planning_scope',
+          label: '正在根据已确认语义解析批量范围',
+          toolName: 'resolve_collection_scope',
+        });
+        await handlers.onEvent({
+          type: 'result',
+          result: {
+            mode: 'scope_confirmation',
+            content: '已识别到当前容器下 2 个表单项，请先确认范围。',
+            question: '确认修改当前容器下的 2 个表单项',
+            scopeConfirmationId: 'scope-intent-1',
+            scope: {
+              rootId: 'form',
+              matchedType: 'FormItem',
+              matchedDisplayName: '表单项',
+              targetIds: ['form-item-a', 'form-item-b'],
+              targetCount: 2,
+            },
+            warnings: [],
+            traceId: 'agent-intent-confirmed',
+            route: {
+              requestedMode: 'auto',
+              resolvedMode: 'patch',
+              reason: 'selected_target',
+              manualOverride: false,
+            },
+          },
+        });
+        await handlers.onEvent({ type: 'done', success: true });
+        return { terminal: 'result' };
+      });
+
+    const loadModels = vi.fn().mockResolvedValue(undefined);
+    const ensureModelsLoaded = vi.fn().mockResolvedValue(undefined);
+    const models = [
+      { id: 'openai-default', name: 'OpenAI', provider: 'openai' as const, model: 'gpt-5.4' },
+    ];
+
+    const { result } = renderHook(() =>
+      useAIAssistantChat({
+        currentSchema: batchSchema,
+        currentModel: 'openai-default',
+        pageId: 'page-1',
+        pageVersion: 3,
+        selectedId: 'form',
+        models,
+        loadModels,
+        ensureModelsLoaded,
+        responseMode: 'auto',
+      }),
+    );
+
+    await act(async () => {
+      result.current.setInputValue('把所有字段的 label 宽度改成 200');
+    });
+
+    await act(async () => {
+      await result.current.sendMessage();
+    });
+
+    const intentMessage = result.current.messages[result.current.messages.length - 1];
+    expect(intentMessage.intentConfirmation?.options.map((option) => option.label)).toEqual([
+      '表单项',
+      '输入框',
+    ]);
+    expect(intentMessage.traceSummary?.stages.map((stage) => stage.label)).toContain(
+      '已识别到多种可能语义，等待确认',
+    );
+    expect(useEditorStore.getState().aiScopeRootId).toBeNull();
+    expect(useEditorStore.getState().aiScopeTargetIds).toEqual([]);
+
+    await act(async () => {
+      await result.current.confirmIntent(intentMessage.id, 'intent-1');
+    });
+
+    const confirmedMessage = result.current.messages[result.current.messages.length - 1];
+    expect(result.current.messages).toHaveLength(3);
+    expect(confirmedMessage.intentConfirmation).toBeUndefined();
+    expect(confirmedMessage.scopeConfirmation?.scope.matchedDisplayName).toBe('表单项');
+    expect(confirmedMessage.traceSummary?.toolCalls.map((tool) => tool.toolName)).toContain(
+      'resolve_collection_scope',
+    );
+    expect(useEditorStore.getState().aiScopeRootId).toBe('form');
+    expect(useEditorStore.getState().aiScopeTargetIds).toEqual(['form-item-a', 'form-item-b']);
+  });
+
   it('reveals streamed answer content incrementally before the final result arrives', async () => {
     vi.useFakeTimers();
     let releaseResult: (() => void) | undefined;

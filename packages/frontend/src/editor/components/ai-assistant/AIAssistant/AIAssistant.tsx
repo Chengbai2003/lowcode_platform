@@ -53,6 +53,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
     sendMessage,
     applyPatchPreview,
     resolveClarification,
+    confirmIntent,
     confirmScope,
     clearScopeHighlight,
     restoreScopeHighlight,
@@ -149,6 +150,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
           onApplySchema={applySchema}
           onApplyPatchPreview={applyPatchPreview}
           onResolveClarification={resolveClarification}
+          onConfirmIntent={confirmIntent}
           onConfirmScope={confirmScope}
           onCancelScopeHighlight={clearScopeHighlight}
           onRestoreScopeHighlight={restoreScopeHighlight}

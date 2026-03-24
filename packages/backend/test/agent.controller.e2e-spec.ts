@@ -9,12 +9,17 @@ import { AgentAnswerService } from '../src/modules/agent/agent-answer.service';
 import { AgentController } from '../src/modules/agent/agent.controller';
 import { AgentIdempotencyService } from '../src/modules/agent/agent-idempotency.service';
 import { AgentIntentClassifierService } from '../src/modules/agent/agent-intent-classifier.service';
+import { AgentIntentConfirmationService } from '../src/modules/agent/agent-intent-confirmation.service';
+import { AgentIntentNormalizationService } from '../src/modules/agent/agent-intent-normalization.service';
 import { AgentLegacySchemaService } from '../src/modules/agent/agent-legacy-schema.service';
+import { AgentMetricsService } from '../src/modules/agent/agent-metrics.service';
 import { AgentPolicyService } from '../src/modules/agent/agent-policy.service';
 import { AgentReadCacheService } from '../src/modules/agent/agent-read-cache.service';
+import { AgentReplayService } from '../src/modules/agent/agent-replay.service';
 import { AgentRoutingService } from '../src/modules/agent/agent-routing.service';
 import { AgentRunnerService } from '../src/modules/agent/agent-runner.service';
 import { AgentSessionMemoryService } from '../src/modules/agent/agent-session-memory.service';
+import { AgentTraceService } from '../src/modules/agent/agent-trace.service';
 import { AgentService } from '../src/modules/agent/agent.service';
 import { PatchApplyService } from '../src/modules/agent-tools/patch-apply.service';
 import { PatchAutoFixService } from '../src/modules/agent-tools/patch-auto-fix.service';
@@ -346,10 +351,15 @@ describe('AgentController (e2e)', () => {
         AgentAnswerService,
         AgentIdempotencyService,
         AgentIntentClassifierService,
+        AgentIntentConfirmationService,
+        AgentIntentNormalizationService,
         AgentPolicyService,
         AgentReadCacheService,
+        AgentReplayService,
         AgentRoutingService,
         AgentScopeConfirmationService,
+        AgentTraceService,
+        AgentMetricsService,
         AgentRunnerService,
         AgentSessionMemoryService,
         AgentService,
@@ -388,6 +398,66 @@ describe('AgentController (e2e)', () => {
         expect(res.body.mode).toBe('schema');
         expect(res.body.traceId).toMatch(/^agent-/);
         expect(res.body.route.resolvedMode).toBe('schema');
+      });
+  });
+
+  it('exposes structured trace and replay data by traceId', async () => {
+    const editResponse = await request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '生成一个详情页',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'auto',
+      })
+      .expect(200);
+
+    const traceId = editResponse.body.traceId as string;
+
+    await request(app.getHttpServer())
+      .get(`/agent/traces/${traceId}`)
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.traceId).toBe(traceId);
+        expect(res.body.request.instruction).toBe('生成一个详情页');
+        expect(res.body.route.resolvedMode).toBe('schema');
+        expect(Array.isArray(res.body.statusEvents)).toBe(true);
+      });
+
+    await request(app.getHttpServer())
+      .get(`/agent/traces/${traceId}/replay`)
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.traceId).toBe(traceId);
+        expect(Array.isArray(res.body.replaySteps)).toBe(true);
+        expect(res.body.replaySteps.length).toBeGreaterThan(0);
+      });
+  });
+
+  it('returns aggregated metrics summary', async () => {
+    await request(app.getHttpServer())
+      .post('/agent/edit')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        instruction: '生成一个登录页',
+        pageId: 'page-1',
+        version: 4,
+        responseMode: 'auto',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/agent/metrics/summary')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .expect(200)
+      .expect((res: request.Response) => {
+        expect(res.body.totalCount).toBeGreaterThan(0);
+        expect(typeof res.body.averageDurationMs).toBe('number');
+        expect(typeof res.body.averageToolCallCount).toBe('number');
+        expect(typeof res.body.versionConflictCount).toBe('number');
       });
   });
 

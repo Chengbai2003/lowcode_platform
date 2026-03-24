@@ -12,6 +12,7 @@ export type AgentProgressStage =
   | 'retrying'
   | 'cache_hit'
   | 'awaiting_scope_confirmation'
+  | 'awaiting_intent_confirmation'
   | 'validating_output'
   | 'completed';
 
