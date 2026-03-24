@@ -43,6 +43,21 @@ const COMPONENT_TYPE_FIX_MAP: Record<string, string> = {
   Progressbar: 'Progress',
 };
 
+const CHILDREN_PROP_COMPONENTS = new Set(['Text', 'Title', 'Paragraph', 'Button']);
+
+type LooseComponent = {
+  id?: unknown;
+  type?: unknown;
+  props?: Record<string, any>;
+  childrenIds?: unknown;
+};
+
+type LooseSchema = {
+  version?: unknown;
+  rootId?: unknown;
+  components?: Record<string, LooseComponent>;
+};
+
 /**
  * 自动修复 A2UI Schema 中的常见错误
  *
@@ -60,10 +75,22 @@ export function autoFixSchema(
   const fixes: string[] = [];
 
   // 1. 深度拷贝，避免污染原始对象
-  const schema = JSON.parse(JSON.stringify(rawSchema)) as A2UISchema;
+  const schema = JSON.parse(JSON.stringify(rawSchema)) as LooseSchema;
 
   // 2. 基础结构校验与初始化
-  if (!schema.version) {
+  const rawVersion = schema.version;
+
+  if (typeof rawVersion === 'string') {
+    const trimmedVersion = rawVersion.trim();
+    const parsedVersion = Number(trimmedVersion);
+    if (trimmedVersion !== '' && Number.isFinite(parsedVersion)) {
+      schema.version = parsedVersion;
+      fixes.push(`修正 version 类型 (${JSON.stringify(trimmedVersion)} -> ${parsedVersion})`);
+    } else {
+      schema.version = 1;
+      fixes.push(`修正无效 version (${JSON.stringify(trimmedVersion)} -> 1)`);
+    }
+  } else if (typeof rawVersion !== 'number' || !Number.isFinite(rawVersion)) {
     schema.version = 1;
     fixes.push('添加默认版本号: 1');
   }
@@ -73,24 +100,26 @@ export function autoFixSchema(
     fixes.push('初始化缺失的 components 对象');
   }
 
+  const components = schema.components;
+
   // 3. 处理每个组件
-  const componentIds = Object.keys(schema.components);
+  const componentIds = Object.keys(components);
 
   for (const id of componentIds) {
-    const comp = schema.components[id];
+    const comp = components[id];
 
     // 3a. 修复 ID 缺失或不一致
     if (!comp.id) {
       comp.id = id;
       fixes.push(`组件 ${id}: 补全缺失的 id 字段`);
-    } else if (comp.id !== id) {
+    } else if (String(comp.id) !== id) {
       const oldId = comp.id;
       comp.id = id;
       fixes.push(`组件 ${id}: 修复 id 不一致 (${oldId} -> ${id})`);
     }
 
     // 3b. 修复组件类型幻觉
-    if (comp.type && !registeredTypes.includes(comp.type)) {
+    if (typeof comp.type === 'string' && !registeredTypes.includes(comp.type)) {
       const fixedType = COMPONENT_TYPE_FIX_MAP[comp.type];
       if (fixedType && registeredTypes.includes(fixedType)) {
         const oldType = comp.type;
@@ -103,14 +132,36 @@ export function autoFixSchema(
     }
 
     // 3c. 确保 props 存在
-    if (!comp.props) {
+    if (!comp.props || typeof comp.props !== 'object') {
       comp.props = {};
+    }
+
+    // 3c-1. 兼容 AI 常见的文本内容别名，统一迁移到 children
+    if (
+      typeof comp.type === 'string' &&
+      CHILDREN_PROP_COMPONENTS.has(comp.type) &&
+      Object.prototype.hasOwnProperty.call(comp.props, 'content') &&
+      !Object.prototype.hasOwnProperty.call(comp.props, 'children')
+    ) {
+      comp.props.children = comp.props.content;
+      delete comp.props.content;
+      fixes.push(`组件 ${id}: 将 props.content 迁移为 props.children`);
+    }
+
+    if (comp.type === 'Button' && comp.props.type === 'danger') {
+      delete comp.props.type;
+      comp.props.danger = true;
+      fixes.push(`组件 ${id}: 将 Button 的 props.type="danger" 修正为 props.danger=true`);
     }
 
     // 3d. 清理无效的 childrenIds 引用
     if (comp.childrenIds && Array.isArray(comp.childrenIds)) {
-      const validChildrenIds = comp.childrenIds.filter((childId) => {
-        const exists = !!schema.components[childId];
+      const validChildrenIds = comp.childrenIds.filter((childId: unknown) => {
+        if (typeof childId !== 'string') {
+          fixes.push(`组件 ${id}: 移除无效的子组件引用 (${String(childId)})`);
+          return false;
+        }
+        const exists = !!components[childId];
         if (!exists) {
           fixes.push(`组件 ${id}: 移除无效的子组件引用 (${childId})`);
         }
@@ -127,20 +178,18 @@ export function autoFixSchema(
   }
 
   // 4. 处理 rootId 幻觉
-  if (!schema.rootId || !schema.components[schema.rootId]) {
+  if (typeof schema.rootId !== 'string' || !components[schema.rootId]) {
     const oldRootId = schema.rootId;
     // 策略：优先寻找 Page 或 Container，否则取第一个组件
-    const firstPage = Object.entries(schema.components).find(([_, c]) => c.type === 'Page')?.[0];
-    const firstContainer = Object.entries(schema.components).find(
-      ([_, c]) => c.type === 'Container',
-    )?.[0];
-    const firstComp = Object.keys(schema.components)[0];
+    const firstPage = Object.entries(components).find(([_, c]) => c.type === 'Page')?.[0];
+    const firstContainer = Object.entries(components).find(([_, c]) => c.type === 'Container')?.[0];
+    const firstComp = Object.keys(components)[0];
 
     const newRootId = firstPage || firstContainer || firstComp || 'root';
 
     // 如果没有任何组件，则创建一个默认 Page
-    if (!schema.components[newRootId]) {
-      schema.components[newRootId] = {
+    if (!components[newRootId]) {
+      components[newRootId] = {
         id: newRootId,
         type: 'Page',
         props: { title: 'New Page' },
@@ -153,5 +202,5 @@ export function autoFixSchema(
     fixes.push(`修正 rootId (${oldRootId || 'null'} -> ${newRootId})`);
   }
 
-  return { fixed: schema, fixes };
+  return { fixed: schema as A2UISchema, fixes };
 }

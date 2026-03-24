@@ -3,6 +3,7 @@ import {
   createUpdateSchemaCommand,
   createAddComponentCommand,
   createDeleteComponentCommand,
+  createPatchCommand,
   createUpdatePropsCommand,
   createMacroCommand,
 } from '../schemaCommands';
@@ -89,6 +90,39 @@ describe('UpdateSchemaCommand', () => {
     );
 
     expect(command.description).toBe('Custom description');
+  });
+});
+
+describe('createPatchCommand', () => {
+  it('creates an undoable command from patch operations', () => {
+    const schema = createMockSchema();
+    const onChange = vi.fn();
+    const command = createPatchCommand(
+      schema,
+      [
+        {
+          op: 'updateProps',
+          componentId: 'child1',
+          props: { text: 'Patched text' },
+        },
+      ],
+      onChange,
+      'Patch update',
+    );
+
+    command.execute();
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        components: expect.objectContaining({
+          child1: expect.objectContaining({
+            props: expect.objectContaining({ text: 'Patched text' }),
+          }),
+        }),
+      }),
+    );
+
+    command.undo();
+    expect(onChange).toHaveBeenLastCalledWith(schema);
   });
 });
 

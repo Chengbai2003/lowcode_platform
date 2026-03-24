@@ -5,21 +5,31 @@
 
 type RequestOptionsMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 
+const DEFAULT_API_BASE_URL =
+  (import.meta.env?.VITE_API_BASE_URL as string) ||
+  ((globalThis as { __LOWCODE_API_URL__?: string }).__LOWCODE_API_URL__ as string | undefined) ||
+  'http://localhost:3001';
+const DEFAULT_API_SECRET = import.meta.env?.VITE_API_SECRET as string | undefined;
+
 export interface RequestOptions {
   method?: RequestOptionsMethod;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   signal?: AbortSignal;
+}
+
+export interface HttpClientError extends Error {
+  status?: number;
+  code?: string;
+  details?: Record<string, unknown>;
+  traceId?: string;
 }
 
 export class HttpClient {
   private apiSecret: string;
   private baseURL: string;
 
-  constructor(
-    baseURL: string = '',
-    defaultSecret: string = 'dev-secret-token-change-in-production',
-  ) {
+  constructor(baseURL: string = '', defaultSecret: string = '') {
     this.baseURL = baseURL;
     this.apiSecret = defaultSecret;
   }
@@ -29,6 +39,14 @@ export class HttpClient {
    */
   setApiSecret(token: string) {
     this.apiSecret = token;
+  }
+
+  setBaseURL(baseURL: string) {
+    this.baseURL = baseURL;
+  }
+
+  getBaseURL() {
+    return this.baseURL;
   }
 
   /**
@@ -65,16 +83,28 @@ export class HttpClient {
   private async handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      let errorCode: string | undefined;
+      let errorDetails: Record<string, unknown> | undefined;
+      let traceId: string | undefined;
 
       try {
         const errorData = await response.json();
         errorMessage = errorData.message || errorMessage;
+        errorCode = typeof errorData.code === 'string' ? errorData.code : undefined;
+        errorDetails =
+          errorData.details && typeof errorData.details === 'object'
+            ? errorData.details
+            : undefined;
+        traceId = typeof errorData.traceId === 'string' ? errorData.traceId : undefined;
       } catch {
         // 忽略 JSON 解析错误
       }
 
-      const error = new Error(errorMessage) as any;
+      const error: HttpClientError = new Error(errorMessage);
       error.status = response.status;
+      error.code = errorCode;
+      error.details = errorDetails;
+      error.traceId = traceId;
       throw error;
     }
 
@@ -131,5 +161,5 @@ export class HttpClient {
   }
 }
 
-// 导出一个默认的单例供全局直接使用
-export const fetchApp = new HttpClient();
+// 导出一个默认的单例供全局直接使用，确保直接 import 组件时也能拿到正确配置
+export const fetchApp = new HttpClient(DEFAULT_API_BASE_URL, DEFAULT_API_SECRET ?? '');

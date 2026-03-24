@@ -2,7 +2,9 @@
 .aiAssistant {
   display: flex;
   flex-direction: column;
+  flex: 1;
   height: 100%;
+  min-height: 0;
   width: 100%;
   background: var(--bg-panel);
   color: var(--text-primary);
@@ -12,15 +14,19 @@
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
+  height: 100%;
   padding: 16px;
   overflow: hidden;
 }
 
 .messagesContainer {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   margin-bottom: 16px;
   padding-right: 8px;
+  overscroll-behavior: contain;
 }
 
 .messagesContainer::-webkit-scrollbar {
@@ -65,6 +71,7 @@
   border-left: 3px solid var(--primary-color);
   margin-bottom: 4px;
   max-width: 80%;
+  overflow: visible;
   box-shadow: var(--shadow-md);
 }
 
@@ -106,6 +113,100 @@
   word-break: break-word;
 }
 
+.markdownContent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.paragraph,
+.blockquoteLine {
+  margin: 0;
+}
+
+.heading1,
+.heading2,
+.heading3 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.35;
+  color: inherit;
+}
+
+.heading1 {
+  font-size: 18px;
+}
+
+.heading2 {
+  font-size: 16px;
+}
+
+.heading3 {
+  font-size: 14px;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.listItem {
+  margin: 0;
+}
+
+.blockquote {
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 3px solid rgba(24, 144, 255, 0.45);
+  background: rgba(24, 144, 255, 0.08);
+  border-radius: 8px;
+}
+
+.inlineCode {
+  font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  font-size: 0.92em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.08);
+  color: inherit;
+}
+
+.codeBlock {
+  margin-top: 4px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: #0f172a;
+  color: #e2e8f0;
+  box-shadow: none;
+}
+
+.codeLanguage {
+  padding: 6px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+}
+
+.codePre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+
+  code {
+    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
 .modelIndicator {
   margin-top: 8px;
   padding-top: 8px;
@@ -124,6 +225,73 @@
   color: var(--primary-color);
   font-size: 16px;
   animation: spin 1s linear infinite;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.progressPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(24, 144, 255, 0.08);
+  border: 1px solid rgba(24, 144, 255, 0.16);
+}
+
+.progressRow {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+.progressLabel {
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.traceSummaryBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(24, 144, 255, 0.18);
+}
+
+.traceSummaryTitle {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.traceSummaryChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.traceSummaryChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(24, 144, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1;
 }
 
 @keyframes spin {
@@ -170,6 +338,468 @@
   text-align: left;
 }
 
+.patchPreviewCard,
+.clarificationCard {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scopeConfirmationCard {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--border-secondary));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary-color) 4%, var(--bg-primary)),
+    var(--bg-primary)
+  );
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.intentConfirmationCard {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(250, 173, 20, 0.26);
+  background: linear-gradient(180deg, rgba(250, 173, 20, 0.08), var(--bg-primary));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.intentOptionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.intentOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(250, 173, 20, 0.24);
+  background: color-mix(in srgb, var(--bg-secondary) 86%, rgba(250, 173, 20, 0.08));
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+  text-align: left;
+}
+
+.intentOption:hover:not(:disabled) {
+  border-color: rgba(250, 173, 20, 0.5);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.intentOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.intentOptionLabel {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.intentOptionDescription {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.scopeConfirmationHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.scopeConfirmationEyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scopeConfirmationStep {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.02em;
+}
+
+.scopeConfirmationTitle {
+  font-size: 15px;
+  line-height: 1.4;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.scopeConfirmationDescription {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.scopeLegend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+}
+
+.scopeLegendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.scopeLegendSwatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.scopeLegendRoot {
+  background: rgba(245, 158, 11, 0.18);
+  border: 2px dashed #f59e0b;
+}
+
+.scopeLegendTarget {
+  background: rgba(8, 145, 178, 0.16);
+  border: 2px dashed #0891b2;
+}
+
+.scopeConfirmationGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.scopeInfoBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+}
+
+.scopeInfoLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.scopeInfoValue {
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.scopeActionHint {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary-color) 7%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--border-secondary));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.scopeConfirmationHint {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--warning-color, #faad14) 8%, var(--bg-secondary));
+  border: 1px dashed color-mix(
+    in srgb,
+    var(--warning-color, #faad14) 24%,
+    var(--border-secondary)
+  );
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.patchPreviewHeader,
+.changeGroupHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.batchPatchFlowHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.batchPatchFlowCopy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.batchPatchFlowEyebrow {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  color: var(--primary-color);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.batchPatchFlowDescription {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.batchPatchFlowMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.patchPreviewTitle,
+.clarificationTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.patchPreviewMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.scopeSummaryBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary-color) 6%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--border-secondary));
+}
+
+.scopeSummaryLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-color);
+}
+
+.scopeSummaryStats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scopeSummaryChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--bg-primary);
+  border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--border-secondary));
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.patchReasonList,
+.changeGroupList,
+.changeEntryList,
+.patchWarningList,
+.clarificationList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.patchReasonItem,
+.changeEntry,
+.patchWarning {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.changeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(24, 144, 255, 0.05);
+  border: 1px solid rgba(24, 144, 255, 0.14);
+}
+
+.patchWarning {
+  color: #ad6800;
+  background: rgba(250, 173, 20, 0.08);
+  border: 1px solid rgba(250, 173, 20, 0.18);
+}
+
+.patchActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.patchActionHint {
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary-color) 7%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--border-secondary));
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.inlineStatusTag {
+  margin-inline-end: 0;
+}
+
+.clarificationOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-secondary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.clarificationOption:hover:not(:disabled) {
+  border-color: var(--primary-color);
+  background: rgba(24, 144, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.clarificationOption:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.clarificationLabel {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.clarificationMeta,
+.clarificationPath,
+.clarificationReason,
+.clarificationDebug {
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.clarificationReason {
+  color: var(--text-secondary);
+}
+
+.clarificationMeta {
+  color: var(--text-tertiary);
+}
+
+.clarificationPath {
+  color: var(--text-primary);
+}
+
+.clarificationDebug {
+  color: var(--text-tertiary);
+  font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .scopeConfirmationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .scopeSummaryBar {
+    align-items: flex-start;
+  }
+
+  .scopeLegendItem {
+    align-items: flex-start;
+  }
+
+  .batchPatchFlowMeta {
+    justify-content: flex-start;
+  }
+}
+
 .messageTime {
   font-size: 11px;
   color: var(--text-tertiary);
@@ -180,15 +810,58 @@
   text-align: right;
 }
 
+.messageUser .blockquote {
+  border-left-color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.messageUser .inlineCode {
+  background: rgba(255, 255, 255, 0.18);
+}
+
 .divider {
-  margin: 0 0 16px 0;
+  margin: auto 0 16px 0;
   border-color: var(--border-secondary);
+  flex-shrink: 0;
 }
 
 .inputArea {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 0;
+  padding-top: 4px;
+  flex-shrink: 0;
+}
+
+.selectionContext {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.16);
+  color: var(--text-secondary);
+}
+
+.selectionContextLabel {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: #059669;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.selectionContextValue {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inputAreaFooter {

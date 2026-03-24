@@ -148,6 +148,15 @@ export function useSchemaHistoryStore(
     [onChange, executeCommand, flushPendingMerge],
   );
 
+  const executeSchemaCommand = useCallback(
+    (command: UpdateSchemaCommand) => {
+      flushPendingMerge();
+      executeCommand(command);
+      currentSchemaRef.current = command.getNewSchema();
+    },
+    [executeCommand, flushPendingMerge],
+  );
+
   /**
    * 撤销操作
    */
@@ -185,6 +194,8 @@ export function useSchemaHistoryStore(
     updateSchema,
     /** 强制立即更新 Schema */
     forceUpdateSchema,
+    /** 执行自定义 Schema 命令 */
+    executeSchemaCommand,
     /** 撤销 */
     undo: handleUndo,
     /** 重做 */

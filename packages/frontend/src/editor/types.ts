@@ -19,6 +19,16 @@ export type {
 
 export interface LowcodeEditorProps {
   /**
+   * 页面唯一标识；提供后将启用后端版本化保存/加载
+   */
+  pageId?: string;
+
+  /**
+   * 页面展示名称
+   */
+  projectName?: string;
+
+  /**
    * 初始 JSON Schema (A2UI Format)
    */
   initialSchema?: A2UISchema | string;

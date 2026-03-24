@@ -1,4 +1,4 @@
-import { LowcodeEditor } from './editor/LowcodeEditor';
+import { LowcodeEditor } from './editor';
 import type { A2UISchema, Action } from './types';
 
 /**
@@ -164,13 +164,9 @@ const loginPageSchema: A2UISchema = {
  * 开发环境 Demo
  */
 function App() {
-  const handleSchemaChange = (schema: A2UISchema) => {
-    console.log('Schema 变化:', schema);
-  };
+  const handleSchemaChange = (_schema: A2UISchema) => {};
 
-  const handleError = (error: string) => {
-    console.error('Schema 错误:', error);
-  };
+  const handleError = (_error: string) => {};
 
   const eventContext = {
     appName: '低代码平台',
@@ -180,6 +176,8 @@ function App() {
   return (
     <div style={{ margin: 0, padding: 0 }}>
       <LowcodeEditor
+        pageId="demo-login-page"
+        projectName="登录注册页"
         initialSchema={loginPageSchema}
         onChange={handleSchemaChange}
         onError={handleError}

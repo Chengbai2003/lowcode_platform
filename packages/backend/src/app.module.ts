@@ -5,9 +5,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AgentModule } from './modules/agent/agent.module';
 import { AiModule } from './modules/ai/ai.module';
 import { CommonModule } from './modules/common/common.module';
 import { CompilerModule } from './modules/compiler/compiler.module';
+import { PageSchemaModule } from './modules/page-schema/page-schema.module';
+import { SchemaContextModule } from './modules/schema-context';
 import appConfig from './config/app.config';
 import aiConfig from './config/ai.config';
 import databaseConfig from './config/database.config';
@@ -39,7 +42,10 @@ import databaseConfig from './config/database.config';
     // 功能模块
     CommonModule,
     AiModule,
+    AgentModule,
     CompilerModule,
+    PageSchemaModule,
+    SchemaContextModule,
   ],
   controllers: [],
   providers: [],

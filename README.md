@@ -1,352 +1,293 @@
 # A2UI 低代码平台
 
-> **First A2UI Protocol Implementation** · AI 驱动的下一代低代码开发平台
-
-[![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
-[![License](https://img.shields.io/badge/license-MIT-blue)]()
-[![React](https://img.shields.io/badge/React-18-blue)]()
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)]()
-[![Ant Design](https://img.shields.io/badge/Ant%20Design-5-blue)]()
+> 基于 **A2UI Schema** 的 AI 驱动低代码平台  
+> 当前代码状态已推进到 **Agent Phase 6.4**：支持页面快照、Patch 编辑、SSE 状态流、澄清 / 语义确认 / 范围确认，以及 Trace / Replay / Metrics 调试链路。
 
 ---
 
-## 🌟 特性亮点
+## 1. 项目简介
 
-- **🤖 AI 对话优先** — 自然语言描述即可生成页面，对非技术用户更友好
-- **🔐 企业级安全** — 表达式沙箱 (jsep) + URL 白名单 + 后端 API 鉴权，多层防护
-- **⚡ 双输出通道** — 同一份 Schema 既可实时渲染预览，又可编译为标准 React 代码导出
-- **🧩 21 个组件元数据** — 可视化属性面板，所见即所得的编辑体验
-- **🔧 精简 DSL 引擎** — 10 种核心 Action，覆盖 90% 低代码场景
-- **📦 2 包精简架构** — Monorepo 结构，依赖清晰，维护轻松
+这个项目的目标不是单纯“让 AI 生成一整页 JSON”，而是逐步建立一个：
+
+> **围绕页面快照、局部上下文和工具调用的受控页面编辑 Agent**
+
+当前仓库已经具备：
+
+- 前端低代码编辑器：画布、组件树、属性面板、撤销重做
+- 前端 AI 助手：聊天、流式状态、patch 预览、确认卡片、历史记录
+- 后端页面快照接口：`pageId + version` 保存 / 读取 / 冲突保护
+- 后端工具链：页面上下文、节点定位、Patch 校验、auto-fix、preview
+- 后端 Agent：`answer / schema / patch` 路由、批量确认、trace / replay / metrics
+- Schema 编译器：A2UI Schema → React 代码
+
+> 当前仍有一个重要未完成项：  
+> 页面快照虽然已经有接口和版本机制，但底层仍以文件存储为主，尚未完全切到路线图中规划的数据库化快照表。
 
 ---
 
-## 🚀 快速开始
+## 2. 当前能力概览
+
+### 编辑器侧
+
+- 页面预览与组件树联动
+- 属性面板动态编辑
+- 历史记录、撤销 / 重做
+- 本地 Schema 校验与 auto-fix
+- Patch 应用与命令体系承接
+
+### AI 助手侧
+
+- Auto / Answer / Schema / Patch 模式
+- `/agent/edit/stream` 流式状态事件
+- 节点歧义澄清（clarification）
+- 集合编辑语义确认（intent confirmation）
+- 批量范围确认（scope confirmation）
+- patch 预览与本地应用
+- trace 时间线 / 最近工具 / 错误码展示
+
+### 后端 Agent 侧
+
+- 页面快照读取与版本校验
+- schema-context 局部上下文切片
+- function-calling 风格工具层
+- patch validate / auto-fix / preview
+- 会话短记忆、只读缓存、patch 幂等复用
+- trace / replay / metrics summary
+
+---
+
+## 3. 仓库结构
+
+```text
+packages/
+├── frontend/                 # 前端整合包
+│   ├── src/editor/           # 编辑器、AI 助手、命令系统
+│   ├── src/renderer/         # 运行时渲染器、DSL 执行引擎
+│   ├── src/components/       # 组件库与元数据
+│   ├── src/schema/           # Schema 校验与 auto-fix
+│   └── src/types/            # A2UI Schema / DSL 等基础类型
+│
+└── backend/                  # 后端服务
+    ├── src/modules/page-schema/   # 页面快照保存/读取/版本控制
+    ├── src/modules/schema-context/ # 页面理解与焦点切片
+    ├── src/modules/agent-tools/    # Patch 工具层与守门工具
+    ├── src/modules/agent/          # Agent 编排、trace、metrics、replay
+    ├── src/modules/ai/             # 多模型 Provider 封装
+    └── src/modules/compiler/       # Schema -> React 代码编译
+```
+
+---
+
+## 4. 核心架构
+
+### 4.1 页面保存链路
+
+```text
+LowcodeEditor
+  -> pageSchemaApi.savePageSchema
+  -> PUT /api/v1/pages/:pageId/schema
+  -> PageSchemaService
+  -> PageSchemaRepository（当前 file-backed）
+  -> 返回 version / snapshotId
+```
+
+### 4.2 AI 编辑链路
+
+```text
+用户输入 instruction + 当前 selectedId
+  -> useAIAssistantChat
+  -> ServerAIService
+  -> /api/v1/agent/edit 或 /api/v1/agent/edit/stream
+  -> AgentRoutingService（answer/schema/patch）
+  -> AgentRunnerService
+  -> schema-context + agent-tools
+  -> 返回 answer / schema / patch / clarification / intent_confirmation / scope_confirmation
+```
+
+### 4.3 批量编辑双阶段确认链路
+
+```text
+“把所有字段的 label 宽度改成 200”
+  -> 语义归一化（字段 / 输入框 / 表单项）
+  -> intent_confirmation（先确认你说的是哪一类组件）
+  -> resolve_collection_scope
+  -> scope_confirmation（再确认这批组件范围）
+  -> 才进入 batch patch 生成
+```
+
+### 4.4 调试与观测链路
+
+```text
+Agent 请求
+  -> trace 记录 route/status/tool/result/error
+  -> GET /api/v1/agent/traces/:traceId
+  -> GET /api/v1/agent/traces/:traceId/replay
+  -> GET /api/v1/agent/metrics/summary
+```
+
+---
+
+## 5. 快速开始
 
 ### 环境要求
 
 - Node.js >= 18
 - pnpm >= 8
 
-### 安装与运行
+### 安装依赖
 
 ```bash
-# 克隆项目
-git clone https://github.com/your-org/a2ui-lowcode.git
-cd a2ui-lowcode
-
-# 安装依赖
 pnpm install
+```
 
-# 启动开发服务器（前端 + 后端）
+### 启动开发环境
+
+> 当前根脚本 `pnpm dev` 只启动前端；后端需要单独起一个终端。
+
+终端 1：启动后端
+
+```bash
+pnpm dev:backend
+```
+
+终端 2：启动前端
+
+```bash
+pnpm dev
+```
+
+默认访问：
+
+- 前端：`http://localhost:5173`
+- 后端：`http://localhost:3000`
+
+---
+
+## 6. 认证与本地配置
+
+后端 Agent / AI 相关接口默认经过鉴权。
+
+### 后端环境变量
+
+在 `packages/backend/.env` 中至少配置：
+
+```bash
+API_SECRET=dev-secret-token-change-in-production
+```
+
+### 前端环境变量
+
+在 `packages/frontend/.env.local` 中至少配置：
+
+```bash
+VITE_API_SECRET=dev-secret-token-change-in-production
+```
+
+### 可选：页面快照文件位置
+
+当前页面快照默认写入后端运行目录下的 `page-schema-store.json`。  
+按当前开发命令，一般会落在 `packages/backend/page-schema-store.json`。  
+如需自定义，可设置：
+
+```bash
+PAGE_SCHEMA_FILE_PATH=/absolute/path/to/page-schema-store.json
+```
+
+---
+
+## 7. 常用命令
+
+```bash
+# 前端开发
 pnpm dev
 
-# 访问 http://localhost:5173
-```
+# 后端开发
+pnpm dev:backend
 
-### 构建
-
-```bash
-# 构建所有包
+# 构建
 pnpm build
-
-# 仅构建前端
-pnpm build:frontend
-
-# 仅构建后端
 pnpm build:backend
+
+# 类型检查
+pnpm type-check
+
+# 测试
+pnpm --filter @lowcode-platform/frontend test
+pnpm --filter @lowcode-platform/backend test
+pnpm --filter @lowcode-platform/backend test:e2e
+
+# 代码质量
+pnpm lint
+pnpm format
 ```
 
 ---
 
-## 📖 项目架构
+## 8. 关键接口
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         用户输入需求                              │
-│                    "帮我设计一个登录表单"                          │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      AI Assistant (Claude/OpenAI)               │
-│                   生成 A2UI Schema (JSON)                        │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-            ┌────────────────┴────────────────┐
-            │                                 │
-            ▼                                 ▼
-┌───────────────────────┐         ┌───────────────────────┐
-│   Renderer (运行时)    │         │   Compiler (编译器)    │
-│   实时渲染预览         │         │   导出 React 代码       │
-│   - 组件树渲染         │         │   - Babel AST 生成     │
-│   - DSL 执行引擎        │         │   - Tailwind 编译      │
-│   - 事件处理           │         │   - 一键下载          │
-└───────────────────────┘         └───────────────────────┘
+### 页面快照接口
+
+```http
+PUT /api/v1/pages/:pageId/schema
+GET /api/v1/pages/:pageId/schema
+GET /api/v1/pages/:pageId/schema?version=xx
 ```
 
-### 目录结构
+### Agent 接口
 
-```
-packages/
-├── frontend/              # 前端整合包
-│   ├── src/
-│   │   ├── types/        # 类型定义 (Schema + DSL + Property Panel)
-│   │   ├── renderer/     # 运行时渲染引擎
-│   │   ├── components/   # UI 组件库 (21 个组件元数据)
-│   │   ├── editor/       # 编辑器 (AI 助手 + 属性面板 + 组件树)
-│   │   └── styles/       # 统一样式
-│   └── package.json
-│
-└── backend/               # 后端服务包
-    ├── src/
-    │   ├── modules/
-    │   │   ├── ai/       # AI 服务 (多 Provider 支持)
-    │   │   └── compiler/ # 编译器 (Schema → React 代码)
-    │   └── main.ts
-    └── package.json
+```http
+POST /api/v1/agent/edit
+POST /api/v1/agent/edit/stream
+POST /api/v1/agent/patch/preview
+GET  /api/v1/agent/traces/:traceId
+GET  /api/v1/agent/traces/:traceId/replay
+GET  /api/v1/agent/metrics/summary
 ```
 
----
-
-## 💡 A2UI Schema 格式
-
-采用 **Google A2UI 协议** 的扁平组件树结构，O(1) 检索效率：
+### 典型 Agent 请求结构
 
 ```json
 {
-  "rootId": "page_root",
-  "components": {
-    "page_root": {
-      "id": "page_root",
-      "type": "Page",
-      "childrenIds": ["form_1"]
-    },
-    "form_1": {
-      "id": "form_1",
-      "type": "Form",
-      "props": { "layout": "vertical" },
-      "childrenIds": ["input_1", "btn_1"]
-    },
-    "input_1": {
-      "id": "input_1",
-      "type": "Input",
-      "props": { "placeholder": "请输入用户名", "field": "username" }
-    },
-    "btn_1": {
-      "id": "btn_1",
-      "type": "Button",
-      "props": { "type": "primary", "children": "登录" },
-      "events": {
-        "onClick": [{ "type": "apiCall", "url": "/api/login", "method": "POST" }]
-      }
-    }
-  }
+  "pageId": "page-1",
+  "version": 7,
+  "instruction": "把这个按钮改成提交",
+  "selectedId": "button_submit",
+  "responseMode": "auto"
 }
 ```
 
 ---
 
-## 🎨 可用组件 (21 个带元数据)
+## 9. 当前路线图状态
 
-### 布局组件 (4)
+根据 `低代码平台-接入agent路线图.md`，当前仓库大致处于：
 
-| 组件        | 说明     | 属性面板 |
-| ----------- | -------- | -------- |
-| `Container` | 容器     | ✅       |
-| `Space`     | 间距     | ✅       |
-| `Divider`   | 分割线   | ✅       |
-| `Div`       | 通用 div | -        |
+| 阶段 | 状态 |
+| --- | --- |
+| Phase 1 页面快照基础设施 | 部分完成（接口与版本机制已落地，数据库化未完成） |
+| Phase 2 局部上下文能力 | 已完成 |
+| Phase 3 工具层与 patch 协议 | 已完成 |
+| Phase 4 bounded Agent | 已完成 |
+| Phase 5 前端 patch 主链路 | 已完成 |
+| Phase 6.1 ~ 6.4 | 已完成当前一轮实现 |
 
-### 表单组件 (10)
+### 接下来最重要的方向
 
-| 组件          | 说明     | 属性面板 |
-| ------------- | -------- | -------- |
-| `Button`      | 按钮     | ✅       |
-| `Input`       | 输入框   | ✅       |
-| `TextArea`    | 多行文本 | ✅       |
-| `InputNumber` | 数字输入 | ✅       |
-| `Select`      | 选择器   | ✅       |
-| `Checkbox`    | 复选框   | ✅       |
-| `Radio`       | 单选框   | ✅       |
-| `Switch`      | 开关     | ✅       |
-| `Form`        | 表单     | ✅       |
-| `FormItem`    | 表单项   | ✅       |
-
-### 数据展示 (4)
-
-| 组件    | 说明   | 属性面板 |
-| ------- | ------ | -------- |
-| `Card`  | 卡片   | ✅       |
-| `Table` | 表格   | ✅       |
-| `Tabs`  | 标签页 | ✅       |
-| `List`  | 列表   | -        |
-
-### 反馈组件 (3)
-
-| 组件         | 说明     | 属性面板 |
-| ------------ | -------- | -------- |
-| `Modal`      | 对话框   | ✅       |
-| `Alert`      | 警告提示 | ✅       |
-| `Typography` | 排版     | ✅       |
-
-> 💡 提示：更多组件（Typography, Text, Title, Slider, Collapse, Progress 等）持续补充中
+1. 把页面快照从文件存储切到正式数据库
+2. 扩展 Agent 评测集与长期指标沉淀
+3. 给 Trace / Replay 增加更产品化的前端查看能力
 
 ---
 
-## 🔧 DSL Action 类型 (10 种核心)
+## 10. 文档入口
 
-| 分类       | Action         | 说明            | 示例                                                       |
-| ---------- | -------------- | --------------- | ---------------------------------------------------------- |
-| **数据**   | `setValue`     | 设置字段/状态值 | `{ "type": "setValue", "field": "name", "value": "John" }` |
-| **网络**   | `apiCall`      | API 请求        | `{ "type": "apiCall", "url": "/api/users" }`               |
-| **路由**   | `navigate`     | 页面跳转        | `{ "type": "navigate", "to": "/dashboard" }`               |
-| **交互**   | `feedback`     | 消息提示        | `{ "type": "feedback", "level": "success" }`               |
-| **弹窗**   | `dialog`       | 模态框/确认框   | `{ "type": "dialog", "kind": "modal" }`                    |
-| **控制**   | `if`           | 条件分支        | `{ "type": "if", "condition": "{{valid}}" }`               |
-| **控制**   | `loop`         | 循环遍历        | `{ "type": "loop", "over": "{{items}}" }`                  |
-| **工具**   | `delay`        | 延迟执行        | `{ "type": "delay", "ms": 1000 }`                          |
-| **工具**   | `log`          | 控制台日志      | `{ "type": "log", "value": "{{data}}" }`                   |
-| **逃生舱** | `customScript` | 自定义脚本      | `{ "type": "customScript", "code": "..." }`                |
+- `README.md`：对外说明、运行方式、接口与当前能力
+- `project_summary.md`：当前仓库的真实状态总结
+- `低代码平台-接入agent路线图.md`：完整路线图与阶段目标
+- `低代码平台-Agent-Phase6.4-执行计划.md`：Phase 6.4 的实施记录
 
 ---
 
-## 🛡️ 安全特性
+## 11. License
 
-### 表达式沙箱
-
-- ✅ 使用 `jsep` AST 解析器替代 `new Function()`
-- ✅ 白名单全局对象（Math, JSON, Date 等）
-- ✅ 原型链保护（拦截 `__proto__`, `prototype`, `constructor`）
-- ✅ 编译器端二次验证 (`isValidExpressionPath`)
-
-### URL 安全
-
-- ✅ 拒绝 `javascript:`, `data:`, `file:` 伪协议
-- ✅ 域名白名单机制
-- ✅ 相对路径优先
-
-### 后端防护
-
-- ✅ Bearer Token 认证
-- ✅ API Key 过滤（响应中自动移除）
-- ✅ 限流保护（10 次/秒，100 次/分钟）
-- ✅ CORS 环境变量控制
-
----
-
-## 📝 常用命令
-
-```bash
-# 开发
-pnpm dev              # 启动开发服务器
-pnpm dev:frontend     # 仅前端
-pnpm dev:backend      # 仅后端
-
-# 构建
-pnpm build            # 全量构建
-pnpm build:frontend   # 仅前端
-pnpm build:backend    # 仅后端
-
-# 代码质量
-pnpm lint             # ESLint 检查
-pnpm lint:fix         # 自动修复
-pnpm format           # Prettier 格式化
-pnpm format:write     # 写入文件
-
-# 测试
-pnpm test             # 运行测试
-pnpm test:coverage    # 生成覆盖率
-
-# 清理
-pnpm clean            # 清理构建产物
-```
-
----
-
-## 🔐 认证配置
-
-### 快速开始（默认配置）
-
-```bash
-# .env (后端 packages/backend/.env)
-API_SECRET=dev-secret-token-change-in-production
-
-# .env (前端 packages/frontend/.env.local)
-VITE_API_SECRET=dev-secret-token-change-in-production
-```
-
-### 生成强随机 Token
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
-
----
-
-## 📚 技术栈
-
-| 层级            | 技术                        |
-| --------------- | --------------------------- |
-| **前端框架**    | React 18 + TypeScript       |
-| **UI 组件**     | Ant Design 5                |
-| **状态管理**    | Zustand                     |
-| **构建工具**    | Vite 5                      |
-| **CSS 方案**    | CSS Modules + Sass          |
-| **代码编辑器**  | Monaco Editor               |
-| **后端框架**    | NestJS                      |
-| **AI Provider** | OpenAI / Anthropic / Ollama |
-| **编译器**      | Babel AST                   |
-
----
-
-## 🗺️ 路线图
-
-### 已完成 (Sprint 1-3 Phase 0)
-
-- ✅ 安全基建（表达式沙箱 + 后端鉴权）
-- ✅ 可视化编辑（属性面板 + 组件树 + 画布选中）
-- ✅ 架构重构（6 包 → 2 包）
-- ✅ 编译器迁移后端
-- ✅ 21 个组件元数据
-
-### 进行中 (Sprint 3 Phase 1)
-
-- 🔄 模板库（5-8 个内置模板）
-- 🔄 Demo 站点部署
-- 🔄 README 文档完善
-
-### 计划中
-
-- ⏳ GitHub Actions CI
-- ⏳ 类型攻坚（消灭 `any`）
-- ⏳ 更多组件元数据
-
----
-
-## 🤝 贡献指南
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 提交 Pull Request
-
----
-
-## 📄 开源协议
-
-MIT License
-
----
-
-## 🙏 致谢
-
-- [Google A2UI Protocol](https://a2ui.org) - AI Agent 到用户界面的开放协议
-- [Ant Design](https://ant.design) - 企业级 UI 组件库
-- [React](https://react.dev) - 用于构建用户界面的 JavaScript 库
-- [NestJS](https://nestjs.com) - 渐进式 Node.js 框架
-
----
-
-**built with ❤️ by A2UI Team**
+MIT

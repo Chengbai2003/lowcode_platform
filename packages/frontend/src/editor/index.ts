@@ -12,17 +12,6 @@
 
 import { fetchApp } from './lib/httpClient';
 
-// ============================================
-// 认证初始化
-// ============================================
-
-// 默认 API Secret（使用环境变量或默认值）
-const DEFAULT_API_SECRET =
-  (import.meta.env?.VITE_API_SECRET as string) || 'dev-secret-token-change-in-production';
-
-// 初始化时设置默认 Token
-fetchApp.setApiSecret(DEFAULT_API_SECRET);
-
 /**
  * 设置 API Secret（供宿主应用调用）
  *
@@ -39,12 +28,12 @@ export function setApiSecret(token: string): void {
   fetchApp.setApiSecret(token);
 }
 
-/**
- * 获取当前 API Secret（调试用）
- */
-export function getApiSecret(): string {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (fetchApp as any).apiSecret;
+export function setApiBaseURL(baseURL: string): void {
+  fetchApp.setBaseURL(baseURL);
+}
+
+export function getApiBaseURL(): string {
+  return fetchApp.getBaseURL();
 }
 
 // 导出样式

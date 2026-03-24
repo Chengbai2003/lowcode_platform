@@ -73,7 +73,7 @@ beforeAll(() => {
     () =>
       ({
         getPropertyValue: () => '',
-      }) as CSSStyleDeclaration,
+      }) as unknown as CSSStyleDeclaration,
   );
 });
 

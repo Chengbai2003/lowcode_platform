@@ -61,6 +61,9 @@ interface EditorState {
   // AI Session 状态
   currentSessionId: string | null;
   sessions: AISessionMeta[];
+  aiScopeRootId: string | null;
+  aiScopeTargetIds: string[];
+  aiScopeSourceMessageId: string | null;
   // UI 状态
   isHistoryDrawerOpen: boolean;
   isFloatingIslandOpen: boolean;
@@ -73,6 +76,12 @@ interface EditorState {
   addSession: (session: AISessionMeta) => void;
   updateSessionMeta: (session: Partial<AISessionMeta> & { id: string }) => void;
   removeSession: (sessionId: string) => void;
+  setAIScopeHighlight: (input: {
+    rootId: string;
+    targetIds: string[];
+    sourceMessageId: string | null;
+  }) => void;
+  clearAIScopeHighlight: () => void;
   toggleHistoryDrawer: () => void;
   setHistoryDrawerOpen: (open: boolean) => void;
   toggleFloatingIsland: () => void;
@@ -86,6 +95,9 @@ export const useEditorStore = create<EditorState>()(
     (set) => ({
       currentSessionId: null,
       sessions: [],
+      aiScopeRootId: null,
+      aiScopeTargetIds: [],
+      aiScopeSourceMessageId: null,
       isHistoryDrawerOpen: false,
       isFloatingIslandOpen: false,
       isLoading: false,
@@ -110,6 +122,20 @@ export const useEditorStore = create<EditorState>()(
           sessions: state.sessions.filter((s) => s.id !== sessionId),
           currentSessionId: state.currentSessionId === sessionId ? null : state.currentSessionId,
         })),
+
+      setAIScopeHighlight: ({ rootId, targetIds, sourceMessageId }) =>
+        set({
+          aiScopeRootId: rootId,
+          aiScopeTargetIds: [...new Set(targetIds)],
+          aiScopeSourceMessageId: sourceMessageId,
+        }),
+
+      clearAIScopeHighlight: () =>
+        set({
+          aiScopeRootId: null,
+          aiScopeTargetIds: [],
+          aiScopeSourceMessageId: null,
+        }),
 
       toggleHistoryDrawer: () =>
         set((state) => ({ isHistoryDrawerOpen: !state.isHistoryDrawerOpen })),
@@ -144,6 +170,13 @@ export const useSelectedIds = () => useSelectionStore((state) => state.selectedI
 export const useCurrentSessionId = () => useEditorStore((state) => state.currentSessionId);
 
 export const useSessions = () => useEditorStore((state) => state.sessions);
+
+export const useAIScopeRootId = () => useEditorStore((state) => state.aiScopeRootId);
+
+export const useAIScopeTargetIds = () => useEditorStore((state) => state.aiScopeTargetIds);
+
+export const useAIScopeSourceMessageId = () =>
+  useEditorStore((state) => state.aiScopeSourceMessageId);
 
 export const useFloatingIslandState = () => useEditorStore((state) => state.isFloatingIslandOpen);
 

@@ -1,4 +1,13 @@
-import { AIService, AIRequest, AIResponse, AIServiceError } from '../types/ai-types';
+import { type ApiEnvelope, unwrapApiEnvelope } from '../../../lib/apiResponse';
+import { toAIServiceError } from '../../../lib/aiError';
+import { fetchApp } from '../../../lib/httpClient';
+import {
+  AIService,
+  type AgentEditRequest,
+  type AgentEditResponse,
+  type AgentStreamEvent,
+  type AgentStreamResponseResult,
+} from '../types/ai-types';
 
 class ServerAIService implements AIService {
   name = 'ServerAIService';
@@ -13,80 +22,129 @@ class ServerAIService implements AIService {
     }
   }
 
-  async generateResponse(request: AIRequest): Promise<AIResponse> {
+  async generateResponse(request: AgentEditRequest): Promise<AgentEditResponse> {
     try {
-      // Call backend AI service
-      const response = await fetch('/api/v1/ai/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
+      const payload = {
+        instruction: request.instruction,
+        modelId: request.modelId,
+        provider: request.provider,
+        pageId: request.pageId,
+        version: request.version,
+        selectedId: request.selectedId,
+        draftSchema: request.draftSchema,
+        conversationHistory: request.conversationHistory,
+        sessionId: request.sessionId,
+        confirmedScopeId: request.confirmedScopeId,
+        confirmedIntentId: request.confirmedIntentId,
+        requestIdempotencyKey: request.requestIdempotencyKey,
+        temperature: request.options?.temperature,
+        maxTokens: request.options?.maxTokens,
+        stream: request.stream,
+        responseMode: request.responseMode ?? 'schema',
+      };
 
-      if (!response.ok) {
-        throw new AIServiceError(
-          `AI service responded with status ${response.status}`,
-          'NETWORK_ERROR',
-          { status: response.status },
-        );
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      if (error instanceof AIServiceError) {
-        throw error;
-      }
-      throw new AIServiceError(
-        error instanceof Error ? error.message : 'Unknown error occurred',
-        'NETWORK_ERROR',
-        error,
+      const response = await fetchApp.post<AgentEditResponse | ApiEnvelope<AgentEditResponse>>(
+        '/api/v1/agent/edit',
+        payload,
       );
+      return unwrapApiEnvelope(response);
+    } catch (error) {
+      throw toAIServiceError(error);
     }
   }
 
   async streamResponse(
-    request: AIRequest,
-    onMessage: (chunk: string) => void,
-    onError?: (error: any) => void,
-  ): Promise<void> {
+    request: AgentEditRequest,
+    handlers: {
+      onEvent: (event: AgentStreamEvent) => void | Promise<void>;
+    },
+  ): Promise<AgentStreamResponseResult> {
     try {
-      const response = await fetch('/api/v1/ai/stream', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(request),
-      });
+      const payload = {
+        instruction: request.instruction,
+        modelId: request.modelId,
+        provider: request.provider,
+        pageId: request.pageId,
+        version: request.version,
+        selectedId: request.selectedId,
+        draftSchema: request.draftSchema,
+        conversationHistory: request.conversationHistory,
+        sessionId: request.sessionId,
+        confirmedScopeId: request.confirmedScopeId,
+        confirmedIntentId: request.confirmedIntentId,
+        requestIdempotencyKey: request.requestIdempotencyKey,
+        temperature: request.options?.temperature,
+        maxTokens: request.options?.maxTokens,
+        stream: true,
+        responseMode: request.responseMode ?? 'schema',
+      };
 
-      if (!response.ok || !response.body) {
-        throw new AIServiceError(
-          `AI service responded with status ${response.status}`,
-          'NETWORK_ERROR',
-          { status: response.status },
-        );
+      const response = await fetchApp.streamRequest('/api/v1/agent/edit/stream', payload);
+      if (!response.body) {
+        throw new Error('Empty stream response body');
       }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
+      let terminal: AgentStreamResponseResult['terminal'] | undefined;
 
-      let done = false;
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
+      const handleFrame = async (frame: string) => {
+        const normalized = frame.trim();
+        if (!normalized) {
+          return;
+        }
 
-        if (value) {
-          const chunk = decoder.decode(value, { stream: true });
-          onMessage(chunk);
+        let eventName = '';
+        const dataLines: string[] = [];
+        for (const line of normalized.split(/\r?\n/)) {
+          if (line.startsWith('event:')) {
+            eventName = line.slice('event:'.length).trim();
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice('data:'.length).trim());
+          }
+        }
+
+        if (!eventName || dataLines.length === 0) {
+          return;
+        }
+
+        const payload = JSON.parse(dataLines.join('\n')) as AgentStreamEvent;
+        if (payload.type === 'result') {
+          terminal = 'result';
+        } else if (payload.type === 'error') {
+          terminal = 'error';
+        }
+        await handlers.onEvent(payload);
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split(/\r?\n\r?\n/);
+        buffer = frames.pop() ?? '';
+
+        for (const frame of frames) {
+          await handleFrame(frame);
         }
       }
-    } catch (error) {
-      if (onError) {
-        onError(error);
-      } else {
-        throw error;
+
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        await handleFrame(buffer);
       }
+
+      if (!terminal) {
+        throw new Error('Stream finished without terminal event');
+      }
+
+      return { terminal };
+    } catch (error) {
+      throw toAIServiceError(error);
     }
   }
 }

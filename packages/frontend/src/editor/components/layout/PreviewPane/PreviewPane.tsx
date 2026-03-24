@@ -35,6 +35,7 @@ interface PreviewPaneProps {
   allComponents: ComponentRegistry;
   eventContext: Record<string, unknown>;
   previewTheme: 'light' | 'dark';
+  selectedId?: string | null;
   isPreviewMode?: boolean;
   compiledCode?: string | null;
   onSchemaChange?: (schema: A2UISchema) => void;
@@ -48,6 +49,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   allComponents,
   eventContext,
   previewTheme,
+  selectedId,
   isPreviewMode,
   compiledCode,
   onSchemaChange,
@@ -61,6 +63,9 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   const saveWhitelistRef = useRef<string[]>(Object.keys(allComponents));
   const onSchemaCommitRef = useRef(onSchemaCommit);
   const onSchemaChangeRef = useRef(onSchemaChange);
+  const jsonEditorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
+  const selectionDecorationIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     editedJsonRef.current = editedJson;
@@ -79,8 +84,8 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   // 将 schema 转换为可展示的 JSON 格式
   const getDisplayJson = useCallback(() => {
     if (!schema) return '{}';
-    const { rootId, components } = schema;
-    return JSON.stringify({ rootId, components }, null, 2);
+    const { version, rootId, components } = schema;
+    return JSON.stringify({ version, rootId, components }, null, 2);
   }, [schema]);
 
   // 当 schema 变化或切换到 JSON tab 时，重置编辑内容
@@ -102,30 +107,191 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     }
   }, []);
 
-  // Editor 挂载时注册 Ctrl/Cmd + S 快捷键
-  const handleEditorMount: OnMount = useCallback((editor, monacoInstance) => {
-    if (!monacoInstance) return;
+  const findBalancedObjectEnd = useCallback((source: string, braceStartIndex: number) => {
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
 
-    // 注册 Ctrl/Cmd + S 快捷键
-    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
-      // 直接使用 ref 调用保存逻辑，避免闭包陷阱
-      if (!hasUnsavedChangesRef.current) {
-        return;
+    for (let index = braceStartIndex; index < source.length; index += 1) {
+      const char = source[index];
+
+      if (escaped) {
+        escaped = false;
+        continue;
       }
-      try {
-        const parsed = parseAndValidateSchema(editedJsonRef.current, saveWhitelistRef.current);
-        if (onSchemaCommitRef.current) {
-          onSchemaCommitRef.current(parsed);
-        } else {
-          onSchemaChangeRef.current?.(parsed);
+
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) {
+        continue;
+      }
+
+      if (char === '{') {
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          return index;
         }
-        setHasUnsavedChanges(false);
-        hasUnsavedChangesRef.current = false;
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : 'JSON 格式错误';
-        alert(`保存失败：${errorMessage}`);
       }
+    }
+
+    return -1;
+  }, []);
+
+  const findComponentJsonRange = useCallback(
+    (jsonString: string, componentId: string) => {
+      const componentsAnchor = jsonString.indexOf('"components": {');
+      if (componentsAnchor < 0) {
+        return null;
+      }
+
+      const componentKey = `"${componentId}": {`;
+      const componentIndex = jsonString.indexOf(componentKey, componentsAnchor);
+      if (componentIndex < 0) {
+        return null;
+      }
+
+      const braceIndex = jsonString.indexOf('{', componentIndex);
+      if (braceIndex < 0) {
+        return null;
+      }
+
+      const objectEndIndex = findBalancedObjectEnd(jsonString, braceIndex);
+      if (objectEndIndex < 0) {
+        return null;
+      }
+
+      return {
+        startOffset: componentIndex,
+        endOffset: objectEndIndex + 1,
+      };
+    },
+    [findBalancedObjectEnd],
+  );
+
+  const revealSelectedComponentInJson = useCallback(() => {
+    if (!selectedId || activeTab !== 'json') {
+      const editor = jsonEditorRef.current;
+      if (editor) {
+        selectionDecorationIdsRef.current = editor.deltaDecorations(
+          selectionDecorationIdsRef.current,
+          [],
+        );
+      }
+      return;
+    }
+
+    const editor = jsonEditorRef.current;
+    const monacoInstance = monacoRef.current;
+    const model = editor?.getModel();
+
+    if (!editor || !monacoInstance || !model) {
+      return;
+    }
+
+    const rangeOffsets = findComponentJsonRange(model.getValue(), selectedId);
+    if (!rangeOffsets) {
+      selectionDecorationIdsRef.current = editor.deltaDecorations(
+        selectionDecorationIdsRef.current,
+        [],
+      );
+      return;
+    }
+
+    const startPosition = model.getPositionAt(rangeOffsets.startOffset);
+    const endPosition = model.getPositionAt(rangeOffsets.endOffset);
+    const range = new monacoInstance.Range(
+      startPosition.lineNumber,
+      1,
+      endPosition.lineNumber,
+      model.getLineMaxColumn(endPosition.lineNumber),
+    );
+
+    selectionDecorationIdsRef.current = editor.deltaDecorations(selectionDecorationIdsRef.current, [
+      {
+        range,
+        options: {
+          isWholeLine: true,
+          className: 'lowcode-json-selection-block',
+          linesDecorationsClassName: 'lowcode-json-selection-glyph',
+        },
+      },
+    ]);
+
+    window.requestAnimationFrame(() => {
+      editor.revealLineInCenter(startPosition.lineNumber);
     });
+  }, [activeTab, findComponentJsonRange, selectedId]);
+
+  useEffect(() => {
+    revealSelectedComponentInJson();
+  }, [revealSelectedComponentInJson, schema]);
+
+  // Editor 挂载时注册 Ctrl/Cmd + S 快捷键
+  const clearSelectionDecorations = useCallback(() => {
+    const editor = jsonEditorRef.current;
+    if (!editor) {
+      return;
+    }
+
+    selectionDecorationIdsRef.current = editor.deltaDecorations(
+      selectionDecorationIdsRef.current,
+      [],
+    );
+  }, []);
+
+  const handleEditorMount: OnMount = useCallback(
+    (editor, monacoInstance) => {
+      if (!monacoInstance) return;
+      jsonEditorRef.current = editor;
+      monacoRef.current = monacoInstance;
+
+      editor.onDidFocusEditorText(() => {
+        clearSelectionDecorations();
+      });
+
+      // 注册 Ctrl/Cmd + S 快捷键
+      editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+        // 直接使用 ref 调用保存逻辑，避免闭包陷阱
+        if (!hasUnsavedChangesRef.current) {
+          return;
+        }
+        try {
+          const parsed = parseAndValidateSchema(editedJsonRef.current, saveWhitelistRef.current);
+          if (onSchemaCommitRef.current) {
+            onSchemaCommitRef.current(parsed);
+          } else {
+            onSchemaChangeRef.current?.(parsed);
+          }
+          setHasUnsavedChanges(false);
+          hasUnsavedChangesRef.current = false;
+        } catch (e) {
+          const errorMessage = e instanceof Error ? e.message : 'JSON 格式错误';
+          alert(`保存失败：${errorMessage}`);
+        }
+      });
+
+      window.requestAnimationFrame(() => {
+        revealSelectedComponentInJson();
+      });
+    },
+    [clearSelectionDecorations, revealSelectedComponentInJson],
+  );
+
+  useEffect(() => {
+    return () => {
+      jsonEditorRef.current = null;
+      monacoRef.current = null;
+    };
   }, []);
 
   // 切换到编译代码 Tab 时的检查

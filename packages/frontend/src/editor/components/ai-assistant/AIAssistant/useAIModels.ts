@@ -26,7 +26,6 @@ export const useAIModels = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to load models:', error);
       throw error;
     }
   }, []);
