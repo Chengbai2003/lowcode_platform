@@ -15,6 +15,18 @@ function isSafeKey(key: string): boolean {
   return !unsafeKeys.includes(key);
 }
 
+function validateFieldPath(field: string): void {
+  if (!field) {
+    throw new Error('setValue: invalid field path ""');
+  }
+
+  for (const key of field.split('.')) {
+    if (!isSafeKey(key)) {
+      throw new Error(`setValue: forbidden key "${key}" - potential prototype pollution`);
+    }
+  }
+}
+
 /**
  * 设置值
  * Action: { type: 'setValue'; field: string; value: Value; merge?: boolean; }
@@ -29,87 +41,23 @@ export const setValue: ActionHandler = async (action, context) => {
   const setValueAction = action as SetValueAction;
   const { field, value, merge = false } = setValueAction;
   const resolvedValue = resolveValue(value, context);
-
-  // Phase 2: Runtime 路径 - 精准脏追踪
-  if (context.runtime) {
-    if (merge && typeof resolvedValue === 'object' && resolvedValue !== null) {
-      // 合并模式：获取当前值，合并后设置
-      const current = context.runtime.get(field);
-      const merged = { ...(current as Record<string, unknown>), ...resolvedValue };
-      context.runtime.set(field, merged);
-    } else {
-      context.runtime.set(field, resolvedValue);
-    }
-    // 不需要 markFullChange - runtime 精准追踪脏路径
-    return { field, value: resolvedValue, merge };
-  }
-
-  // 遗留：直接变更路径（当 runtime 禁用时保持向后兼容）
-  // 解析路径
-  const keys = field.split('.');
-  const lastKey = keys.pop();
-
-  if (!lastKey) {
-    throw new Error(`setValue: invalid field path "${field}"`);
-  }
-
-  // 获取目标对象
-  let target: Record<string, unknown> = context.data || {};
-
-  // 特殊路径处理
-  if (keys[0] === 'state') {
-    target = context.state;
-    keys.shift(); // 移除 "state" 前缀
-  } else if (keys[0] === 'formData') {
-    target = context.formData;
-    keys.shift();
-  }
-
-  // 遍历到父级（安全检查每个 key）
-  for (const key of keys) {
-    // 原型污染防护：跳过危险键名
-    if (!isSafeKey(key)) {
-      throw new Error(`setValue: forbidden key "${key}" - potential prototype pollution`);
-    }
-    if (target[key] == null || typeof target[key] !== 'object') {
-      target[key] = {};
-    }
-    target = target[key] as Record<string, unknown>;
-  }
-
-  // 设置值（安全检查 lastKey）
-  if (!isSafeKey(lastKey)) {
-    throw new Error(`setValue: forbidden key "${lastKey}" - potential prototype pollution`);
-  }
+  validateFieldPath(field);
 
   if (merge && typeof resolvedValue === 'object' && resolvedValue !== null) {
-    // 合并模式：过滤危险键名后浅合并
     const safeValue: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(resolvedValue)) {
       if (isSafeKey(k)) {
         safeValue[k] = v;
       }
     }
-    if (typeof target[lastKey] !== 'object' || target[lastKey] === null) {
-      target[lastKey] = {};
-    }
-    Object.assign(target[lastKey] as Record<string, unknown>, safeValue);
+    const current = context.runtime.get(field);
+    const base =
+      current && typeof current === 'object' && !Array.isArray(current)
+        ? (current as Record<string, unknown>)
+        : {};
+    context.runtime.set(field, { ...base, ...safeValue });
   } else {
-    // 直接设置
-    target[lastKey] = resolvedValue;
-  }
-
-  // 触发 dispatch（如果存在）
-  if (context.dispatch) {
-    context.dispatch({
-      type: 'SET_FIELD',
-      payload: { field, value: resolvedValue, merge },
-    });
-  }
-
-  // 通知响应式系统：DSL 写入无法精确追踪，标记全量变更
-  if (typeof context.markFullChange === 'function') {
-    context.markFullChange();
+    context.runtime.set(field, resolvedValue);
   }
 
   return { field, value: resolvedValue, merge };

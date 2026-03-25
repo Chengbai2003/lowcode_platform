@@ -13,17 +13,6 @@ export { EventDispatcher } from './EventDispatcher';
 export type { RendererProps, ComponentRegistry, A2UIComponent, A2UISchema } from './types';
 export { builtInComponents } from './builtInComponents';
 
-// 导出 Redux 兼容层相关 API
-export { store } from './store';
-export { useAppDispatch, useAppSelector } from './store/hooks';
-export {
-  setComponentData,
-  setMultipleComponentData,
-  clearComponentData,
-  setComponentConfig,
-  resetAllData,
-} from './store/componentSlice';
-
 // 导出表单验证相关
 export {
   validateSchema,

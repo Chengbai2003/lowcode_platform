@@ -104,7 +104,7 @@ export function buildExpressionContext(context: Record<string, any> = {}): Recor
     return { ...context };
   }
 
-  // Phase 2: Proxy 惰性别名，按需读取而非全量展开
+  // Proxy 惰性别名，按需读取而非全量展开
   if (getFlag('selectiveEvaluation')) {
     return new Proxy(context, {
       get(target, key: string) {
@@ -443,7 +443,7 @@ function buildExpressionContextWithProxy(
     components: proxy.components,
   };
 
-  // Phase 2: Proxy 惰性别名，按需读取
+  // Proxy 惰性别名，按需读取
   if (getFlag('selectiveEvaluation')) {
     return new Proxy(baseContext, {
       get(target, key: string) {

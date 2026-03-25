@@ -21,24 +21,15 @@ export interface CapabilityAPIOptions {
   /** 当前 schema 中所有合法的 componentId */
   validComponentIds: Set<string>;
 
-  // Phase 2: 直接 runtime 访问
-  /** ReactiveRuntime 实例（用于精准脏追踪） */
-  runtime?: ReactiveRuntime;
-
-  // 遗留：当 runtime 不可用时保持向后兼容
-  /** 读取组件数据 */
-  getData?: () => Record<string, any>;
-  /** 写入组件数据（走 dispatch + eventDispatcher 通知链路） */
-  setComponentData?: (id: string, value: any) => void;
-  /** 通知响应式系统 */
-  markFullChange?: () => void;
+  /** ReactiveRuntime 实例（唯一运行态数据源） */
+  runtime: ReactiveRuntime;
 }
 
 /**
  * 创建 CapabilityAPI 实例
  */
 export function createCapabilityAPI(options: CapabilityAPIOptions): CapabilityAPI {
-  const { validComponentIds, runtime, getData, setComponentData, markFullChange } = options;
+  const { validComponentIds, runtime } = options;
 
   function isForbiddenComponentId(componentId: string): boolean {
     return (
@@ -75,30 +66,12 @@ export function createCapabilityAPI(options: CapabilityAPIOptions): CapabilityAP
       if (!validateComponentId(componentId, false)) {
         return undefined;
       }
-
-      // Phase 2: Runtime 路径
-      if (runtime) {
-        return runtime.get(componentId);
-      }
-
-      // 遗留
-      const data = getData?.() ?? {};
-      return data[componentId];
+      return runtime.get(componentId);
     },
 
     set(componentId: string, value: any): void {
-      // Throws for truly invalid IDs (empty/non-string); warns but proceeds for unknown-but-valid IDs
       validateComponentId(componentId);
-
-      // Phase 2: Runtime 路径 - 精准脏追踪
-      if (runtime) {
-        runtime.set(componentId, value);
-        return; // 不需要 markFullChange
-      }
-
-      // 遗留：Redux dispatch + 全量失效
-      setComponentData?.(componentId, value);
-      markFullChange?.();
+      runtime.set(componentId, value);
     },
 
     patch(updates: Record<string, any>): void {
@@ -111,21 +84,7 @@ export function createCapabilityAPI(options: CapabilityAPIOptions): CapabilityAP
         validateComponentId(id);
       }
 
-      // Phase 2: Runtime 路径 - 批量更新，单次通知
-      if (runtime) {
-        runtime.patch(updates);
-        return; // 不需要 markFullChange
-      }
-
-      // 遗留：多次写入 + 单次全量失效
-      let hasWrite = false;
-      for (const [id, value] of Object.entries(updates)) {
-        setComponentData?.(id, value);
-        hasWrite = true;
-      }
-      if (hasWrite) {
-        markFullChange?.();
-      }
+      runtime.patch(updates);
     },
 
     log(...args: any[]): void {

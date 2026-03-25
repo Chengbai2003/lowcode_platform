@@ -8,8 +8,6 @@
 export const RENDERER_FLAGS_DEFAULTS = {
   /** 启用表达式选择性求值 */
   selectiveEvaluation: true,
-  /** 启用脚本能力模型 */
-  capabilityScript: false,
 } as const;
 
 export type RendererFlagKey = keyof typeof RENDERER_FLAGS_DEFAULTS;

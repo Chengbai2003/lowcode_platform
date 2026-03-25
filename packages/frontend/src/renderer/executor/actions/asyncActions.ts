@@ -167,30 +167,8 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       response = await fetchResponse.json();
     }
 
-    // 保存结果
     if (resultTo) {
-      // Phase 2: Runtime 路径 - 精准脏追踪
-      if (context.runtime) {
-        context.runtime.set(resultTo, response);
-        // 不需要 markFullChange - runtime 追踪脏路径
-      } else if (context.data) {
-        // 遗留：直接变更路径（路径已在 try-catch 外部验证）
-        const keys = resultTo.split('.');
-        const lastKey = keys.pop();
-        if (lastKey) {
-          let target: Record<string, unknown> = context.data;
-          for (const key of keys) {
-            if (target[key] == null) target[key] = {};
-            target = target[key] as Record<string, unknown>;
-          }
-          target[lastKey] = response;
-        }
-
-        // 通知响应式系统：API 结果写入无法精确追踪，标记全量变更
-        if (typeof context.markFullChange === 'function') {
-          context.markFullChange();
-        }
-      }
+      context.runtime.set(resultTo, response);
     }
 
     // 成功回调

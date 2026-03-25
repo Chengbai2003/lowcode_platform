@@ -1,6 +1,6 @@
 /**
  * 表达式依赖静态分析器
- * 分析组件 props 中的表达式依赖，用于 Phase 2 选择性求值优化
+ * 分析组件 props 中的表达式依赖，用于选择性求值优化
  */
 
 import { parseExpression } from '../executor/parser/expressionParser';

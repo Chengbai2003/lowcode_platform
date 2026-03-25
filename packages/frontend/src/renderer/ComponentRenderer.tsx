@@ -149,7 +149,6 @@ export const ComponentRenderer = memo(
           p.onValuesChange = (changedValues: any, allValues: any, ...args: any[]) => {
             const newValue = { ...(componentValue || {}), ...allValues };
 
-            // Phase 2: 单一写路径 - 通过 EventDispatcher -> ReactiveRuntime
             if (eventDispatcher) {
               eventDispatcher.updateComponentData(id, newValue);
             }
@@ -173,7 +172,6 @@ export const ComponentRenderer = memo(
               value = e.target.checked;
             }
 
-            // Phase 2: 单一写路径 - 通过 EventDispatcher -> ReactiveRuntime
             if (eventDispatcher) {
               eventDispatcher.updateComponentData(id, value);
             }

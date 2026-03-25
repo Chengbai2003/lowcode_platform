@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import type { A2UISchema } from '../../types';
-import { LowcodeProvider, Renderer, setComponentData, store } from '../';
+import { LowcodeProvider, Renderer } from '../';
 
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
@@ -71,7 +71,7 @@ describe('Renderer visibility', () => {
     expect(screen.getByDisplayValue('standalone')).toBeTruthy();
   });
 
-  it('does not use Redux store as the renderer read chain', () => {
+  it('does not use host getState as the renderer read chain', () => {
     const schema: A2UISchema = {
       rootId: 'root',
       components: {
@@ -85,15 +85,16 @@ describe('Renderer visibility', () => {
       },
     };
 
-    render(<Renderer schema={schema} />);
-
-    expect(screen.getByDisplayValue('schema-value')).toBeTruthy();
-
-    act(() => {
-      store.dispatch(setComponentData({ id: 'root', value: 'redux-only-value' }) as any);
+    const getState = () => ({
+      components: {
+        data: {
+          root: 'host-only-value',
+        },
+      },
     });
 
-    expect(screen.queryByDisplayValue('redux-only-value')).toBeNull();
+    render(<Renderer schema={schema} eventContext={{ getState }} />);
+
     expect(screen.getByDisplayValue('schema-value')).toBeTruthy();
   });
 });

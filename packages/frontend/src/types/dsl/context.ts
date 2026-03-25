@@ -88,11 +88,11 @@ export interface ExecutionContext {
   // 全局状态
   state: Record<string, unknown>;
 
-  // Redux dispatch
-  dispatch: (action: unknown) => void;
+  // Host dispatch hook（可选）
+  dispatch?: (action: unknown) => void;
 
-  // 获取Store状态
-  getState: () => unknown;
+  // Host state hook（可选）
+  getState?: () => unknown;
 
   // 事件对象
   event?: Event | unknown;
@@ -148,20 +148,13 @@ export interface ExecutionContext {
   navigate: (path: string, params?: Record<string, unknown>) => void;
   back: () => void;
 
-  // 设置组件数据
-  setComponentData?: (id: string, value: unknown) => void;
-
-  // 通知响应式系统全量变更
-  markFullChange?: () => void;
-
   // 当前 schema 组件池（componentId -> component）
-  components?: Record<string, unknown>;
+  components: Record<string, unknown>;
 
   /**
-   * ReactiveRuntime 引用，用于统一写路径（Phase 2）
-   * 当存在时，action handler 应使用 runtime.set() 而非直接变更
+   * ReactiveRuntime 引用，renderer runtime 的唯一真相源
    */
-  runtime?: ReactiveRuntime;
+  runtime: ReactiveRuntime;
 
   // 自定义扩展数据
   [key: string]: unknown;

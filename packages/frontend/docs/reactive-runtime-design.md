@@ -15,7 +15,7 @@
 
 - 所有写入都通过 `EventDispatcher` 或 Capability API 进入
 - 所有用于渲染的读取都来自 `ReactiveRuntime`
-- Redux 即使存在，也只作为兼容镜像层存在
+- renderer 内建实现不再依赖 Redux 或 compat bridge
 
 ## 运行时流程
 
@@ -24,7 +24,7 @@
 3. `ComponentRenderer` 通过 `useSyncExternalStore` 建立订阅
 4. 表达式求值通过 runtime 的 tracking proxy 读取数据
 5. runtime 写入会标记 dirty path，并在 microtask 中统一 flush
-6. 受影响的 computed 监听器触发重新渲染，随后在需要时把兼容态镜像出去
+6. 受影响的 computed 监听器触发重新渲染
 
 ## 关键不变量
 
@@ -32,23 +32,7 @@
 - `runtime.set()` 是同步写入
 - 订阅通知必须批量触发
 - computed props 只读，绝不能反向写回 runtime
-- 兼容层 Redux state 绝不能驱动 renderer 的读取链路
-
-## 兼容层
-
-以下 API 仍然保留，用于向后兼容：
-
-- `LowcodeProvider`
-- `renderer/store`
-- `setComponentData`、`setMultipleComponentData`、`setComponentConfig`
-
-它们当前的职责被限制为：
-
-- 接收遗留调用
-- 接收 runtime 的镜像快照
-- 避免破坏旧有集成方式
-
-它们不属于 renderer 的响应式主链。
+- renderer 不再维护 compat mirror 或 store 回读逻辑
 
 ## EventDispatcher 职责
 
@@ -57,9 +41,8 @@
 - DSL 执行入口
 - runtime 初始化
 - 输入事件和 action 的统一写入 facade
-- 在兼容层存在时，将 runtime 快照镜像到兼容状态
 
-它不再依赖 Redux 作为事实来源。
+它只以 `ReactiveRuntime` 为事实来源。
 
 ## 渲染模型
 
@@ -77,5 +60,5 @@
 
 - 除非是真正的组件值数据，否则优先把新的可写状态放进 `state.*`
 - 所有写入都通过 `EventDispatcher`、DSL action 或 Capability API 进入
-- 不要从兼容层 Redux state 新增 renderer 直读路径
+- 不要新增 runtime 之外的状态事实源
 - 新增命名空间或写路径时，同步更新文档和测试

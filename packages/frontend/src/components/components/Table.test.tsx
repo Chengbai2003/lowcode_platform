@@ -1,15 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '../../types';
+import { DSLExecutor } from '../../renderer/executor';
 import { Table } from './Table';
 
 function createExecutionContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
-  return {
-    data: {},
-    formData: {},
+  return DSLExecutor.createContext({
     user: { id: 'u1', name: 'Tester', roles: [], permissions: [] },
     route: { path: '/', query: {}, params: {} },
-    state: {},
     dispatch: vi.fn(),
     getState: vi.fn(),
     utils: {
@@ -45,7 +43,7 @@ function createExecutionContext(overrides: Partial<ExecutionContext> = {}): Exec
     navigate: vi.fn(),
     back: vi.fn(),
     ...overrides,
-  };
+  });
 }
 
 let originalMatchMedia: typeof window.matchMedia | undefined;

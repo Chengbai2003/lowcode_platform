@@ -21,6 +21,7 @@ import flowActions from './actions/flowActions';
 import asyncActions from './actions/asyncActions';
 import debugActions from './actions/debugActions';
 import extensionActions from './actions/extensionActions';
+import { ReactiveRuntime } from '../reactive/runtime';
 
 /**
  * 内置Action处理器 (8种精简方案)
@@ -252,83 +253,128 @@ export class DSLExecutor {
    * 创建一个新的执行上下文
    */
   static createContext(baseContext: Partial<ExecutionContext> = {}): ExecutionContext {
-    return {
-      data: {},
-      formData: {},
-      user: { id: '', name: '', roles: [], permissions: [] },
-      route: { path: '', query: {}, params: {} },
-      state: {},
-      dispatch: () => {},
-      getState: () => ({}),
-      utils: {
-        formatDate: (date: Date | string, _format = 'YYYY-MM-DD') => {
-          // TODO: 实现日期格式化
-          return String(date);
-        },
-        uuid: () => {
-          // 使用 crypto.randomUUID()（如果可用），否则降级到 Math.random()
-          if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-            return crypto.randomUUID();
+    const runtime = baseContext.runtime ?? new ReactiveRuntime();
+
+    if (baseContext.runtime) {
+      if (baseContext.data && !runtime.hasNamespaceData('data')) {
+        runtime.setNamespace('data', baseContext.data, { notify: false });
+      }
+      if (baseContext.state && !runtime.hasNamespaceData('state')) {
+        runtime.setNamespace('state', baseContext.state, { notify: false });
+      }
+      if (baseContext.formData && !runtime.hasNamespaceData('formData')) {
+        runtime.setNamespace('formData', baseContext.formData, { notify: false });
+      }
+      if (baseContext.components && !runtime.hasComponents()) {
+        runtime.setComponents(baseContext.components, { notify: false });
+      }
+    } else {
+      runtime.initialize({
+        data: baseContext.data,
+        state: baseContext.state,
+        formData: baseContext.formData,
+        components: baseContext.components,
+      });
+    }
+
+    const {
+      data: _data,
+      formData: _formData,
+      state: _state,
+      components: _components,
+      runtime: _runtime,
+      user,
+      route,
+      utils,
+      ui,
+      api,
+      navigate,
+      back,
+      ...restContext
+    } = baseContext;
+
+    const defaultUtils = {
+      formatDate: (date: Date | string, _format = 'YYYY-MM-DD') => {
+        return String(date);
+      },
+      uuid: () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+          return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+          const r = (Math.random() * 16) | 0;
+          const v = c === 'x' ? r : (r & 0x3) | 0x8;
+          return v.toString(16);
+        });
+      },
+      clone: <T>(obj: T): T => {
+        return JSON.parse(JSON.stringify(obj));
+      },
+      debounce: <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
+        let timeout: any;
+        return ((...args: any[]) => {
+          clearTimeout(timeout);
+          timeout = setTimeout(() => fn(...args), delay);
+        }) as T;
+      },
+      throttle: <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
+        let lastCall = 0;
+        return ((...args: any[]) => {
+          const now = Date.now();
+          if (now - lastCall >= delay) {
+            lastCall = now;
+            fn(...args);
           }
-          // 降级方案（非加密安全，仅用于不重要的场景）
-          return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = (Math.random() * 16) | 0;
-            const v = c === 'x' ? r : (r & 0x3) | 0x8;
-            return v.toString(16);
-          });
-        },
-        clone: <T>(obj: T): T => {
-          return JSON.parse(JSON.stringify(obj));
-        },
-        debounce: <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
-          let timeout: any;
-          return ((...args: any[]) => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => fn(...args), delay);
-          }) as T;
-        },
-        throttle: <T extends (...args: any[]) => any>(fn: T, delay: number): T => {
-          let lastCall = 0;
-          return ((...args: any[]) => {
-            const now = Date.now();
-            if (now - lastCall >= delay) {
-              lastCall = now;
-              fn(...args);
-            }
-          }) as T;
-        },
+        }) as T;
       },
-      ui: {
-        message: {
-          success: () => {},
-          error: () => {},
-          warning: () => {},
-          info: () => {},
-        },
-        modal: {
-          confirm: () => Promise.resolve(false),
-          info: () => Promise.resolve(),
-          success: () => Promise.resolve(),
-          error: () => Promise.resolve(),
-          warning: () => Promise.resolve(),
-        },
-        notification: {
-          success: () => {},
-          error: () => {},
-          warning: () => {},
-          info: () => {},
-        },
+    };
+
+    const defaultUi = {
+      message: {
+        success: () => {},
+        error: () => {},
+        warning: () => {},
+        info: () => {},
       },
-      api: {
-        get: <T = any>() => Promise.resolve({} as T),
-        post: <T = any>() => Promise.resolve({} as T),
-        put: <T = any>() => Promise.resolve({} as T),
-        delete: <T = any>() => Promise.resolve({} as T),
-        request: <T = any>() => Promise.resolve({} as T),
+      modal: {
+        confirm: () => Promise.resolve(false),
+        info: () => Promise.resolve(),
+        success: () => Promise.resolve(),
+        error: () => Promise.resolve(),
+        warning: () => Promise.resolve(),
       },
-      navigate: () => {},
-      back: () => {},
-      ...baseContext,
+      notification: {
+        success: () => {},
+        error: () => {},
+        warning: () => {},
+        info: () => {},
+      },
+    };
+
+    const defaultApi = {
+      get: <T = any>() => Promise.resolve({} as T),
+      post: <T = any>() => Promise.resolve({} as T),
+      put: <T = any>() => Promise.resolve({} as T),
+      delete: <T = any>() => Promise.resolve({} as T),
+      request: <T = any>() => Promise.resolve({} as T),
+    };
+
+    return {
+      ...restContext,
+      user: user ?? { id: '', name: '', roles: [], permissions: [] },
+      route: route ?? { path: '', query: {}, params: {} },
+      dispatch: baseContext.dispatch,
+      getState: baseContext.getState,
+      utils: utils ?? defaultUtils,
+      ui: ui ?? defaultUi,
+      api: api ?? defaultApi,
+      navigate: navigate ?? (() => {}),
+      back: back ?? (() => {}),
+      data: runtime.getData(),
+      formData: runtime.getFormData(),
+      state: runtime.getState(),
+      components: runtime.getComponents(),
+      runtime,
     };
   }
 }

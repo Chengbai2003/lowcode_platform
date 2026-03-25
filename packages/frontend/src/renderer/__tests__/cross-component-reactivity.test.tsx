@@ -105,48 +105,6 @@ describe('EventDispatcher subscribe mechanism', () => {
     expect((keys as Set<string>).size).toBe(3);
   });
 
-  it('setComponentData keeps context/store aligned when dispatch throws after store update', async () => {
-    const state = { components: { data: {} as Record<string, unknown> } };
-    const dispatch = vi.fn((action: any) => {
-      const { id, value } = action.payload as { id: string; value: unknown };
-      state.components.data[id] = value;
-      throw new Error('post-next failure');
-    });
-
-    const dispatcher = new EventDispatcher({}, dispatch, () => state);
-    const setData = dispatcher.getExecutionContext().setComponentData;
-
-    expect(() => setData?.('input1', 'value1')).toThrow('post-next failure');
-
-    await flushMicrotasks();
-
-    expect(dispatcher.getExecutionContext().data['input1']).toBe('value1');
-    expect(dispatcher.getVersion()).toBe(1);
-    const changed = dispatcher.getChangedKeysForVersion(0);
-    expect(changed).not.toBe('all');
-    expect((changed as Set<string>).has('input1')).toBe(true);
-  });
-
-  it('setComponentData leaves context unchanged when dispatch throws before store update', async () => {
-    const state = { components: { data: {} as Record<string, unknown> } };
-    const dispatch = vi.fn(() => {
-      throw new Error('pre-next failure');
-    });
-
-    const dispatcher = new EventDispatcher({}, dispatch, () => state);
-    const setData = dispatcher.getExecutionContext().setComponentData;
-
-    expect(() => setData?.('input1', 'value1')).toThrow('pre-next failure');
-
-    await flushMicrotasks();
-
-    expect(dispatcher.getExecutionContext().data['input1']).toBeUndefined();
-    expect(dispatcher.getVersion()).toBe(0);
-    const changed = dispatcher.getChangedKeysForVersion(0);
-    expect(changed).not.toBe('all');
-    expect((changed as Set<string>).size).toBe(0);
-  });
-
   it('initializes ReactiveRuntime with existing execution context namespaces', () => {
     (window as any).__RENDERER_FLAGS__ = {
       reactiveContext: true,
@@ -222,14 +180,7 @@ describe('EventDispatcher subscribe mechanism', () => {
       useReactiveRuntime: true,
     };
 
-    const state = { components: { data: {} as Record<string, unknown> } };
-    const dispatch = vi.fn((action: any) => {
-      if (action.type?.endsWith('/setMultipleComponentData')) {
-        state.components.data = { ...state.components.data, ...action.payload };
-      }
-    });
-
-    const dispatcher = new EventDispatcher({}, dispatch, () => state);
+    const dispatcher = new EventDispatcher({}, vi.fn(), vi.fn());
 
     await dispatcher.execute([
       { type: 'setValue', field: 'input1', value: 'runtime-first' },
@@ -242,40 +193,6 @@ describe('EventDispatcher subscribe mechanism', () => {
     expect(dispatcher.getRuntime()?.get('mirror')).toBe('runtime-first');
     expect(dispatcher.getExecutionContext().data.input1).toBe('runtime-first');
     expect(dispatcher.getExecutionContext().data.mirror).toBe('runtime-first');
-    expect(state.components.data.input1).toBe('runtime-first');
-    expect(state.components.data.mirror).toBe('runtime-first');
-  });
-
-  it('keeps runtime input writes mirrored to compatibility layers', async () => {
-    (window as any).__RENDERER_FLAGS__ = {
-      reactiveContext: true,
-      useReactiveRuntime: true,
-    };
-
-    const state = { components: { data: {} as Record<string, unknown> } };
-    const dispatch = vi.fn((action: any) => {
-      if (action.type?.endsWith('/setComponentData')) {
-        const { id, value } = action.payload as { id: string; value: unknown };
-        state.components.data[id] = value;
-      }
-
-      if (action.type?.endsWith('/setMultipleComponentData')) {
-        state.components.data = { ...state.components.data, ...action.payload };
-      }
-    });
-
-    const dispatcher = new EventDispatcher({}, dispatch, () => state);
-
-    dispatcher.updateComponentData('input1', 'hello-runtime');
-
-    expect(dispatcher.getRuntime()?.get('input1')).toBe('hello-runtime');
-    expect(dispatcher.getExecutionContext().data.input1).toBe('hello-runtime');
-    expect(state.components.data.input1).toBe('hello-runtime');
-
-    await flushMicrotasks();
-
-    expect(dispatcher.getExecutionContext().data.input1).toBe('hello-runtime');
-    expect(state.components.data.input1).toBe('hello-runtime');
   });
 });
 

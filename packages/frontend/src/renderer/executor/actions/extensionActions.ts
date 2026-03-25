@@ -7,7 +7,6 @@
 // 假设你的类型定义路径
 import type { ActionHandler, ExecutionContext } from '../../../types';
 import type { CustomScriptAction } from '../../../types/dsl/actions/extension';
-import { getFlag } from '../../featureFlags';
 import { createCapabilityAPI } from '../capability/capabilityAPI';
 
 const BLOCKED_SCRIPT_PATTERNS = [
@@ -40,19 +39,8 @@ function cloneForSandbox<T>(value: T): T {
 
 function resolveValidComponentIds(context: ExecutionContext): Set<string> {
   const ids = new Set<string>();
-
-  const components = context.components;
-  if (components && typeof components === 'object') {
-    for (const id of Object.keys(components as Record<string, unknown>)) {
-      ids.add(id);
-    }
-  }
-
-  const data = context.data;
-  if (data && typeof data === 'object') {
-    for (const id of Object.keys(data as Record<string, unknown>)) {
-      ids.add(id);
-    }
+  for (const id of Object.keys(context.runtime.getComponents())) {
+    ids.add(id);
   }
 
   return ids;
@@ -84,19 +72,8 @@ export const customScript: ActionHandler = async (action, context) => {
   }
 
   try {
-    // 1. 提取安全的上下文变量
     const sandboxContext = createSandboxContext(context);
-
-    // 2. 在安全沙箱中执行代码
-    const result = await executeInSandbox(code, sandboxContext, timeout);
-
-    // 脚本执行成功后统一触发全量失效兜底（仅在非 capabilityScript 模式下）
-    // capabilityScript 模式下 $.set/$.patch 内部已调用 markFullChange，无需重复触发
-    if (!getFlag('capabilityScript') && typeof context.markFullChange === 'function') {
-      context.markFullChange();
-    }
-
-    return result;
+    return await executeInSandbox(code, sandboxContext, timeout);
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
     const wrappedError = new Error(`Custom script execution failed: ${errorObj.message}`);
@@ -109,74 +86,31 @@ export const customScript: ActionHandler = async (action, context) => {
  * 提取并构建基础上下文（白名单机制）
  */
 function createSandboxContext(context: ExecutionContext): Record<string, any> {
-  // Phase 3: CapabilityAPI 模式 — 只注入受控 API，不暴露 dispatch/getState
-  if (getFlag('capabilityScript')) {
-    const validIds = resolveValidComponentIds(context);
+  const validIds = resolveValidComponentIds(context);
+  const api = createCapabilityAPI({
+    validComponentIds: validIds,
+    runtime: context.runtime,
+  });
 
-    const api = createCapabilityAPI({
-      validComponentIds: validIds,
-      // Phase 2: 为统一写路径传递 runtime
-      runtime: context.runtime,
-      // 遗留：保持向后兼容
-      getData: () => (context.data || {}) as Record<string, any>,
-      setComponentData: context.setComponentData
-        ? (id: string, value: any) => context.setComponentData!(id, value)
-        : () => {
-            console.warn('[CapabilityAPI] setComponentData not available');
-          },
-      markFullChange:
-        typeof context.markFullChange === 'function' ? () => context.markFullChange!() : () => {},
-    });
-
-    // Object.freeze 防止脚本通过 sandbox.data/formData 直写绕过 $.set 链路
-    const sandbox: Record<string, any> = {
-      $: api,
-      data: deepFreeze(cloneForSandbox(context.data ?? {})),
-      formData: deepFreeze(cloneForSandbox(context.formData ?? {})),
-      state: context.state,
-      user: context.user,
-      route: context.route,
-      Math,
-      Date,
-      JSON,
-      console: {
-        log: (...args: any[]) => api.log(...args),
-        warn: (...args: any[]) => console.warn('[Sandbox Warn]:', ...args),
-        error: (...args: any[]) => console.error('[Sandbox Error]:', ...args),
-      },
-    };
-
-    if (context.ui) {
-      sandbox.message = context.ui.message;
-    }
-    if (context.api) {
-      sandbox.api = context.api;
-    }
-
-    return sandbox;
-  }
-
-  // 默认路径：原有白名单机制
-  const safeProps = [
-    'data',
-    'formData',
-    'user',
-    'route',
-    'state',
-    'dispatch',
-    'getState',
-    'utils',
-    'navigate',
-    'back',
-  ];
-
-  const sandbox: Record<string, any> = {};
-
-  for (const prop of safeProps) {
-    if (context[prop] !== undefined) {
-      sandbox[prop] = context[prop];
-    }
-  }
+  const sandbox: Record<string, any> = {
+    $: api,
+    data: deepFreeze(cloneForSandbox(context.runtime.getData())),
+    formData: deepFreeze(cloneForSandbox(context.runtime.getFormData())),
+    state: deepFreeze(cloneForSandbox(context.runtime.getState())),
+    user: context.user,
+    route: context.route,
+    utils: context.utils,
+    navigate: context.navigate,
+    back: context.back,
+    Math,
+    Date,
+    JSON,
+    console: {
+      log: (...args: any[]) => console.log('[Sandbox Log]:', ...args),
+      warn: (...args: any[]) => console.warn('[Sandbox Warn]:', ...args),
+      error: (...args: any[]) => console.error('[Sandbox Error]:', ...args),
+    },
+  };
 
   if (context.ui) {
     sandbox.message = context.ui.message;
@@ -185,16 +119,6 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
   if (context.api) {
     sandbox.api = context.api;
   }
-
-  // 注入一些安全的内置对象，防止用户代码报错
-  sandbox.Math = Math;
-  sandbox.Date = Date;
-  sandbox.JSON = JSON;
-  sandbox.console = {
-    log: (...args: any[]) => console.log('[Sandbox Log]:', ...args),
-    warn: (...args: any[]) => console.warn('[Sandbox Warn]:', ...args),
-    error: (...args: any[]) => console.error('[Sandbox Error]:', ...args),
-  };
 
   return sandbox;
 }

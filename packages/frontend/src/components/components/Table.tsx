@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Button as AntButton, Space, Table as AntTable } from 'antd';
 import type { EventDispatcher } from '../../renderer/EventDispatcher';
+import { DSLExecutor } from '../../renderer/executor';
 import { resolveValue } from '../../renderer/executor/parser/valueResolver';
 import type { ActionList, ExecutionContext } from '../../types';
 import {
@@ -25,57 +26,10 @@ function createTableExecutionContext(
   eventDispatcher: EventDispatcher | undefined,
   extraContext: Record<string, unknown>,
 ): ExecutionContext {
-  const baseContext = eventDispatcher?.getExecutionContext() ?? {
-    data: {},
-    formData: {},
-    user: { id: '', name: '', roles: [], permissions: [] },
-    route: { path: '', query: {}, params: {} },
-    state: {},
-    dispatch: () => undefined,
-    getState: () => ({}),
-    utils: {
-      formatDate: (date: Date | string) => String(date),
-      uuid: () => 'table-runtime',
-      clone: <T,>(obj: T): T => JSON.parse(JSON.stringify(obj)),
-      debounce: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
-      throttle: <T extends (...args: unknown[]) => unknown>(fn: T) => fn,
-    },
-    ui: {
-      message: {
-        success: () => undefined,
-        error: () => undefined,
-        warning: () => undefined,
-        info: () => undefined,
-      },
-      modal: {
-        confirm: async () => false,
-        info: async () => undefined,
-        success: async () => undefined,
-        error: async () => undefined,
-        warning: async () => undefined,
-      },
-      notification: {
-        success: () => undefined,
-        error: () => undefined,
-        warning: () => undefined,
-        info: () => undefined,
-      },
-    },
-    api: {
-      get: async <T = unknown,>() => ({}) as T,
-      post: async <T = unknown,>() => ({}) as T,
-      put: async <T = unknown,>() => ({}) as T,
-      delete: async <T = unknown,>() => ({}) as T,
-      request: async <T = unknown,>() => ({}) as T,
-    },
-    navigate: () => undefined,
-    back: () => undefined,
-  };
-
-  return {
-    ...baseContext,
+  return DSLExecutor.createContext({
+    ...(eventDispatcher?.getExecutionContext() ?? {}),
     ...extraContext,
-  };
+  });
 }
 
 function stringifyCellValue(value: unknown): string {

@@ -1,34 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DSLExecutor } from '../executor';
 import { EventDispatcher } from '../EventDispatcher';
 import { customScript } from '../executor/actions/extensionActions';
 import type { CustomScriptAction, ExecutionContext } from '../../types';
 
 function createExecutionContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
-  return DSLExecutor.createContext(overrides) as ExecutionContext;
+  return DSLExecutor.createContext(overrides);
 }
 
-describe('extensionActions customScript (capability mode)', () => {
-  beforeEach(() => {
-    (window as any).__RENDERER_FLAGS__ = { capabilityScript: true };
-  });
-
+describe('extensionActions customScript', () => {
   afterEach(() => {
-    delete (window as any).__RENDERER_FLAGS__;
     vi.restoreAllMocks();
   });
 
-  it('allows $.set for component IDs from context.components even when data is empty', async () => {
-    const setComponentData = vi.fn();
-    const markFullChange = vi.fn();
-
+  it('allows $.set for component IDs from context.components', async () => {
     const context = createExecutionContext({
-      data: {},
       components: {
         inputB: { id: 'inputB' },
       },
-      setComponentData,
-      markFullChange,
     });
 
     const action: CustomScriptAction = {
@@ -38,8 +27,52 @@ describe('extensionActions customScript (capability mode)', () => {
 
     await customScript(action, context);
 
-    expect(setComponentData).toHaveBeenCalledWith('inputB', 'hello');
-    expect(markFullChange).toHaveBeenCalledTimes(1);
+    expect(context.runtime.get('inputB')).toBe('hello');
+    expect(context.data.inputB).toBe('hello');
+  });
+
+  it('allows $.patch and updates runtime in one batch', async () => {
+    const context = createExecutionContext({
+      components: {
+        inputA: { id: 'inputA' },
+        inputB: { id: 'inputB' },
+      },
+    });
+
+    await customScript(
+      {
+        type: 'customScript',
+        code: "$.patch({ inputA: 'A', inputB: 'B' })",
+      },
+      context,
+    );
+
+    expect(context.runtime.get('inputA')).toBe('A');
+    expect(context.runtime.get('inputB')).toBe('B');
+  });
+
+  it('reads frozen runtime snapshots inside the sandbox', async () => {
+    const context = createExecutionContext({
+      data: {
+        profile: {
+          name: 'alice',
+        },
+      },
+      components: {
+        profile: { id: 'profile' },
+      },
+    });
+
+    await expect(
+      customScript(
+        {
+          type: 'customScript',
+          code: "data.profile.name = 'bob'; return data.profile.name",
+        },
+        context,
+      ),
+    ).resolves.toBe('alice');
+    expect((context.data as any).profile.name).toBe('alice');
   });
 
   it('falls back when structuredClone is unavailable', async () => {
@@ -59,49 +92,32 @@ describe('extensionActions customScript (capability mode)', () => {
         },
       });
 
-      const action: CustomScriptAction = {
-        type: 'customScript',
-        code: 'return data.profile.name',
-      };
-
-      await expect(customScript(action, context)).resolves.toBe('alice');
+      await expect(
+        customScript(
+          {
+            type: 'customScript',
+            code: 'return data.profile.name',
+          },
+          context,
+        ),
+      ).resolves.toBe('alice');
     } finally {
       (globalThis as any).structuredClone = originalStructuredClone;
     }
   });
 
-  it('keeps frozen sandbox data immutable', async () => {
-    const context = createExecutionContext({
-      data: {
-        profile: {
-          name: 'alice',
-        },
-      },
-      components: {
-        profile: { id: 'profile' },
-      },
-    });
-
-    const action: CustomScriptAction = {
-      type: 'customScript',
-      code: "data.profile.name = 'bob'; return data.profile.name",
-    };
-
-    await expect(customScript(action, context)).resolves.toBe('alice');
-    expect((context.data as any).profile.name).toBe('alice');
-  });
-
   it('blocks dynamic import escape hatch', async () => {
     const context = createExecutionContext();
 
-    const action: CustomScriptAction = {
-      type: 'customScript',
-      code: "return import('data:text/javascript,export default 1')",
-    };
-
-    await expect(customScript(action, context)).rejects.toThrow(
-      'Dynamic import is not allowed in customScript',
-    );
+    await expect(
+      customScript(
+        {
+          type: 'customScript',
+          code: "return import('data:text/javascript,export default 1')",
+        },
+        context,
+      ),
+    ).rejects.toThrow('Dynamic import is not allowed in customScript');
   });
 });
 
@@ -115,17 +131,17 @@ describe('enableCustomScript security check', () => {
       enableCustomScript: false,
     });
 
-    const context = createExecutionContext({
-      data: { input1: 'test' },
-    });
-
-    const action: CustomScriptAction = {
-      type: 'customScript',
-      code: 'return "evil"',
-    };
-
-    // executor.execute 返回 BatchActionResult，错误在 results 数组中
-    const result = await executor.execute([action], context);
+    const result = await executor.execute(
+      [
+        {
+          type: 'customScript',
+          code: 'return "evil"',
+        },
+      ],
+      createExecutionContext({
+        data: { input1: 'test' },
+      }),
+    );
 
     expect(result.failed).toBe(1);
     expect(result.results[0].success).toBe(false);
@@ -137,17 +153,17 @@ describe('enableCustomScript security check', () => {
       enableCustomScript: true,
     });
 
-    const context = createExecutionContext({
-      data: { input1: 'test' },
-    });
-
-    const action: CustomScriptAction = {
-      type: 'customScript',
-      code: 'return data.input1',
-    };
-
-    // executor.execute 返回 BatchActionResult，结果在 results[0].value 中
-    const result = await executor.execute([action], context);
+    const result = await executor.execute(
+      [
+        {
+          type: 'customScript',
+          code: 'return data.input1',
+        },
+      ],
+      createExecutionContext({
+        data: { input1: 'test' },
+      }),
+    );
 
     expect(result.success).toBe(1);
     expect(result.results[0].success).toBe(true);
@@ -155,9 +171,7 @@ describe('enableCustomScript security check', () => {
   });
 
   it('keeps customScript enabled in renderer EventDispatcher path', async () => {
-    const dispatch = vi.fn();
-    const state = { components: { data: {} as Record<string, unknown> } };
-    const dispatcher = new EventDispatcher({}, dispatch, () => state);
+    const dispatcher = new EventDispatcher({}, vi.fn(), vi.fn());
 
     const result = await dispatcher.execute(
       [
