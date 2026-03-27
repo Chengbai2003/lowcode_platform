@@ -1,135 +1,150 @@
-# @lowcode-platform/server
+# @lowcode-platform/backend
 
-低代码平台后端服务，提供 AI 集成能力，支持多种 AI Provider。
+> A2UI 低代码平台的后端服务。  
+> 负责页面快照、页面理解、编辑工具、agent 编排、模型接入和代码导出。
 
-## 特性
+## 服务职责
 
-- **NestJS 框架** - 企业级 Node.js 框架
-- **多 AI Provider 支持** - OpenAI、Anthropic、Ollama、LM Studio 等
-- **流式响应** - Server-Sent Events (SSE) 实现打字机效果
-- **模块化架构** - 易于扩展和维护
-- **类型安全** - TypeScript 全支持
+当前 backend 主要承担：
 
-## 支持的 AI Provider
-
-| Provider | 类型 | 说明 |
-|---------|------|------|
-| OpenAI | 云端 | OpenAI 官方 API |
-| Anthropic | 云端 | Claude API |
-| Ollama | 本地 | 本地运行开源模型 |
-| LM Studio | 本地 | 本地模型服务端 |
-| 自定义 | 兼容 | 任意 OpenAI 兼容服务 |
+- 页面快照读写与版本控制
+- 页面上下文切片与候选节点定位
+- 低代码编辑工具注册、patch 校验、auto-fix、preview
+- `answer / schema / patch` 路由与 bounded agent 执行
+- AI Provider 接入、模型配置与通用聊天接口
+- A2UI Schema -> React 代码导出
 
 ## 快速开始
 
-### 安装依赖
+在仓库根目录执行：
 
 ```bash
 pnpm install
 ```
 
-### 配置环境变量
+复制 `packages/backend/.env.example` 为 `packages/backend/.env`，至少配置：
 
 ```bash
-cp .env.example .env
-# 编辑 .env 文件，填写你的 API 密钥
+API_SECRET=dev-secret-token-change-in-production
+PORT=3001
 ```
 
-### 启动开发服务器
+如需调用模型，再补充：
 
 ```bash
-pnpm dev
-```
-
-服务将在 http://localhost:3000 启动。
-
-## API 文档
-
-### 聊天接口
-
-**普通聊天**
-
-```http
-POST /api/v1/ai/chat
-Content-Type: application/json
-
-{
-  "messages": [
-    { "role": "user", "content": "Hello!" }
-  ],
-  "provider": "openai"
-}
-```
-
-**流式聊天 (SSE)**
-
-```http
-POST /api/v1/ai/chat/stream
-Content-Type: application/json
-
-{
-  "messages": [
-    { "role": "user", "content": "Hello!" }
-  ],
-  "provider": "openai"
-}
-```
-
-### 代码生成接口
-
-```http
-POST /api/v1/ai/generate-schema
-Content-Type: application/json
-
-{
-  "description": "创建一个用户登录表单",
-  "provider": "openai"
-}
-```
-
-### Provider 管理接口
-
-```http
-# 获取所有可用 Provider
-GET /api/v1/ai/providers
-
-# 获取所有 Provider 状态
-GET /api/v1/ai/providers/status
-```
-
-## 环境变量配置
-
-### 基础配置
-
-```env
-NODE_ENV=development
-PORT=3000
 AI_DEFAULT_PROVIDER=openai
-```
-
-### OpenAI 配置
-
-```env
-OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4o-mini
-```
-
-### 本地模型配置 (Ollama)
-
-```env
+OPENAI_API_KEY=your_openai_api_key_here
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
 ```
 
-### 自定义 Provider 配置
+启动服务：
 
-```env
-CUSTOM_PROVIDER_1_NAME=siliconflow
-CUSTOM_PROVIDER_1_API_KEY=...
-CUSTOM_PROVIDER_1_BASE_URL=https://api.siliconflow.cn/v1
-CUSTOM_PROVIDER_1_MODEL=deepseek-ai/DeepSeek-V2.5
+```bash
+pnpm dev:backend
 ```
+
+默认地址：
+
+- `http://localhost:3001/api/v1`
+
+补充说明：
+
+- API 全局前缀是 `/api/v1`
+- 核心接口默认需要 `Authorization: Bearer {API_SECRET}`
+- 页面快照文件路径可通过 `PAGE_SCHEMA_FILE_PATH` 覆盖
+
+## 核心模块
+
+```text
+src/modules/
+├── page-schema/    # 页面快照保存、读取、版本冲突保护
+├── schema-context/ # 页面理解、焦点切片、候选定位
+├── agent-tools/    # 低代码编辑工具、preview/validate/auto-fix
+├── agent/          # 路由、runner、memory、trace、replay、metrics
+├── ai/             # Provider 接入、模型管理、通用 chat/schema 生成
+├── compiler/       # Schema -> React 代码导出
+└── common/         # auth、filter、interceptor 等基础设施
+```
+
+## 主要接口
+
+### Agent
+
+```http
+POST /api/v1/agent/edit
+POST /api/v1/agent/edit/stream
+POST /api/v1/agent/patch/preview
+GET  /api/v1/agent/traces/:traceId
+GET  /api/v1/agent/traces/:traceId/replay
+GET  /api/v1/agent/metrics/summary
+```
+
+### Page Schema
+
+```http
+PUT /api/v1/pages/:pageId/schema
+GET /api/v1/pages/:pageId/schema
+GET /api/v1/pages/:pageId/schema?version=xx
+```
+
+### AI / Models
+
+```http
+POST   /api/v1/ai/chat
+POST   /api/v1/ai/chat/stream
+POST   /api/v1/ai/generate-schema
+POST   /api/v1/ai/generate-schema/stream
+GET    /api/v1/ai/providers
+GET    /api/v1/ai/providers/status
+GET    /api/v1/ai/providers/:name/health
+GET    /api/v1/ai/models
+POST   /api/v1/ai/models
+DELETE /api/v1/ai/models/:id
+```
+
+### AI Sessions
+
+```http
+GET    /api/v1/ai/sessions
+GET    /api/v1/ai/sessions/:id
+POST   /api/v1/ai/sessions
+PUT    /api/v1/ai/sessions/:id
+DELETE /api/v1/ai/sessions/:id
+```
+
+### Compiler
+
+```http
+GET  /api/v1/compiler/health
+POST /api/v1/compiler/export
+```
+
+## 常用命令
+
+```bash
+pnpm --filter @lowcode-platform/backend dev
+pnpm --filter @lowcode-platform/backend build
+pnpm --filter @lowcode-platform/backend test
+pnpm --filter @lowcode-platform/backend test:e2e
+pnpm --filter @lowcode-platform/backend test:cov
+pnpm --filter @lowcode-platform/backend test:compiler
+pnpm --filter @lowcode-platform/backend compiler:regression
+pnpm --filter @lowcode-platform/backend type-check
+```
+
+## 当前边界
+
+- 页面快照当前仍是 file-backed store
+- `ai/sessions` 当前是内存实现，只适合开发和测试
+- 数据库与 Redis 配置目前仍主要是预留位
+- `agent-runner.service.ts` 已经较大，后续继续扩展前需要拆职责
+
+## 相关文档
+
+- 根目录 `README.md`：项目整体说明
+- 根目录 `project_summary.md`：当前仓库状态综述
+- 根目录 `低代码平台-接入agent路线图.md`：阶段路线图
 
 ## License
 
