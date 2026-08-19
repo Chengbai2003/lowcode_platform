@@ -54,10 +54,46 @@ const RESERVED_CONTEXT_KEYS = new Set([
   'dispatch',
   'getState',
   'components',
+  'runtime',
   '__proto__',
   'constructor',
   'prototype',
 ]);
+
+const ALLOWED_EXPRESSION_KEYS = [
+  'data',
+  'state',
+  'formData',
+  'user',
+  'route',
+  'components',
+] as const;
+const PURE_UTILS_KEYS = ['formatDate', 'uuid', 'clone'] as const;
+
+function pickAllowedContext(context: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const k of ALLOWED_EXPRESSION_KEYS) {
+    if (k in context) out[k] = (context as Record<string, any>)[k];
+  }
+  // preserve existing top-level data aliases (e.g. loginForm) that are already in context
+  // but filter via isValidAliasKey to avoid leaking reserved keys like api/runtime
+  for (const [k, v] of Object.entries(context)) {
+    if ((ALLOWED_EXPRESSION_KEYS as readonly string[]).includes(k)) continue;
+    if (k === 'utils') continue;
+    if (!isValidAliasKey(k, out)) continue;
+    out[k] = v;
+  }
+  // expose only pure utils helpers if present
+  if (context.utils && typeof context.utils === 'object') {
+    const filtered: Record<string, any> = {};
+    for (const kk of PURE_UTILS_KEYS) {
+      const fn = (context.utils as Record<string, any>)[kk];
+      if (typeof fn === 'function') filtered[kk] = fn;
+    }
+    if (Object.keys(filtered).length > 0) out.utils = filtered;
+  }
+  return out;
+}
 
 /**
  * 表达式正则表达式
@@ -99,18 +135,19 @@ export function buildExpressionContext(context: Record<string, any> = {}): Recor
   }
 
   const data = (context as Record<string, any>).data;
+  const allowedBase = pickAllowedContext(context);
 
   if (!data || typeof data !== 'object') {
-    return { ...context };
+    return allowedBase;
   }
 
   // Proxy 惰性别名，按需读取而非全量展开
   if (getFlag('selectiveEvaluation')) {
-    return new Proxy(context, {
+    return new Proxy(allowedBase, {
       get(target, key: string) {
-        if (key in target) return target[key];
+        if (key in target) return (target as Record<string, any>)[key];
         if (typeof key === 'string' && isValidAliasKey(key, target) && key in data) {
-          return data[key];
+          return (data as Record<string, any>)[key];
         }
         return undefined;
       },
@@ -122,8 +159,8 @@ export function buildExpressionContext(context: Record<string, any> = {}): Recor
   }
 
   // 默认路径：全量展开（向后兼容）
-  const resolvedContext: Record<string, any> = { ...context };
-  for (const [key, value] of Object.entries(data)) {
+  const resolvedContext: Record<string, any> = { ...allowedBase };
+  for (const [key, value] of Object.entries(data as Record<string, any>)) {
     if (!isValidAliasKey(key, resolvedContext)) continue;
     resolvedContext[key] = value;
   }
@@ -435,8 +472,9 @@ function buildExpressionContextWithProxy(
   proxy: Record<string, any>,
   context: Record<string, any> = {},
 ): Record<string, any> {
+  const allowed = pickAllowedContext(context);
   const baseContext: Record<string, any> = {
-    ...context,
+    ...allowed,
     data: proxy.data,
     state: proxy.state,
     formData: proxy.formData,

@@ -184,6 +184,77 @@ export class PatchValidationService {
         traceId,
       });
     }
+
+    if (this.hasCustomScriptInComponent(operation.component)) {
+      throw new AgentToolException({
+        code: 'PATCH_POLICY_BLOCKED',
+        message: 'customScript is not allowed in schema',
+        traceId,
+      });
+    }
+  }
+
+  private hasCustomScriptInComponent(component: Record<string, unknown>): boolean {
+    const events = component.events;
+    if (events && typeof events === 'object' && !Array.isArray(events)) {
+      for (const actions of Object.values(events as Record<string, unknown>)) {
+        if (this.hasCustomScriptInActions(actions)) {
+          return true;
+        }
+      }
+    }
+    if (component.props && this.hasCustomScriptInValue(component.props)) {
+      return true;
+    }
+    return false;
+  }
+
+  private hasCustomScriptInActions(value: unknown): boolean {
+    if (!Array.isArray(value)) {
+      return false;
+    }
+    for (const action of value) {
+      if (this.hasCustomScriptInAction(action)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private hasCustomScriptInAction(action: unknown): boolean {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) {
+      return false;
+    }
+    const typed = action as Record<string, unknown>;
+    if (typed.type === 'customScript') {
+      return true;
+    }
+    const nestedKeys = ['then', 'else', 'actions', 'onSuccess', 'onError', 'onOk', 'onCancel'];
+    for (const key of nestedKeys) {
+      const nested = typed[key];
+      if (Array.isArray(nested)) {
+        for (const nestedAction of nested) {
+          if (this.hasCustomScriptInAction(nestedAction)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
+  private hasCustomScriptInValue(value: unknown): boolean {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+    if (Array.isArray(value)) {
+      return value.some((item) => this.hasCustomScriptInValue(item));
+    }
+    const record = value as Record<string, unknown>;
+    if (record.type === 'customScript') {
+      return true;
+    }
+    return Object.values(record).some((v) => this.hasCustomScriptInValue(v));
   }
 
   private assertMoveValid(

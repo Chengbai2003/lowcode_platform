@@ -51,6 +51,10 @@ interface HistoryState {
   maxHistorySize: number;
   /** 当前是否正在执行命令（防止重复执行） */
   isExecuting: boolean;
+  /** 当前页面 ID，用于隔离 per-page 历史 */
+  currentPageId: string | null;
+  /** 单调递增代次，page 切换或 clear 时递增，用于 async 响应过期校验 */
+  generation: number;
 }
 
 interface HistoryActions {
@@ -74,6 +78,16 @@ interface HistoryActions {
   getUndoHistory: (count?: number) => string[];
   /** 获取最近 N 条重做命令描述 */
   getRedoHistory: (count?: number) => string[];
+  /** 设置当前页面上下文，pageId 变化时自动清空并递增 generation */
+  setCurrentPageId: (pageId: string | null) => void;
+  /** setPageContext 别名，兼容不同调用方 */
+  setPageContext: (pageId: string | null) => void;
+  /** clearForPage 别名 */
+  clearForPage: (pageId: string | null) => void;
+  /** 获取当前页面 ID */
+  getCurrentPageId: () => string | null;
+  /** 获取当前 generation */
+  getGeneration: () => number;
 }
 
 type HistoryStore = HistoryState & HistoryActions;
@@ -112,6 +126,8 @@ export const useHistoryStore = create<HistoryStore>()(
       redoStack: [],
       maxHistorySize: 50,
       isExecuting: false,
+      currentPageId: null,
+      generation: 0,
 
       executeCommand: (command: Command) => {
         const state = get();
@@ -214,7 +230,39 @@ export const useHistoryStore = create<HistoryStore>()(
       },
 
       clear: () => {
-        set({ undoStack: [], redoStack: [] });
+        set((state) => ({
+          undoStack: [],
+          redoStack: [],
+          generation: state.generation + 1,
+        }));
+      },
+
+      setCurrentPageId: (pageId) => {
+        const state = get();
+        if (state.currentPageId === pageId) return;
+        set({
+          currentPageId: pageId,
+          undoStack: [],
+          redoStack: [],
+          generation: state.generation + 1,
+        });
+      },
+
+      setPageContext: (pageId) => {
+        // alias to setCurrentPageId for compatibility
+        get().setCurrentPageId(pageId);
+      },
+
+      clearForPage: (pageId) => {
+        get().setCurrentPageId(pageId);
+      },
+
+      getCurrentPageId: () => {
+        return get().currentPageId;
+      },
+
+      getGeneration: () => {
+        return get().generation;
       },
 
       getUndoStackSize: () => {

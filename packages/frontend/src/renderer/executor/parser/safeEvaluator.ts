@@ -23,6 +23,36 @@ export const SAFE_GLOBALS: Record<string, any> = {
   false: false,
 };
 
+const BLOCKED_MEMBER_PROPS = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+  'toJSON',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+]);
+
+const BLOCKED_CALL_METHODS = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+  'assign',
+  'defineProperty',
+  'setPrototypeOf',
+  'freeze',
+  'seal',
+  'preventExtensions',
+  'toJSON',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+]);
+
+const HIGH_COST_METHODS = new Set(['repeat', 'padStart', 'padEnd']);
+
 /**
  * 安全计算 AST 节点
  */
@@ -63,12 +93,8 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         propertyName = (memberNode.property as jsep.Identifier).name;
       }
 
-      // 安全检查：阻止访问原型链和构造函数
-      if (
-        propertyName === '__proto__' ||
-        propertyName === 'prototype' ||
-        propertyName === 'constructor'
-      ) {
+      // 安全检查：阻止访问原型链、构造函数及危险方法
+      if (typeof propertyName === 'string' && BLOCKED_MEMBER_PROPS.has(propertyName)) {
         return undefined;
       }
 
@@ -196,25 +222,17 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         }
 
         // 安全拦截
-        if (
-          funcName === '__proto__' ||
-          funcName === 'prototype' ||
-          funcName === 'constructor' ||
-          [
-            'assign',
-            'defineProperty',
-            'setPrototypeOf',
-            'freeze',
-            'seal',
-            'preventExtensions',
-          ].includes(funcName)
-        ) {
+        if (BLOCKED_CALL_METHODS.has(funcName)) {
           return undefined;
         }
 
         func = targetObj[funcName];
       } else if (callNode.callee.type === 'Identifier') {
         funcName = (callNode.callee as jsep.Identifier).name;
+
+        if (BLOCKED_CALL_METHODS.has(funcName)) {
+          return undefined;
+        }
 
         if (context && funcName in context) {
           func = context[funcName];
@@ -223,6 +241,8 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
           func = SAFE_GLOBALS[funcName];
           targetObj = SAFE_GLOBALS; // 函数的 this 绑定到 SAFE_GLOBALS
         }
+      } else {
+        return undefined;
       }
 
       if (typeof func !== 'function') {
@@ -231,6 +251,18 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
       // 计算参数
       const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+
+      // 高消耗方法：repeat/padStart/padEnd 且数值参数过大时直接拦截
+      if (HIGH_COST_METHODS.has(funcName)) {
+        for (const a of args) {
+          if (typeof a === 'number' && a > 1000) return undefined;
+        }
+      }
+
+      // 过滤函数类型的参数（阻止 map/filter 等传入回调获取函数执行能力）
+      if (args.some((a) => typeof a === 'function')) {
+        return undefined;
+      }
 
       try {
         return func.apply(targetObj, args);

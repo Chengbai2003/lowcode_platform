@@ -72,4 +72,83 @@ export function assertValidPageSchema(
       }
     }
   }
+
+  if (hasCustomScriptInSchema(typedSchema as A2UISchemaShape)) {
+    throw new BadRequestException('customScript is not allowed in schema');
+  }
+}
+
+function hasCustomScriptInSchema(schema: A2UISchemaShape): boolean {
+  for (const component of Object.values(schema.components)) {
+    if (hasCustomScriptInComponent(component as A2UIComponentShape)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasCustomScriptInComponent(component: A2UIComponentShape): boolean {
+  if (
+    component.events &&
+    typeof component.events === 'object' &&
+    !Array.isArray(component.events)
+  ) {
+    for (const actions of Object.values(component.events)) {
+      if (hasCustomScriptInActions(actions)) {
+        return true;
+      }
+    }
+  }
+  if (component.props && hasCustomScriptInValue(component.props)) {
+    return true;
+  }
+  return false;
+}
+
+function hasCustomScriptInActions(value: unknown): boolean {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  for (const action of value) {
+    if (hasCustomScriptInAction(action)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasCustomScriptInAction(action: unknown): boolean {
+  if (!action || typeof action !== 'object' || Array.isArray(action)) {
+    return false;
+  }
+  const typed = action as Record<string, unknown>;
+  if (typed.type === 'customScript') {
+    return true;
+  }
+  const nestedKeys = ['then', 'else', 'actions', 'onSuccess', 'onError', 'onOk', 'onCancel'];
+  for (const key of nestedKeys) {
+    const nested = typed[key];
+    if (Array.isArray(nested)) {
+      for (const nestedAction of nested) {
+        if (hasCustomScriptInAction(nestedAction)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function hasCustomScriptInValue(value: unknown): boolean {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  if (Array.isArray(value)) {
+    return value.some((item) => hasCustomScriptInValue(item));
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type === 'customScript') {
+    return true;
+  }
+  return Object.values(record).some((v) => hasCustomScriptInValue(v));
 }

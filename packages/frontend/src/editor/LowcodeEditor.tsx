@@ -26,7 +26,8 @@ import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
 import { createPatchCommand } from './commands/schemaCommands';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
-import { useSelectionStore } from './store/editor-store';
+import { useSelectionStore, useEditorStore } from './store/editor-store';
+import { useHistoryStore } from './store/history';
 import { createDefaultReactiveSchema } from './templates/reactiveSchema';
 import { pageSchemaApi } from './services/pageSchemaApi';
 import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
@@ -175,6 +176,17 @@ function LowcodeEditorInner({
   const selectedId = useSelectionStore((state) => state.selectedId);
   const selectComponent = useSelectionStore((state) => state.selectComponent);
 
+  // 按 pageId 隔离 history 与 selection（P0-8）
+  const setEditorPageId = useEditorStore((state) => state.setCurrentPageId);
+  useEffect(() => {
+    const nextPageId = pageId ?? null;
+    // 通过 editorStore 统一分发到 history 与 selection
+    setEditorPageId(nextPageId);
+    // 兼容直接订阅 history 的消费者：同步更新 historyStore
+    useHistoryStore.getState().setCurrentPageId(nextPageId);
+    useSelectionStore.getState().setCurrentPageId(nextPageId);
+  }, [pageId, setEditorPageId]);
+
   // 浮动岛快捷键
   useFloatingIslandHotkey();
 
@@ -228,6 +240,9 @@ function LowcodeEditorInner({
 
   useEffect(() => {
     let cancelled = false;
+    // 捕获当前 pageId 与 generation，用于 async 响应过期校验（P0-8）
+    const requestPageId = pageId ?? null;
+    const requestGeneration = useEditorStore.getState().generation;
 
     if (!pageId) {
       return () => {
@@ -241,11 +256,22 @@ function LowcodeEditorInner({
         if (cancelled) {
           return;
         }
+        // 若期间发生 page 切换（generation 变化或 pageId 不一致），丢弃过期响应
+        const currentGeneration = useEditorStore.getState().generation;
+        const currentPageId = useEditorStore.getState().currentPageId;
+        if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
+          return;
+        }
         setSchema(syncSchemaVersion(result.schema, result.version));
         setPageVersion(result.version);
       })
       .catch(async (error: unknown) => {
         if (cancelled) {
+          return;
+        }
+        const currentGeneration = useEditorStore.getState().generation;
+        const currentPageId = useEditorStore.getState().currentPageId;
+        if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
           return;
         }
 
@@ -255,6 +281,11 @@ function LowcodeEditorInner({
           try {
             const bootstrapResult = await pageSchemaApi.savePageSchema(pageId, initialSchemaObj);
             if (cancelled) {
+              return;
+            }
+            const curGen = useEditorStore.getState().generation;
+            const curPageId = useEditorStore.getState().currentPageId;
+            if (curGen !== requestGeneration || curPageId !== requestPageId) {
               return;
             }
             setSchema(syncSchemaVersion(initialSchemaObj, bootstrapResult.version));

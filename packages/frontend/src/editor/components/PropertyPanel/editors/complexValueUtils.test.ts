@@ -9,18 +9,35 @@ import {
   sanitizeTableColumnsValue,
 } from './complexValueUtils';
 
+function stripStableIds(columns: unknown[]): unknown[] {
+  return (columns as unknown as Array<Record<string, unknown>>).map((col) => {
+    const { __stableId, _stableId, _id, ...rest } = col;
+    if (Array.isArray(rest.buttons)) {
+      rest.buttons = (rest.buttons as unknown as Array<Record<string, unknown>>).map((btn) => {
+        const { __stableId: _bStable, _stableId: _b2, _id: _b3, ...bRest } = btn;
+        return bRest;
+      });
+    }
+    return rest;
+  });
+}
+
 describe('sanitizeTableColumnsValue', () => {
   it('returns fallback template for non-array values', () => {
     const result = sanitizeTableColumnsValue('not-json');
 
-    expect(result).toEqual([{ kind: 'data', title: '列1', dataIndex: 'col1', key: 'col1' }]);
+    expect(stripStableIds(result as unknown[])).toEqual([
+      { kind: 'data', title: '列1', dataIndex: 'col1', key: 'col1' },
+    ]);
+    // 每个列应具有稳定 ID
+    expect((result[0] as unknown as Record<string, unknown>).__stableId).toBeDefined();
   });
 
   it('returns cloned fallback for null/undefined input', () => {
     const fallback = [{ title: '姓名', dataIndex: 'name', key: 'name' }];
     const result = sanitizeTableColumnsValue(undefined, fallback);
 
-    expect(result).toEqual([
+    expect(stripStableIds(result as unknown[])).toEqual([
       {
         kind: 'data',
         title: '姓名',
@@ -39,7 +56,7 @@ describe('sanitizeTableColumnsValue', () => {
       '[{"title":"","dataIndex":"name","width":"120","align":"center"}]',
     );
 
-    expect(result).toEqual([
+    expect(stripStableIds(result as unknown[])).toEqual([
       {
         kind: 'data',
         title: '列1',
@@ -77,7 +94,7 @@ describe('sanitizeTableColumnsValue', () => {
       },
     ]);
 
-    expect(result).toEqual([
+    expect(stripStableIds(result as unknown[])).toEqual([
       {
         kind: 'data',
         title: '用户名',
@@ -113,7 +130,18 @@ describe('sanitizeTableColumnsValue', () => {
       },
     ]);
 
-    expect(result).toEqual([
+    const stripped = stripStableIds(result as unknown[]) as Array<Record<string, unknown>>;
+    const expectedButtons = [
+      {
+        ...createDefaultTableActionButton(0),
+        danger: true,
+        actions: [{ type: 'feedback', kind: 'message', content: 'ok', level: 'success' }],
+      },
+    ];
+    const strippedExpectedButtons = stripStableIds(expectedButtons as unknown[]) as Array<
+      Record<string, unknown>
+    >;
+    expect(stripped).toEqual([
       {
         kind: 'link',
         title: '详情',
@@ -127,13 +155,7 @@ describe('sanitizeTableColumnsValue', () => {
         kind: 'action',
         title: '操作',
         key: 'actions',
-        buttons: [
-          {
-            ...createDefaultTableActionButton(0),
-            danger: true,
-            actions: [{ type: 'feedback', kind: 'message', content: 'ok', level: 'success' }],
-          },
-        ],
+        buttons: strippedExpectedButtons,
       },
     ]);
   });

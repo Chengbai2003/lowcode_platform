@@ -51,6 +51,105 @@ export function isValidExpressionPath(code: string): boolean {
   return /^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*|\[\d+\])*$/.test(code);
 }
 
+const ALLOWED_AST_TYPES = new Set([
+  'Literal',
+  'Identifier',
+  'MemberExpression',
+  'BinaryExpression',
+  'LogicalExpression',
+  'UnaryExpression',
+  'ConditionalExpression',
+  'CallExpression',
+  'ArrayExpression',
+  'Compound',
+]);
+
+const BLOCKED_CALLEE_NAMES = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+  'toJSON',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  'assign',
+  'defineProperty',
+  'setPrototypeOf',
+  'freeze',
+  'seal',
+  'preventExtensions',
+  'eval',
+  'Function',
+]);
+
+function isAllowedASTNode(node: any): boolean {
+  if (!node || typeof node !== 'object' || !node.type) return true;
+  if (!ALLOWED_AST_TYPES.has(node.type)) return false;
+  switch (node.type) {
+    case 'Compound': {
+      const body = (node as any).body;
+      if (!Array.isArray(body) || body.length !== 1) return false;
+      return isAllowedASTNode(body[0]);
+    }
+    case 'MemberExpression': {
+      const prop = (node as any).property;
+      const propName =
+        (node as any).computed === false && prop && prop.type === 'Identifier'
+          ? prop.name
+          : typeof prop?.value === 'string'
+            ? prop.value
+            : typeof prop?.name === 'string'
+              ? prop.name
+              : '';
+      if (propName && BLOCKED_CALLEE_NAMES.has(propName)) return false;
+      return isAllowedASTNode((node as any).object) && isAllowedASTNode(prop);
+    }
+    case 'BinaryExpression':
+    case 'LogicalExpression': {
+      return isAllowedASTNode((node as any).left) && isAllowedASTNode((node as any).right);
+    }
+    case 'UnaryExpression': {
+      return isAllowedASTNode((node as any).argument);
+    }
+    case 'ConditionalExpression': {
+      return (
+        isAllowedASTNode((node as any).test) &&
+        isAllowedASTNode((node as any).consequent) &&
+        isAllowedASTNode((node as any).alternate)
+      );
+    }
+    case 'CallExpression': {
+      const callee = (node as any).callee;
+      if (!callee) return false;
+      if (callee.type === 'Identifier') {
+        if (BLOCKED_CALLEE_NAMES.has(callee.name)) return false;
+      } else if (callee.type === 'MemberExpression') {
+        if (!isAllowedASTNode(callee)) return false;
+      } else {
+        return false;
+      }
+      const args = (node as any).arguments || [];
+      for (const arg of args) {
+        if (!isAllowedASTNode(arg)) return false;
+      }
+      return true;
+    }
+    case 'ArrayExpression': {
+      const elems = (node as any).elements || [];
+      for (const el of elems) {
+        if (el && !isAllowedASTNode(el)) return false;
+      }
+      return true;
+    }
+    case 'Literal':
+    case 'Identifier':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function isSafeInlineExpression(code: string): boolean {
   if (!code || typeof code !== 'string') return false;
   const trimmed = code.trim();
@@ -71,6 +170,39 @@ export function isSafeInlineExpression(code: string): boolean {
   }
 
   if (/(^|[^=!<>])=($|[^=])/m.test(trimmed)) {
+    return false;
+  }
+
+  // secondary block for dangerous method names even without AST (fallback)
+  for (const token of BLOCKED_CALLEE_NAMES) {
+    if (trimmed.includes(token)) {
+      return false;
+    }
+  }
+
+  // AST whitelist (primary)
+  try {
+    let jsep: any = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+      jsep = require('jsep');
+    } catch {
+      try {
+        // fallback to frontend's jsep if backend doesn't have direct dep
+        // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+        jsep = require('../../../../frontend/node_modules/jsep/dist/jsep.js');
+      } catch {
+        jsep = null;
+      }
+    }
+    if (jsep) {
+      const parseFn = typeof jsep === 'function' ? jsep : jsep.default || jsep.parse;
+      if (typeof parseFn === 'function') {
+        const ast = parseFn(trimmed);
+        if (!isAllowedASTNode(ast)) return false;
+      }
+    }
+  } catch {
     return false;
   }
 
@@ -233,5 +365,3 @@ export function sanitizeUrl(url: string): string {
 export function isStaticStringValue(node: ValueNode): node is { kind: 'literal'; value: string } {
   return node.kind === 'literal' && typeof node.value === 'string';
 }
-
-

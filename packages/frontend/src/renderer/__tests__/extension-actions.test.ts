@@ -170,8 +170,8 @@ describe('enableCustomScript security check', () => {
     expect((result.results[0] as any).value).toBe('test');
   });
 
-  it('keeps customScript enabled in renderer EventDispatcher path', async () => {
-    const dispatcher = new EventDispatcher({}, vi.fn(), vi.fn());
+  it('keeps customScript enabled in renderer EventDispatcher path when explicitly enabled', async () => {
+    const dispatcher = new EventDispatcher({ enableCustomScript: true }, vi.fn(), vi.fn());
 
     const result = await dispatcher.execute(
       [

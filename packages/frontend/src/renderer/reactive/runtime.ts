@@ -30,11 +30,16 @@ import { SnapshotManager } from './snapshot';
  * - "formData.user.name" -> formData.user.name（显式 formData 命名空间）
  * - "data.input1" -> data.input1（显式 data 前缀）
  */
+export function isSafeKey(key: string): boolean {
+  return key !== '__proto__' && key !== 'prototype' && key !== 'constructor';
+}
+
 function parsePath(path: DataPath): { namespace: string; rest: string } {
   const dotIndex = path.indexOf('.');
 
   // 没有点表示是顶层路径，默认为 'data' 命名空间
   if (dotIndex === -1) {
+    // single segment __proto__ should be considered unsafe later via rest check
     return { namespace: 'data', rest: path };
   }
 
@@ -80,6 +85,9 @@ function getValueByPath(obj: Record<string, unknown>, path: string): unknown {
   let current: unknown = obj;
 
   for (const part of parts) {
+    if (!isSafeKey(part)) {
+      return undefined;
+    }
     if (current === null || current === undefined) {
       return undefined;
     }
@@ -102,6 +110,11 @@ function setValueByPath(obj: Record<string, unknown>, path: string, value: unkno
   }
 
   const parts = path.split('.');
+  for (const part of parts) {
+    if (!isSafeKey(part)) {
+      throw new Error(`[ReactiveRuntime] Invalid key: ${part}`);
+    }
+  }
   let current: Record<string, unknown> = obj;
 
   for (let i = 0; i < parts.length - 1; i++) {
@@ -199,6 +212,16 @@ export class ReactiveRuntime {
    */
   set(path: DataPath, value: unknown): void {
     const { namespace, rest } = parsePath(path);
+
+    // unified prototype pollution check on rest segments + namespace
+    if (!isSafeKey(namespace)) {
+      throw new Error(`[ReactiveRuntime] Invalid namespace: ${namespace}`);
+    }
+    for (const part of rest.split('.')) {
+      if (!isSafeKey(part)) {
+        throw new Error(`[ReactiveRuntime] Invalid key: ${part}`);
+      }
+    }
 
     let target: Record<string, unknown>;
     switch (namespace) {
