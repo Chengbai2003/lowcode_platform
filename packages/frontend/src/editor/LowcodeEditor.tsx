@@ -27,7 +27,6 @@ import { createPatchCommand } from './commands/schemaCommands';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
 import { useSelectionStore, useEditorStore } from './store/editor-store';
-import { useHistoryStore } from './store/history';
 import { createDefaultReactiveSchema } from './templates/reactiveSchema';
 import { pageSchemaApi } from './services/pageSchemaApi';
 import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
@@ -176,15 +175,11 @@ function LowcodeEditorInner({
   const selectedId = useSelectionStore((state) => state.selectedId);
   const selectComponent = useSelectionStore((state) => state.selectComponent);
 
-  // 按 pageId 隔离 history 与 selection（P0-8）
+  // 按 pageId 隔离 history 与 selection（P0-8）- editorStore 内部已同步 history/selection
   const setEditorPageId = useEditorStore((state) => state.setCurrentPageId);
   useEffect(() => {
     const nextPageId = pageId ?? null;
-    // 通过 editorStore 统一分发到 history 与 selection
     setEditorPageId(nextPageId);
-    // 兼容直接订阅 history 的消费者：同步更新 historyStore
-    useHistoryStore.getState().setCurrentPageId(nextPageId);
-    useSelectionStore.getState().setCurrentPageId(nextPageId);
   }, [pageId, setEditorPageId]);
 
   // 浮动岛快捷键

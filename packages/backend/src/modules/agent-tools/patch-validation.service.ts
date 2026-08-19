@@ -243,6 +243,7 @@ export class PatchValidationService {
     return false;
   }
 
+  // TODO: dedupe with schema-validation.ts hasCustomScript* helpers - extract to shared/customScriptGuard.ts
   private hasCustomScriptInValue(value: unknown): boolean {
     if (!value || typeof value !== 'object') {
       return false;

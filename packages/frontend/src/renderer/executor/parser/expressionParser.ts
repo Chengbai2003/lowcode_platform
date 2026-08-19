@@ -75,8 +75,9 @@ function pickAllowedContext(context: Record<string, any>): Record<string, any> {
   for (const k of ALLOWED_EXPRESSION_KEYS) {
     if (k in context) out[k] = (context as Record<string, any>)[k];
   }
-  // preserve existing top-level data aliases (e.g. loginForm) that are already in context
-  // but filter via isValidAliasKey to avoid leaking reserved keys like api/runtime
+  // preserve top-level data aliases (e.g. loginForm) but deny-list guarded:
+  // isValidAliasKey checks RESERVED_CONTEXT_KEYS (contains api/runtime/dispatch/getState/navigate/ui etc.)
+  // so even if future context adds new sensitive keys, they will be filtered here.
   for (const [k, v] of Object.entries(context)) {
     if ((ALLOWED_EXPRESSION_KEYS as readonly string[]).includes(k)) continue;
     if (k === 'utils') continue;

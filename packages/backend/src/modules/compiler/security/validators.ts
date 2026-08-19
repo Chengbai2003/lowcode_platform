@@ -173,35 +173,19 @@ export function isSafeInlineExpression(code: string): boolean {
     return false;
   }
 
-  // secondary block for dangerous method names even without AST (fallback)
-  for (const token of BLOCKED_CALLEE_NAMES) {
-    if (trimmed.includes(token)) {
-      return false;
-    }
-  }
-
-  // AST whitelist (primary)
+  // AST whitelist (primary) - fail-close if parser unavailable
   try {
     let jsep: any = null;
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
       jsep = require('jsep');
     } catch {
-      try {
-        // fallback to frontend's jsep if backend doesn't have direct dep
-        // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
-        jsep = require('../../../../frontend/node_modules/jsep/dist/jsep.js');
-      } catch {
-        jsep = null;
-      }
+      return false;
     }
-    if (jsep) {
-      const parseFn = typeof jsep === 'function' ? jsep : jsep.default || jsep.parse;
-      if (typeof parseFn === 'function') {
-        const ast = parseFn(trimmed);
-        if (!isAllowedASTNode(ast)) return false;
-      }
-    }
+    const parseFn = typeof jsep === 'function' ? jsep : jsep.default || jsep.parse;
+    if (typeof parseFn !== 'function') return false;
+    const ast = parseFn(trimmed);
+    if (!isAllowedASTNode(ast)) return false;
   } catch {
     return false;
   }

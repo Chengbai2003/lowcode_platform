@@ -139,6 +139,7 @@ function hasCustomScriptInAction(action: unknown): boolean {
   return false;
 }
 
+// TODO: dedupe with patch-validation.service.ts hasCustomScript* helpers - extract to shared/customScriptGuard.ts on next iteration
 function hasCustomScriptInValue(value: unknown): boolean {
   if (!value || typeof value !== 'object') {
     return false;

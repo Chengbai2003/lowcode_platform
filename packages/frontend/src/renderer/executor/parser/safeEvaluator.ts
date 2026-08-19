@@ -252,10 +252,11 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       // 计算参数
       const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
 
-      // 高消耗方法：repeat/padStart/padEnd 且数值参数过大时直接拦截
+      // 高消耗方法：repeat/padStart/padEnd 且数值参数过大时直接拦截（Number 转换防字符串绕过）
       if (HIGH_COST_METHODS.has(funcName)) {
         for (const a of args) {
-          if (typeof a === 'number' && a > 1000) return undefined;
+          const n = Number(a);
+          if (Number.isFinite(n) && n > 1000) return undefined;
         }
       }
 

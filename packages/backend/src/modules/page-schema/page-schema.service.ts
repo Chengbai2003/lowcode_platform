@@ -50,37 +50,18 @@ export class PageSchemaService {
 
     // Delegate version check to repository atomic operation to prevent race conditions.
     // The check and write are serialized via repository's async mutex (saveQueue)
-    // and performed inside the same critical section.
-    const repoAny = this.repository as unknown as Record<string, unknown>;
-    if (typeof repoAny.saveSnapshotWithVersionCheck === 'function') {
-      await (
-        repoAny.saveSnapshotWithVersionCheck as (
-          s: PageSchemaSnapshotRecord,
-          p: PageRecord,
-          v: number | undefined,
-        ) => Promise<void>
-      )(snapshot, page, dto.baseVersion);
-    } else if (typeof repoAny.saveWithConflictCheck === 'function') {
-      await (
-        repoAny.saveWithConflictCheck as (
-          id: string,
-          v: number | undefined,
-          s: PageSchemaSnapshotRecord,
-          p: PageRecord,
-        ) => Promise<void>
-      )(pageId, dto.baseVersion, snapshot, page);
-    } else if (typeof repoAny.trySaveWithVersionCheck === 'function') {
-      await (
-        repoAny.trySaveWithVersionCheck as (
-          s: PageSchemaSnapshotRecord,
-          p: PageRecord,
-          v: number | undefined,
-        ) => Promise<void>
-      )(snapshot, page, dto.baseVersion);
+    // and performed inside the same critical section. Test mocks that only implement
+    // saveSnapshot are handled via fallback non-atomic check.
+    const repoWithCheck = this.repository as unknown as {
+      saveSnapshotWithVersionCheck?: (
+        s: PageSchemaSnapshotRecord,
+        p: PageRecord,
+        v: number | undefined,
+      ) => Promise<void>;
+    };
+    if (repoWithCheck.saveSnapshotWithVersionCheck) {
+      await repoWithCheck.saveSnapshotWithVersionCheck(snapshot, page, dto.baseVersion);
     } else {
-      // Fallback for test mocks that only implement saveSnapshot: keep non-atomic check
-      // for backward compatibility, but real repository's saveSnapshot is already atomic
-      // via internal queue + snapshot.version validation.
       if (existingPage && dto.baseVersion === undefined) {
         throw new ConflictException({
           message: 'Page version mismatch',
@@ -89,7 +70,6 @@ export class PageSchemaService {
           receivedVersion: null,
         });
       }
-
       if (dto.baseVersion !== undefined && dto.baseVersion !== currentVersion) {
         throw new ConflictException({
           message: 'Page version mismatch',
@@ -98,7 +78,6 @@ export class PageSchemaService {
           receivedVersion: dto.baseVersion,
         });
       }
-
       await this.repository.saveSnapshot(snapshot, page);
     }
 

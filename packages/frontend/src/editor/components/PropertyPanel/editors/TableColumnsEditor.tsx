@@ -72,7 +72,7 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const prevStableIdsRef = useRef<Set<string>>(new Set());
 
-  // 清理已删除列/按钮的 draft
+  // 清理已删除列/按钮的 draft - 仅依赖 columns，避免 keystroke 全量对比
   useEffect(() => {
     const liveKeys = new Set<string>();
     for (const col of columns) {
@@ -92,25 +92,23 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
         }
       }
     }
-    // 仅当有变化时才清理，避免不必要重渲染
-    let needClean = false;
-    for (const k of Object.keys(drafts)) {
-      if (!liveKeys.has(k)) {
-        needClean = true;
-        break;
-      }
-    }
-    if (needClean) {
-      setDrafts((prev) => {
-        const next: Record<string, string> = {};
-        for (const [k, v] of Object.entries(prev)) {
-          if (liveKeys.has(k)) next[k] = v;
+    setDrafts((prev) => {
+      let needClean = false;
+      for (const k of Object.keys(prev)) {
+        if (!liveKeys.has(k)) {
+          needClean = true;
+          break;
         }
-        return next;
-      });
-    }
+      }
+      if (!needClean) return prev;
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (liveKeys.has(k)) next[k] = v;
+      }
+      return next;
+    });
     prevStableIdsRef.current = liveKeys;
-  }, [columns, drafts]);
+  }, [columns]);
 
   const getDraftKey = useCallback(
     (stableId: string | undefined, field: string, fallbackIndex: number) => {

@@ -32,6 +32,9 @@ export class PageSchemaRepository implements OnModuleInit {
   private pages = new Map<string, PageRecord>();
   private snapshots: PageSchemaSnapshotRecord[] = [];
 
+  // TODO: single-process in-memory queue only serializes concurrent requests within one Node instance.
+  // File-based store is inherently unsuitable for multi-instance deployment - migrate to DB
+  // transaction (SELECT FOR UPDATE) on next iteration. Keep this as best-effort for single-instance dev.
   private saveQueue: Promise<void> = Promise.resolve();
 
   onModuleInit() {
