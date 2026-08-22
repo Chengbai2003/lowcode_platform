@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -32,13 +33,15 @@ export class PageSchemaRepository implements OnModuleInit {
   private pages = new Map<string, PageRecord>();
   private snapshots: PageSchemaSnapshotRecord[] = [];
 
-  // TODO: single-process in-memory queue only serializes concurrent requests within one Node instance.
-  // File-based store is inherently unsuitable for multi-instance deployment - migrate to DB
-  // transaction (SELECT FOR UPDATE) on next iteration. Keep this as best-effort for single-instance dev.
-  private saveQueue: Promise<void> = Promise.resolve();
+  // static lock 仅保证单进程多实例，多进程需 DB 事务（如 SELECT FOR UPDATE）。
+  private static readonly writeTails = new Map<string, Promise<void>>();
 
-  onModuleInit() {
-    this.loadStore();
+  async onModuleInit(): Promise<void> {
+    await this.enqueue(async () => {
+      const loaded = await this.loadStoreFromDisk();
+      this.pages = loaded.pages;
+      this.snapshots = loaded.snapshots;
+    });
   }
 
   getPage(pageId: string): PageRecord | undefined {
@@ -60,162 +63,148 @@ export class PageSchemaRepository implements OnModuleInit {
   }
 
   private enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.saveQueue.then(task, task);
-    // Ensure queue continues even if task rejects
-    this.saveQueue = result.then(
+    const key = path.resolve(this.storeFilePath);
+    const prevTail = PageSchemaRepository.writeTails.get(key) ?? Promise.resolve();
+    const result = prevTail.then(task, task);
+    const tail: Promise<void> = result.then(
       () => undefined,
       () => undefined,
     );
+    PageSchemaRepository.writeTails.set(key, tail);
+    tail.finally(() => {
+      if (PageSchemaRepository.writeTails.get(key) === tail) {
+        PageSchemaRepository.writeTails.delete(key);
+      }
+    });
     return result;
   }
 
-  async saveSnapshot(snapshot: PageSchemaSnapshotRecord, page: PageRecord): Promise<void> {
+  async saveSchema(params: {
+    pageId: string;
+    schema: Record<string, unknown>;
+    baseVersion?: number;
+  }): Promise<{ page: PageRecord; snapshot: PageSchemaSnapshotRecord }> {
     return this.enqueue(async () => {
-      const existing = this.pages.get(page.id);
-      const currentVersion = existing?.currentVersion ?? 0;
-      // Atomic version check inside critical section: snapshot must be exactly next version
-      if (snapshot.version !== currentVersion + 1) {
-        // If page already exists with different version, treat as conflict
-        // For brand new page, currentVersion 0 -> expected snapshot.version 1
-        throw new ConflictException({
-          message: 'Page version mismatch',
-          pageId: page.id,
-          expectedVersion: currentVersion,
-          receivedVersion: snapshot.version - 1,
-        });
-      }
-
-      const existingIndex = this.snapshots.findIndex((item) => item.id === snapshot.id);
-      if (existingIndex >= 0) {
-        this.snapshots[existingIndex] = snapshot;
-      } else {
-        this.snapshots.push(snapshot);
-      }
-
-      this.pages.set(page.id, page);
-      await this.saveStore();
-    });
-  }
-
-  /**
-   * Atomic save with explicit expectedVersion check inside the same critical section.
-   * This ensures version check and write are serialized via the global queue,
-   * preventing lost-update race conditions.
-   */
-  async saveSnapshotWithVersionCheck(
-    snapshot: PageSchemaSnapshotRecord,
-    page: PageRecord,
-    expectedVersion: number | undefined,
-  ): Promise<void> {
-    return this.enqueue(async () => {
-      const existing = this.pages.get(page.id);
+      // 重读磁盘最新 store，保证锁内闭环
+      const disk = await this.loadStoreFromDisk();
+      const existing = disk.pages.get(params.pageId);
       const currentVersion = existing?.currentVersion ?? 0;
 
-      if (existing && expectedVersion === undefined) {
+      if (existing && params.baseVersion === undefined) {
         throw new ConflictException({
           message: 'Page version mismatch',
-          pageId: page.id,
+          pageId: params.pageId,
           expectedVersion: currentVersion,
           receivedVersion: null,
         });
       }
-
-      if (expectedVersion !== undefined && expectedVersion !== currentVersion) {
+      if (params.baseVersion !== undefined && params.baseVersion !== currentVersion) {
         throw new ConflictException({
           message: 'Page version mismatch',
-          pageId: page.id,
+          pageId: params.pageId,
           expectedVersion: currentVersion,
-          receivedVersion: expectedVersion,
+          receivedVersion: params.baseVersion,
         });
       }
 
-      if (snapshot.version !== currentVersion + 1) {
-        throw new ConflictException({
-          message: 'Page version mismatch',
-          pageId: page.id,
-          expectedVersion: currentVersion,
-          receivedVersion: snapshot.version - 1,
-        });
-      }
+      const nextVersion = currentVersion + 1;
+      const savedAt = new Date().toISOString();
+      const snapshotId = crypto.randomUUID();
+      const normalizedSchema = { ...params.schema, version: nextVersion };
 
-      const existingIndex = this.snapshots.findIndex((item) => item.id === snapshot.id);
-      if (existingIndex >= 0) {
-        this.snapshots[existingIndex] = snapshot;
-      } else {
-        this.snapshots.push(snapshot);
-      }
+      const snapshot: PageSchemaSnapshotRecord = {
+        id: snapshotId,
+        pageId: params.pageId,
+        version: nextVersion,
+        schema: normalizedSchema,
+        createdAt: savedAt,
+      };
 
-      this.pages.set(page.id, page);
-      await this.saveStore();
+      const page: PageRecord = {
+        id: params.pageId,
+        currentVersion: nextVersion,
+        latestSnapshotId: snapshotId,
+        createdAt: existing?.createdAt || savedAt,
+        updatedAt: savedAt,
+      };
+
+      // 用全新 Map/数组构造 next state
+      const nextPages = new Map(disk.pages);
+      const nextSnapshots = [...disk.snapshots, snapshot];
+      nextPages.set(params.pageId, page);
+
+      const store: PageSchemaStore = {
+        pages: Array.from(nextPages.values()),
+        snapshots: nextSnapshots,
+      };
+
+      await this.persistStore(store);
+
+      // rename 成功后才替换内存（失败自动回滚，保持旧状态）
+      this.pages = nextPages;
+      this.snapshots = nextSnapshots;
+
+      return { page, snapshot };
     });
   }
 
-  // Alias for spec naming variants
-  async saveWithConflictCheck(
-    pageId: string,
-    expectedVersion: number | undefined,
-    snapshot: PageSchemaSnapshotRecord,
-    page: PageRecord,
-  ): Promise<void> {
-    return this.saveSnapshotWithVersionCheck(snapshot, page, expectedVersion);
-  }
-
-  async trySaveWithVersionCheck(
-    snapshot: PageSchemaSnapshotRecord,
-    page: PageRecord,
-    expectedVersion: number | undefined,
-  ): Promise<void> {
-    return this.saveSnapshotWithVersionCheck(snapshot, page, expectedVersion);
-  }
-
-  private loadStore() {
-    try {
-      if (!fs.existsSync(this.storeFilePath)) {
-        void this.saveStore().catch((error) => {
-          this.logger.error('Failed to initialize page schema store', error);
-        });
-        return;
-      }
-
-      const content = fs.readFileSync(this.storeFilePath, 'utf-8');
-      if (!content.trim()) {
-        void this.saveStore().catch((error) => {
-          this.logger.error('Failed to initialize empty page schema store', error);
-        });
-        return;
-      }
-
-      const parsed = JSON.parse(content) as Partial<PageSchemaStore>;
-      const pages = Array.isArray(parsed.pages) ? parsed.pages : [];
-      const snapshots = Array.isArray(parsed.snapshots) ? parsed.snapshots : [];
-
-      this.pages = new Map(pages.map((page) => [page.id, page]));
-      this.snapshots = snapshots;
-    } catch (error) {
-      this.logger.error('Failed to load page schema store', error);
-      this.pages.clear();
-      this.snapshots = [];
+  private async loadStoreFromDisk(): Promise<{
+    pages: Map<string, PageRecord>;
+    snapshots: PageSchemaSnapshotRecord[];
+  }> {
+    if (!fs.existsSync(this.storeFilePath)) {
+      return { pages: new Map(), snapshots: [] };
     }
+    const content = await fs.promises.readFile(this.storeFilePath, 'utf-8');
+    if (!content.trim()) {
+      throw new Error('Page schema store is empty');
+    }
+    let parsed: Partial<PageSchemaStore>;
+    try {
+      parsed = JSON.parse(content) as Partial<PageSchemaStore>;
+    } catch {
+      throw new Error('Page schema store is corrupted: invalid JSON');
+    }
+    if (!Array.isArray(parsed.pages)) {
+      throw new Error('Page schema store is corrupted: pages must be an array');
+    }
+    if (!Array.isArray(parsed.snapshots)) {
+      throw new Error('Page schema store is corrupted: snapshots must be an array');
+    }
+    for (const p of parsed.pages as PageRecord[]) {
+      if (!Number.isInteger(p.currentVersion)) {
+        throw new Error(`Page ${p.id} version must be an integer`);
+      }
+    }
+    for (const s of parsed.snapshots as PageSchemaSnapshotRecord[]) {
+      if (!Number.isInteger(s.version)) {
+        throw new Error(`Snapshot ${s.id} version must be an integer`);
+      }
+    }
+    const snapshotIds = new Set((parsed.snapshots as PageSchemaSnapshotRecord[]).map((s) => s.id));
+    for (const p of parsed.pages as PageRecord[]) {
+      if (!snapshotIds.has(p.latestSnapshotId)) {
+        throw new Error(`Page ${p.id} latestSnapshotId ${p.latestSnapshotId} is dangling`);
+      }
+    }
+    return {
+      pages: new Map((parsed.pages as PageRecord[]).map((p) => [p.id, p])),
+      snapshots: parsed.snapshots as PageSchemaSnapshotRecord[],
+    };
   }
 
-  private async saveStore() {
-    const store: PageSchemaStore = {
-      pages: Array.from(this.pages.values()),
-      snapshots: this.snapshots,
-    };
-
+  private async persistStore(store: PageSchemaStore): Promise<void> {
     const content = JSON.stringify(store, null, 2);
     const tmpPath = `${this.storeFilePath}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 8)}`;
 
     try {
       await fs.promises.mkdir(path.dirname(this.storeFilePath), { recursive: true });
     } catch {
-      // ignore mkdir errors, write will fail if directory unavailable
+      // ignore mkdir errors
     }
 
     await fs.promises.writeFile(tmpPath, content, 'utf-8');
 
-    // Best-effort fsync for durability before rename
     try {
       const handle = await fs.promises.open(tmpPath, 'r');
       try {
@@ -224,17 +213,16 @@ export class PageSchemaRepository implements OnModuleInit {
         await handle.close();
       }
     } catch {
-      // fsync is best-effort; ignore errors on platforms that don't support it
+      // fsync best-effort
     }
 
     try {
       await fs.promises.rename(tmpPath, this.storeFilePath);
     } catch (error) {
-      // Cleanup temp file on failure
       try {
         await fs.promises.unlink(tmpPath);
       } catch {
-        // ignore cleanup errors
+        // ignore cleanup
       }
       this.logger.error('Failed to atomically rename page schema store', error);
       throw error;

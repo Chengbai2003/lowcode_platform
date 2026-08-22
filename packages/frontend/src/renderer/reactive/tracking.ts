@@ -5,8 +5,31 @@
  * 实现组件渲染系统中的细粒度响应式。
  */
 
+// 用于在 sanitize 克隆期间暂停追踪，避免 ownKeys 枚举误污染依赖（P0-2 收尾）
+let pauseDepth = 0;
+export function pauseTracking(): void {
+  pauseDepth++;
+}
+export function resumeTracking(): void {
+  pauseDepth = Math.max(0, pauseDepth - 1);
+}
+export function isTrackingPaused(): boolean {
+  return pauseDepth > 0;
+}
+
+const trackingProxySet = new WeakSet<object>();
+export function isTrackingProxy(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && trackingProxySet.has(value as object);
+}
+
 /** 需要忽略的原型污染键集合 */
 const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function isPlainObject(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return false;
+  return Object.prototype.toString.call(value) === '[object Object]';
+}
 
 /**
  * TrackingScope 管理一个追踪会话，在响应式求值期间收集依赖路径。
@@ -14,6 +37,8 @@ const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 export class TrackingScope {
   private active = false;
   private dependencies: Set<string> = new Set();
+  // ponytail: proxyCache 移到实例字段，按 basePath 区分，start() 重建
+  private proxyCache: WeakMap<object, Map<string, object>> = new WeakMap();
 
   /**
    * 开始追踪依赖
@@ -21,6 +46,7 @@ export class TrackingScope {
   start(): void {
     this.active = true;
     this.dependencies.clear();
+    this.proxyCache = new WeakMap();
   }
 
   /**
@@ -37,7 +63,7 @@ export class TrackingScope {
    * 记录一个依赖路径
    */
   track(path: string): void {
-    if (this.active) {
+    if (this.active && !isTrackingPaused()) {
       this.dependencies.add(path);
     }
   }
@@ -48,10 +74,12 @@ export class TrackingScope {
   isActive(): boolean {
     return this.active;
   }
-}
 
-/** WeakMap 用于追踪已代理的对象，避免重复 */
-const proxyCache = new WeakMap<object, object>();
+  /** 供 withTracking / createDeepTrackingProxy 使用 */
+  getCache(): WeakMap<object, Map<string, object>> {
+    return this.proxyCache;
+  }
+}
 
 /**
  * 为对象创建追踪代理
@@ -63,8 +91,9 @@ const proxyCache = new WeakMap<object, object>();
 export function createTrackingProxy(
   data: Record<string, unknown>,
   tracker: (path: string) => void,
+  cache?: WeakMap<object, Map<string, object>>,
 ): Record<string, unknown> {
-  return createDeepTrackingProxy(data, '', tracker);
+  return createDeepTrackingProxy(data, '', tracker, cache);
 }
 
 /**
@@ -79,21 +108,27 @@ export function createDeepTrackingProxy(
   data: Record<string, unknown>,
   basePath: string,
   tracker: (path: string) => void,
+  cache?: WeakMap<object, Map<string, object>>,
 ): Record<string, unknown> {
   // 处理 null/undefined - 原样返回
   if (data === null || data === undefined) {
     return data as Record<string, unknown>;
   }
 
-  // 只代理对象和数组
+  // 只代理 plain object 和数组，非 plain 直接返回
   if (typeof data !== 'object') {
     return data;
   }
+  if (!Array.isArray(data) && !isPlainObject(data)) {
+    return data as Record<string, unknown>;
+  }
 
-  // 检查是否已代理（避免循环引用的无限循环）
-  const cachedProxy = proxyCache.get(data);
-  if (cachedProxy) {
-    return cachedProxy as Record<string, unknown>;
+  const c = cache ?? new WeakMap<object, Map<string, object>>();
+  // 按 basePath 区分缓存
+  const inner = c.get(data as object);
+  if (inner) {
+    const hit = inner.get(basePath);
+    if (hit) return hit as Record<string, unknown>;
   }
 
   const handler: ProxyHandler<Record<string, unknown>> = {
@@ -126,12 +161,13 @@ export function createDeepTrackingProxy(
 
       // 处理数组 - 创建代理以追踪数组访问
       if (Array.isArray(value)) {
-        return createArrayProxy(value, fullPath, tracker);
+        return createArrayProxy(value, fullPath, tracker, c);
       }
 
-      // 处理嵌套对象 - 创建深层代理
+      // 处理嵌套对象 - 仅 plain object 进代理
       if (typeof value === 'object') {
-        return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker);
+        if (!isPlainObject(value)) return value;
+        return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker, c);
       }
 
       // 直接返回原始值
@@ -184,9 +220,15 @@ export function createDeepTrackingProxy(
   };
 
   const proxy = new Proxy(data, handler);
+  trackingProxySet.add(proxy as object);
 
-  // 缓存代理以处理循环引用
-  proxyCache.set(data, proxy);
+  // 缓存代理（按 basePath）
+  let m = c.get(data as object);
+  if (!m) {
+    m = new Map<string, object>();
+    c.set(data as object, m);
+  }
+  m.set(basePath, proxy as unknown as object);
 
   return proxy;
 }
@@ -199,11 +241,13 @@ function createArrayProxy(
   array: unknown[],
   basePath: string,
   tracker: (path: string) => void,
+  cache?: WeakMap<object, Map<string, object>>,
 ): unknown[] {
-  // 检查是否已代理
-  const cachedProxy = proxyCache.get(array);
-  if (cachedProxy) {
-    return cachedProxy as unknown[];
+  const c = cache ?? new WeakMap<object, Map<string, object>>();
+  const inner = c.get(array as object);
+  if (inner) {
+    const hit = inner.get(basePath);
+    if (hit) return hit as unknown[];
   }
 
   const handler: ProxyHandler<unknown[]> = {
@@ -229,9 +273,10 @@ function createArrayProxy(
         // 处理数组中的嵌套对象/数组
         if (value !== null && typeof value === 'object') {
           if (Array.isArray(value)) {
-            return createArrayProxy(value, fullPath, tracker);
+            return createArrayProxy(value, fullPath, tracker, c);
           }
-          return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker);
+          if (!isPlainObject(value)) return value;
+          return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker, c);
         }
 
         return value;
@@ -270,9 +315,10 @@ function createArrayProxy(
       // 处理嵌套对象
       if (value !== null && typeof value === 'object') {
         if (Array.isArray(value)) {
-          return createArrayProxy(value, fullPath, tracker);
+          return createArrayProxy(value, fullPath, tracker, c);
         }
-        return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker);
+        if (!isPlainObject(value)) return value;
+        return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker, c);
       }
 
       return value;
@@ -288,9 +334,15 @@ function createArrayProxy(
   };
 
   const proxy = new Proxy(array, handler);
+  trackingProxySet.add(proxy as object);
 
   // 缓存代理
-  proxyCache.set(array, proxy);
+  let m = c.get(array as object);
+  if (!m) {
+    m = new Map<string, object>();
+    c.set(array as object, m);
+  }
+  m.set(basePath, proxy as unknown as object);
 
   return proxy;
 }
@@ -318,7 +370,7 @@ export function withTracking<T>(
 ): [T, Set<string>] {
   scope.start();
   try {
-    const trackedData = createTrackingProxy(data, (path) => scope.track(path));
+    const trackedData = createTrackingProxy(data, (path) => scope.track(path), scope.getCache());
     const result = fn(trackedData);
     const deps = scope.stop();
     return [result, deps];

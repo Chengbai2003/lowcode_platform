@@ -5,7 +5,6 @@ import {
   Variable,
   MessageSquare,
   ArrowRight,
-  Code,
   LayoutTemplate,
   Clock,
   FileText,
@@ -99,14 +98,6 @@ const ACTION_TYPES: {
     bg: 'bg-slate-100',
     title: '日志',
     desc: '输出调试日志',
-  },
-  {
-    type: 'customScript',
-    icon: Code,
-    color: 'text-red-600',
-    bg: 'bg-red-100',
-    title: '自定义脚本',
-    desc: '执行 JavaScript',
   },
 ];
 

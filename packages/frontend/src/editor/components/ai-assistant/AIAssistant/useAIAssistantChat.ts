@@ -48,6 +48,14 @@ const TRUNCATION_SUFFIX = '...(truncated)';
 const STREAM_REVEAL_INTERVAL_MS = 40;
 const STREAM_REVEAL_CHARS_PER_TICK = 24;
 
+const WELCOME_MESSAGE: AIMessage = {
+  id: 'welcome',
+  type: 'system',
+  content:
+    'AI助手已就绪！\n\n我可以帮你：\n• 回答页面理解问题\n• 根据描述生成页面结构\n• 预览并解释局部修改\n• 分析组件与事件配置',
+  timestamp: new Date(),
+};
+
 function sanitizeConversationHistoryContent(content: string): string {
   return content.length <= MAX_CONVERSATION_HISTORY_CHARS
     ? content
@@ -91,6 +99,9 @@ export const useAIAssistantChat = ({
   const previousSelectedIdRef = useRef<string | null | undefined>(selectedId);
   const previousPageIdRef = useRef(pageId);
   const previousSchemaRootIdRef = useRef(currentSchema?.rootId);
+  // ponytail ultra: AbortController 贯穿 ServerAIService，pageId 切换时 abort
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const pageIdResetRef = useRef(pageId);
 
   const setAIScopeHighlight = useEditorStore((state) => state.setAIScopeHighlight);
   const clearAIScopeHighlight = useEditorStore((state) => state.clearAIScopeHighlight);
@@ -152,6 +163,8 @@ export const useAIAssistantChat = ({
       streamRevealTimersRef.current.forEach((timer) => clearInterval(timer));
       streamRevealTimersRef.current.clear();
       pendingStreamChunksRef.current.clear();
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
       clearAIScopeHighlight();
     },
     [clearAIScopeHighlight],
@@ -165,30 +178,40 @@ export const useAIAssistantChat = ({
   }, [clearAIScopeHighlight, selectedId]);
 
   useEffect(() => {
-    if (
-      previousPageIdRef.current !== pageId ||
-      previousSchemaRootIdRef.current !== currentSchema?.rootId
-    ) {
+    if (previousSchemaRootIdRef.current !== currentSchema?.rootId) {
       clearAIScopeHighlight();
-      previousPageIdRef.current = pageId;
       previousSchemaRootIdRef.current = currentSchema?.rootId;
     }
-  }, [clearAIScopeHighlight, currentSchema?.rootId, pageId]);
+  }, [clearAIScopeHighlight, currentSchema?.rootId]);
+
+  useEffect(() => {
+    if (previousPageIdRef.current !== pageId) {
+      clearAIScopeHighlight();
+      previousPageIdRef.current = pageId;
+    }
+  }, [clearAIScopeHighlight, pageId]);
+
+  // P0-4: pageId 变化时 reset messages/session + abort 飞行请求（跨页隔离）
+  useEffect(() => {
+    if (pageIdResetRef.current === pageId) return;
+    pageIdResetRef.current = pageId;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setLoading(false);
+    streamRevealTimersRef.current.forEach((t) => clearInterval(t));
+    streamRevealTimersRef.current.clear();
+    pendingStreamChunksRef.current.clear();
+    setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
+    setSessionMessages([]);
+    sessionMessagesRef.current = [];
+  }, [pageId]);
 
   useEffect(() => {
     loadModels().catch((error) => {
       const errorMessage = error instanceof Error ? error.message : '加载模型失败';
       onError?.(errorMessage);
     });
-    setMessages([
-      {
-        id: 'welcome',
-        type: 'system',
-        content:
-          'AI助手已就绪！\n\n我可以帮你：\n• 回答页面理解问题\n• 根据描述生成页面结构\n• 预览并解释局部修改\n• 分析组件与事件配置',
-        timestamp: new Date(),
-      },
-    ]);
+    setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
   }, [loadModels, onError]);
 
   const scrollToBottom = useCallback(() => {
@@ -222,11 +245,7 @@ export const useAIAssistantChat = ({
   );
 
   const appendTraceProgress = useCallback(
-    (
-      messageId: string,
-      progress: Omit<AgentMessageProgress, 'traceId'>,
-      traceId?: string,
-    ) => {
+    (messageId: string, progress: Omit<AgentMessageProgress, 'traceId'>, traceId?: string) => {
       updateAssistantMessage(messageId, (messageItem) => {
         const nextProgress = createProgress(progress, messageItem.traceId ?? traceId);
         const previousStages = messageItem.traceSummary?.stages ?? [];
@@ -255,7 +274,9 @@ export const useAIAssistantChat = ({
           traceId: messageItem.traceId ?? traceId,
           progress: nextProgress,
           traceSummary: {
-            stages: shouldAppendStage ? [...previousStages, nextProgress].slice(-8) : previousStages,
+            stages: shouldAppendStage
+              ? [...previousStages, nextProgress].slice(-8)
+              : previousStages,
             toolCalls,
             finishReason: nextProgress.finishReason ?? messageItem.traceSummary?.finishReason,
             errorCode: messageItem.traceSummary?.errorCode,
@@ -482,6 +503,8 @@ export const useAIAssistantChat = ({
               risk: response.risk,
               requiresConfirmation: response.requiresConfirmation,
               scopeSummary: response.scopeSummary,
+              sourcePageId: response.pageId ?? pageId ?? null,
+              basePageVersion: response.baseVersion ?? pageVersion ?? null,
             },
             clarification: undefined,
             intentConfirmation: undefined,
@@ -691,6 +714,8 @@ export const useAIAssistantChat = ({
       formatSchemaResultContent,
       setAIScopeHighlight,
       updateAssistantMessage,
+      pageId,
+      pageVersion,
     ],
   );
 
@@ -712,6 +737,19 @@ export const useAIAssistantChat = ({
     async (messageId: string) => {
       const messageItem = messagesRef.current.find((item) => item.id === messageId);
       if (!messageItem?.patchPreview) {
+        return false;
+      }
+      // ponytail: P0-4 双重校验 sourcePageId+basePageVersion
+      const srcPageId = messageItem.patchPreview.sourcePageId ?? null;
+      const baseVer = messageItem.patchPreview.basePageVersion ?? null;
+      if (srcPageId !== null && srcPageId !== (pageId ?? null)) {
+        message.error('当前页面已切换，该预览来自其他页面，已拦截应用');
+        updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+        return false;
+      }
+      if (baseVer !== null && baseVer !== (pageVersion ?? null)) {
+        message.error('页面版本已变化，该预览已过期，请重新生成');
+        updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
       }
 
@@ -782,7 +820,15 @@ export const useAIAssistantChat = ({
         return false;
       }
     },
-    [confirmHighRiskPatch, onError, onPatchApply, persistSessionMessages, updateAssistantMessage],
+    [
+      confirmHighRiskPatch,
+      onError,
+      onPatchApply,
+      persistSessionMessages,
+      updateAssistantMessage,
+      pageId,
+      pageVersion,
+    ],
   );
 
   const submitMessage = useCallback(
@@ -858,6 +904,12 @@ export const useAIAssistantChat = ({
         },
       ]);
 
+      // P0-4: AbortController 贯穿请求
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      const signal = abortController.signal;
+
       try {
         const conversationHistory = buildConversationHistory(nextSessionMessagesAfterUser);
         const patchModeAvailable =
@@ -888,80 +940,88 @@ export const useAIAssistantChat = ({
         } as const;
 
         try {
-          await serverAIService.streamResponse?.(requestPayload, {
-            onEvent: async (event) => {
-              switch (event.type) {
-                case 'meta':
-                  traceId = event.traceId;
-                  attachTraceMeta(aiMessageId, event.traceId);
-                  break;
-                case 'route':
-                  updateAssistantMessage(aiMessageId, (messageItem) => ({
-                    ...messageItem,
-                    route: event.route,
-                  }));
-                  break;
-                case 'status':
-                  appendTraceProgress(
-                    aiMessageId,
+          await serverAIService.streamResponse?.(
+            requestPayload,
+            {
+              onEvent: async (event) => {
+                switch (event.type) {
+                  case 'meta':
+                    traceId = event.traceId;
+                    attachTraceMeta(aiMessageId, event.traceId);
+                    break;
+                  case 'route':
+                    updateAssistantMessage(aiMessageId, (messageItem) => ({
+                      ...messageItem,
+                      route: event.route,
+                    }));
+                    break;
+                  case 'status':
+                    appendTraceProgress(
+                      aiMessageId,
+                      {
+                        stage: event.stage,
+                        label: event.label,
+                        detail: event.detail,
+                        toolName: event.toolName,
+                        targetId: event.targetId,
+                        stepNumber: event.stepNumber,
+                        finishReason: event.finishReason,
+                      },
+                      traceId,
+                    );
+                    break;
+                  case 'content_delta':
+                    if (event.mode === 'answer') {
+                      enqueueStreamContent(aiMessageId, event.delta);
+                    }
+                    break;
+                  case 'result':
+                    terminalReceived = true;
                     {
-                      stage: event.stage,
-                      label: event.label,
-                      detail: event.detail,
-                      toolName: event.toolName,
-                      targetId: event.targetId,
-                      stepNumber: event.stepNumber,
-                      finishReason: event.finishReason,
-                    },
-                    traceId,
-                  );
-                  break;
-                case 'content_delta':
-                  if (event.mode === 'answer') {
-                    enqueueStreamContent(aiMessageId, event.delta);
-                  }
-                  break;
-                case 'result':
-                  terminalReceived = true;
-                  {
-                    const applied = applyAgentResponse({
-                      messageId: aiMessageId,
-                      instruction: trimmedInstruction,
-                      response: event.result,
-                    });
-                    fullContent = applied.fullContent;
-                    actionResult = applied.actionResult;
-                    traceId = event.result.traceId;
-                  }
-                  break;
-                case 'error':
-                  terminalReceived = true;
-                  attachTraceError(aiMessageId, event.error.code, event.error.traceId);
-                  structuredStreamError = new AIServiceError(
-                    event.error.message,
-                    (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
-                    {
-                      traceId: event.error.traceId,
-                      ...(event.error.details ? { details: event.error.details } : {}),
-                    },
-                  );
-                  break;
-                case 'done':
-                  break;
-              }
+                      const applied = applyAgentResponse({
+                        messageId: aiMessageId,
+                        instruction: trimmedInstruction,
+                        response: event.result,
+                      });
+                      fullContent = applied.fullContent;
+                      actionResult = applied.actionResult;
+                      traceId = event.result.traceId;
+                    }
+                    break;
+                  case 'error':
+                    terminalReceived = true;
+                    attachTraceError(aiMessageId, event.error.code, event.error.traceId);
+                    structuredStreamError = new AIServiceError(
+                      event.error.message,
+                      (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                      {
+                        traceId: event.error.traceId,
+                        ...(event.error.details ? { details: event.error.details } : {}),
+                      },
+                    );
+                    break;
+                  case 'done':
+                    break;
+                }
+              },
             },
-          });
+            { signal },
+          );
 
           if (structuredStreamError) {
             throw structuredStreamError;
           }
         } catch (streamError) {
+          if ((streamError as Error)?.name === 'AbortError') throw streamError;
           if (!terminalReceived) {
             flushStreamContent(aiMessageId);
-            const response = await serverAIService.generateResponse({
-              ...requestPayload,
-              stream: false,
-            });
+            const response = await serverAIService.generateResponse(
+              {
+                ...requestPayload,
+                stream: false,
+              },
+              { signal },
+            );
             const applied = applyAgentResponse({
               messageId: aiMessageId,
               instruction: trimmedInstruction,
@@ -998,6 +1058,13 @@ export const useAIAssistantChat = ({
         }
         setSessionMessages(nextSessionMessagesAfterAssistant);
       } catch (error: unknown) {
+        if ((error as Error)?.name === 'AbortError') {
+          flushStreamContent(aiMessageId);
+          clearStreamReveal(aiMessageId);
+          pendingStreamChunksRef.current.delete(aiMessageId);
+          setMessages((prev) => prev.filter((m) => m.id !== aiMessageId));
+          return;
+        }
         flushStreamContent(aiMessageId);
         clearScopeHighlight();
         if (error instanceof AIServiceError) {
@@ -1020,6 +1087,7 @@ export const useAIAssistantChat = ({
       } finally {
         clearStreamReveal(aiMessageId);
         pendingStreamChunksRef.current.delete(aiMessageId);
+        if (abortControllerRef.current === abortController) abortControllerRef.current = null;
         setLoading(false);
       }
     },
@@ -1094,6 +1162,10 @@ export const useAIAssistantChat = ({
         ),
       }));
       setLoading(true);
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      const signal = abortController.signal;
 
       let fullContent = messageItem.content;
       let actionResult: AIMessageActionResult | undefined;
@@ -1119,76 +1191,84 @@ export const useAIAssistantChat = ({
 
       try {
         try {
-          await serverAIService.streamResponse?.(requestPayload, {
-            onEvent: async (event) => {
-              switch (event.type) {
-                case 'meta':
-                  traceId = event.traceId;
-                  attachTraceMeta(messageId, event.traceId);
-                  break;
-                case 'route':
-                  updateAssistantMessage(messageId, (current) => ({
-                    ...current,
-                    route: event.route,
-                  }));
-                  break;
-                case 'status':
-                  appendTraceProgress(
-                    messageId,
-                    {
-                      stage: event.stage,
-                      label: event.label,
-                      detail: event.detail,
-                      toolName: event.toolName,
-                      targetId: event.targetId,
-                      stepNumber: event.stepNumber,
-                      finishReason: event.finishReason,
-                    },
-                    traceId,
-                  );
-                  break;
-                case 'content_delta':
-                  break;
-                case 'result':
-                  terminalReceived = true;
-                  {
-                    const applied = applyAgentResponse({
+          await serverAIService.streamResponse?.(
+            requestPayload,
+            {
+              onEvent: async (event) => {
+                switch (event.type) {
+                  case 'meta':
+                    traceId = event.traceId;
+                    attachTraceMeta(messageId, event.traceId);
+                    break;
+                  case 'route':
+                    updateAssistantMessage(messageId, (current) => ({
+                      ...current,
+                      route: event.route,
+                    }));
+                    break;
+                  case 'status':
+                    appendTraceProgress(
                       messageId,
-                      instruction,
-                      response: event.result,
-                    });
-                    fullContent = applied.fullContent;
-                    actionResult = applied.actionResult;
-                    traceId = event.result.traceId;
-                  }
-                  break;
-                case 'error':
-                  terminalReceived = true;
-                  attachTraceError(messageId, event.error.code, event.error.traceId);
-                  structuredStreamError = new AIServiceError(
-                    event.error.message,
-                    (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                      {
+                        stage: event.stage,
+                        label: event.label,
+                        detail: event.detail,
+                        toolName: event.toolName,
+                        targetId: event.targetId,
+                        stepNumber: event.stepNumber,
+                        finishReason: event.finishReason,
+                      },
+                      traceId,
+                    );
+                    break;
+                  case 'content_delta':
+                    break;
+                  case 'result':
+                    terminalReceived = true;
                     {
-                      traceId: event.error.traceId,
-                      ...(event.error.details ? { details: event.error.details } : {}),
-                    },
-                  );
-                  break;
-                case 'done':
-                  break;
-              }
+                      const applied = applyAgentResponse({
+                        messageId,
+                        instruction,
+                        response: event.result,
+                      });
+                      fullContent = applied.fullContent;
+                      actionResult = applied.actionResult;
+                      traceId = event.result.traceId;
+                    }
+                    break;
+                  case 'error':
+                    terminalReceived = true;
+                    attachTraceError(messageId, event.error.code, event.error.traceId);
+                    structuredStreamError = new AIServiceError(
+                      event.error.message,
+                      (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                      {
+                        traceId: event.error.traceId,
+                        ...(event.error.details ? { details: event.error.details } : {}),
+                      },
+                    );
+                    break;
+                  case 'done':
+                    break;
+                }
+              },
             },
-          });
+            { signal },
+          );
 
           if (structuredStreamError) {
             throw structuredStreamError;
           }
         } catch (streamError) {
+          if ((streamError as Error)?.name === 'AbortError') throw streamError;
           if (!terminalReceived) {
-            const response = await serverAIService.generateResponse({
-              ...requestPayload,
-              stream: false,
-            });
+            const response = await serverAIService.generateResponse(
+              {
+                ...requestPayload,
+                stream: false,
+              },
+              { signal },
+            );
             const applied = applyAgentResponse({
               messageId,
               instruction,
@@ -1223,6 +1303,14 @@ export const useAIAssistantChat = ({
           activeSession,
         );
       } catch (error) {
+        if ((error as Error)?.name === 'AbortError') {
+          updateAssistantMessage(messageId, (c) => ({
+            ...c,
+            status: 'error',
+            content: `${c.content}\n\n[已取消]`,
+          }));
+          return;
+        }
         clearScopeHighlight();
         if (error instanceof AIServiceError) {
           presentStructuredError(error);
@@ -1235,6 +1323,7 @@ export const useAIAssistantChat = ({
         }));
         onError?.(errorMessage);
       } finally {
+        if (abortControllerRef.current === abortController) abortControllerRef.current = null;
         setLoading(false);
       }
     },
@@ -1282,6 +1371,10 @@ export const useAIAssistantChat = ({
         ),
       }));
       setLoading(true);
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      const signal = abortController.signal;
 
       let fullContent = messageItem.content;
       let actionResult: AIMessageActionResult | undefined;
@@ -1307,76 +1400,84 @@ export const useAIAssistantChat = ({
 
       try {
         try {
-          await serverAIService.streamResponse?.(requestPayload, {
-            onEvent: async (event) => {
-              switch (event.type) {
-                case 'meta':
-                  traceId = event.traceId;
-                  attachTraceMeta(messageId, event.traceId);
-                  break;
-                case 'route':
-                  updateAssistantMessage(messageId, (current) => ({
-                    ...current,
-                    route: event.route,
-                  }));
-                  break;
-                case 'status':
-                  appendTraceProgress(
-                    messageId,
-                    {
-                      stage: event.stage,
-                      label: event.label,
-                      detail: event.detail,
-                      toolName: event.toolName,
-                      targetId: event.targetId,
-                      stepNumber: event.stepNumber,
-                      finishReason: event.finishReason,
-                    },
-                    traceId,
-                  );
-                  break;
-                case 'content_delta':
-                  break;
-                case 'result':
-                  terminalReceived = true;
-                  {
-                    const applied = applyAgentResponse({
+          await serverAIService.streamResponse?.(
+            requestPayload,
+            {
+              onEvent: async (event) => {
+                switch (event.type) {
+                  case 'meta':
+                    traceId = event.traceId;
+                    attachTraceMeta(messageId, event.traceId);
+                    break;
+                  case 'route':
+                    updateAssistantMessage(messageId, (current) => ({
+                      ...current,
+                      route: event.route,
+                    }));
+                    break;
+                  case 'status':
+                    appendTraceProgress(
                       messageId,
-                      instruction,
-                      response: event.result,
-                    });
-                    fullContent = applied.fullContent;
-                    actionResult = applied.actionResult;
-                    traceId = event.result.traceId;
-                  }
-                  break;
-                case 'error':
-                  terminalReceived = true;
-                  attachTraceError(messageId, event.error.code, event.error.traceId);
-                  structuredStreamError = new AIServiceError(
-                    event.error.message,
-                    (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                      {
+                        stage: event.stage,
+                        label: event.label,
+                        detail: event.detail,
+                        toolName: event.toolName,
+                        targetId: event.targetId,
+                        stepNumber: event.stepNumber,
+                        finishReason: event.finishReason,
+                      },
+                      traceId,
+                    );
+                    break;
+                  case 'content_delta':
+                    break;
+                  case 'result':
+                    terminalReceived = true;
                     {
-                      traceId: event.error.traceId,
-                      ...(event.error.details ? { details: event.error.details } : {}),
-                    },
-                  );
-                  break;
-                case 'done':
-                  break;
-              }
+                      const applied = applyAgentResponse({
+                        messageId,
+                        instruction,
+                        response: event.result,
+                      });
+                      fullContent = applied.fullContent;
+                      actionResult = applied.actionResult;
+                      traceId = event.result.traceId;
+                    }
+                    break;
+                  case 'error':
+                    terminalReceived = true;
+                    attachTraceError(messageId, event.error.code, event.error.traceId);
+                    structuredStreamError = new AIServiceError(
+                      event.error.message,
+                      (event.error.code ?? 'NETWORK_ERROR') as AIServiceError['code'],
+                      {
+                        traceId: event.error.traceId,
+                        ...(event.error.details ? { details: event.error.details } : {}),
+                      },
+                    );
+                    break;
+                  case 'done':
+                    break;
+                }
+              },
             },
-          });
+            { signal },
+          );
 
           if (structuredStreamError) {
             throw structuredStreamError;
           }
         } catch (streamError) {
+          if ((streamError as Error)?.name === 'AbortError') throw streamError;
           if (!terminalReceived) {
-            const response = await serverAIService.generateResponse({
-              ...requestPayload,
-              stream: false,
-            });
+            const response = await serverAIService.generateResponse(
+              {
+                ...requestPayload,
+                stream: false,
+              },
+              { signal },
+            );
             const applied = applyAgentResponse({
               messageId,
               instruction,
@@ -1411,6 +1512,14 @@ export const useAIAssistantChat = ({
           activeSession,
         );
       } catch (error) {
+        if ((error as Error)?.name === 'AbortError') {
+          updateAssistantMessage(messageId, (c) => ({
+            ...c,
+            status: 'error',
+            content: `${c.content}\n\n[已取消]`,
+          }));
+          return;
+        }
         clearScopeHighlight();
         if (error instanceof AIServiceError) {
           presentStructuredError(error);
@@ -1423,6 +1532,7 @@ export const useAIAssistantChat = ({
         }));
         onError?.(errorMessage);
       } finally {
+        if (abortControllerRef.current === abortController) abortControllerRef.current = null;
         setLoading(false);
       }
     },

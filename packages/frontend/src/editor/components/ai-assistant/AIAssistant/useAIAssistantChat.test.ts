@@ -216,6 +216,7 @@ describe('useAIAssistantChat', () => {
         responseMode: 'auto',
       }),
       expect.any(Object),
+      expect.objectContaining({ signal: expect.any(Object) }),
     );
     expect(onPatchApply).not.toHaveBeenCalled();
 
@@ -305,11 +306,13 @@ describe('useAIAssistantChat', () => {
         sessionId: 'session-1',
       }),
       expect.any(Object),
+      expect.objectContaining({ signal: expect.any(Object) }),
     );
     expect(serverAIServiceMock.generateResponse).toHaveBeenCalledWith(
       expect.objectContaining({
         responseMode: 'auto',
       }),
+      expect.objectContaining({ signal: expect.any(Object) }),
     );
     expect(onPatchApply).not.toHaveBeenCalled();
 

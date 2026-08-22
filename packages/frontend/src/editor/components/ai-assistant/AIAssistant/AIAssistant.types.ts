@@ -23,6 +23,9 @@ export interface AIPatchPreviewState {
   risk: AgentPatchRiskAssessment;
   requiresConfirmation: boolean;
   scopeSummary?: AgentPatchScopeSummary;
+  // ponytail: P0-4 跨页隔离双重校验
+  sourcePageId?: string | null;
+  basePageVersion?: number | null;
 }
 
 export interface AIClarificationState {

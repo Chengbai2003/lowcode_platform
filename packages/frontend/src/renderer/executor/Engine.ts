@@ -196,7 +196,7 @@ export class DSLExecutor {
   private async _executeAction(action: Action, context: ExecutionContext): Promise<any> {
     const actionType = action.type;
 
-    // 安全检查：customScript 需要显式启用
+    // customScript: 可信代码任意执行，非安全沙箱，需 enableCustomScript 显式开启
     if (actionType === 'customScript' && !this.options.enableCustomScript) {
       throw new Error('customScript is disabled. Enable it via options.enableCustomScript: true');
     }

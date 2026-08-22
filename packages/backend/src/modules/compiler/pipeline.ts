@@ -229,13 +229,17 @@ function parseAction(action: unknown): ActionNode {
     body: record.body !== undefined ? normalizeValue(record.body) : undefined,
     headers: normalizeValueRecord(record.headers),
     params: normalizeValueRecord(record.params),
-    actions: Array.isArray(record.actions) ? record.actions.map((item) => parseAction(item)) : undefined,
+    actions: Array.isArray(record.actions)
+      ? record.actions.map((item) => parseAction(item))
+      : undefined,
     then: Array.isArray(record.then) ? record.then.map((item) => parseAction(item)) : undefined,
     else: Array.isArray(record.else) ? record.else.map((item) => parseAction(item)) : undefined,
     onSuccess: Array.isArray(record.onSuccess)
       ? record.onSuccess.map((item) => parseAction(item))
       : undefined,
-    onError: Array.isArray(record.onError) ? record.onError.map((item) => parseAction(item)) : undefined,
+    onError: Array.isArray(record.onError)
+      ? record.onError.map((item) => parseAction(item))
+      : undefined,
     onOk: Array.isArray(record.onOk) ? record.onOk.map((item) => parseAction(item)) : undefined,
     onCancel: Array.isArray(record.onCancel)
       ? record.onCancel.map((item) => parseAction(item))
@@ -301,7 +305,9 @@ function buildComponentTree(
       eventName: event.eventName,
       actions: event.actions.map((action) => cloneActionNode(action)),
     })),
-    children: flatComponent.childIds.map((childId) => buildComponentTree(childId, componentMap, nextPath)),
+    children: flatComponent.childIds.map((childId) =>
+      buildComponentTree(childId, componentMap, nextPath),
+    ),
   };
 }
 
@@ -329,7 +335,10 @@ export function parseSchema(schema: A2UISchema, options?: CompileOptions): RootN
   };
 }
 
-function findProp(component: FlatComponentNode | ResolvedComponentNode, name: string): PropNode | undefined {
+function findProp(
+  component: FlatComponentNode | ResolvedComponentNode,
+  name: string,
+): PropNode | undefined {
   return component.props.find((prop) => prop.name === name);
 }
 
@@ -367,16 +376,24 @@ function resolveFieldName(sourceKey: string, source: FieldInfo['source']): strin
 function collectFields(ctx: TransformContext) {
   for (const component of ctx.root.flatComponents) {
     const fieldProp = findProp(component, 'field');
-    if (fieldProp && fieldProp.value.kind === 'literal' && typeof fieldProp.value.value === 'string') {
+    if (
+      fieldProp &&
+      fieldProp.value.kind === 'literal' &&
+      typeof fieldProp.value.value === 'string'
+    ) {
       const rawFieldName = fieldProp.value.value;
-      const initialValue =
-        findProp(component, 'defaultValue')?.value ??
+      const initialValue = findProp(component, 'defaultValue')?.value ??
         findProp(component, 'value')?.value ??
         findProp(component, 'initialValue')?.value ?? { kind: 'literal', value: '' as const };
 
       registerField(
         ctx,
-        createFieldInfo(resolveFieldName(rawFieldName, 'field'), rawFieldName, 'field', initialValue),
+        createFieldInfo(
+          resolveFieldName(rawFieldName, 'field'),
+          rawFieldName,
+          'field',
+          initialValue,
+        ),
       );
       continue;
     }
@@ -468,7 +485,8 @@ function toPascalIdentifier(value: string, fallback: string): string {
 
 function createEventHandlerName(componentId: string, eventName: string): string {
   const componentPart = toPascalIdentifier(componentId, 'Component');
-  const rawEventName = eventName.startsWith('on') && eventName.length > 2 ? eventName.slice(2) : eventName;
+  const rawEventName =
+    eventName.startsWith('on') && eventName.length > 2 ? eventName.slice(2) : eventName;
   const eventPart = toPascalIdentifier(rawEventName, 'Event');
   return `handle${componentPart}${eventPart}`;
 }
@@ -567,7 +585,8 @@ function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined')
     case 'expression': {
       const code = value.code.trim();
       if (!code) return fallback;
-      const valid = value.source === 'legacy' ? isValidExpressionPath(code) : isSafeInlineExpression(code);
+      const valid =
+        value.source === 'legacy' ? isValidExpressionPath(code) : isSafeInlineExpression(code);
       return valid ? code : fallback;
     }
     case 'template':
@@ -582,7 +601,10 @@ function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined')
       return `[${value.items.map((item) => getExpressionCode(item, 'undefined')).join(', ')}]`;
     case 'object':
       return `{ ${value.properties
-        .map((property) => `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined')}`)
+        .map(
+          (property) =>
+            `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined')}`,
+        )
         .join(', ')} }`;
     default:
       return fallback;
@@ -762,7 +784,11 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     attributes.push(createAttribute(prop.name, prop.value, '""'));
   }
 
-  if (fieldProp && fieldProp.value.kind === 'literal' && typeof fieldProp.value.value === 'string') {
+  if (
+    fieldProp &&
+    fieldProp.value.kind === 'literal' &&
+    typeof fieldProp.value.value === 'string'
+  ) {
     const fieldInfo = getFieldInfo(ctx, fieldProp.value.value);
     if (fieldInfo) {
       attributes.push(...buildFieldBinding(fieldInfo));
@@ -887,7 +913,11 @@ function needsAsync(actions: ActionNode[]): boolean {
   });
 }
 
-function resolveResultTarget(resultTo: string | undefined, ctx: TransformContext, valueCode: string): string {
+function resolveResultTarget(
+  resultTo: string | undefined,
+  ctx: TransformContext,
+  valueCode: string,
+): string {
   if (!resultTo) {
     return valueCode;
   }
@@ -912,7 +942,10 @@ function buildActionBlock(
 ): { code: string; async: boolean } {
   const segments = actions.map((action) => buildActionStatement(action, ctx, ownerHandlerName));
   return {
-    code: segments.map((segment) => segment.code).filter(Boolean).join('\n'),
+    code: segments
+      .map((segment) => segment.code)
+      .filter(Boolean)
+      .join('\n'),
     async: segments.some((segment) => segment.async),
   };
 }
@@ -933,10 +966,17 @@ function buildNotificationObject(action: ActionNode): string {
   return `{ ${props.join(', ')} }`;
 }
 
-function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHandlerName: string): { code: string; async: boolean } {
+function buildActionStatement(
+  action: ActionNode,
+  ctx: TransformContext,
+  ownerHandlerName: string,
+): { code: string; async: boolean } {
   switch (action.type) {
     case 'setValue': {
-      const valueCode = getExpressionCode(action.value ?? { kind: 'literal', value: '' }, 'undefined');
+      const valueCode = getExpressionCode(
+        action.value ?? { kind: 'literal', value: '' },
+        'undefined',
+      );
       if (action.field) {
         const fieldInfo = getFieldInfo(ctx, action.field);
         if (fieldInfo) {
@@ -993,28 +1033,40 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
 
       const successHandler =
         action.resultTo || (action.onSuccess?.length ?? 0) > 0
-          ? registerNestedCodeHandler(ownerHandlerName, 'OnSuccess', ctx, ['response'], (handlerName) => {
-              const onSuccess = buildActionBlock(action.onSuccess ?? [], ctx, handlerName);
-              const successLines: string[] = [];
-              if (action.resultTo) {
-                successLines.push(resolveResultTarget(action.resultTo, ctx, 'response'));
-              }
-              if (onSuccess.code) {
-                successLines.push(onSuccess.code);
-              }
-              return {
-                code: successLines.join('\n'),
-                async: onSuccess.async,
-              };
-            })
+          ? registerNestedCodeHandler(
+              ownerHandlerName,
+              'OnSuccess',
+              ctx,
+              ['response'],
+              (handlerName) => {
+                const onSuccess = buildActionBlock(action.onSuccess ?? [], ctx, handlerName);
+                const successLines: string[] = [];
+                if (action.resultTo) {
+                  successLines.push(resolveResultTarget(action.resultTo, ctx, 'response'));
+                }
+                if (onSuccess.code) {
+                  successLines.push(onSuccess.code);
+                }
+                return {
+                  code: successLines.join('\n'),
+                  async: onSuccess.async,
+                };
+              },
+            )
           : undefined;
-      const errorHandler = registerNestedCodeHandler(ownerHandlerName, 'OnError', ctx, ['error'], (handlerName) => {
-        const onError = buildActionBlock(action.onError ?? [], ctx, handlerName);
-        return {
-          code: onError.code || 'console.error(error);',
-          async: onError.async,
-        };
-      });
+      const errorHandler = registerNestedCodeHandler(
+        ownerHandlerName,
+        'OnError',
+        ctx,
+        ['error'],
+        (handlerName) => {
+          const onError = buildActionBlock(action.onError ?? [], ctx, handlerName);
+          return {
+            code: onError.code || 'console.error(error);',
+            async: onError.async,
+          };
+        },
+      );
 
       const successChain = successHandler ? `\n  .then(${successHandler.name})` : '';
 
@@ -1030,8 +1082,9 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
           async: false,
         };
       }
+      // ponytail: P0 保守降级，动态导航统一降级为 '/'，防 javascript:/data: 与可控跳转
       return {
-        code: `window.location.href = ${getExpressionCode(action.to ?? { kind: 'literal', value: '/' }, '"/"')};`,
+        code: `window.location.href = '/';`,
         async: false,
       };
     }
@@ -1206,7 +1259,9 @@ function genImports(imports: Map<string, Set<string>>): string {
     if (names.size === 0) continue;
     const sortedNames = Array.from(names).sort();
     if (source === 'react') {
-      statements.push(`import React, { ${sortedNames.join(', ')} } from ${toQuotedString(source)};`);
+      statements.push(
+        `import React, { ${sortedNames.join(', ')} } from ${toQuotedString(source)};`,
+      );
       continue;
     }
     statements.push(`import { ${sortedNames.join(', ')} } from ${toQuotedString(source)};`);
@@ -1252,8 +1307,3 @@ export function compileSchemaToCode(schema: A2UISchema, options?: CompileOptions
   transform(ast);
   return generate(ast);
 }
-
-
-
-
-

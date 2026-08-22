@@ -331,6 +331,7 @@ export const DANGEROUS_ACTION_TYPES: string[] = [
   'exec',
   'runScript',
   'evaluate',
+  'customScript',
 ];
 
 /**

@@ -25,8 +25,6 @@ export const CORE_ACTION_TYPES = [
   // 工具
   'delay',
   'log',
-  // 逃生舱
-  'customScript',
 ] as const;
 
 /**
@@ -77,11 +75,6 @@ const CORE_ACTIONS_DESCRIPTION = {
   log: {
     description: '控制台日志',
     example: `{ "type": "log", "value": "{{formData}}" }`,
-  },
-  // 逃生舱
-  customScript: {
-    description: '自定义脚本（高级功能）',
-    example: `{ "type": "customScript", "code": "console.log('Hello')" }`,
   },
 } as const;
 

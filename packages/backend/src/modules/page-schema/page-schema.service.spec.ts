@@ -46,10 +46,50 @@ describe('PageSchemaService', () => {
       getSnapshotByVersion: jest.fn((pageId: string, version: number) =>
         snapshots.find((snapshot) => snapshot.pageId === pageId && snapshot.version === version),
       ),
-      saveSnapshot: jest.fn((snapshot: PageSchemaSnapshotRecord, page: PageRecord) => {
-        pageStore = page;
-        snapshots.push(snapshot);
-      }),
+      saveSchema: jest.fn(
+        async (params: {
+          pageId: string;
+          schema: Record<string, unknown>;
+          baseVersion?: number;
+        }) => {
+          const currentVersion = pageStore?.currentVersion ?? 0;
+          if (pageStore && params.baseVersion === undefined) {
+            throw new ConflictException({
+              message: 'Page version mismatch',
+              pageId: params.pageId,
+              expectedVersion: currentVersion,
+              receivedVersion: null,
+            });
+          }
+          if (params.baseVersion !== undefined && params.baseVersion !== currentVersion) {
+            throw new ConflictException({
+              message: 'Page version mismatch',
+              pageId: params.pageId,
+              expectedVersion: currentVersion,
+              receivedVersion: params.baseVersion,
+            });
+          }
+          const nextVersion = currentVersion + 1;
+          const snapshotId = `mock-${params.pageId}-v${nextVersion}-${Date.now()}`;
+          const snap: PageSchemaSnapshotRecord = {
+            id: snapshotId,
+            pageId: params.pageId,
+            version: nextVersion,
+            schema: { ...params.schema, version: nextVersion },
+            createdAt: new Date().toISOString(),
+          };
+          const page: PageRecord = {
+            id: params.pageId,
+            currentVersion: nextVersion,
+            latestSnapshotId: snapshotId,
+            createdAt: pageStore?.createdAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          pageStore = page;
+          snapshots.push(snap);
+          return { page, snapshot: snap };
+        },
+      ),
     } as unknown as jest.Mocked<PageSchemaRepository>;
 
     const module: TestingModule = await Test.createTestingModule({
@@ -67,35 +107,24 @@ describe('PageSchemaService', () => {
   });
 
   it('saves a new page at version 1', async () => {
-    const result = await service.saveSchema('page-1', {
-      schema: createSchema('first'),
-    });
+    const result = await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
 
     expect(result.pageId).toBe('page-1');
     expect(result.version).toBe(1);
-    expect(repository.saveSnapshot).toHaveBeenCalledTimes(1);
-    expect(repository.saveSnapshot).toHaveBeenCalledWith(
+    expect(repository.saveSchema).toHaveBeenCalledTimes(1);
+    expect(repository.saveSchema).toHaveBeenCalledWith(
       expect.objectContaining({
         pageId: 'page-1',
-        version: 1,
-        schema: {
-          ...createSchema('first'),
-          version: 1,
-        },
-      }),
-      expect.objectContaining({
-        id: 'page-1',
-        currentVersion: 1,
+        baseVersion: undefined,
       }),
     );
   });
 
   it('increments the version when saving the same page again', async () => {
-    await service.saveSchema('page-1', {
-      schema: createSchema('first'),
-    });
+    await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
 
-    const result = await service.saveSchema('page-1', {
+    const result = await service.saveSchema({
+      pageId: 'page-1',
       schema: createSchema('second'),
       baseVersion: 1,
     });
@@ -105,12 +134,11 @@ describe('PageSchemaService', () => {
   });
 
   it('throws conflict when baseVersion is stale', async () => {
-    await service.saveSchema('page-1', {
-      schema: createSchema('first'),
-    });
+    await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
 
     await expect(
-      service.saveSchema('page-1', {
+      service.saveSchema({
+        pageId: 'page-1',
         schema: createSchema('stale'),
         baseVersion: 0,
       }),
@@ -118,10 +146,9 @@ describe('PageSchemaService', () => {
   });
 
   it('loads the latest or versioned snapshot', async () => {
-    await service.saveSchema('page-1', {
-      schema: createSchema('first'),
-    });
-    await service.saveSchema('page-1', {
+    await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
+    await service.saveSchema({
+      pageId: 'page-1',
       schema: createSchema('second'),
       baseVersion: 1,
     });

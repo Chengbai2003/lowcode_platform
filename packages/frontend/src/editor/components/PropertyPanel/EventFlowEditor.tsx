@@ -10,7 +10,6 @@ import {
   DialogActionEditor,
   DelayActionEditor,
   LogActionEditor,
-  CustomScriptActionEditor,
   IfActionEditor,
   LoopActionEditor,
   UnsupportedActionEditor,
@@ -71,8 +70,6 @@ export const EventFlowEditor = ({
         return `delay(${action.ms ?? 0}ms)`;
       case ACTION_TYPE.log:
         return `${action.level || 'info'}: ${String(action.value)}`;
-      case ACTION_TYPE.customScript:
-        return '// 自定义代码';
       default:
         return '请配置详细参数...';
     }
@@ -98,8 +95,6 @@ export const EventFlowEditor = ({
         return <DelayActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.log:
         return <LogActionEditor action={action} updateAction={updateAction} />;
-      case ACTION_TYPE.customScript:
-        return <CustomScriptActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.if:
         return <IfActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.loop:

@@ -11,7 +11,11 @@ export class PageSchemaController {
 
   @Put(':pageId/schema')
   async saveSchema(@Param('pageId') pageId: string, @Body() dto: SavePageSchemaDto) {
-    return this.pageSchemaService.saveSchema(pageId, dto);
+    return this.pageSchemaService.saveSchema({
+      pageId,
+      schema: dto.schema,
+      baseVersion: dto.baseVersion,
+    });
   }
 
   @Get(':pageId/schema')

@@ -22,6 +22,7 @@ const DANGEROUS_TOKENS = [
   'window.',
   'window[',
   'XMLHttpRequest',
+  'fetch(',
 ];
 
 const MUSTACHE_REGEX = /\{\{([\s\S]+?)\}\}/g;
@@ -50,6 +51,19 @@ export function isValidExpressionPath(code: string): boolean {
 
   return /^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*|\[\d+\])*$/.test(code);
 }
+
+// P0 保守白名单：仅允许的直接调用与 Math/Date 成员调用；Identifier 根白名单需动态结合 schema 字段（动态字段无法静态枚举），此处依靠 DANGEROUS_TOKENS + 调用白名单兜底
+const ALLOWED_DIRECT_CALLS = new Set<string>([
+  'String',
+  'Number',
+  'Boolean',
+  'parseInt',
+  'parseFloat',
+]);
+const ALLOWED_MEMBER_CALLS: Record<string, Set<string>> = {
+  Math: new Set(['abs', 'max', 'min', 'round', 'floor', 'ceil']),
+  Date: new Set(['now', 'parse', 'UTC']),
+};
 
 const ALLOWED_AST_TYPES = new Set([
   'Literal',
@@ -122,18 +136,26 @@ function isAllowedASTNode(node: any): boolean {
     case 'CallExpression': {
       const callee = (node as any).callee;
       if (!callee) return false;
-      if (callee.type === 'Identifier') {
-        if (BLOCKED_CALLEE_NAMES.has(callee.name)) return false;
-      } else if (callee.type === 'MemberExpression') {
-        if (!isAllowedASTNode(callee)) return false;
-      } else {
-        return false;
-      }
       const args = (node as any).arguments || [];
       for (const arg of args) {
         if (!isAllowedASTNode(arg)) return false;
       }
-      return true;
+      if (callee.type === 'Identifier') {
+        // fail-close: 仅允许白名单直调
+        return ALLOWED_DIRECT_CALLS.has(callee.name);
+      }
+      if (callee.type === 'MemberExpression') {
+        // 仅允许静态 Math.xxx / Date.xxx 且方法在白名单，禁止计算属性与数据链调用
+        if ((callee as any).computed) return false;
+        const obj = (callee as any).object;
+        const prop = (callee as any).property;
+        if (!obj || obj.type !== 'Identifier') return false;
+        if (!prop || prop.type !== 'Identifier') return false;
+        const allowed = ALLOWED_MEMBER_CALLS[obj.name];
+        if (!allowed) return false;
+        return allowed.has(prop.name);
+      }
+      return false;
     }
     case 'ArrayExpression': {
       const elems = (node as any).elements || [];

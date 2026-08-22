@@ -60,6 +60,63 @@ const RESERVED_CONTEXT_KEYS = new Set([
   'prototype',
 ]);
 
+// ——— P0-2: 输入净化（同 safeEvaluator 复用逻辑，本地最小实现） ———
+const SANITIZE_SKIP_EP = Symbol('sanitize-skip-ep');
+function isPlainObjectEp(o: unknown): boolean {
+  if (o === null || typeof o !== 'object') return false;
+  const proto = Object.getPrototypeOf(o);
+  return proto === Object.prototype || proto === null;
+}
+function cloneSanitizedEp(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
+  if (value === null) return null;
+  if (typeof value !== 'object') {
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
+      return SANITIZE_SKIP_EP;
+    return value;
+  }
+  if (value instanceof Date) return new Date(value.getTime());
+  if (seen.has(value as object)) return seen.get(value as object);
+  if (Array.isArray(value)) {
+    const arr: unknown[] = [];
+    seen.set(value as object, arr);
+    for (let i = 0; i < (value as unknown[]).length; i++) {
+      const desc = Object.getOwnPropertyDescriptor(value, String(i));
+      if (desc && (desc.get || desc.set)) {
+        arr[i] = undefined;
+        continue;
+      }
+      const raw = (value as unknown[])[i];
+      if (typeof raw === 'function' || typeof raw === 'symbol') {
+        arr[i] = undefined;
+        continue;
+      }
+      const cloned = cloneSanitizedEp(raw, seen);
+      arr[i] = cloned === SANITIZE_SKIP_EP ? undefined : cloned;
+    }
+    return arr;
+  }
+  if (!isPlainObjectEp(value)) return SANITIZE_SKIP_EP;
+  const out: Record<string, unknown> = {};
+  seen.set(value as object, out);
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, key);
+    if (!desc) continue;
+    if (desc.get || desc.set) continue;
+    const raw = desc.value;
+    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+    const cloned = cloneSanitizedEp(raw, seen);
+    if (cloned === SANITIZE_SKIP_EP) continue;
+    out[key] = cloned;
+  }
+  return out;
+}
+function sanitizeContextEp(context: Record<string, any> | undefined): Record<string, any> {
+  if (!context || typeof context !== 'object') return {};
+  const cloned = cloneSanitizedEp(context) as Record<string, any>;
+  return (cloned as Record<string, any>) ?? {};
+}
+
 const ALLOWED_EXPRESSION_KEYS = [
   'data',
   'state',
@@ -68,20 +125,37 @@ const ALLOWED_EXPRESSION_KEYS = [
   'route',
   'components',
 ] as const;
+// 行上下文/循环变量等合法扩展键（Table record/value、loop item/index 等），不在真白名单核心但需放行以支撑模板；仍受 RESERVED_CONTEXT_KEYS / isValidAliasKey 阻断
+const ALLOWED_EXTENSION_KEYS = [
+  'record',
+  'value',
+  'rowIndex',
+  'item',
+  'index',
+  'componentId',
+  'event',
+  'row',
+  'response',
+  'error',
+] as const;
 const PURE_UTILS_KEYS = ['formatDate', 'uuid', 'clone'] as const;
 
+// 真白名单：核心命名空间 + 合法扩展键（record/item/index 等），其余自定义顶层字段不暴露，数据别名另由 buildExpressionContext 处理
 function pickAllowedContext(context: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {};
   for (const k of ALLOWED_EXPRESSION_KEYS) {
     if (k in context) out[k] = (context as Record<string, any>)[k];
   }
-  // preserve top-level data aliases (e.g. loginForm) but deny-list guarded:
-  // isValidAliasKey checks RESERVED_CONTEXT_KEYS (contains api/runtime/dispatch/getState/navigate/ui etc.)
-  // so even if future context adds new sensitive keys, they will be filtered here.
+  for (const k of ALLOWED_EXTENSION_KEYS) {
+    if (k in context) out[k] = (context as Record<string, any>)[k];
+  }
+  // 兼容任意合法循环变量：isValidAliasKey 且非保留键，已存在于 sanitized context 的额外键（如自定义 itemVar）
   for (const [k, v] of Object.entries(context)) {
     if ((ALLOWED_EXPRESSION_KEYS as readonly string[]).includes(k)) continue;
+    if ((ALLOWED_EXTENSION_KEYS as readonly string[]).includes(k)) continue;
     if (k === 'utils') continue;
     if (!isValidAliasKey(k, out)) continue;
+    // 仅放行已存在于 sanitized context 的额外键，且其值非敏感对象（已在 sanitize 阶段去函数/getter）
     out[k] = v;
   }
   // expose only pure utils helpers if present
@@ -131,19 +205,24 @@ function isValidAliasKey(key: string, context: Record<string, any>): boolean {
 }
 
 export function buildExpressionContext(context: Record<string, any> = {}): Record<string, any> {
-  if (!context || typeof context !== 'object') {
+  const sanitized = sanitizeContextEp(context);
+  if (!sanitized || typeof sanitized !== 'object') {
     return {};
   }
 
-  const data = (context as Record<string, any>).data;
-  const allowedBase = pickAllowedContext(context);
+  const data = (sanitized as Record<string, any>).data;
+  const allowedBase = pickAllowedContext(sanitized);
 
   if (!data || typeof data !== 'object') {
     return allowedBase;
   }
 
-  // Proxy 惰性别名，按需读取而非全量展开
+  // Proxy 惰性别名，按需读取而非全量展开；补 ownKeys/getOwnPropertyDescriptor 使 Object.keys / sanitize 能捕获别名
   if (getFlag('selectiveEvaluation')) {
+    const aliasKeys = () =>
+      Object.keys(data as Record<string, unknown>).filter(
+        (k) => isValidAliasKey(k, allowedBase) && !(k in allowedBase),
+      );
     return new Proxy(allowedBase, {
       get(target, key: string) {
         if (key in target) return (target as Record<string, any>)[key];
@@ -155,6 +234,23 @@ export function buildExpressionContext(context: Record<string, any> = {}): Recor
       has(target, key: string) {
         if (key in target) return true;
         return typeof key === 'string' && isValidAliasKey(key, target) && key in data;
+      },
+      ownKeys(target) {
+        return [...Reflect.ownKeys(target), ...aliasKeys()];
+      },
+      getOwnPropertyDescriptor(target, key) {
+        if (Reflect.has(target, key)) {
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        }
+        if (typeof key === 'string' && aliasKeys().includes(key)) {
+          return {
+            value: (data as Record<string, unknown>)[key],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          };
+        }
+        return undefined;
       },
     });
   }
@@ -473,7 +569,8 @@ function buildExpressionContextWithProxy(
   proxy: Record<string, any>,
   context: Record<string, any> = {},
 ): Record<string, any> {
-  const allowed = pickAllowedContext(context);
+  const sanitized = sanitizeContextEp(context);
+  const allowed = pickAllowedContext(sanitized);
   const baseContext: Record<string, any> = {
     ...allowed,
     data: proxy.data,
@@ -482,8 +579,13 @@ function buildExpressionContextWithProxy(
     components: proxy.components,
   };
 
-  // Proxy 惰性别名，按需读取
+  // Proxy 惰性别名，按需读取；ownKeys 使 sanitizer 能捕获别名
   if (getFlag('selectiveEvaluation')) {
+    const aliasKeysWithProxy = (target: Record<string, any>) => {
+      const d = (target.data || {}) as Record<string, unknown>;
+      if (!d || typeof d !== 'object') return [] as string[];
+      return Object.keys(d).filter((k) => isValidAliasKey(k, target) && !(k in target));
+    };
     return new Proxy(baseContext, {
       get(target, key: string) {
         if (key in target) return target[key];
@@ -497,6 +599,21 @@ function buildExpressionContextWithProxy(
         return (
           typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})
         );
+      },
+      ownKeys(target) {
+        return [...Reflect.ownKeys(target), ...aliasKeysWithProxy(target)];
+      },
+      getOwnPropertyDescriptor(target, key) {
+        if (Reflect.has(target, key)) return Reflect.getOwnPropertyDescriptor(target, key);
+        if (typeof key === 'string' && aliasKeysWithProxy(target).includes(key)) {
+          return {
+            value: (target.data as Record<string, unknown>)[key],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          };
+        }
+        return undefined;
       },
     });
   }

@@ -55,6 +55,25 @@ function toWidth(value: string): number | undefined {
   return Number.isFinite(width) && width > 0 ? width : undefined;
 }
 
+// strip __stableId before external onChange (sanitize outputs retain it, so manual filter)
+function stripStableIds(columns: TableColumnItem[]): TableColumnItem[] {
+  return columns.map((col) => {
+    const { __stableId: _colId, ...rest } = col as TableColumnItem & { __stableId?: string };
+    if ('buttons' in rest && Array.isArray((rest as { buttons?: unknown[] }).buttons)) {
+      const r = rest as unknown as { buttons: Array<{ __stableId?: string }> } & typeof rest;
+      const buttons = r.buttons.map((b) => {
+        const { __stableId: _bid, ...bRest } = b as { __stableId?: string } & Record<
+          string,
+          unknown
+        >;
+        return bRest;
+      });
+      return { ...rest, buttons } as unknown as TableColumnItem;
+    }
+    return rest as TableColumnItem;
+  });
+}
+
 export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
   label,
   value,
@@ -66,7 +85,29 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     () => sanitizeTableColumnsValue(defaultTemplate, [DEFAULT_TABLE_COLUMN]),
     [defaultTemplate],
   );
-  const columns = useMemo(() => sanitizeTableColumnsValue(value, template), [value, template]);
+  // __stableId 本地 Map 映射：仅内部用于 React key 与 draft，不随 onChange 外泄
+  const stableIdMapRef = useRef<Map<string, string>>(new Map());
+  const columns = useMemo(() => {
+    const sanitized = sanitizeTableColumnsValue(value, template);
+    // 通过本地 Map 复用 stableId，避免外部 strip 后重复生成导致 key 抖动
+    return sanitized.map((col, idx) => {
+      const sid = (col as TableColumnItem & { __stableId?: string }).__stableId;
+      if (!sid) return col;
+      const rawArr = Array.isArray(value) ? (value as unknown[]) : [];
+      const rawItem = rawArr[idx] as Record<string, unknown> | undefined;
+      const hasExternalId =
+        rawItem && typeof rawItem.__stableId === 'string' && (rawItem.__stableId as string).trim();
+      const cacheKey = `col-${idx}`;
+      if (!hasExternalId) {
+        const cached = stableIdMapRef.current.get(cacheKey);
+        if (cached) return { ...col, __stableId: cached } as TableColumnItem;
+        stableIdMapRef.current.set(cacheKey, sid);
+        return col;
+      }
+      stableIdMapRef.current.set(cacheKey, sid);
+      return col;
+    });
+  }, [value, template]);
 
   // Draft 态：输入过程中的原始字符串，允许空字符串等中间态，blur 时再提交 sanitized 值（P0-9）
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -157,10 +198,66 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
 
   const emitColumns = useCallback(
     (nextColumns: TableColumnItem[]) => {
-      onChange(sanitizeTableColumnsValue(nextColumns, template));
+      const sanitized = sanitizeTableColumnsValue(nextColumns, template);
+      // sanitize outputs retain __stableId — strip before external onChange (confirmed)
+      const stripped = stripStableIds(sanitized);
+      onChange(stripped as TableColumnItem[]);
     },
     [onChange, template],
   );
+
+  // 未失焦卸载时 flush 草稿，避免切页丢失（P0-9 收尾）
+  const draftsRef = useRef(drafts);
+  const columnsRef = useRef(columns);
+  const emitColumnsRef = useRef(emitColumns);
+  useEffect(() => {
+    draftsRef.current = drafts;
+  }, [drafts]);
+  useEffect(() => {
+    columnsRef.current = columns;
+  }, [columns]);
+  useEffect(() => {
+    emitColumnsRef.current = emitColumns;
+  }, [emitColumns]);
+  useEffect(() => {
+    return () => {
+      const pending = draftsRef.current;
+      if (!pending || Object.keys(pending).length === 0) return;
+      const cur = columnsRef.current;
+      if (!cur || cur.length === 0) return;
+      const next = cur.map(
+        (c) => ({ ...(c as Record<string, unknown>) }) as TableColumnItem & { __stableId?: string },
+      );
+      let hasChange = false;
+      for (const [key, val] of Object.entries(pending)) {
+        const sep = key.lastIndexOf('__');
+        if (sep === -1) continue;
+        const sid = key.slice(0, sep);
+        const field = key.slice(sep + 2);
+        let idx = -1;
+        if (sid.startsWith('idx_')) idx = Number(sid.slice(4));
+        else
+          idx = next.findIndex(
+            (col) => (col as unknown as { __stableId?: string }).__stableId === sid,
+          );
+        if (idx < 0 || idx >= next.length) continue;
+        const col = next[idx] as unknown as Record<string, unknown>;
+        if (
+          field === 'title' ||
+          field === 'key' ||
+          field === 'dataIndex' ||
+          field === 'textTemplate'
+        ) {
+          col[field] = val;
+          hasChange = true;
+        } else if (field === 'width') {
+          col.width = toWidth(val);
+          hasChange = true;
+        }
+      }
+      if (hasChange) emitColumnsRef.current(next as TableColumnItem[]);
+    };
+  }, []);
 
   const updateColumn = useCallback(
     (index: number, updater: (column: TableColumnItem) => TableColumnItem) => {

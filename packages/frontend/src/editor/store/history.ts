@@ -84,6 +84,7 @@ interface HistoryActions {
   setPageContext: (pageId: string | null) => void;
   /** clearForPage 别名 */
   clearForPage: (pageId: string | null) => void;
+  resetForDocument: (pageId: string | null) => void;
   /** 获取当前页面 ID */
   getCurrentPageId: () => string | null;
   /** 获取当前 generation */
@@ -255,6 +256,16 @@ export const useHistoryStore = create<HistoryStore>()(
 
       clearForPage: (pageId) => {
         get().setCurrentPageId(pageId);
+      },
+
+      resetForDocument: (pageId) => {
+        const state = get();
+        set({
+          currentPageId: pageId,
+          undoStack: [],
+          redoStack: [],
+          generation: state.generation + 1,
+        });
       },
 
       getCurrentPageId: () => {

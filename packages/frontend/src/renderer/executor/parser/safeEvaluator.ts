@@ -1,5 +1,6 @@
 import jsep from 'jsep';
 import jsepNew from '@jsep-plugin/new';
+import { pauseTracking, resumeTracking, isTrackingProxy } from '../../reactive/tracking';
 
 jsep.plugins.register(jsepNew);
 // jsep 默认不将 typeof 视作一元运算符，需要手动注册
@@ -51,7 +52,141 @@ const BLOCKED_CALL_METHODS = new Set([
   '__lookupSetter__',
 ]);
 
-const HIGH_COST_METHODS = new Set(['repeat', 'padStart', 'padEnd']);
+// ——— P0-2: intrinsic 白名单（只允许原生原型方法且未被自有属性覆盖） ———
+const STRING_SAFE = new Set([
+  'slice',
+  'substring',
+  'split',
+  'includes',
+  'startsWith',
+  'endsWith',
+  'toLowerCase',
+  'toUpperCase',
+  'trim',
+  'trimStart',
+  'trimEnd',
+  'indexOf',
+  'lastIndexOf',
+  'charAt',
+  'charCodeAt',
+  'replace',
+  'replaceAll',
+  'toString',
+  'valueOf',
+]);
+const ARRAY_SAFE = new Set([
+  'slice',
+  'concat',
+  'includes',
+  'indexOf',
+  'lastIndexOf',
+  'join',
+  'at',
+  'flat',
+]);
+const NUMBER_SAFE = new Set(['toString', 'toFixed', 'toPrecision', 'toExponential', 'valueOf']);
+const MATH_SAFE = new Set([
+  'abs',
+  'ceil',
+  'floor',
+  'round',
+  'max',
+  'min',
+  'pow',
+  'sqrt',
+  'trunc',
+  'sign',
+  'random',
+]);
+const JSON_SAFE = new Set(['stringify', 'parse']);
+
+const ARRAY_MUTATOR_BLOCK = new Set([
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'sort',
+  'reverse',
+  'fill',
+  'copyWithin',
+]);
+const ARRAY_CALLBACK_BLOCK = new Set([
+  'map',
+  'filter',
+  'find',
+  'findIndex',
+  'findLast',
+  'findLastIndex',
+  'some',
+  'every',
+  'reduce',
+  'reduceRight',
+  'flatMap',
+  'forEach',
+  'sort',
+]);
+const STRING_BLOCK = new Set(['match', 'search', 'matchAll', 'repeat', 'padStart', 'padEnd']);
+
+// ——— P0-2: 输入净化 ———
+// 只保留 plain object / array / primitive / Date 深拷贝，跳过 getter/setter、函数、类实例
+const SANITIZE_SKIP = Symbol('sanitize-skip');
+function isPlainObject(o: unknown): boolean {
+  if (o === null || typeof o !== 'object') return false;
+  const proto = Object.getPrototypeOf(o);
+  return proto === Object.prototype || proto === null;
+}
+function cloneSanitized(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
+  if (value === null) return null;
+  if (typeof value !== 'object') {
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
+      return SANITIZE_SKIP;
+    return value;
+  }
+  // 保留追踪代理以维持依赖收集（P0-2 收尾）
+  if (isTrackingProxy(value)) return value;
+  if (value instanceof Date) return new Date(value.getTime());
+  if (seen.has(value as object)) return seen.get(value as object);
+  if (Array.isArray(value)) {
+    const arr: unknown[] = [];
+    seen.set(value as object, arr);
+    for (let i = 0; i < (value as unknown[]).length; i++) {
+      const desc = Object.getOwnPropertyDescriptor(value, String(i));
+      if (desc && (desc.get || desc.set)) {
+        arr[i] = undefined;
+        continue;
+      }
+      const raw = (value as unknown[])[i];
+      if (typeof raw === 'function' || typeof raw === 'symbol') {
+        arr[i] = undefined;
+        continue;
+      }
+      const cloned = cloneSanitized(raw, seen);
+      arr[i] = cloned === SANITIZE_SKIP ? undefined : cloned;
+    }
+    return arr;
+  }
+  if (!isPlainObject(value)) return SANITIZE_SKIP;
+  const out: Record<string, unknown> = {};
+  seen.set(value as object, out);
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, key);
+    if (!desc) continue;
+    if (desc.get || desc.set) continue;
+    const raw = desc.value;
+    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+    const cloned = cloneSanitized(raw, seen);
+    if (cloned === SANITIZE_SKIP) continue;
+    out[key] = cloned;
+  }
+  return out;
+}
+function sanitizeContext(context: Record<string, any> | undefined): Record<string, any> {
+  if (!context || typeof context !== 'object') return {};
+  const cloned = cloneSanitized(context) as Record<string, any>;
+  return (cloned as Record<string, any>) ?? {};
+}
 
 /**
  * 安全计算 AST 节点
@@ -201,10 +336,6 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'CallExpression': {
       const callNode = node as jsep.CallExpression;
-
-      // 我们只支持对象方法的调用 (如 Math.max)，或者 context 里提供的安全函数
-      // 不支持直接全局函数调用（比如未在 context 或白名单声明的 alert()）
-
       let funcName: string;
       let targetObj: any;
       let func: any;
@@ -212,63 +343,93 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       if (callNode.callee.type === 'MemberExpression') {
         const memberNode = callNode.callee as jsep.MemberExpression;
         targetObj = evaluateNode(memberNode.object, context);
-
         if (targetObj === undefined || targetObj === null) return undefined;
-
         if (memberNode.computed) {
           funcName = evaluateNode(memberNode.property, context);
         } else {
           funcName = (memberNode.property as jsep.Identifier).name;
         }
-
-        // 安全拦截
-        if (BLOCKED_CALL_METHODS.has(funcName)) {
+        if (typeof funcName !== 'string') return undefined;
+        if (BLOCKED_CALL_METHODS.has(funcName)) return undefined;
+        if (
+          STRING_BLOCK.has(funcName) ||
+          ARRAY_MUTATOR_BLOCK.has(funcName) ||
+          ARRAY_CALLBACK_BLOCK.has(funcName)
+        )
+          return undefined;
+        // 禁止自有属性覆盖：若 target 自身拥有该属性则视为污染
+        if (Object.prototype.hasOwnProperty.call(targetObj, funcName)) return undefined;
+        // 计算参数先于 intrinsic 检查? 需先检查以便过滤函数参数
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        if (args.some((a) => typeof a === 'function')) return undefined;
+        // 固定 intrinsic 对比，不先读 target[funcName]
+        const t = targetObj;
+        if (typeof t === 'string' || t instanceof String) {
+          if (!STRING_SAFE.has(funcName)) return undefined;
+          func = (String.prototype as unknown as Record<string, unknown>)[funcName];
+        } else if (Array.isArray(t)) {
+          if (!ARRAY_SAFE.has(funcName)) return undefined;
+          func = (Array.prototype as unknown as Record<string, unknown>)[funcName];
+        } else if (typeof t === 'number' || t instanceof Number) {
+          if (!NUMBER_SAFE.has(funcName)) return undefined;
+          func = (Number.prototype as unknown as Record<string, unknown>)[funcName];
+        } else if (t instanceof Date) {
+          // Date 实例仅允许白名单子集（valueOf/toString/toISOString/getTime 等），此处最小化：toString/valueOf/toISOString/getTime
+          const DATE_SAFE = new Set([
+            'toString',
+            'valueOf',
+            'toISOString',
+            'getTime',
+            'getFullYear',
+            'getMonth',
+            'getDate',
+          ]);
+          if (!DATE_SAFE.has(funcName)) return undefined;
+          func = (Date.prototype as unknown as Record<string, unknown>)[funcName];
+        } else if (t === Math) {
+          if (!MATH_SAFE.has(funcName)) return undefined;
+          func = (Math as unknown as Record<string, unknown>)[funcName];
+        } else if (t === JSON) {
+          if (!JSON_SAFE.has(funcName)) return undefined;
+          func = (JSON as unknown as Record<string, unknown>)[funcName];
+        } else {
           return undefined;
         }
-
-        func = targetObj[funcName];
+        if (typeof func !== 'function') return undefined;
+        try {
+          return func.apply(t, args);
+        } catch {
+          return undefined;
+        }
       } else if (callNode.callee.type === 'Identifier') {
         funcName = (callNode.callee as jsep.Identifier).name;
-
-        if (BLOCKED_CALL_METHODS.has(funcName)) {
+        if (BLOCKED_CALL_METHODS.has(funcName)) return undefined;
+        if (
+          STRING_BLOCK.has(funcName) ||
+          ARRAY_MUTATOR_BLOCK.has(funcName) ||
+          ARRAY_CALLBACK_BLOCK.has(funcName)
+        )
+          return undefined;
+        if (context && funcName in context) {
+          // context 中函数已被 sanitize 去除，此处若仍存在则为潜在污染，直接拒绝
           return undefined;
         }
-
-        if (context && funcName in context) {
-          func = context[funcName];
-          targetObj = context; // 函数的 this 绑定到 context
-        } else if (funcName in SAFE_GLOBALS) {
+        if (funcName in SAFE_GLOBALS) {
           func = SAFE_GLOBALS[funcName];
-          targetObj = SAFE_GLOBALS; // 函数的 this 绑定到 SAFE_GLOBALS
+          targetObj = undefined;
+        } else {
+          return undefined;
+        }
+        if (typeof func !== 'function') return undefined;
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        if (args.some((a) => typeof a === 'function')) return undefined;
+        try {
+          return func.apply(targetObj, args);
+        } catch {
+          return undefined;
         }
       } else {
         return undefined;
-      }
-
-      if (typeof func !== 'function') {
-        return undefined; // 不是一个可调用的函数
-      }
-
-      // 计算参数
-      const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
-
-      // 高消耗方法：repeat/padStart/padEnd 且数值参数过大时直接拦截（Number 转换防字符串绕过）
-      if (HIGH_COST_METHODS.has(funcName)) {
-        for (const a of args) {
-          const n = Number(a);
-          if (Number.isFinite(n) && n > 1000) return undefined;
-        }
-      }
-
-      // 过滤函数类型的参数（阻止 map/filter 等传入回调获取函数执行能力）
-      if (args.some((a) => typeof a === 'function')) {
-        return undefined;
-      }
-
-      try {
-        return func.apply(targetObj, args);
-      } catch (err) {
-        return undefined; // 函数内部报错，安全静默
       }
     }
 
@@ -366,10 +527,23 @@ export function safeEvaluate(expression: string, context: Record<string, any> = 
   if (typeof expression !== 'string' || !expression.trim()) {
     return undefined;
   }
-
+  let sanitized: Record<string, any>;
+  try {
+    // debug
+    // console.log('[safeEvaluate] before pause', expression, 'paused', (globalThis as any).__pauseCheck?.());
+    pauseTracking();
+    sanitized = sanitizeContext(context);
+  } finally {
+    try {
+      resumeTracking();
+    } catch {
+      // ignore
+    }
+  }
+  // console.log('[safeEvaluate] after resume paused', (globalThis as any).__pauseCheck?.());
   try {
     const ast = getCachedAST(expression);
-    return evaluateNode(ast, context);
+    return evaluateNode(ast, sanitized);
   } catch (error) {
     // 表达式语法报错，安全返回 undefined
     return undefined;

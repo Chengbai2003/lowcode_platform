@@ -66,6 +66,72 @@ function shallowClone<T extends Record<string, unknown>>(obj: T): T {
   return clone as T;
 }
 
+function isPlainObjectForSnapshot(o: unknown): boolean {
+  if (o === null || typeof o !== 'object') return false;
+  const proto = Object.getPrototypeOf(o);
+  return proto === Object.prototype || proto === null;
+}
+
+function fallbackClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (value === null) return value;
+  if (typeof value !== 'object') {
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
+      return undefined as unknown as T;
+    return value;
+  }
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+  if (seen.has(value as object)) return seen.get(value as object) as T;
+  if (Array.isArray(value)) {
+    const arr: unknown[] = [];
+    seen.set(value as object, arr);
+    for (let i = 0; i < (value as unknown[]).length; i++) {
+      const cloned = fallbackClone((value as unknown[])[i], seen);
+      arr[i] = cloned;
+    }
+    return arr as unknown as T;
+  }
+  // 非普通对象：浅拷贝可枚举自有属性为普通对象，避免 shared 引用
+  if (!isPlainObjectForSnapshot(value)) {
+    const out: Record<string, unknown> = {};
+    seen.set(value as object, out);
+    for (const k of Object.keys(value as Record<string, unknown>)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
+      if (!desc || desc.get || desc.set) continue;
+      const raw = desc.value;
+      if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+      out[k] = fallbackClone(raw, seen);
+    }
+    return out as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  seen.set(value as object, out);
+  for (const k of Object.keys(value as Record<string, unknown>)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
+    if (!desc || desc.get || desc.set) continue;
+    const raw = desc.value;
+    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+    out[k] = fallbackClone(raw, seen);
+  }
+  return out as unknown as T;
+}
+
+function cloneOrThrow<T extends Record<string, unknown>>(value: T, ns: string): T {
+  try {
+    return structuredClone(value);
+  } catch (e) {
+    // Fallback for non-cloneable values (functions/symbols/circular with functions): JSON-safe deep clone
+    try {
+      const fallback = fallbackClone(value);
+      if (fallback !== undefined) return fallback;
+    } catch {
+      // ignore fallback error
+    }
+    throw new Error(`snapshot clone failed for ${ns}: ${(e as Error).message}`);
+  }
+}
+
 /**
  * SnapshotManager 处理不可变运行时快照的创建和缓存。
  *
@@ -100,22 +166,26 @@ export class SnapshotManager {
       return this.cachedSnapshot;
     }
 
-    // 在冻结前创建浅拷贝，避免修改原始数据
+    // data/state/formData: try { structuredClone } catch 抛错，再 deepFreeze
+    const dataClone = cloneOrThrow(data, 'data');
+    const stateClone = cloneOrThrow(state, 'state');
+    const formDataClone = cloneOrThrow(formData, 'formData');
+    deepFreeze(dataClone);
+    deepFreeze(stateClone);
+    deepFreeze(formDataClone);
+
+    // components 保持浅拷贝浅冻结
+    const componentsClone = shallowClone(components);
+    Object.freeze(componentsClone);
+
     const snapshot: RuntimeSnapshot = {
-      data: shallowClone(data),
-      state: shallowClone(state),
-      formData: shallowClone(formData),
-      components: shallowClone(components),
+      data: dataClone,
+      state: stateClone,
+      formData: formDataClone,
+      components: componentsClone,
       version,
     };
 
-    // 深度冻结快照使其不可变
-    deepFreeze(snapshot.data);
-    deepFreeze(snapshot.state);
-    deepFreeze(snapshot.formData);
-    // 注意：components 引用通常与 schema 共享，
-    // 我们浅冻结容器但不深度冻结 components
-    Object.freeze(snapshot.components);
     Object.freeze(snapshot);
 
     // 缓存以供后续请求使用

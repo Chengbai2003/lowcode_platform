@@ -21,6 +21,7 @@ interface SelectionState {
   setCurrentPageId: (pageId: string | null) => void;
   setPageContext: (pageId: string | null) => void;
   clearForPage: (pageId: string | null) => void;
+  resetForDocument: (pageId: string | null) => void;
   getCurrentPageId: () => string | null;
   getGeneration: () => number;
 }
@@ -79,6 +80,18 @@ export const useSelectionStore = create<SelectionState>()(
         get().setCurrentPageId(pageId);
       },
 
+      resetForDocument: (pageId) => {
+        // ponytail ultra: force per-document reset, bump generation even if same id
+        const state = get();
+        set({
+          currentPageId: pageId,
+          selectedId: null,
+          hoverId: null,
+          selectedIds: [],
+          generation: state.generation + 1,
+        });
+      },
+
       getCurrentPageId: () => get().currentPageId,
 
       getGeneration: () => get().generation,
@@ -128,6 +141,7 @@ interface EditorState {
   setCurrentPageId: (pageId: string | null) => void;
   setPageContext: (pageId: string | null) => void;
   clearForPage: (pageId: string | null) => void;
+  resetForDocument: (pageId: string | null) => void;
   getCurrentPageId: () => string | null;
   getGeneration: () => number;
 }
@@ -212,6 +226,20 @@ export const useEditorStore = create<EditorState>()(
 
       clearForPage: (pageId) => {
         get().setCurrentPageId(pageId);
+      },
+
+      resetForDocument: (pageId) => {
+        const state = get();
+        // force bump even if same id to isolate document singletons
+        set({
+          currentPageId: pageId,
+          generation: state.generation + 1,
+          aiScopeRootId: null,
+          aiScopeTargetIds: [],
+          aiScopeSourceMessageId: null,
+        });
+        useHistoryStore.getState().resetForDocument(pageId);
+        useSelectionStore.getState().resetForDocument(pageId);
       },
 
       getCurrentPageId: () => get().currentPageId,
