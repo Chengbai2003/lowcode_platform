@@ -108,6 +108,37 @@ function generateStableId(): string {
   return `col_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+export function cloneInternalColumn<T extends TableColumnItem>(col: T): T & { __stableId: string } {
+  const cloned = {
+    ...(col as unknown as Record<string, unknown>),
+  } as unknown as T & { __stableId?: string };
+  if (
+    'buttons' in (cloned as unknown as Record<string, unknown>) &&
+    Array.isArray((cloned as unknown as { buttons: unknown }).buttons)
+  ) {
+    (cloned as unknown as { buttons: Array<Record<string, unknown>> }).buttons = (
+      cloned as unknown as { buttons: Array<Record<string, unknown>> }
+    ).buttons.map((b) => ({ ...(b as unknown as Record<string, unknown>) }));
+  }
+  return cloned as T & { __stableId: string };
+}
+
+export function findDuplicateKeys(columns: TableColumnItem[]): string[] {
+  const counts = new Map<string, number>();
+  for (const col of columns) {
+    const key = col.key;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+}
+
+export function warnDuplicateKeys(columns: TableColumnItem[]): void {
+  const dups = findDuplicateKeys(columns);
+  if (dups.length > 0) {
+    console.warn(`[TableColumnsEditor] duplicate column keys: ${dups.join(', ')}`);
+  }
+}
+
 function sanitizeActionList(value: unknown): ActionList {
   if (!Array.isArray(value)) {
     return [];

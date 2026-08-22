@@ -80,6 +80,7 @@ describe('PropertyPanel complex editors', () => {
     fireEvent.change(screen.getByLabelText('列1按钮1文本'), {
       target: { value: '查看' },
     });
+    fireEvent.blur(screen.getByLabelText('列1按钮1文本'));
     fireEvent.change(screen.getByLabelText('列1按钮1类型'), {
       target: { value: 'link' },
     });

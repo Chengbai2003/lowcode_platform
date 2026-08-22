@@ -241,6 +241,10 @@ export interface AgentPatchApplyPayload {
   resolvedSelectedId?: string;
   warnings?: string[];
   traceId: string;
+  sourcePageId: string | null;
+  basePageVersion: number | null;
+  sourceGeneration: number;
+  documentSessionId: string;
 }
 
 export type AgentPatchApplyHandler = (

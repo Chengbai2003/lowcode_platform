@@ -75,6 +75,15 @@ function LowcodeEditorInner({
     schemaVersionRef.current = schema.version;
   }, [schema.version]);
 
+  // P0-5 TOCTOU atomic: mounted guard for unmount race
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   const syncSchemaVersion = useCallback(
     (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema => {
       const resolvedVersion =
@@ -94,6 +103,16 @@ function LowcodeEditorInner({
   useEffect(() => {
     syncSchemaVersionRef.current = syncSchemaVersion;
   }, [syncSchemaVersion]);
+
+  // ponytail ultra: stable refs for initialSchema/onError to avoid effect re-trigger
+  const initialSchemaRef = useRef(initialSchemaObj);
+  useEffect(() => {
+    initialSchemaRef.current = initialSchemaObj;
+  }, [initialSchemaObj]);
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const uiContext = useMemo<EventUIContext>(() => {
     const modal = {
@@ -190,13 +209,6 @@ function LowcodeEditorInner({
   const selectedId = useSelectionStore((state) => state.selectedId);
   const selectComponent = useSelectionStore((state) => state.selectComponent);
 
-  // 按 pageId 隔离 history 与 selection（P0-8）- editorStore 内部已同步 history/selection
-  const setEditorPageId = useEditorStore((state) => state.setCurrentPageId);
-  useEffect(() => {
-    const nextPageId = pageId ?? null;
-    setEditorPageId(nextPageId);
-  }, [pageId, setEditorPageId]);
-
   // 浮动岛快捷键
   useFloatingIslandHotkey();
 
@@ -250,26 +262,36 @@ function LowcodeEditorInner({
 
   useEffect(() => {
     let cancelled = false;
-    // 捕获当前 pageId 与 generation，用于 async 响应过期校验（P0-8）
-    const requestPageId = pageId ?? null;
-    const requestGeneration = useEditorStore.getState().generation;
+    const pageIdParam = pageId ?? null;
+    // Synchronous reset + generation capture in same tick (P0-4: atomic)
+    const requestGeneration = useEditorStore
+      .getState()
+      .resetForDocumentAndGetGeneration(pageIdParam);
+    const requestPageId = pageIdParam;
+    const requestDocumentSessionId = useEditorStore.getState().documentSessionId;
+    const initial = initialSchemaRef.current;
 
-    if (!pageId) {
+    if (!pageIdParam) {
+      setSchema(initial);
       return () => {
         cancelled = true;
       };
     }
 
     pageSchemaApi
-      .getPageSchema(pageId)
+      .getPageSchema(pageIdParam)
       .then((result) => {
         if (cancelled) {
           return;
         }
-        // 若期间发生 page 切换（generation 变化或 pageId 不一致），丢弃过期响应
         const currentGeneration = useEditorStore.getState().generation;
         const currentPageId = useEditorStore.getState().currentPageId;
-        if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
+        const currentSessionId = useEditorStore.getState().documentSessionId;
+        if (
+          currentGeneration !== requestGeneration ||
+          currentPageId !== requestPageId ||
+          currentSessionId !== requestDocumentSessionId
+        ) {
           return;
         }
         setSchema(syncSchemaVersionRef.current(result.schema, result.version));
@@ -281,7 +303,12 @@ function LowcodeEditorInner({
         }
         const currentGeneration = useEditorStore.getState().generation;
         const currentPageId = useEditorStore.getState().currentPageId;
-        if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
+        const currentSessionId = useEditorStore.getState().documentSessionId;
+        if (
+          currentGeneration !== requestGeneration ||
+          currentPageId !== requestPageId ||
+          currentSessionId !== requestDocumentSessionId
+        ) {
           return;
         }
 
@@ -289,36 +316,41 @@ function LowcodeEditorInner({
           typeof error === 'object' && error ? (error as { status?: number }).status : undefined;
         if (status === 404) {
           try {
-            const bootstrapResult = await pageSchemaApi.savePageSchema(pageId, initialSchemaObj);
+            const bootstrapResult = await pageSchemaApi.savePageSchema(pageIdParam, initial);
             if (cancelled) {
               return;
             }
             const curGen = useEditorStore.getState().generation;
             const curPageId = useEditorStore.getState().currentPageId;
-            if (curGen !== requestGeneration || curPageId !== requestPageId) {
+            const curSessionId = useEditorStore.getState().documentSessionId;
+            if (
+              curGen !== requestGeneration ||
+              curPageId !== requestPageId ||
+              curSessionId !== requestDocumentSessionId
+            ) {
               return;
             }
-            setSchema(syncSchemaVersionRef.current(initialSchemaObj, bootstrapResult.version));
+            setSchema(syncSchemaVersionRef.current(initial, bootstrapResult.version));
             setPageVersion(bootstrapResult.version);
-            message.info(`已为页面 ${pageId} 初始化默认 Schema`);
+            message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
           } catch (bootstrapError) {
             const errorMessage =
               bootstrapError instanceof Error ? bootstrapError.message : '页面初始化失败';
-            onError?.(errorMessage);
+            onErrorRef.current?.(errorMessage);
             message.error(errorMessage);
           }
           return;
         }
 
         const errorMessage = error instanceof Error ? error.message : '页面加载失败';
-        onError?.(errorMessage);
+        onErrorRef.current?.(errorMessage);
         message.error('页面加载失败，已回退到本地初始内容');
       });
 
     return () => {
       cancelled = true;
     };
-  }, [initialSchemaObj, onError, pageId]);
+  }, [pageId]);
 
   const handleSavePage = useCallback(async () => {
     if (!pageId || isPageSaving) {
@@ -444,9 +476,42 @@ function LowcodeEditorInner({
       patch,
       resolvedSelectedId,
       warnings,
+      sourcePageId,
+      basePageVersion,
+      sourceGeneration,
+      documentSessionId,
     }: AgentPatchApplyPayload): Promise<A2UISchema | null> => {
+      // P0-5 TOCTOU atomic: early fail-close before any pollution
+      const editorState = useEditorStore.getState();
+      if (
+        !mountedRef.current ||
+        (sourcePageId ?? null) !== (editorState.currentPageId ?? null) ||
+        sourceGeneration !== editorState.generation ||
+        documentSessionId !== editorState.documentSessionId
+      ) {
+        message.error('页面已切换，AI 修改已过期，已拦截');
+        return null;
+      }
+      if (basePageVersion !== null && basePageVersion !== pageVersionRef.current) {
+        message.error('页面版本已变化，该预览已过期，已拦截');
+        return null;
+      }
       try {
         const baseSchema = syncSchemaVersion(schema);
+        // P0-5 second atomic guard after syncSchemaVersion, before createPatchCommand (fail-close before pollution)
+        const cur2 = useEditorStore.getState();
+        if (
+          (sourcePageId ?? null) !== (cur2.currentPageId ?? null) ||
+          sourceGeneration !== cur2.generation ||
+          documentSessionId !== cur2.documentSessionId
+        ) {
+          message.error('页面已切换，AI 修改已过期，已拦截');
+          return null;
+        }
+        if (basePageVersion !== null && basePageVersion !== pageVersionRef.current) {
+          message.error('页面版本已变化，该预览已过期，已拦截');
+          return null;
+        }
         const command = createPatchCommand(
           baseSchema,
           patch,
@@ -743,17 +808,13 @@ function LowcodeEditorInner({
 /**
  * JSON Schema 编辑器，支持实时预览
  * 使用 ErrorBoundary 包裹以捕获渲染错误
- * ponytail ultra: 公共入口按 pageId 生成 documentKey 并 key 包裹 Inner，调用 resetForDocument 清理 Zustand 单例
+ * ponytail ultra: key 移至 ErrorBoundary 以在 document 切换时清除错误边界状态；Inner 内同步 reset 避免 generation 竞态
  */
 export function LowcodeEditor(props: LowcodeEditorProps) {
   const documentKey = `doc::${props.pageId ?? '__local'}`;
-  const pageIdForReset = props.pageId ?? null;
-  useEffect(() => {
-    useEditorStore.getState().resetForDocument(pageIdForReset);
-  }, [pageIdForReset]);
   return (
-    <ErrorBoundary>
-      <LowcodeEditorInner key={documentKey} {...props} />
+    <ErrorBoundary key={documentKey}>
+      <LowcodeEditorInner {...props} />
     </ErrorBoundary>
   );
 }

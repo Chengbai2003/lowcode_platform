@@ -98,6 +98,9 @@ describe('useAIAssistantChat', () => {
       isFloatingIslandOpen: false,
       isLoading: false,
       error: null,
+      currentPageId: 'page-1',
+      generation: 0,
+      documentSessionId: 'test-doc-session',
     });
   });
 
@@ -237,6 +240,10 @@ describe('useAIAssistantChat', () => {
       resolvedSelectedId: 'button',
       warnings: ['auto-fixed'],
       traceId: 'agent-trace',
+      sourcePageId: 'page-1',
+      basePageVersion: 3,
+      sourceGeneration: 0,
+      documentSessionId: 'test-doc-session',
     });
     expect(result.current.messages[result.current.messages.length - 1].applyState).toBe('applied');
 

@@ -574,7 +574,11 @@ function getFieldInfo(ctx: TransformContext, sourceKey: string): FieldInfo | und
   return ctx.fieldBySourceKey.get(sourceKey) ?? ctx.fieldByName.get(sourceKey);
 }
 
-function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined'): string {
+function getExpressionCode(
+  value: ValueNode | undefined,
+  fallback = 'undefined',
+  ctxFields?: Set<string>,
+): string {
   if (!value) return fallback;
 
   switch (value.kind) {
@@ -586,7 +590,9 @@ function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined')
       const code = value.code.trim();
       if (!code) return fallback;
       const valid =
-        value.source === 'legacy' ? isValidExpressionPath(code) : isSafeInlineExpression(code);
+        value.source === 'legacy'
+          ? isValidExpressionPath(code)
+          : isSafeInlineExpression(code, ctxFields);
       return valid ? code : fallback;
     }
     case 'template':
@@ -594,16 +600,16 @@ function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined')
         .map((part) =>
           part.kind === 'text'
             ? escapeTemplateText(part.value)
-            : `\${${getExpressionCode(part.value, '""')}}`,
+            : `\${${getExpressionCode(part.value, '""', ctxFields)}}`,
         )
         .join('')}\``;
     case 'array':
-      return `[${value.items.map((item) => getExpressionCode(item, 'undefined')).join(', ')}]`;
+      return `[${value.items.map((item) => getExpressionCode(item, 'undefined', ctxFields)).join(', ')}]`;
     case 'object':
       return `{ ${value.properties
         .map(
           (property) =>
-            `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined')}`,
+            `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined', ctxFields)}`,
         )
         .join(', ')} }`;
     default:
@@ -651,7 +657,12 @@ function valueNodeToPlain(value: ValueNode): unknown {
   }
 }
 
-function createAttribute(name: string, value: ValueNode, fallback = 'undefined'): JSXAttributeNode {
+function createAttribute(
+  name: string,
+  value: ValueNode,
+  fallback = 'undefined',
+  ctxFields?: Set<string>,
+): JSXAttributeNode {
   if (value.kind === 'literal' && typeof value.value === 'string') {
     return {
       name,
@@ -663,11 +674,11 @@ function createAttribute(name: string, value: ValueNode, fallback = 'undefined')
   return {
     name,
     mode: 'expression',
-    value: getExpressionCode(value, fallback),
+    value: getExpressionCode(value, fallback, ctxFields),
   };
 }
 
-function createValueChild(value: ValueNode): JSXNode | null {
+function createValueChild(value: ValueNode, ctxFields?: Set<string>): JSXNode | null {
   if (value.kind === 'literal') {
     if (value.value === null || value.value === undefined) {
       return null;
@@ -675,12 +686,12 @@ function createValueChild(value: ValueNode): JSXNode | null {
     if (typeof value.value === 'string') {
       return { kind: 'text', value: value.value };
     }
-    return { kind: 'expression', code: getExpressionCode(value, 'null') };
+    return { kind: 'expression', code: getExpressionCode(value, 'null', ctxFields) };
   }
 
   return {
     kind: 'expression',
-    code: getExpressionCode(value, '""'),
+    code: getExpressionCode(value, '""', ctxFields),
   };
 }
 
@@ -759,6 +770,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     };
   }
 
+  const ctxFields = new Set(ctx.fieldByName.keys());
   const fieldProp = findProp(node, 'field');
   const labelProp = findProp(node, 'label');
   const styleProp = findProp(node, 'style');
@@ -781,7 +793,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
       continue;
     }
 
-    attributes.push(createAttribute(prop.name, prop.value, '""'));
+    attributes.push(createAttribute(prop.name, prop.value, '""', ctxFields));
   }
 
   if (
@@ -828,14 +840,14 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
         attributes.push({
           name: 'style',
           mode: 'expression',
-          value: getExpressionCode(normalizeValue(compiled.styleObj), '{}'),
+          value: getExpressionCode(normalizeValue(compiled.styleObj), '{}', ctxFields),
         });
       }
     } else {
       attributes.push({
         name: 'style',
         mode: 'expression',
-        value: getExpressionCode(styleProp.value, '{}'),
+        value: getExpressionCode(styleProp.value, '{}', ctxFields),
       });
     }
   } else {
@@ -847,7 +859,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
         value: classNameProp.value.value,
       });
     } else if (classNameProp) {
-      attributes.push(createAttribute('className', classNameProp.value, '""'));
+      attributes.push(createAttribute('className', classNameProp.value, '""', ctxFields));
     }
   }
 
@@ -857,7 +869,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
       children.push(buildComponentNode(child, ctx));
     }
   } else if (childrenProp) {
-    const childNode = createValueChild(childrenProp.value);
+    const childNode = createValueChild(childrenProp.value, ctxFields);
     if (childNode) {
       children.push(childNode);
     }
@@ -883,7 +895,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     return componentNode;
   }
 
-  const conditionCode = getExpressionCode(visibleProp.value, 'false');
+  const conditionCode = getExpressionCode(visibleProp.value, 'false', ctxFields);
   if (visibleProp.value.kind === 'literal' && visibleProp.value.value === true) {
     return componentNode;
   }
@@ -950,10 +962,10 @@ function buildActionBlock(
   };
 }
 
-function buildNotificationObject(action: ActionNode): string {
+function buildNotificationObject(action: ActionNode, ctxFields?: Set<string>): string {
   const props: string[] = [
-    `message: ${getExpressionCode(action.title ?? { kind: 'literal', value: '通知' }, '"通知"')}`,
-    `description: ${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""')}`,
+    `message: ${getExpressionCode(action.title ?? { kind: 'literal', value: '通知' }, '"通知"', ctxFields)}`,
+    `description: ${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields)}`,
   ];
 
   if (action.placement) {
@@ -971,11 +983,13 @@ function buildActionStatement(
   ctx: TransformContext,
   ownerHandlerName: string,
 ): { code: string; async: boolean } {
+  const ctxFields = new Set(ctx.fieldByName.keys());
   switch (action.type) {
     case 'setValue': {
       const valueCode = getExpressionCode(
         action.value ?? { kind: 'literal', value: '' },
         'undefined',
+        ctxFields,
       );
       if (action.field) {
         const fieldInfo = getFieldInfo(ctx, action.field);
@@ -1013,14 +1027,21 @@ function buildActionStatement(
               properties: Object.entries(action.headers).map(([key, value]) => ({ key, value })),
             },
             '{}',
+            ctxFields,
           )}`,
         );
       }
       if (action.body) {
-        configParts.push(`body: JSON.stringify(${getExpressionCode(action.body, 'undefined')})`);
+        configParts.push(
+          `body: JSON.stringify(${getExpressionCode(action.body, 'undefined', ctxFields)})`,
+        );
       }
 
-      const urlCode = getExpressionCode(action.url ?? { kind: 'literal', value: '/' }, '"/"');
+      const urlCode = getExpressionCode(
+        action.url ?? { kind: 'literal', value: '/' },
+        '"/"',
+        ctxFields,
+      );
       const paramsCode = action.params
         ? `const requestParams = ${getExpressionCode(
             {
@@ -1028,6 +1049,7 @@ function buildActionStatement(
               properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
             },
             '{}',
+            ctxFields,
           )};\nconst queryString = new URLSearchParams(Object.entries(requestParams).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst requestUrl = queryString ? (${urlCode}).includes('?') ? ${urlCode} + '&' + queryString : ${urlCode} + '?' + queryString : ${urlCode};`
         : `const requestUrl = ${urlCode};`;
 
@@ -1091,10 +1113,13 @@ function buildActionStatement(
     case 'feedback': {
       const level = action.level || 'info';
       if (action.kind === 'notification') {
-        return { code: `notification.${level}(${buildNotificationObject(action)});`, async: false };
+        return {
+          code: `notification.${level}(${buildNotificationObject(action, ctxFields)});`,
+          async: false,
+        };
       }
       return {
-        code: `message.${level}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""')});`,
+        code: `message.${level}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields)});`,
         async: false,
       };
     }
@@ -1103,8 +1128,13 @@ function buildActionStatement(
       const titleCode = getExpressionCode(
         action.title ?? { kind: 'literal', value: kind === 'confirm' ? '确认' : '提示' },
         kind === 'confirm' ? '"确认"' : '"提示"',
+        ctxFields,
       );
-      const contentCode = getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""');
+      const contentCode = getExpressionCode(
+        action.content ?? { kind: 'literal', value: '' },
+        '""',
+        ctxFields,
+      );
       const objectParts = [`title: ${titleCode}`, `content: ${contentCode}`];
 
       if (kind === 'confirm') {
@@ -1134,7 +1164,7 @@ function buildActionStatement(
       const elseBlock = buildActionBlock(action.else ?? [], ctx, ownerHandlerName);
       const elseCode = elseBlock.code ? ` else {\n${indentBlock(elseBlock.code)}\n}` : '';
       return {
-        code: `if (${getExpressionCode(action.condition ?? { kind: 'literal', value: false }, 'false')}) {\n${indentBlock(thenBlock.code)}\n}${elseCode}`,
+        code: `if (${getExpressionCode(action.condition ?? { kind: 'literal', value: false }, 'false', ctxFields)}) {\n${indentBlock(thenBlock.code)}\n}${elseCode}`,
         async: thenBlock.async || elseBlock.async,
       };
     }
@@ -1143,12 +1173,12 @@ function buildActionStatement(
       const itemVar = action.itemVar || 'item';
       if (action.indexVar) {
         return {
-          code: `for (const [${action.indexVar}, ${itemVar}] of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]')}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
+          code: `for (const [${action.indexVar}, ${itemVar}] of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]', ctxFields)}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
           async: loopBlock.async,
         };
       }
       return {
-        code: `for (const ${itemVar} of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]')}) {\n${indentBlock(loopBlock.code)}\n}`,
+        code: `for (const ${itemVar} of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]', ctxFields)}) {\n${indentBlock(loopBlock.code)}\n}`,
         async: loopBlock.async,
       };
     }
@@ -1159,7 +1189,7 @@ function buildActionStatement(
       };
     case 'log':
       return {
-        code: `console.${action.level || 'log'}(${getExpressionCode(action.value ?? { kind: 'literal', value: '' }, '""')});`,
+        code: `console.${action.level || 'log'}(${getExpressionCode(action.value ?? { kind: 'literal', value: '' }, '""', ctxFields)});`,
         async: false,
       };
     case 'customScript': {
@@ -1270,10 +1300,11 @@ function genImports(imports: Map<string, Set<string>>): string {
 }
 
 function genStateHooks(fields: FieldInfo[]): string {
+  const ctxFields = new Set(fields.map((field) => field.name));
   return fields
     .map(
       (field) =>
-        `const [${field.name}, ${field.setterName}] = useState(${getExpressionCode(field.initialValue, 'undefined')});`,
+        `const [${field.name}, ${field.setterName}] = useState(${getExpressionCode(field.initialValue, 'undefined', ctxFields)});`,
     )
     .join('\n');
 }

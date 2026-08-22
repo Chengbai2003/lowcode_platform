@@ -85,8 +85,18 @@ function fallbackClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
     const arr: unknown[] = [];
     seen.set(value as object, arr);
     for (let i = 0; i < (value as unknown[]).length; i++) {
-      const cloned = fallbackClone((value as unknown[])[i], seen);
-      arr[i] = cloned;
+      const desc = Object.getOwnPropertyDescriptor(value, String(i));
+      if (desc && (desc.get || desc.set)) {
+        arr[i] = undefined;
+        continue;
+      }
+      const raw = (value as unknown[])[i];
+      if (typeof raw === 'function' || typeof raw === 'symbol') {
+        arr[i] = undefined;
+        continue;
+      }
+      const cloned = fallbackClone(raw as T, seen);
+      arr[i] = cloned === (undefined as unknown) ? (undefined as unknown as T) : cloned;
     }
     return arr as unknown as T;
   }
@@ -118,16 +128,16 @@ function fallbackClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
 }
 
 function cloneOrThrow<T extends Record<string, unknown>>(value: T, ns: string): T {
+  // P0-3: fallbackClone 优先，避免 structuredClone 触发 enumerable getter
+  try {
+    const fallback = fallbackClone(value);
+    if (fallback !== undefined) return fallback;
+  } catch {
+    // ignore fallback error, try structuredClone
+  }
   try {
     return structuredClone(value);
   } catch (e) {
-    // Fallback for non-cloneable values (functions/symbols/circular with functions): JSON-safe deep clone
-    try {
-      const fallback = fallbackClone(value);
-      if (fallback !== undefined) return fallback;
-    } catch {
-      // ignore fallback error
-    }
     throw new Error(`snapshot clone failed for ${ns}: ${(e as Error).message}`);
   }
 }

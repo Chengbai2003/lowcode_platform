@@ -24,6 +24,84 @@ export const SAFE_GLOBALS: Record<string, any> = {
   false: false,
 };
 
+// P0-3: internal pure utils (descriptor-safe clone)
+const PURE_UTILS_KEYS_INTERNAL = ['formatDate', 'uuid', 'clone'] as const;
+function isPlainObjectPureInternal(o: unknown): boolean {
+  if (o === null || typeof o !== 'object') return false;
+  const proto = Object.getPrototypeOf(o);
+  return proto === Object.prototype || proto === null;
+}
+function fallbackClonePureInternal<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (value === null) return value;
+  if (typeof value !== 'object') {
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
+      return undefined as unknown as T;
+    return value;
+  }
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+  if (seen.has(value as object)) return seen.get(value as object) as T;
+  if (Array.isArray(value)) {
+    const arr: unknown[] = [];
+    seen.set(value as object, arr);
+    for (let i = 0; i < (value as unknown[]).length; i++) {
+      const desc = Object.getOwnPropertyDescriptor(value, String(i));
+      if (desc && (desc.get || desc.set)) {
+        arr[i] = undefined;
+        continue;
+      }
+      const raw = (value as unknown[])[i];
+      if (typeof raw === 'function' || typeof raw === 'symbol') {
+        arr[i] = undefined;
+        continue;
+      }
+      const cloned = fallbackClonePureInternal(raw as T, seen);
+      arr[i] = cloned;
+    }
+    return arr as unknown as T;
+  }
+  if (!isPlainObjectPureInternal(value)) {
+    const out: Record<string, unknown> = {};
+    seen.set(value as object, out);
+    for (const k of Object.keys(value as Record<string, unknown>)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
+      if (!desc || desc.get || desc.set) continue;
+      const raw = desc.value;
+      if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+      out[k] = fallbackClonePureInternal(raw, seen);
+    }
+    return out as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  seen.set(value as object, out);
+  for (const k of Object.keys(value as Record<string, unknown>)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
+    if (!desc || desc.get || desc.set) continue;
+    const raw = desc.value;
+    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+    out[k] = fallbackClonePureInternal(raw, seen);
+  }
+  return out as unknown as T;
+}
+const pureFormatDateInternal = (date: Date | string, _format = 'YYYY-MM-DD'): string =>
+  String(date);
+const pureUuidInternal = (): string => {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID)
+    return (crypto as any).randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+const pureCloneInternal = <T>(obj: T): T => fallbackClonePureInternal(obj);
+const INTERNAL_PURE_UTILS: Record<string, unknown> = {
+  formatDate: pureFormatDateInternal,
+  uuid: pureUuidInternal,
+  clone: pureCloneInternal,
+};
+
 const BLOCKED_MEMBER_PROPS = new Set([
   '__proto__',
   'prototype',
@@ -143,7 +221,8 @@ function cloneSanitized(value: unknown, seen = new WeakMap<object, unknown>()): 
       return SANITIZE_SKIP;
     return value;
   }
-  // 保留追踪代理以维持依赖收集（P0-2 收尾）
+  // 保留追踪代理以维持依赖收集；safe tracking membrane 已在 tracking.ts 阻断 getter/Symbol/function，
+  // 此处直接返回代理以保留依赖追踪能力，且不克隆成普通对象避免丢失追踪（P0-3）
   if (isTrackingProxy(value)) return value;
   if (value instanceof Date) return new Date(value.getTime());
   if (seen.has(value as object)) return seen.get(value as object);
@@ -185,7 +264,15 @@ function cloneSanitized(value: unknown, seen = new WeakMap<object, unknown>()): 
 function sanitizeContext(context: Record<string, any> | undefined): Record<string, any> {
   if (!context || typeof context !== 'object') return {};
   const cloned = cloneSanitized(context) as Record<string, any>;
-  return (cloned as Record<string, any>) ?? {};
+  const out = (cloned as Record<string, any>) ?? {};
+  // P0-3: reconstruct pure utils with internal implementations, not accepting context override
+  const filtered: Record<string, any> = {};
+  for (const kk of PURE_UTILS_KEYS_INTERNAL) {
+    const fn = (INTERNAL_PURE_UTILS as Record<string, any>)[kk];
+    if (typeof fn === 'function') filtered[kk] = fn;
+  }
+  if (Object.keys(filtered).length > 0) out.utils = filtered;
+  return out;
 }
 
 /**
@@ -229,10 +316,40 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       }
 
       // 安全检查：阻止访问原型链、构造函数及危险方法
+      if (typeof propertyName === 'symbol') return undefined;
       if (typeof propertyName === 'string' && BLOCKED_MEMBER_PROPS.has(propertyName)) {
         return undefined;
       }
 
+      // For tracking proxy, use direct access to trigger dependency collection (membrane handles security)
+      if (isTrackingProxy(obj)) {
+        return obj[propertyName];
+      }
+      // descriptor-safe access: block getter/setter if any (for non-proxy plain objects, sanitize already stripped getters)
+      try {
+        const desc = Object.getOwnPropertyDescriptor(obj, String(propertyName));
+        if (desc && (desc.get || desc.set)) return undefined;
+        if (desc && typeof desc.value === 'function') {
+          return undefined;
+        }
+      } catch {
+        return undefined;
+      }
+
+      // Use descriptor value if available to avoid invoking getter
+      const desc2 = Object.getOwnPropertyDescriptor(obj, String(propertyName));
+      if (desc2 && 'value' in desc2) return desc2.value;
+      // For prototype chain, check for getter/function to block
+      let proto = Object.getPrototypeOf(obj);
+      while (proto) {
+        const pd = Object.getOwnPropertyDescriptor(proto, String(propertyName));
+        if (pd) {
+          if (pd.get || pd.set) return undefined;
+          if (typeof pd.value === 'function') return undefined;
+          break;
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
       return obj[propertyName];
     }
 
@@ -240,6 +357,16 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       const binaryNode = node as jsep.BinaryExpression;
       const left = evaluateNode(binaryNode.left, context);
       const right = evaluateNode(binaryNode.right, context);
+
+      // P0-3: block implicit coercion via Symbol.toPrimitive / valueOf: object operands fail-close for arithmetic/comparison
+      const isObj = (v: unknown) => v !== null && typeof v === 'object';
+      const op = binaryNode.operator;
+      if (
+        (isObj(left) || isObj(right)) &&
+        ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op)
+      ) {
+        return undefined;
+      }
 
       switch (binaryNode.operator) {
         case '+':
@@ -357,12 +484,26 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
           ARRAY_CALLBACK_BLOCK.has(funcName)
         )
           return undefined;
-        // 禁止自有属性覆盖：若 target 自身拥有该属性则视为污染
-        if (Object.prototype.hasOwnProperty.call(targetObj, funcName)) return undefined;
-        // 计算参数先于 intrinsic 检查? 需先检查以便过滤函数参数
-        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
-        if (args.some((a) => typeof a === 'function')) return undefined;
-        // 固定 intrinsic 对比，不先读 target[funcName]
+        // P0-3/P1: hasOwnProperty 仅对业务 plain 对象生效，对 Math/JSON/String/Number/Array/Date/utils 等 intrinsic 跳过
+        const isUtilsTarget = targetObj === (context as any).utils;
+        const isIntrinsicTarget =
+          targetObj === Math ||
+          targetObj === JSON ||
+          typeof targetObj === 'string' ||
+          targetObj instanceof String ||
+          Array.isArray(targetObj) ||
+          typeof targetObj === 'number' ||
+          targetObj instanceof Number ||
+          targetObj instanceof Date ||
+          isUtilsTarget;
+        const isBusinessPlainForCall =
+          !isIntrinsicTarget &&
+          targetObj !== null &&
+          typeof targetObj === 'object' &&
+          isPlainObject(targetObj);
+        if (isBusinessPlainForCall && Object.prototype.hasOwnProperty.call(targetObj, funcName))
+          return undefined;
+        // 固定 intrinsic 对比，不先读 target[funcName] — 先校验白名单再求值参数，避免对已拦截方法仍执行参数中的副作用
         const t = targetObj;
         if (typeof t === 'string' || t instanceof String) {
           if (!STRING_SAFE.has(funcName)) return undefined;
@@ -392,10 +533,19 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         } else if (t === JSON) {
           if (!JSON_SAFE.has(funcName)) return undefined;
           func = (JSON as unknown as Record<string, unknown>)[funcName];
+        } else if (
+          t === (context as any).utils &&
+          (PURE_UTILS_KEYS_INTERNAL as readonly string[]).includes(funcName)
+        ) {
+          // utils 命名空间：仅允许 PURE_UTILS 白名单，且从内部纯净实现取函数
+          func = (INTERNAL_PURE_UTILS as Record<string, unknown>)[funcName];
         } else {
           return undefined;
         }
         if (typeof func !== 'function') return undefined;
+        // 仅在白名单校验通过后求值参数
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        if (args.some((a) => typeof a === 'function')) return undefined;
         try {
           return func.apply(t, args);
         } catch {

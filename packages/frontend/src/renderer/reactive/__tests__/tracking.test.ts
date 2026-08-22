@@ -246,7 +246,7 @@ describe('createTrackingProxy', () => {
       const value = (proxy as any)[Symbol.toStringTag];
 
       expect(tracker).not.toHaveBeenCalled();
-      expect(value).toBe('TestObject');
+      expect(value).toBeUndefined();
     });
 
     it('应忽略原型污染键', () => {

@@ -140,6 +140,85 @@ const ALLOWED_EXTENSION_KEYS = [
 ] as const;
 const PURE_UTILS_KEYS = ['formatDate', 'uuid', 'clone'] as const;
 
+// ——— P0-3: 内部纯净 utils（不接受 context 覆盖），clone 为 descriptor-safe ———
+function isPlainObjectPure(o: unknown): boolean {
+  if (o === null || typeof o !== 'object') return false;
+  const proto = Object.getPrototypeOf(o);
+  return proto === Object.prototype || proto === null;
+}
+function fallbackClonePure<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  if (value === null) return value;
+  if (typeof value !== 'object') {
+    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
+      return undefined as unknown as T;
+    return value;
+  }
+  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
+  if (seen.has(value as object)) return seen.get(value as object) as T;
+  if (Array.isArray(value)) {
+    const arr: unknown[] = [];
+    seen.set(value as object, arr);
+    for (let i = 0; i < (value as unknown[]).length; i++) {
+      const desc = Object.getOwnPropertyDescriptor(value, String(i));
+      if (desc && (desc.get || desc.set)) {
+        arr[i] = undefined;
+        continue;
+      }
+      const raw = (value as unknown[])[i];
+      if (typeof raw === 'function' || typeof raw === 'symbol') {
+        arr[i] = undefined;
+        continue;
+      }
+      const cloned = fallbackClonePure(raw as T, seen);
+      arr[i] = cloned;
+    }
+    return arr as unknown as T;
+  }
+  if (!isPlainObjectPure(value)) {
+    const out: Record<string, unknown> = {};
+    seen.set(value as object, out);
+    for (const k of Object.keys(value as Record<string, unknown>)) {
+      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+      const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
+      if (!desc || desc.get || desc.set) continue;
+      const raw = desc.value;
+      if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+      out[k] = fallbackClonePure(raw, seen);
+    }
+    return out as unknown as T;
+  }
+  const out: Record<string, unknown> = {};
+  seen.set(value as object, out);
+  for (const k of Object.keys(value as Record<string, unknown>)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
+    if (!desc || desc.get || desc.set) continue;
+    const raw = desc.value;
+    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
+    out[k] = fallbackClonePure(raw, seen);
+  }
+  return out as unknown as T;
+}
+const pureFormatDate = (date: Date | string, _format = 'YYYY-MM-DD'): string => {
+  return String(date);
+};
+const pureUuid = (): string => {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) {
+    return (crypto as any).randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+const pureClone = <T>(obj: T): T => fallbackClonePure(obj);
+const INTERNAL_PURE_UTILS: Record<string, unknown> = {
+  formatDate: pureFormatDate,
+  uuid: pureUuid,
+  clone: pureClone,
+};
+
 // 真白名单：核心命名空间 + 合法扩展键（record/item/index 等），其余自定义顶层字段不暴露，数据别名另由 buildExpressionContext 处理
 function pickAllowedContext(context: Record<string, any>): Record<string, any> {
   const out: Record<string, any> = {};
@@ -158,15 +237,13 @@ function pickAllowedContext(context: Record<string, any>): Record<string, any> {
     // 仅放行已存在于 sanitized context 的额外键，且其值非敏感对象（已在 sanitize 阶段去函数/getter）
     out[k] = v;
   }
-  // expose only pure utils helpers if present
-  if (context.utils && typeof context.utils === 'object') {
-    const filtered: Record<string, any> = {};
-    for (const kk of PURE_UTILS_KEYS) {
-      const fn = (context.utils as Record<string, any>)[kk];
-      if (typeof fn === 'function') filtered[kk] = fn;
-    }
-    if (Object.keys(filtered).length > 0) out.utils = filtered;
+  // 只暴露内建纯净 utils，不接受 context 覆盖（P0-3）
+  const filtered: Record<string, any> = {};
+  for (const kk of PURE_UTILS_KEYS) {
+    const fn = (INTERNAL_PURE_UTILS as Record<string, any>)[kk];
+    if (typeof fn === 'function') filtered[kk] = fn;
   }
+  if (Object.keys(filtered).length > 0) out.utils = filtered;
   return out;
 }
 

@@ -102,6 +102,15 @@ export const useAIAssistantChat = ({
   // ponytail ultra: AbortController 贯穿 ServerAIService，pageId 切换时 abort
   const abortControllerRef = useRef<AbortController | null>(null);
   const pageIdResetRef = useRef(pageId);
+  // P0-5 TOCTOU: track latest pageId/pageVersion for atomic checks (closure is stale during Modal.confirm)
+  const pageIdRef = useRef(pageId);
+  const pageVersionRef = useRef(pageVersion);
+  useEffect(() => {
+    pageIdRef.current = pageId;
+  }, [pageId]);
+  useEffect(() => {
+    pageVersionRef.current = pageVersion;
+  }, [pageVersion]);
 
   const setAIScopeHighlight = useEditorStore((state) => state.setAIScopeHighlight);
   const clearAIScopeHighlight = useEditorStore((state) => state.clearAIScopeHighlight);
@@ -483,9 +492,12 @@ export const useAIAssistantChat = ({
       let actionResult: AIMessageActionResult | undefined;
 
       switch (response.mode) {
-        case 'patch':
+        case 'patch': {
           clearScopeHighlight();
           fullContent = formatPatchPreviewContent(response);
+          const editorState = useEditorStore.getState();
+          const sourceGeneration = editorState.generation;
+          const documentSessionId = editorState.documentSessionId;
           updateAssistantMessage(messageId, (messageItem) => ({
             ...messageItem,
             content: fullContent,
@@ -505,6 +517,8 @@ export const useAIAssistantChat = ({
               scopeSummary: response.scopeSummary,
               sourcePageId: response.pageId ?? pageId ?? null,
               basePageVersion: response.baseVersion ?? pageVersion ?? null,
+              sourceGeneration,
+              documentSessionId,
             },
             clarification: undefined,
             intentConfirmation: undefined,
@@ -526,6 +540,7 @@ export const useAIAssistantChat = ({
           }));
           message.success('AI 修改预览已生成');
           break;
+        }
         case 'intent_confirmation':
           clearScopeHighlight();
           fullContent = response.content;
@@ -739,15 +754,28 @@ export const useAIAssistantChat = ({
       if (!messageItem?.patchPreview) {
         return false;
       }
-      // ponytail: P0-4 双重校验 sourcePageId+basePageVersion
-      const srcPageId = messageItem.patchPreview.sourcePageId ?? null;
-      const baseVer = messageItem.patchPreview.basePageVersion ?? null;
-      if (srcPageId !== null && srcPageId !== (pageId ?? null)) {
-        message.error('当前页面已切换，该预览来自其他页面，已拦截应用');
+      // ponytail P0-5: TOCTOU atomic – capture generation/session at preview creation, check before confirm
+      const curBefore = useEditorStore.getState();
+      const previewBefore = messageItem.patchPreview;
+      if ((previewBefore.sourcePageId ?? null) !== (curBefore.currentPageId ?? null)) {
+        message.error('当前页面已切换，该预览已过期，已拦截应用');
         updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
       }
-      if (baseVer !== null && baseVer !== (pageVersion ?? null)) {
+      if (previewBefore.sourceGeneration !== curBefore.generation) {
+        message.error('当前页面已切换，该预览已过期，已拦截应用');
+        updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+        return false;
+      }
+      if (previewBefore.documentSessionId !== curBefore.documentSessionId) {
+        message.error('当前页面已切换，该预览已过期，已拦截应用');
+        updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+        return false;
+      }
+      if (
+        previewBefore.basePageVersion !== null &&
+        previewBefore.basePageVersion !== (pageVersionRef.current ?? null)
+      ) {
         message.error('页面版本已变化，该预览已过期，请重新生成');
         updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
@@ -758,6 +786,55 @@ export const useAIAssistantChat = ({
         if (!confirmed) {
           return false;
         }
+        // P0-5 TOCTOU double-check after async Modal.confirm (pageId may have changed during modal)
+        const cur = useEditorStore.getState();
+        const latestItem = messagesRef.current.find((item) => item.id === messageId);
+        if (!latestItem?.patchPreview) {
+          return false;
+        }
+        if (
+          (latestItem.patchPreview.sourcePageId ?? null) !== (cur.currentPageId ?? null) ||
+          latestItem.patchPreview.sourceGeneration !== cur.generation ||
+          latestItem.patchPreview.documentSessionId !== cur.documentSessionId
+        ) {
+          message.error('当前页面已切换，该预览已过期，已拦截应用');
+          updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+          return false;
+        }
+        if (
+          latestItem.patchPreview.basePageVersion !== null &&
+          latestItem.patchPreview.basePageVersion !== (pageVersionRef.current ?? null)
+        ) {
+          message.error('页面版本已变化，该预览已过期，请重新生成');
+          updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+          return false;
+        }
+      }
+
+      // Final atomic check immediately before pollution (covers non-confirm path TOCTOU too)
+      {
+        const cur = useEditorStore.getState();
+        const latestItem = messagesRef.current.find((item) => item.id === messageId);
+        if (!latestItem?.patchPreview) {
+          return false;
+        }
+        if (
+          (latestItem.patchPreview.sourcePageId ?? null) !== (cur.currentPageId ?? null) ||
+          latestItem.patchPreview.sourceGeneration !== cur.generation ||
+          latestItem.patchPreview.documentSessionId !== cur.documentSessionId
+        ) {
+          message.error('当前页面已切换，该预览已过期，已拦截应用');
+          updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+          return false;
+        }
+        if (
+          latestItem.patchPreview.basePageVersion !== null &&
+          latestItem.patchPreview.basePageVersion !== (pageVersionRef.current ?? null)
+        ) {
+          message.error('页面版本已变化，该预览已过期，请重新生成');
+          updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+          return false;
+        }
       }
 
       updateAssistantMessage(messageId, (current) => ({
@@ -766,23 +843,52 @@ export const useAIAssistantChat = ({
       }));
 
       try {
+        const latestForPayload = messagesRef.current.find((item) => item.id === messageId);
+        if (!latestForPayload?.patchPreview) {
+          return false;
+        }
+        const previewForPayload = latestForPayload.patchPreview;
+        const traceForPayload = latestForPayload.traceId ?? messageItem.traceId ?? '';
+        // P0-5 atomic final guard right before calling onPatchApply (fail-close)
+        const curPayloadCheck = useEditorStore.getState();
+        if (
+          (previewForPayload.sourcePageId ?? null) !== (curPayloadCheck.currentPageId ?? null) ||
+          previewForPayload.sourceGeneration !== curPayloadCheck.generation ||
+          previewForPayload.documentSessionId !== curPayloadCheck.documentSessionId
+        ) {
+          message.error('当前页面已切换，该预览已过期，已拦截应用');
+          updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+          return false;
+        }
+        if (
+          previewForPayload.basePageVersion !== null &&
+          previewForPayload.basePageVersion !== (pageVersionRef.current ?? null)
+        ) {
+          message.error('页面版本已变化，该预览已过期，请重新生成');
+          updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
+          return false;
+        }
         const nextSchema = await onPatchApply?.({
-          instruction: messageItem.patchPreview.instruction,
-          patch: messageItem.patchPreview.patch,
-          resolvedSelectedId: messageItem.patchPreview.resolvedSelectedId,
-          warnings: messageItem.patchPreview.warnings,
-          traceId: messageItem.traceId ?? '',
+          instruction: previewForPayload.instruction,
+          patch: previewForPayload.patch,
+          resolvedSelectedId: previewForPayload.resolvedSelectedId,
+          warnings: previewForPayload.warnings,
+          traceId: traceForPayload,
+          sourcePageId: previewForPayload.sourcePageId ?? null,
+          basePageVersion: previewForPayload.basePageVersion ?? null,
+          sourceGeneration: previewForPayload.sourceGeneration,
+          documentSessionId: previewForPayload.documentSessionId,
         });
 
         if (!nextSchema) {
           throw new AIServiceError('AI patch 应用失败', 'PATCH_APPLY_FAILED', {
-            traceId: messageItem.traceId,
+            traceId: traceForPayload,
           });
         }
 
         const actionResult: AIMessageActionResult = {
           type: 'batch_update',
-          componentId: messageItem.patchPreview.resolvedSelectedId,
+          componentId: previewForPayload.resolvedSelectedId,
           schemaSnapshot: nextSchema,
         };
 
@@ -799,7 +905,7 @@ export const useAIAssistantChat = ({
                   actionResult,
                   metadata: {
                     ...(sessionMessage.metadata ?? {}),
-                    traceId: messageItem.traceId,
+                    traceId: traceForPayload,
                     applyState: 'applied',
                   },
                 }

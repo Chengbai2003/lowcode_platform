@@ -2,12 +2,14 @@ import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react'
 import styles from '../PropertyPanel.module.scss';
 import { JsonEditor } from './JsonEditor';
 import {
+  cloneInternalColumn,
   DEFAULT_TABLE_COLUMN,
   createDefaultTableActionButton,
   createDefaultTableColumn,
   isTableActionColumn,
   isTableLinkColumn,
   sanitizeTableColumnsValue,
+  warnDuplicateKeys,
   type TableActionButtonType,
   type TableColumnAlign,
   type TableColumnItem,
@@ -86,27 +88,155 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     [defaultTemplate],
   );
   // __stableId 本地 Map 映射：仅内部用于 React key 与 draft，不随 onChange 外泄
-  const stableIdMapRef = useRef<Map<string, string>>(new Map());
+  // 5 步调和: legacy id -> unique key -> kind+dataIndex -> position -> UUID
+  const stableIdByKeyRef = useRef<Map<string, string>>(new Map());
+  const stableIdByKindDataRef = useRef<Map<string, string>>(new Map());
+  const stableIdByPositionRef = useRef<Map<number, string>>(new Map());
+  const stableButtonIdMapRef = useRef<Map<string, string>>(new Map());
   const columns = useMemo(() => {
     const sanitized = sanitizeTableColumnsValue(value, template);
-    // 通过本地 Map 复用 stableId，避免外部 strip 后重复生成导致 key 抖动
-    return sanitized.map((col, idx) => {
-      const sid = (col as TableColumnItem & { __stableId?: string }).__stableId;
-      if (!sid) return col;
-      const rawArr = Array.isArray(value) ? (value as unknown[]) : [];
-      const rawItem = rawArr[idx] as Record<string, unknown> | undefined;
-      const hasExternalId =
-        rawItem && typeof rawItem.__stableId === 'string' && (rawItem.__stableId as string).trim();
-      const cacheKey = `col-${idx}`;
-      if (!hasExternalId) {
-        const cached = stableIdMapRef.current.get(cacheKey);
-        if (cached) return { ...col, __stableId: cached } as TableColumnItem;
-        stableIdMapRef.current.set(cacheKey, sid);
-        return col;
+    const rawArr = Array.isArray(value) ? (value as unknown[]) : [];
+
+    // 统计唯一性：仅唯一 key / 唯一 kind+dataIndex 才可作为身份依据
+    const keyCount = new Map<string, number>();
+    const kindDataCount = new Map<string, number>();
+    for (const c of sanitized) {
+      const k = (c as unknown as { key?: unknown }).key;
+      if (typeof k === 'string') keyCount.set(k, (keyCount.get(k) ?? 0) + 1);
+      const kind = (c as unknown as { kind?: string }).kind ?? 'data';
+      const di = (c as unknown as { dataIndex?: unknown }).dataIndex;
+      if (typeof di === 'string' && di) {
+        const kd = `${kind}:${di}`;
+        kindDataCount.set(kd, (kindDataCount.get(kd) ?? 0) + 1);
       }
-      stableIdMapRef.current.set(cacheKey, sid);
+    }
+
+    const nextColumns = sanitized.map((col, idx) => {
+      let sid = (col as unknown as { __stableId?: string }).__stableId;
+      const rawItem = rawArr[idx] as Record<string, unknown> | undefined;
+
+      // 1. legacy id 优先: raw 上的 __stableId / _stableId / _id
+      let legacyId: string | undefined;
+      if (rawItem) {
+        if (typeof rawItem.__stableId === 'string' && (rawItem.__stableId as string).trim()) {
+          legacyId = (rawItem.__stableId as string).trim();
+        } else if (typeof rawItem._stableId === 'string' && (rawItem._stableId as string).trim()) {
+          legacyId = (rawItem._stableId as string).trim();
+        } else if (typeof rawItem._id === 'string' && (rawItem._id as string).trim()) {
+          legacyId = (rawItem._id as string).trim();
+        }
+      }
+      let reused = false;
+      if (legacyId) {
+        sid = legacyId;
+        reused = true;
+      } else {
+        // 2. unique key
+        const key = (col as unknown as { key?: unknown }).key;
+        if (typeof key === 'string' && keyCount.get(key) === 1) {
+          const prev = stableIdByKeyRef.current.get(key);
+          if (prev) {
+            sid = prev;
+            reused = true;
+          }
+        }
+        // 3. kind+dataIndex 唯一
+        if (!reused) {
+          const kind = (col as unknown as { kind?: string }).kind ?? 'data';
+          const di = (col as unknown as { dataIndex?: unknown }).dataIndex;
+          if (typeof di === 'string' && di) {
+            const kd = `${kind}:${di}`;
+            if (kindDataCount.get(kd) === 1) {
+              const prev2 = stableIdByKindDataRef.current.get(kd);
+              if (prev2) {
+                sid = prev2;
+                reused = true;
+              }
+            }
+          }
+        }
+        // 4. position fallback
+        if (!reused) {
+          const prevPos = stableIdByPositionRef.current.get(idx);
+          if (prevPos) {
+            sid = prevPos;
+            reused = true;
+          }
+        }
+        // 5. UUID 已由 sanitize 生成，无需额外处理
+      }
+
+      // 缓存映射供下次调和
+      if (sid) {
+        const key = (col as unknown as { key?: unknown }).key;
+        if (typeof key === 'string') stableIdByKeyRef.current.set(key, sid);
+        const kind = (col as unknown as { kind?: string }).kind ?? 'data';
+        const di = (col as unknown as { dataIndex?: unknown }).dataIndex;
+        if (typeof di === 'string' && di) {
+          const kd = `${kind}:${di}`;
+          stableIdByKindDataRef.current.set(kd, sid);
+        }
+        stableIdByPositionRef.current.set(idx, sid);
+      }
+
+      // Buttons 稳定化：类似调和，优先 legacy，其次 position
+      if (
+        isTableActionColumn(col as unknown as TableColumnItem) &&
+        Array.isArray((col as unknown as { buttons?: unknown }).buttons)
+      ) {
+        const rawButtons =
+          rawItem && Array.isArray(rawItem.buttons)
+            ? (rawItem.buttons as Array<Record<string, unknown>>)
+            : [];
+        const sanitizedButtons = (
+          col as unknown as { buttons: Array<Record<string, unknown> & { __stableId?: string }> }
+        ).buttons;
+        const nextButtons = sanitizedButtons.map((btn, bIdx) => {
+          let bSid = (btn as { __stableId?: string }).__stableId;
+          const rawBtn = rawButtons[bIdx] as Record<string, unknown> | undefined;
+          let bLegacy: string | undefined;
+          if (rawBtn) {
+            if (typeof rawBtn.__stableId === 'string' && (rawBtn.__stableId as string).trim())
+              bLegacy = (rawBtn.__stableId as string).trim();
+            else if (typeof rawBtn._stableId === 'string' && (rawBtn._stableId as string).trim())
+              bLegacy = (rawBtn._stableId as string).trim();
+            else if (typeof rawBtn._id === 'string' && (rawBtn._id as string).trim())
+              bLegacy = (rawBtn._id as string).trim();
+          }
+          if (bLegacy) {
+            bSid = bLegacy;
+          } else if (sid) {
+            const cacheKey = `${sid}__btn-${bIdx}`;
+            const cached = stableButtonIdMapRef.current.get(cacheKey);
+            if (cached) bSid = cached;
+          }
+          if (sid && bSid) {
+            const cacheKey = `${sid}__btn-${bIdx}`;
+            stableButtonIdMapRef.current.set(cacheKey, bSid);
+          }
+          return {
+            ...(btn as unknown as Record<string, unknown>),
+            __stableId: bSid,
+          } as unknown as typeof btn;
+        });
+        const withSidAndButtons = {
+          ...(col as unknown as Record<string, unknown>),
+          __stableId: sid,
+          buttons: nextButtons,
+        } as unknown as TableColumnItem;
+        return cloneInternalColumn(withSidAndButtons) as TableColumnItem;
+      }
+
+      if (sid && sid !== (col as unknown as { __stableId?: string }).__stableId) {
+        return cloneInternalColumn({
+          ...(col as unknown as Record<string, unknown>),
+          __stableId: sid,
+        } as unknown as TableColumnItem) as TableColumnItem;
+      }
       return col;
     });
+
+    return nextColumns;
   }, [value, template]);
 
   // Draft 态：输入过程中的原始字符串，允许空字符串等中间态，blur 时再提交 sanitized 值（P0-9）
@@ -206,58 +336,12 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     [onChange, template],
   );
 
-  // 未失焦卸载时 flush 草稿，避免切页丢失（P0-9 收尾）
-  const draftsRef = useRef(drafts);
-  const columnsRef = useRef(columns);
-  const emitColumnsRef = useRef(emitColumns);
+  // duplicate key 警告：新重复 key 提示但兼容 legacy（仅 console.warn，不阻断）
   useEffect(() => {
-    draftsRef.current = drafts;
-  }, [drafts]);
-  useEffect(() => {
-    columnsRef.current = columns;
+    warnDuplicateKeys(columns);
   }, [columns]);
-  useEffect(() => {
-    emitColumnsRef.current = emitColumns;
-  }, [emitColumns]);
-  useEffect(() => {
-    return () => {
-      const pending = draftsRef.current;
-      if (!pending || Object.keys(pending).length === 0) return;
-      const cur = columnsRef.current;
-      if (!cur || cur.length === 0) return;
-      const next = cur.map(
-        (c) => ({ ...(c as Record<string, unknown>) }) as TableColumnItem & { __stableId?: string },
-      );
-      let hasChange = false;
-      for (const [key, val] of Object.entries(pending)) {
-        const sep = key.lastIndexOf('__');
-        if (sep === -1) continue;
-        const sid = key.slice(0, sep);
-        const field = key.slice(sep + 2);
-        let idx = -1;
-        if (sid.startsWith('idx_')) idx = Number(sid.slice(4));
-        else
-          idx = next.findIndex(
-            (col) => (col as unknown as { __stableId?: string }).__stableId === sid,
-          );
-        if (idx < 0 || idx >= next.length) continue;
-        const col = next[idx] as unknown as Record<string, unknown>;
-        if (
-          field === 'title' ||
-          field === 'key' ||
-          field === 'dataIndex' ||
-          field === 'textTemplate'
-        ) {
-          col[field] = val;
-          hasChange = true;
-        } else if (field === 'width') {
-          col.width = toWidth(val);
-          hasChange = true;
-        }
-      }
-      if (hasChange) emitColumnsRef.current(next as TableColumnItem[]);
-    };
-  }, []);
+
+  // 注意：不在组件 unmount 时向外发布 Schema（风险：切页/旧页写入），仅 blur/save flush
 
   const updateColumn = useCallback(
     (index: number, updater: (column: TableColumnItem) => TableColumnItem) => {
@@ -697,13 +781,27 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
                           <div className={styles.complexEditorGrid}>
                             <input
                               aria-label={`列${index + 1}按钮${buttonIndex + 1}文本`}
-                              value={button.label}
+                              value={getDraftValue(
+                                btnStableId,
+                                'label',
+                                index * 1000 + buttonIndex,
+                                button.label,
+                              )}
                               onChange={(event) =>
-                                handleActionButtonFieldChange(
-                                  index,
-                                  buttonIndex,
+                                setDraftValue(
+                                  btnStableId,
                                   'label',
+                                  index * 1000 + buttonIndex,
                                   event.target.value,
+                                )
+                              }
+                              onBlur={() =>
+                                commitDraft(
+                                  btnStableId,
+                                  'label',
+                                  index * 1000 + buttonIndex,
+                                  (val) =>
+                                    handleActionButtonFieldChange(index, buttonIndex, 'label', val),
                                 )
                               }
                               placeholder="按钮文本"
