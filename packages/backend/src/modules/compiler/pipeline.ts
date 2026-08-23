@@ -570,12 +570,19 @@ function addImport(ctx: TransformContext, source: string, name: string) {
   if (!ctx.imports.has(source)) {
     ctx.imports.set(source, new Set());
   }
-  ctx.imports.get(source)?.add(name);
+  const set = ctx.imports.get(source);
+  if (set?.has(name)) return;
+  set?.add(name);
+  if (!ctx.registry.has(name)) {
+    ctx.registry.reserveExact(name, `import:${name}`);
+  }
 }
 
 function collectImports(ctx: TransformContext) {
   ctx.imports.set('react', new Set(['useState']));
+  if (!ctx.registry.has('useState')) ctx.registry.reserveExact('useState', 'import:useState');
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
+  if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
   for (const component of ctx.root.flatComponents) {
     if (!isSafeComponentType(component.componentType)) {
@@ -584,8 +591,13 @@ function collectImports(ctx: TransformContext) {
     const source =
       ctx.root.options.componentSources[component.componentType] || ctx.root.options.defaultLibrary;
     addImport(ctx, source, component.componentType);
-    if (!ctx.registry.has(component.componentType)) {
-      ctx.registry.reserveExact(component.componentType, `import:${component.componentType}`);
+  }
+}
+
+function preCollectAllActionImports(ctx: TransformContext) {
+  for (const component of ctx.root.flatComponents) {
+    for (const event of component.events) {
+      collectActionImports(event.actions, ctx);
     }
   }
 }
@@ -1455,6 +1467,7 @@ function buildActionStatement(
 export function transform(root: RootNode): void {
   const ctx = createTransformContext(root);
   collectImports(ctx);
+  preCollectAllActionImports(ctx);
   collectFields(ctx);
 
   root.imports = ctx.imports;
