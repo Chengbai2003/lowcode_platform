@@ -481,6 +481,10 @@ function registerField(ctx: TransformContext, field: FieldInfo) {
 }
 
 function resolveFieldName(sourceKey: string, source: FieldInfo['source']): string {
+  // 禁止危险名称在规范化过程中被洗白，保留原名交 registerField/registry 明确抛错（__proto__→_Proto__ 等）
+  if (RESERVED_GENERATED_IDENTIFIERS.has(sourceKey) || BUILTIN_IDENTIFIERS.has(sourceKey)) {
+    return sourceKey;
+  }
   let candidate: string;
   if (source === 'hiddenData') {
     candidate = isValidIdentifier(sourceKey) ? sourceKey : toSafeIdentifier(sourceKey);

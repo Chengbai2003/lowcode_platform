@@ -143,7 +143,6 @@ export const JS_RESERVED_WORDS = new Set<string>([
   'protected',
   'public',
   'static',
-  'yield',
 ]);
 
 export const RESERVED_GENERATED_IDENTIFIERS = new Set<string>([
@@ -175,6 +174,9 @@ export const RESERVED_GENERATED_IDENTIFIERS = new Set<string>([
   'undefined',
   'NaN',
   'Infinity',
+  'arguments',
+  // 安全不变量：表达式层禁止的危险名称，不得成为生成代码中的用户绑定名；随 BLOCKED_CALLEE_NAMES 自动同步
+  ...BLOCKED_CALLEE_NAMES,
   ...JS_RESERVED_WORDS,
 ]);
 
