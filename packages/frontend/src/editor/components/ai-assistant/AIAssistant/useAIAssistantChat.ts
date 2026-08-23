@@ -42,11 +42,11 @@ interface SendMessageOptions {
   selectedIdOverride?: string;
 }
 
+import { useAIAssistantStream } from './useAIAssistantStream';
+
 const MAX_CONVERSATION_HISTORY_CHARS = 4000;
 const MAX_CONVERSATION_HISTORY_TURNS = 8;
 const TRUNCATION_SUFFIX = '...(truncated)';
-const STREAM_REVEAL_INTERVAL_MS = 40;
-const STREAM_REVEAL_CHARS_PER_TICK = 24;
 
 const WELCOME_MESSAGE: AIMessage = {
   id: 'welcome',
@@ -94,8 +94,6 @@ export const useAIAssistantChat = ({
   const messagesRef = useRef<AIMessage[]>([]);
   const sessionMessagesRef = useRef<AISessionMessage[]>([]);
   const activeSessionRef = useRef<AISession | null>(currentSession ?? null);
-  const pendingStreamChunksRef = useRef<Map<string, string>>(new Map());
-  const streamRevealTimersRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
   const previousSelectedIdRef = useRef<string | null | undefined>(selectedId);
   const previousPageIdRef = useRef(pageId);
   const previousSchemaRootIdRef = useRef(currentSchema?.rootId);
@@ -169,9 +167,6 @@ export const useAIAssistantChat = ({
 
   useEffect(
     () => () => {
-      streamRevealTimersRef.current.forEach((timer) => clearInterval(timer));
-      streamRevealTimersRef.current.clear();
-      pendingStreamChunksRef.current.clear();
       abortControllerRef.current?.abort();
       abortControllerRef.current = null;
       clearAIScopeHighlight();
@@ -201,15 +196,13 @@ export const useAIAssistantChat = ({
   }, [clearAIScopeHighlight, pageId]);
 
   // P0-4: pageId 变化时 reset messages/session + abort 飞行请求（跨页隔离）
+  // stream 由 useAIAssistantStream 内部 clearAll 管理，此处仅处理 abort 与消息重置
   useEffect(() => {
     if (pageIdResetRef.current === pageId) return;
     pageIdResetRef.current = pageId;
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setLoading(false);
-    streamRevealTimersRef.current.forEach((t) => clearInterval(t));
-    streamRevealTimersRef.current.clear();
-    pendingStreamChunksRef.current.clear();
     setMessages([{ ...WELCOME_MESSAGE, timestamp: new Date() }]);
     setSessionMessages([]);
     sessionMessagesRef.current = [];
@@ -343,78 +336,8 @@ export const useAIAssistantChat = ({
     [currentSession, updateCurrentSessionMessages],
   );
 
-  const clearStreamReveal = useCallback((messageId: string) => {
-    const timer = streamRevealTimersRef.current.get(messageId);
-    if (timer) {
-      clearInterval(timer);
-      streamRevealTimersRef.current.delete(messageId);
-    }
-  }, []);
-
-  const flushStreamContent = useCallback(
-    (messageId: string) => {
-      const pending = pendingStreamChunksRef.current.get(messageId);
-      if (!pending) {
-        clearStreamReveal(messageId);
-        return;
-      }
-
-      pendingStreamChunksRef.current.delete(messageId);
-      clearStreamReveal(messageId);
-      updateAssistantMessage(messageId, (messageItem) => ({
-        ...messageItem,
-        content: `${messageItem.content}${pending}`,
-      }));
-    },
-    [clearStreamReveal, updateAssistantMessage],
-  );
-
-  const ensureStreamReveal = useCallback(
-    (messageId: string) => {
-      if (streamRevealTimersRef.current.has(messageId)) {
-        return;
-      }
-
-      const timer = setInterval(() => {
-        const pending = pendingStreamChunksRef.current.get(messageId) ?? '';
-        if (!pending) {
-          clearStreamReveal(messageId);
-          return;
-        }
-
-        const chunk = pending.slice(0, STREAM_REVEAL_CHARS_PER_TICK);
-        const rest = pending.slice(STREAM_REVEAL_CHARS_PER_TICK);
-
-        if (rest) {
-          pendingStreamChunksRef.current.set(messageId, rest);
-        } else {
-          pendingStreamChunksRef.current.delete(messageId);
-          clearStreamReveal(messageId);
-        }
-
-        updateAssistantMessage(messageId, (messageItem) => ({
-          ...messageItem,
-          content: `${messageItem.content}${chunk}`,
-        }));
-      }, STREAM_REVEAL_INTERVAL_MS);
-
-      streamRevealTimersRef.current.set(messageId, timer);
-    },
-    [clearStreamReveal, updateAssistantMessage],
-  );
-
-  const enqueueStreamContent = useCallback(
-    (messageId: string, delta: string) => {
-      if (!delta) {
-        return;
-      }
-
-      const existing = pendingStreamChunksRef.current.get(messageId) ?? '';
-      pendingStreamChunksRef.current.set(messageId, `${existing}${delta}`);
-      ensureStreamReveal(messageId);
-    },
-    [ensureStreamReveal],
-  );
+  const { pendingStreamChunksRef, clearStreamReveal, flushStreamContent, enqueueStreamContent } =
+    useAIAssistantStream(updateAssistantMessage, pageId);
 
   const presentStructuredError = useCallback((error: AIServiceError) => {
     if (error.code === 'PAGE_VERSION_CONFLICT') {

@@ -17,6 +17,7 @@ import {
   toSafeIdentifier,
 } from './helpers/codeHelpers';
 import {
+  BLOCKED_PROP_NAMES,
   BUILTIN_IDENTIFIERS,
   isSafeInlineExpression,
   isStaticStringValue,
@@ -181,17 +182,6 @@ interface TransformContext {
   reservedHandlerNames: Set<string>;
   registry: GeneratedIdentifierRegistry;
 }
-
-const BLOCKED_PROP_NAMES = new Set<string>([
-  '__proto__',
-  'prototype',
-  'constructor',
-  '__defineGetter__',
-  '__defineSetter__',
-  '__lookupGetter__',
-  '__lookupSetter__',
-  'toJSON',
-]);
 
 function isSafePropName(name: string): boolean {
   return isValidIdentifier(name) && !BLOCKED_PROP_NAMES.has(name) && !name.startsWith('__');

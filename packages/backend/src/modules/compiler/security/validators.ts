@@ -96,6 +96,18 @@ const BLOCKED_CALLEE_NAMES = new Set([
   'Function',
 ]);
 
+// Prop-level denylist — intentional subset of BLOCKED_CALLEE_NAMES for JSX prop names
+export const BLOCKED_PROP_NAMES = new Set<string>([
+  '__proto__',
+  'prototype',
+  'constructor',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  'toJSON',
+]);
+
 export const JS_RESERVED_WORDS = new Set<string>([
   'await',
   'break',
