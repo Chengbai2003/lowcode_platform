@@ -20,115 +20,11 @@ import type {
 import { TrackingScope, createTrackingProxy } from './tracking';
 import { FlushScheduler } from './flush';
 import { SnapshotManager } from './snapshot';
+import { getValueByPath, normalizeDeps, normalizePath, parsePath, setValueByPath } from './path';
+import { assertSafePath } from './guards';
 
-/**
- * 将数据路径解析为命名空间和剩余路径。
- *
- * 路径解析规则：
- * - "input1" -> data.input1（隐式 data 前缀）
- * - "state.loading" -> state.loading（显式 state 命名空间）
- * - "formData.user.name" -> formData.user.name（显式 formData 命名空间）
- * - "data.input1" -> data.input1（显式 data 前缀）
- */
-export function isSafeKey(key: string): boolean {
-  return key !== '__proto__' && key !== 'prototype' && key !== 'constructor';
-}
-
-function parsePath(path: DataPath): { namespace: string; rest: string } {
-  const dotIndex = path.indexOf('.');
-
-  // 没有点表示是顶层路径，默认为 'data' 命名空间
-  if (dotIndex === -1) {
-    // single segment __proto__ should be considered unsafe later via rest check
-    return { namespace: 'data', rest: path };
-  }
-
-  const namespace = path.substring(0, dotIndex);
-  const rest = path.substring(dotIndex + 1);
-
-  // 有效命名空间
-  const validNamespaces = ['data', 'state', 'formData', 'components'];
-  if (validNamespaces.includes(namespace)) {
-    return { namespace, rest };
-  }
-
-  // 无效命名空间，将整个路径视为在 'data' 下
-  return { namespace: 'data', rest: path };
-}
-
-function normalizePath(path: DataPath): DataPath {
-  const { namespace, rest } = parsePath(path);
-  return `${namespace}.${rest}`;
-}
-
-function normalizeDeps(deps?: Set<DataPath>): Set<DataPath> | undefined {
-  if (!deps) {
-    return undefined;
-  }
-
-  const normalized = new Set<DataPath>();
-  for (const dep of deps) {
-    normalized.add(normalizePath(dep));
-  }
-  return normalized;
-}
-
-/**
- * 通过点分隔路径从对象获取值。
- */
-function getValueByPath(obj: Record<string, unknown>, path: string): unknown {
-  if (!path) {
-    return obj;
-  }
-
-  const parts = path.split('.');
-  let current: unknown = obj;
-
-  for (const part of parts) {
-    if (!isSafeKey(part)) {
-      return undefined;
-    }
-    if (current === null || current === undefined) {
-      return undefined;
-    }
-    if (typeof current !== 'object') {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[part];
-  }
-
-  return current;
-}
-
-/**
- * 通过点分隔路径在对象中设置值。
- * 按需创建中间对象。
- */
-function setValueByPath(obj: Record<string, unknown>, path: string, value: unknown): void {
-  if (!path) {
-    return;
-  }
-
-  const parts = path.split('.');
-  for (const part of parts) {
-    if (!isSafeKey(part)) {
-      throw new Error(`[ReactiveRuntime] Invalid key: ${part}`);
-    }
-  }
-  let current: Record<string, unknown> = obj;
-
-  for (let i = 0; i < parts.length - 1; i++) {
-    const part = parts[i];
-    const next = current[part];
-
-    if (next === null || next === undefined || typeof next !== 'object') {
-      current[part] = {};
-    }
-    current = current[part] as Record<string, unknown>;
-  }
-
-  current[parts[parts.length - 1]] = value;
-}
+// 保持向后兼容：历史入口 `import { isSafeKey } from './runtime'` 仍可用
+export { isSafeKey } from './guards';
 
 /**
  * ReactiveRuntime 是渲染器的核心响应式运行时。
@@ -211,17 +107,8 @@ export class ReactiveRuntime {
    * @param value - 要设置的值
    */
   set(path: DataPath, value: unknown): void {
+    assertSafePath(path);
     const { namespace, rest } = parsePath(path);
-
-    // unified prototype pollution check on rest segments + namespace
-    if (!isSafeKey(namespace)) {
-      throw new Error(`[ReactiveRuntime] Invalid namespace: ${namespace}`);
-    }
-    for (const part of rest.split('.')) {
-      if (!isSafeKey(part)) {
-        throw new Error(`[ReactiveRuntime] Invalid key: ${part}`);
-      }
-    }
 
     let target: Record<string, unknown>;
     switch (namespace) {

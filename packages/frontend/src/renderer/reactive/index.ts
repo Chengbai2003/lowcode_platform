@@ -68,3 +68,17 @@ export { FlushScheduler, flushScheduler } from './flush';
 // ========================================
 
 export { TrackingScope, createTrackingProxy, withTracking } from './tracking';
+
+// ========================================
+// 路径与安全边界（P1 抽离）
+// ========================================
+
+export {
+  getValueByPath,
+  isSafeKey,
+  normalizeDeps,
+  normalizePath,
+  parsePath,
+  setValueByPath,
+} from './path';
+export { assertSafePath, isSafePath } from './guards';

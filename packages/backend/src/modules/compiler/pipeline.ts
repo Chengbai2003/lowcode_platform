@@ -25,6 +25,11 @@ import {
   RESERVED_GENERATED_IDENTIFIERS,
   sanitizeUrl,
 } from './security/validators';
+import {
+  GeneratedIdentifierRegistry,
+  isSafeComponentType,
+  isSafeGeneratedIdentifier,
+} from './registry';
 
 interface PropNode {
   name: string;
@@ -175,45 +180,6 @@ interface TransformContext {
   fieldByName: Map<string, FieldInfo>;
   reservedHandlerNames: Set<string>;
   registry: GeneratedIdentifierRegistry;
-}
-
-class GeneratedIdentifierRegistry {
-  private owners = new Map<string, string>();
-  assertAvailable(name: string, owner: string): void {
-    const existing = this.owners.get(name);
-    if (existing) throw new Error(`标识符 "${name}" (${owner}) 与 ${existing} 冲突`);
-  }
-  reserveExact(name: string, owner: string): void {
-    this.assertAvailable(name, owner);
-    this.owners.set(name, owner);
-  }
-  allocateInternal(base: string, owner: string): string {
-    let candidate = base;
-    let i = 2;
-    while (this.owners.has(candidate)) {
-      candidate = `${base}_${i}`;
-      i++;
-    }
-    this.owners.set(candidate, owner);
-    return candidate;
-  }
-  has(name: string): boolean {
-    return this.owners.has(name);
-  }
-}
-
-// Centralized generated identifier safety (P0-1)
-function isSafeGeneratedIdentifier(name: string): boolean {
-  return (
-    isValidIdentifier(name) &&
-    !RESERVED_GENERATED_IDENTIFIERS.has(name) &&
-    !BUILTIN_IDENTIFIERS.has(name) &&
-    !name.startsWith('__')
-  );
-}
-
-function isSafeComponentType(name: string): boolean {
-  return isSafeGeneratedIdentifier(name) && /^[A-Z][A-Za-z0-9]*$/.test(name);
 }
 
 const BLOCKED_PROP_NAMES = new Set<string>([
