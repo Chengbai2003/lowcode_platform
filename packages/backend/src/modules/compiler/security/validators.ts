@@ -121,6 +121,23 @@ export const RESERVED_GENERATED_IDENTIFIERS = new Set<string>([
   'XMLHttpRequest',
 ]);
 
+export const BUILTIN_IDENTIFIERS = new Set<string>([
+  'String',
+  'Number',
+  'Boolean',
+  'Math',
+  'Date',
+  'JSON',
+  'parseInt',
+  'parseFloat',
+  'isNaN',
+  'isFinite',
+]);
+
+export function isReservedGenerated(name: string): boolean {
+  return RESERVED_GENERATED_IDENTIFIERS.has(name) || BUILTIN_IDENTIFIERS.has(name);
+}
+
 const BUILTIN_DIRECT_CALLEES = ALLOWED_DIRECT_CALLS;
 const BUILTIN_MEMBER_ROOTS = new Set<string>(['Math', 'JSON', 'Date']);
 
@@ -391,14 +408,17 @@ export function normalizeLegacyExpression(value: ExpressionNode): ExpressionValu
   };
 }
 
-export function sanitizeUrl(url: string): string {
-  if (!url || typeof url !== 'string') return '/';
-  if (/[\x00-\x20\x7F]/.test(url)) return '/';
-  const trimmed = url.trim();
-  if (!trimmed) return '/';
+const ENCODED_BACKSLASH_RE = /%(?:25)*5c/i;
+export function sanitizeUrl(url: unknown): string {
+  if (typeof url !== 'string') return '/';
+  if (/[\x00-\x20\x7f\\]/.test(url)) return '/';
+  if (ENCODED_BACKSLASH_RE.test(url)) return '/';
+  if (url !== url.trim()) return '/';
+  const v = url.trim();
+  if (!v || !v.startsWith('/') || v.startsWith('//')) return '/';
   try {
     const base = new URL('https://lowcode.internal');
-    const parsed = new URL(trimmed, base);
+    const parsed = new URL(v, base);
     if (parsed.origin !== base.origin) return '/';
     const lower = parsed.href.toLowerCase();
     if (

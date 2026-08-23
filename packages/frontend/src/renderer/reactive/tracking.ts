@@ -164,7 +164,7 @@ export function createDeepTrackingProxy(
   }
 
   const handler: ProxyHandler<Record<string, unknown>> = {
-    get(target, property, receiver): unknown {
+    get(target, property, _receiver): unknown {
       // Block all Symbol access (including Symbol.toPrimitive, Symbol.iterator, Symbol.toStringTag)
       if (typeof property === 'symbol') {
         return undefined;
@@ -175,24 +175,16 @@ export function createDeepTrackingProxy(
         return undefined;
       }
 
-      // descriptor-safe check: block getter/setter and own function values
+      // own-only membrane (P1-high #3): no prototype walk, no Reflect.get — hide Object.prototype.polluted
       const desc = Object.getOwnPropertyDescriptor(target, property as string);
-      if (desc) {
-        if (desc.get || desc.set) return undefined;
-        if (typeof desc.value === 'function') return undefined;
-      } else {
-        // Check prototype chain for accessor to avoid invoking getter via Reflect.get
-        let proto = Object.getPrototypeOf(target);
-        while (proto) {
-          const pd = Object.getOwnPropertyDescriptor(proto, property as string);
-          if (pd) {
-            if (pd.get || pd.set) return undefined;
-            if (typeof pd.value === 'function') return undefined;
-            break;
-          }
-          proto = Object.getPrototypeOf(proto);
-        }
+      if (!desc) {
+        // track missing own property then hide (own-only) — keeps reactivity for missing but not leaking prototype
+        const fullPath = basePath ? `${basePath}.${property as string}` : (property as string);
+        tracker(fullPath);
+        return undefined;
       }
+      if (desc.get || desc.set) return undefined;
+      if (typeof desc.value === 'function') return undefined;
 
       // 构建此访问的完整路径
       const fullPath = basePath ? `${basePath}.${property as string}` : (property as string);
@@ -200,16 +192,8 @@ export function createDeepTrackingProxy(
       // 追踪此访问 (only for safe access)
       tracker(fullPath);
 
-      // Safely retrieve value without invoking getter (we already blocked getters)
-      let value: unknown;
-      if (desc && 'value' in desc) {
-        value = desc.value;
-      } else {
-        // For prototype data properties or missing descriptor, safe to Reflect.get (no getter in chain)
-        value = Reflect.get(target, property, receiver);
-        // Extra safety: if retrieved value is function (prototype function), block
-        if (typeof value === 'function') return undefined;
-      }
+      // Own-only: use descriptor value directly, never traverse prototype or Reflect.get
+      let value: unknown = desc.value;
 
       // 处理 null/undefined - 原样返回，不创建代理
       if (value === null || value === undefined) {
@@ -249,14 +233,15 @@ export function createDeepTrackingProxy(
     has(target, property): boolean {
       if (typeof property === 'string' && PROTOTYPE_KEYS.has(property)) {
         const desc = Object.getOwnPropertyDescriptor(target, property);
-        if (desc && !desc.configurable) return Reflect.has(target, property);
+        if (desc && !desc.configurable) return true;
         return false;
       }
       if (typeof property === 'symbol') {
-        // Symbol `in` checks are not used for pollution but keep invariant via Reflect
-        return Reflect.has(target, property);
+        // own-only for Symbol as well (hide prototype pollution via Symbol)
+        return !!Object.getOwnPropertyDescriptor(target as object, property);
       }
-      return Reflect.has(target, property);
+      // own-only membrane: hide prototype pollution (P1-high #3)
+      return !!Object.getOwnPropertyDescriptor(target, property as string);
     },
 
     ownKeys(target: Record<string, unknown>): ArrayLike<string | symbol> {
@@ -314,7 +299,7 @@ function createArrayProxy(
   }
 
   const handler: ProxyHandler<unknown[]> = {
-    get(target, property, receiver): unknown {
+    get(target, property, _receiver): unknown {
       // Block all Symbol access
       if (typeof property === 'symbol') {
         return undefined;
@@ -325,34 +310,19 @@ function createArrayProxy(
         return undefined;
       }
 
-      // descriptor-safe check for own properties (including indices and custom props)
+      // own-only membrane (P1-high #3): no prototype walk, no Reflect.get
       const desc = Object.getOwnPropertyDescriptor(target, property as string);
       if (desc) {
         if (desc.get || desc.set) return undefined;
         if (typeof desc.value === 'function') return undefined;
-      } else {
-        // For prototype properties (array methods), check if any accessor in chain
-        // We will handle array methods via intrinsic, so don't block prototype functions here yet
-        // But block if prototype has getter
-        let proto = Object.getPrototypeOf(target);
-        while (proto && proto !== Array.prototype) {
-          const pd = Object.getOwnPropertyDescriptor(proto, property as string);
-          if (pd) {
-            if (pd.get || pd.set) return undefined;
-            if (typeof pd.value === 'function') return undefined;
-            break;
-          }
-          proto = Object.getPrototypeOf(proto);
-        }
-        // For Array.prototype itself, don't block function yet; handle below
       }
 
-      // 处理数字索引 — 稀疏 hole 不读取原型，避免 Array.prototype[0] getter 执行
+      // 处理数字索引 — 稀疏 hole 不读取原型，避免 Array.prototype[0] getter 执行 — own-only
       const numIndex = Number(property);
       if (!Number.isNaN(numIndex) && Number.isInteger(numIndex) && numIndex >= 0) {
         const fullPath = `${basePath}[${numIndex}]`;
         tracker(fullPath);
-        // hole: own descriptor missing => return undefined directly, don't read proto
+        // hole: own descriptor missing => return undefined directly, don't read proto (own-only)
         if (!desc) {
           return undefined;
         }
@@ -380,13 +350,14 @@ function createArrayProxy(
         return value;
       }
 
-      // 处理数组长度
+      // 处理数组长度 — own-only (length is own, desc exists)
       if (property === 'length') {
         tracker(`${basePath}.length`);
+        if (desc && 'value' in desc) return desc.value;
         return target.length;
       }
 
-      // 处理数组方法 - 仅暴露只读方法，mutator 直接阻断
+      // 处理数组方法 - 仅暴露只读方法，mutator 直接阻断 — via Array.prototype intrinsic own descriptor (not target)
       if (typeof property === 'string') {
         if (TRACKING_ARRAY_MUTATOR_BLOCK.has(property)) {
           return undefined;
@@ -409,17 +380,16 @@ function createArrayProxy(
         }
       }
 
-      // 对于其他属性（如自定义属性），追踪并返回
+      // 对于其他属性（如自定义属性），追踪并返回 — own-only
+      if (!desc) {
+        const fullPath = `${basePath}.${property as string}`;
+        tracker(fullPath);
+        return undefined;
+      }
       const fullPath = `${basePath}.${property as string}`;
       tracker(fullPath);
 
-      let value: unknown;
-      if (desc && 'value' in desc) {
-        value = desc.value;
-      } else {
-        value = Reflect.get(target, property, receiver);
-        if (typeof value === 'function') return undefined;
-      }
+      let value: unknown = desc.value;
 
       if (value === null || value === undefined) return value;
 
@@ -449,11 +419,13 @@ function createArrayProxy(
     has(target, property): boolean {
       if (typeof property === 'string' && PROTOTYPE_KEYS.has(property)) {
         const desc = Object.getOwnPropertyDescriptor(target, property as string);
-        if (desc && !desc.configurable) return Reflect.has(target, property);
+        if (desc && !desc.configurable) return true;
         return false;
       }
-      if (typeof property === 'symbol') return Reflect.has(target, property);
-      return Reflect.has(target, property);
+      if (typeof property === 'symbol')
+        return !!Object.getOwnPropertyDescriptor(target as object, property);
+      // own-only membrane: hide prototype pollution
+      return !!Object.getOwnPropertyDescriptor(target, property as string);
     },
 
     ownKeys(target: unknown[]): ArrayLike<string | symbol> {

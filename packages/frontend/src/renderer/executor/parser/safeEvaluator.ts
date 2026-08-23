@@ -22,8 +22,8 @@ jsep.plugins.register(jsepNew);
 // jsep 默认不将 typeof 视作一元运算符，需要手动注册
 jsep.addUnaryOp('typeof');
 
-// 白名单：允许在表达式中使用的全局对象与方法
-export const SAFE_GLOBALS: Record<string, any> = {
+// 白名单：允许在表达式中使用的全局对象与方法 — null-prototype, frozen
+export const SAFE_GLOBALS: Record<string, any> = Object.assign(Object.create(null), {
   Math,
   JSON,
   Date,
@@ -38,7 +38,10 @@ export const SAFE_GLOBALS: Record<string, any> = {
   null: null,
   true: true,
   false: false,
-};
+});
+Object.freeze(SAFE_GLOBALS);
+
+const hasOwn = (t: object, k: PropertyKey): boolean => Object.prototype.hasOwnProperty.call(t, k);
 
 // P0-3: internal pure utils (descriptor-safe clone via shared safeClone)
 const PURE_UTILS_KEYS_INTERNAL = ['formatDate', 'uuid', 'clone'] as const;
@@ -167,6 +170,31 @@ const ARRAY_CALLBACK_BLOCK = new Set([
 ]);
 const STRING_BLOCK = new Set(['match', 'search', 'matchAll', 'repeat', 'padStart', 'padEnd']);
 
+const DATE_SAFE = new Set([
+  'valueOf',
+  'getTime',
+  'getFullYear',
+  'getMonth',
+  'getDate',
+  'getDay',
+  'getHours',
+  'getMinutes',
+  'getSeconds',
+  'getMilliseconds',
+  'getUTCFullYear',
+  'getUTCMonth',
+  'getUTCDate',
+  'getUTCDay',
+  'getUTCHours',
+  'getUTCMinutes',
+  'getUTCSeconds',
+  'getUTCMilliseconds',
+  'getTimezoneOffset',
+  'toString',
+  'toISOString',
+  'toUTCString',
+]);
+
 // ——— P0-2: 输入净化（via shared safeClone, descriptor-safe） ———
 const SANITIZE_SKIP = Symbol('sanitize-skip');
 function isPlainObject(o: unknown): boolean {
@@ -202,11 +230,11 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'Identifier': {
       const name = (node as jsep.Identifier).name;
-      // 优先从上下文获取，其次是从白名单全局对象获取
-      if (context && typeof context === 'object' && name in context) {
+      // 优先从上下文获取，其次是从白名单全局对象获取 — own-only (P1-high #3)
+      if (context && typeof context === 'object' && hasOwn(context, name)) {
         return context[name];
       }
-      if (name in SAFE_GLOBALS) {
+      if (hasOwn(SAFE_GLOBALS, name)) {
         return SAFE_GLOBALS[name];
       }
       return undefined;
@@ -336,14 +364,14 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
     case 'UnaryExpression': {
       const unaryNode = node as jsep.UnaryExpression;
 
-      // 特殊处理 typeof，因为它允许操作未定义的变量而不报错
+      // 特殊处理 typeof，因为它允许操作未定义的变量而不报错 — own-only
       if (unaryNode.operator === 'typeof') {
         if (unaryNode.argument.type === 'Identifier') {
           const name = (unaryNode.argument as jsep.Identifier).name;
-          if (context && typeof context === 'object' && name in context) {
+          if (context && typeof context === 'object' && hasOwn(context, name)) {
             return typeof context[name];
           }
-          if (name in SAFE_GLOBALS) {
+          if (hasOwn(SAFE_GLOBALS, name)) {
             return typeof SAFE_GLOBALS[name];
           }
           return 'undefined';
@@ -429,16 +457,6 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
           if (!NUMBER_SAFE.has(funcName)) return undefined;
           func = getIntrinsicSafe(Number.prototype, funcName);
         } else if (t instanceof Date) {
-          // Date 实例仅允许白名单子集（valueOf/toString/toISOString/getTime 等），此处最小化：toString/valueOf/toISOString/getTime
-          const DATE_SAFE = new Set([
-            'toString',
-            'valueOf',
-            'toISOString',
-            'getTime',
-            'getFullYear',
-            'getMonth',
-            'getDate',
-          ]);
           if (!DATE_SAFE.has(funcName)) return undefined;
           func = getIntrinsicSafe(Date.prototype, funcName);
         } else if (t === Math) {
@@ -474,11 +492,11 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
           ARRAY_CALLBACK_BLOCK.has(funcName)
         )
           return undefined;
-        if (context && funcName in context) {
-          // context 中函数已被 sanitize 去除，此处若仍存在则为潜在污染，直接拒绝
+        if (context && hasOwn(context, funcName)) {
+          // context 中函数已被 sanitize 去除，此处若仍存在则为潜在污染，直接拒绝 — own-only
           return undefined;
         }
-        if (funcName in SAFE_GLOBALS) {
+        if (hasOwn(SAFE_GLOBALS, funcName)) {
           func = SAFE_GLOBALS[funcName];
           targetObj = undefined;
         } else {

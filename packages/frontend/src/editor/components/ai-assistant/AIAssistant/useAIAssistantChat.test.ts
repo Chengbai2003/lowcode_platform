@@ -1064,6 +1064,326 @@ describe('useAIAssistantChat', () => {
     expect(aiMessage.content).toContain('页面版本已变化');
   });
 
+  it('applies pending patch fails if pageId changes during confirm dialog', async () => {
+    const nextSchema: A2UISchema = {
+      ...baseSchema,
+      components: {
+        ...baseSchema.components,
+        button: {
+          ...baseSchema.components.button,
+          props: { children: '提交' },
+        },
+      },
+    };
+
+    serverAIServiceMock.streamResponse.mockImplementation(async (_request: any, handlers: any) => {
+      await handlers.onEvent({ type: 'meta', traceId: 'agent-trace-high' });
+      await handlers.onEvent({
+        type: 'route',
+        route: {
+          requestedMode: 'auto',
+          resolvedMode: 'patch',
+          reason: 'selected_target',
+          manualOverride: false,
+        },
+      });
+      await handlers.onEvent({
+        type: 'result',
+        result: {
+          mode: 'patch',
+          patch: [{ op: 'updateProps', componentId: 'button', props: { children: '提交' } }],
+          previewSchema: nextSchema,
+          previewSummary: '本次修改共 1 个 patch，涉及 文案1处。',
+          changeGroups: [
+            {
+              kind: 'content',
+              label: '文案',
+              count: 1,
+              entries: [
+                { op: 'updateProps', targetId: 'button', summary: '更新文案 button -> 提交' },
+              ],
+            },
+          ],
+          risk: {
+            level: 'high',
+            reasons: ['修改范围较大'],
+            patchOps: 1,
+            distinctTargets: 1,
+            requiresConfirmation: true,
+          },
+          requiresConfirmation: true,
+          warnings: [],
+          resolvedSelectedId: 'button',
+          traceId: 'agent-trace-high',
+          route: {
+            requestedMode: 'auto',
+            resolvedMode: 'patch',
+            reason: 'selected_target',
+            manualOverride: false,
+          },
+        },
+      });
+      await handlers.onEvent({ type: 'done', success: true });
+      return { terminal: 'result' };
+    });
+
+    let capturedOk: (() => void) | undefined;
+    modalMock.confirm.mockImplementation((opts: any) => {
+      capturedOk = opts.onOk;
+    });
+
+    const onPatchApply = vi.fn().mockResolvedValue(nextSchema);
+    const loadModels = vi.fn().mockResolvedValue(undefined);
+    const ensureModelsLoaded = vi.fn().mockResolvedValue(undefined);
+    const models = [
+      { id: 'openai-default', name: 'OpenAI', provider: 'openai' as const, model: 'gpt-5.4' },
+    ];
+
+    const { result, rerender } = renderHook((props: any) => useAIAssistantChat(props), {
+      initialProps: {
+        currentSchema: baseSchema,
+        currentModel: 'openai-default',
+        pageId: 'page-1',
+        pageVersion: 3,
+        selectedId: 'button',
+        models,
+        loadModels,
+        ensureModelsLoaded,
+        responseMode: 'auto' as const,
+        onPatchApply,
+      },
+    });
+
+    await act(async () => {
+      result.current.setInputValue('把这个按钮改成提交');
+    });
+    await act(async () => {
+      await result.current.sendMessage();
+    });
+
+    const aiMessage = result.current.messages[result.current.messages.length - 1];
+    expect(aiMessage.patchPreview?.requiresConfirmation).toBe(true);
+    expect(aiMessage.applyState).toBe('pending');
+
+    let applyPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      applyPromise = result.current.applyPatchPreview(aiMessage.id);
+      await Promise.resolve();
+    });
+
+    expect(modalMock.confirm).toHaveBeenCalledTimes(1);
+    expect(onPatchApply).not.toHaveBeenCalled();
+
+    // while modal is pending, simulate page switch (store changes but keep hook pageId prop to avoid reset)
+    act(() => {
+      useEditorStore.setState({
+        currentPageId: 'page-2',
+        generation: 1,
+        documentSessionId: 'new-session',
+        schemaRevision: 1,
+      });
+    });
+    rerender({
+      currentSchema: baseSchema,
+      currentModel: 'openai-default',
+      pageId: 'page-1',
+      pageVersion: 4,
+      selectedId: 'button',
+      models,
+      loadModels,
+      ensureModelsLoaded,
+      responseMode: 'auto' as const,
+      onPatchApply,
+    });
+
+    await act(async () => {
+      capturedOk?.();
+      if (applyPromise) await applyPromise;
+    });
+
+    expect(onPatchApply).not.toHaveBeenCalled();
+    const updated = result.current.messages.find((m) => m.id === aiMessage.id);
+    expect(updated?.applyState).toBe('failed');
+    expect(messageMock.error).toHaveBeenCalledWith(expect.stringContaining('已过期'));
+  });
+
+  it('applies pending patch fails if schemaRevision increments during confirm', async () => {
+    const nextSchema: A2UISchema = {
+      ...baseSchema,
+      components: {
+        ...baseSchema.components,
+        button: {
+          ...baseSchema.components.button,
+          props: { children: '提交' },
+        },
+      },
+    };
+
+    serverAIServiceMock.streamResponse.mockImplementation(async (_request: any, handlers: any) => {
+      await handlers.onEvent({ type: 'meta', traceId: 'agent-trace-high2' });
+      await handlers.onEvent({
+        type: 'route',
+        route: {
+          requestedMode: 'auto',
+          resolvedMode: 'patch',
+          reason: 'selected_target',
+          manualOverride: false,
+        },
+      });
+      await handlers.onEvent({
+        type: 'result',
+        result: {
+          mode: 'patch',
+          patch: [{ op: 'updateProps', componentId: 'button', props: { children: '提交' } }],
+          previewSchema: nextSchema,
+          previewSummary: '本次修改共 1 个 patch，涉及 文案1处。',
+          changeGroups: [
+            {
+              kind: 'content',
+              label: '文案',
+              count: 1,
+              entries: [
+                { op: 'updateProps', targetId: 'button', summary: '更新文案 button -> 提交' },
+              ],
+            },
+          ],
+          risk: {
+            level: 'high',
+            reasons: ['修改范围较大'],
+            patchOps: 1,
+            distinctTargets: 1,
+            requiresConfirmation: true,
+          },
+          requiresConfirmation: true,
+          warnings: [],
+          resolvedSelectedId: 'button',
+          traceId: 'agent-trace-high2',
+          route: {
+            requestedMode: 'auto',
+            resolvedMode: 'patch',
+            reason: 'selected_target',
+            manualOverride: false,
+          },
+        },
+      });
+      await handlers.onEvent({ type: 'done', success: true });
+      return { terminal: 'result' };
+    });
+
+    let capturedOk: (() => void) | undefined;
+    modalMock.confirm.mockImplementation((opts: any) => {
+      capturedOk = opts.onOk;
+    });
+
+    const onPatchApply = vi.fn().mockResolvedValue(nextSchema);
+    const loadModels = vi.fn().mockResolvedValue(undefined);
+    const ensureModelsLoaded = vi.fn().mockResolvedValue(undefined);
+    const models = [
+      { id: 'openai-default', name: 'OpenAI', provider: 'openai' as const, model: 'gpt-5.4' },
+    ];
+
+    const { result } = renderHook(() =>
+      useAIAssistantChat({
+        currentSchema: baseSchema,
+        currentModel: 'openai-default',
+        pageId: 'page-1',
+        pageVersion: 3,
+        selectedId: 'button',
+        models,
+        loadModels,
+        ensureModelsLoaded,
+        responseMode: 'auto',
+        onPatchApply,
+      }),
+    );
+
+    await act(async () => {
+      result.current.setInputValue('把这个按钮改成提交');
+    });
+    await act(async () => {
+      await result.current.sendMessage();
+    });
+
+    const aiMessage = result.current.messages[result.current.messages.length - 1];
+    expect(aiMessage.applyState).toBe('pending');
+
+    let applyPromise: Promise<boolean> | undefined;
+    await act(async () => {
+      applyPromise = result.current.applyPatchPreview(aiMessage.id);
+      await Promise.resolve();
+    });
+
+    expect(modalMock.confirm).toHaveBeenCalledTimes(1);
+
+    // only bump schemaRevision during confirm
+    act(() => {
+      useEditorStore.setState({ schemaRevision: 1 });
+    });
+
+    await act(async () => {
+      capturedOk?.();
+      if (applyPromise) await applyPromise;
+    });
+
+    expect(onPatchApply).not.toHaveBeenCalled();
+    const updated = result.current.messages.find((m) => m.id === aiMessage.id);
+    expect(updated?.applyState).toBe('failed');
+    expect(messageMock.error).toHaveBeenCalledWith('当前页面已切换，该预览已过期，已拦截应用');
+  });
+
+  it('does not fallback after AGENT_TIMEOUT structured error', async () => {
+    serverAIServiceMock.streamResponse.mockImplementation(async (_request: any, handlers: any) => {
+      await handlers.onEvent({ type: 'meta', traceId: 'agent-timeout' });
+      await handlers.onEvent({
+        type: 'error',
+        error: {
+          code: 'AGENT_TIMEOUT',
+          message: 'Agent timed out',
+          traceId: 'agent-timeout',
+        },
+      });
+      await handlers.onEvent({ type: 'done', success: false });
+      return { terminal: 'error' };
+    });
+
+    const onPatchApply = vi.fn();
+    const loadModels = vi.fn().mockResolvedValue(undefined);
+    const ensureModelsLoaded = vi.fn().mockResolvedValue(undefined);
+    const models = [
+      { id: 'openai-default', name: 'OpenAI', provider: 'openai' as const, model: 'gpt-5.4' },
+    ];
+
+    const { result } = renderHook(() =>
+      useAIAssistantChat({
+        currentSchema: baseSchema,
+        currentModel: 'openai-default',
+        pageId: 'page-1',
+        pageVersion: 3,
+        selectedId: 'button',
+        models,
+        loadModels,
+        ensureModelsLoaded,
+        responseMode: 'auto',
+        onPatchApply,
+      }),
+    );
+
+    await act(async () => {
+      result.current.setInputValue('把这个按钮改成提交');
+    });
+
+    await act(async () => {
+      await result.current.sendMessage();
+    });
+
+    expect(onPatchApply).not.toHaveBeenCalled();
+    expect(serverAIServiceMock.generateResponse).not.toHaveBeenCalled();
+
+    const aiMessage = result.current.messages[result.current.messages.length - 1];
+    expect(aiMessage.status).toBe('error');
+    expect(aiMessage.content).toContain('AI 编辑超时');
+  });
+
   it('truncates oversized conversation history entries before sending requests', async () => {
     const longAnswer = 'A'.repeat(4500);
 

@@ -6,6 +6,7 @@
 import type { ActionHandler } from '../../../types';
 import type { NavigateAction } from '../../../types/dsl/actions/navigation';
 import { resolveValue, resolveValues } from '../parser';
+import { buildNavigationTarget } from '../../utils/sanitizeUrl';
 
 /**
  * 页面跳转
@@ -15,31 +16,26 @@ export const navigate: ActionHandler = async (action, context) => {
   const navAction = action as NavigateAction;
   const { to, params, replace = false } = navAction;
   const resolvedTo = resolveValue(to, context) as string;
-  const resolvedParams = params ? resolveValues(params, context) : undefined;
+  const resolvedParams = params
+    ? (resolveValues(params, context) as Record<string, unknown>)
+    : undefined;
+
+  const final = buildNavigationTarget(resolvedTo, resolvedParams);
 
   if (context.navigate && typeof context.navigate === 'function') {
-    context.navigate(resolvedTo, resolvedParams);
+    context.navigate(final);
   } else if (typeof window !== 'undefined' && window.location) {
-    // 降级到原生跳转
-    let url = resolvedTo;
-    if (resolvedParams) {
-      const searchParams = new URLSearchParams(resolvedParams as Record<string, string>);
-      const queryString = searchParams.toString();
-      if (queryString) {
-        url += (url.includes('?') ? '&' : '?') + queryString;
-      }
-    }
-
+    const finalFallback = buildNavigationTarget(resolvedTo, resolvedParams);
     if (replace) {
-      window.location.replace(url);
+      window.location.replace(finalFallback);
     } else {
-      window.location.href = url;
+      window.location.href = finalFallback;
     }
   } else {
     console.warn('No navigation method available');
   }
 
-  return { to: resolvedTo, params: resolvedParams };
+  return { to: final, params: resolvedParams };
 };
 
 /**

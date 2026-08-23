@@ -8,6 +8,7 @@
 import type { ActionHandler, ExecutionContext } from '../../../types';
 import type { CustomScriptAction } from '../../../types/dsl/actions/extension';
 import { createCapabilityAPI } from '../capability/capabilityAPI';
+import { buildNavigationTarget } from '../../utils/sanitizeUrl';
 
 const BLOCKED_SCRIPT_PATTERNS = [
   {
@@ -92,6 +93,13 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
     runtime: context.runtime,
   });
 
+  const rawNavigate = (context.navigate ?? (() => {})) as (
+    path: unknown,
+    params?: Record<string, unknown>,
+  ) => void;
+  const safeNavigate = (path: unknown, params?: Record<string, unknown>) =>
+    rawNavigate(buildNavigationTarget(path, params));
+
   const sandbox: Record<string, any> = {
     $: api,
     data: deepFreeze(cloneForSandbox(context.runtime.getData())),
@@ -100,7 +108,7 @@ function createSandboxContext(context: ExecutionContext): Record<string, any> {
     user: context.user,
     route: context.route,
     utils: context.utils,
-    navigate: context.navigate,
+    navigate: safeNavigate,
     back: context.back,
     Math,
     Date,

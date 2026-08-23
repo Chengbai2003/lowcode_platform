@@ -62,6 +62,7 @@ const RESERVED_CONTEXT_KEYS = new Set([
 ]);
 
 // ——— P0-2: 输入净化（via shared safeClone, descriptor-safe） ———
+const hasOwnEp = (t: object, k: PropertyKey): boolean => Object.prototype.hasOwnProperty.call(t, k);
 const SANITIZE_SKIP_EP = Symbol('sanitize-skip-ep');
 function cloneSanitizedEp(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
   return cloneSanitizedSafe(value, seen, SANITIZE_SKIP_EP);
@@ -119,14 +120,14 @@ const INTERNAL_PURE_UTILS: Record<string, unknown> = {
   clone: pureClone,
 };
 
-// 真白名单：核心命名空间 + 合法扩展键（record/item/index 等），其余自定义顶层字段不暴露，数据别名另由 buildExpressionContext 处理
+// 真白名单：核心命名空间 + 合法扩展键（record/item/index 等），其余自定义顶层字段不暴露，数据别名另由 buildExpressionContext 处理 — own-only (P1-high #3)
 function pickAllowedContext(context: Record<string, any>): Record<string, any> {
-  const out: Record<string, any> = {};
+  const out: Record<string, any> = Object.create(null);
   for (const k of ALLOWED_EXPRESSION_KEYS) {
-    if (k in context) out[k] = (context as Record<string, any>)[k];
+    if (hasOwnEp(context, k)) out[k] = (context as Record<string, any>)[k];
   }
   for (const k of ALLOWED_EXTENSION_KEYS) {
-    if (k in context) out[k] = (context as Record<string, any>)[k];
+    if (hasOwnEp(context, k)) out[k] = (context as Record<string, any>)[k];
   }
   // 兼容任意合法循环变量：isValidAliasKey 且非保留键，已存在于 sanitized context 的额外键（如自定义 itemVar）
   for (const [k, v] of Object.entries(context)) {
@@ -176,8 +177,8 @@ function isReservedLiteral(str: string): boolean {
 function isValidAliasKey(key: string, context: Record<string, any>): boolean {
   if (!VALID_ALIAS_REGEX.test(key)) return false;
   if (RESERVED_CONTEXT_KEYS.has(key)) return false;
-  if (key in Object.prototype) return false;
-  if (Object.prototype.hasOwnProperty.call(context, key)) return false;
+  if (hasOwnEp(Object.prototype, key)) return false;
+  if (hasOwnEp(context, key)) return false;
   return true;
 }
 
@@ -194,29 +195,35 @@ export function buildExpressionContext(context: Record<string, any> = {}): Recor
     return allowedBase;
   }
 
-  // Proxy 惰性别名，按需读取而非全量展开；补 ownKeys/getOwnPropertyDescriptor 使 Object.keys / sanitize 能捕获别名
+  // Proxy 惰性别名，按需读取而非全量展开；补 ownKeys/getOwnPropertyDescriptor 使 Object.keys / sanitize 能捕获别名 — own-only
   if (getFlag('selectiveEvaluation')) {
     const aliasKeys = () =>
       Object.keys(data as Record<string, unknown>).filter(
-        (k) => isValidAliasKey(k, allowedBase) && !(k in allowedBase),
+        (k) => isValidAliasKey(k, allowedBase) && !hasOwnEp(allowedBase, k),
       );
     return new Proxy(allowedBase, {
       get(target, key: string) {
-        if (key in target) return (target as Record<string, any>)[key];
-        if (typeof key === 'string' && isValidAliasKey(key, target) && key in data) {
+        if (hasOwnEp(target, key)) return (target as Record<string, any>)[key];
+        if (
+          typeof key === 'string' &&
+          isValidAliasKey(key, target) &&
+          hasOwnEp(data as object, key)
+        ) {
           return (data as Record<string, any>)[key];
         }
         return undefined;
       },
       has(target, key: string) {
-        if (key in target) return true;
-        return typeof key === 'string' && isValidAliasKey(key, target) && key in data;
+        if (hasOwnEp(target, key)) return true;
+        return (
+          typeof key === 'string' && isValidAliasKey(key, target) && hasOwnEp(data as object, key)
+        );
       },
       ownKeys(target) {
         return [...Reflect.ownKeys(target), ...aliasKeys()];
       },
       getOwnPropertyDescriptor(target, key) {
-        if (Reflect.has(target, key)) {
+        if (hasOwnEp(target, key as string)) {
           return Reflect.getOwnPropertyDescriptor(target, key);
         }
         if (typeof key === 'string' && aliasKeys().includes(key)) {
@@ -556,32 +563,38 @@ function buildExpressionContextWithProxy(
     components: proxy.components,
   };
 
-  // Proxy 惰性别名，按需读取；ownKeys 使 sanitizer 能捕获别名
+  // Proxy 惰性别名，按需读取；ownKeys 使 sanitizer 能捕获别名 — own-only
   if (getFlag('selectiveEvaluation')) {
     const aliasKeysWithProxy = (target: Record<string, any>) => {
       const d = (target.data || {}) as Record<string, unknown>;
       if (!d || typeof d !== 'object') return [] as string[];
-      return Object.keys(d).filter((k) => isValidAliasKey(k, target) && !(k in target));
+      return Object.keys(d).filter((k) => isValidAliasKey(k, target) && !hasOwnEp(target, k));
     };
     return new Proxy(baseContext, {
       get(target, key: string) {
-        if (key in target) return target[key];
-        if (typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})) {
+        if (hasOwnEp(target, key)) return target[key];
+        if (
+          typeof key === 'string' &&
+          isValidAliasKey(key, target) &&
+          hasOwnEp((target.data || {}) as object, key)
+        ) {
           return (target.data as Record<string, any>)[key];
         }
         return undefined;
       },
       has(target, key: string) {
-        if (key in target) return true;
+        if (hasOwnEp(target, key)) return true;
         return (
-          typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})
+          typeof key === 'string' &&
+          isValidAliasKey(key, target) &&
+          hasOwnEp((target.data || {}) as object, key)
         );
       },
       ownKeys(target) {
         return [...Reflect.ownKeys(target), ...aliasKeysWithProxy(target)];
       },
       getOwnPropertyDescriptor(target, key) {
-        if (Reflect.has(target, key)) return Reflect.getOwnPropertyDescriptor(target, key);
+        if (hasOwnEp(target, key as string)) return Reflect.getOwnPropertyDescriptor(target, key);
         if (typeof key === 'string' && aliasKeysWithProxy(target).includes(key)) {
           return {
             value: (target.data as Record<string, unknown>)[key],

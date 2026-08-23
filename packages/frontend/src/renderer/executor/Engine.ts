@@ -22,6 +22,7 @@ import asyncActions from './actions/asyncActions';
 import debugActions from './actions/debugActions';
 import extensionActions from './actions/extensionActions';
 import { ReactiveRuntime } from '../reactive/runtime';
+import { buildNavigationTarget } from '../utils/sanitizeUrl';
 
 /**
  * 内置Action处理器 (8种精简方案)
@@ -359,6 +360,13 @@ export class DSLExecutor {
       request: <T = any>() => Promise.resolve({} as T),
     };
 
+    const rawNavigate = navigate as unknown as
+      | ((path: string, params?: Record<string, unknown>) => void)
+      | undefined;
+    const baseNavigate = rawNavigate ?? (() => {});
+    const safeNavigate = (path: unknown, params?: Record<string, unknown>) =>
+      (baseNavigate as (p: string) => void)(buildNavigationTarget(path, params));
+
     return {
       ...restContext,
       user: user ?? { id: '', name: '', roles: [], permissions: [] },
@@ -368,7 +376,7 @@ export class DSLExecutor {
       utils: utils ?? defaultUtils,
       ui: ui ?? defaultUi,
       api: api ?? defaultApi,
-      navigate: navigate ?? (() => {}),
+      navigate: safeNavigate as unknown as ExecutionContext['navigate'],
       back: back ?? (() => {}),
       data: runtime.getData(),
       formData: runtime.getFormData(),

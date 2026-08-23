@@ -17,6 +17,7 @@ import {
   toSafeIdentifier,
 } from './helpers/codeHelpers';
 import {
+  BUILTIN_IDENTIFIERS,
   isSafeInlineExpression,
   isStaticStringValue,
   isValidExpressionPath,
@@ -173,12 +174,41 @@ interface TransformContext {
   fieldBySourceKey: Map<string, FieldInfo>;
   fieldByName: Map<string, FieldInfo>;
   reservedHandlerNames: Set<string>;
+  registry: GeneratedIdentifierRegistry;
+}
+
+class GeneratedIdentifierRegistry {
+  private owners = new Map<string, string>();
+  assertAvailable(name: string, owner: string): void {
+    const existing = this.owners.get(name);
+    if (existing) throw new Error(`标识符 "${name}" (${owner}) 与 ${existing} 冲突`);
+  }
+  reserveExact(name: string, owner: string): void {
+    this.assertAvailable(name, owner);
+    this.owners.set(name, owner);
+  }
+  allocateInternal(base: string, owner: string): string {
+    let candidate = base;
+    let i = 2;
+    while (this.owners.has(candidate)) {
+      candidate = `${base}_${i}`;
+      i++;
+    }
+    this.owners.set(candidate, owner);
+    return candidate;
+  }
+  has(name: string): boolean {
+    return this.owners.has(name);
+  }
 }
 
 // Centralized generated identifier safety (P0-1)
 function isSafeGeneratedIdentifier(name: string): boolean {
   return (
-    isValidIdentifier(name) && !RESERVED_GENERATED_IDENTIFIERS.has(name) && !name.startsWith('__')
+    isValidIdentifier(name) &&
+    !RESERVED_GENERATED_IDENTIFIERS.has(name) &&
+    !BUILTIN_IDENTIFIERS.has(name) &&
+    !name.startsWith('__')
   );
 }
 
@@ -235,9 +265,17 @@ function sanitizeLogLevel(level: string | undefined, fallback = 'log'): string {
   return fallback;
 }
 
-function sanitizeLoopVar(name: string | undefined, fallback: string): string {
-  if (name && isSafeGeneratedIdentifier(name)) return name;
-  return fallback;
+function sanitizeLoopVar(
+  name: string | undefined,
+  fallback: string,
+  ctx: TransformContext,
+): string {
+  const base = name && isSafeGeneratedIdentifier(name) ? name : fallback;
+  if (!ctx.registry.has(base)) {
+    ctx.registry.reserveExact(base, `loop:${base}`);
+    return base;
+  }
+  return ctx.registry.allocateInternal(base, `loop:${base}`);
 }
 
 function escapeComment(text: string): string {
@@ -431,32 +469,12 @@ function registerField(ctx: TransformContext, field: FieldInfo) {
   if (ctx.fieldBySourceKey.has(field.sourceKey)) {
     return;
   }
-  // P0-1: ensure generated field name is safe and unique
-  let safeName = field.name;
-  if (!isSafeGeneratedIdentifier(safeName)) {
-    const sanitized = toSafeIdentifier(safeName) || 'fieldValue';
-    if (isSafeGeneratedIdentifier(sanitized)) {
-      safeName = sanitized;
-    } else {
-      const withUnderscore = `${safeName}_`;
-      if (isSafeGeneratedIdentifier(withUnderscore)) {
-        safeName = withUnderscore;
-      } else {
-        safeName = 'fieldValue';
-      }
-    }
-  }
-  let candidate = safeName;
-  let counter = 2;
-  while (ctx.fieldByName.has(candidate)) {
-    candidate = `${safeName}_${counter}`;
-    counter += 1;
-  }
-  if (candidate !== field.name) {
-    field = { ...field, name: candidate, setterName: createSetterName(candidate) };
-  } else if (safeName !== field.name) {
-    field = { ...field, name: safeName, setterName: createSetterName(safeName) };
-  }
+  const candidate = field.name;
+  const setter = createSetterName(candidate);
+  ctx.registry.assertAvailable(candidate, `field:${field.sourceKey}`);
+  ctx.registry.assertAvailable(setter, `setter:${field.sourceKey}`);
+  ctx.registry.reserveExact(candidate, `field:${field.sourceKey}`);
+  ctx.registry.reserveExact(setter, `setter:${field.sourceKey}`);
   ctx.fieldBySourceKey.set(field.sourceKey, field);
   ctx.fieldByName.set(field.name, field);
   ctx.fields.push(field);
@@ -477,6 +495,10 @@ function resolveFieldName(sourceKey: string, source: FieldInfo['source']): strin
   if (!candidate) candidate = 'fieldValue';
   if (!isValidIdentifier(candidate)) {
     candidate = toSafeIdentifier(candidate) || 'fieldValue';
+  }
+  // Keep reserved/builtin as-is so registerField can throw with proper owner info instead of silently renaming
+  if (RESERVED_GENERATED_IDENTIFIERS.has(candidate) || BUILTIN_IDENTIFIERS.has(candidate)) {
+    return candidate;
   }
   if (!isSafeGeneratedIdentifier(candidate)) {
     const sanitized = toSafeIdentifier(candidate) || 'fieldValue';
@@ -562,6 +584,9 @@ function collectImports(ctx: TransformContext) {
     const source =
       ctx.root.options.componentSources[component.componentType] || ctx.root.options.defaultLibrary;
     addImport(ctx, source, component.componentType);
+    if (!ctx.registry.has(component.componentType)) {
+      ctx.registry.reserveExact(component.componentType, `import:${component.componentType}`);
+    }
   }
 }
 
@@ -591,6 +616,18 @@ function collectActionImports(actions: ActionNode[], ctx: TransformContext) {
 }
 
 function createTransformContext(root: RootNode): TransformContext {
+  const registry = new GeneratedIdentifierRegistry();
+  for (const name of RESERVED_GENERATED_IDENTIFIERS) {
+    registry.reserveExact(name, `reserved:${name}`);
+  }
+  for (const name of BUILTIN_IDENTIFIERS) {
+    // avoid double-reserve if already in RESERVED (none overlap but keep safe)
+    if (!registry.has(name)) registry.reserveExact(name, `builtin:${name}`);
+  }
+  const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
+  for (const name of reservedHandlerNames) {
+    if (!registry.has(name)) registry.reserveExact(name, `handler:${name}`);
+  }
   return {
     root,
     imports: root.imports,
@@ -598,7 +635,8 @@ function createTransformContext(root: RootNode): TransformContext {
     handlers: root.handlers,
     fieldBySourceKey: new Map(),
     fieldByName: new Map(),
-    reservedHandlerNames: new Set(root.handlers.map((handler) => handler.name)),
+    reservedHandlerNames,
+    registry,
   };
 }
 
@@ -617,16 +655,15 @@ function createEventHandlerName(componentId: string, eventName: string): string 
 }
 
 function reserveHandlerName(ctx: TransformContext, baseName: string): string {
-  let candidate = baseName;
-  let suffix = 2;
-
-  while (ctx.reservedHandlerNames.has(candidate)) {
-    candidate = `${baseName}${suffix}`;
-    suffix += 1;
+  const owner = `handler:${baseName}`;
+  if (!ctx.registry.has(baseName)) {
+    ctx.registry.reserveExact(baseName, owner);
+    ctx.reservedHandlerNames.add(baseName);
+    return baseName;
   }
-
-  ctx.reservedHandlerNames.add(candidate);
-  return candidate;
+  const allocated = ctx.registry.allocateInternal(baseName, owner);
+  ctx.reservedHandlerNames.add(allocated);
+  return allocated;
 }
 
 function createHandlerCode(
@@ -1361,14 +1398,14 @@ function buildActionStatement(
       };
     }
     case 'loop': {
-      let safeItemVar = sanitizeLoopVar(action.itemVar, 'item');
+      let safeItemVar = sanitizeLoopVar(action.itemVar, 'item', ctx);
       let safeIndexVar: string | undefined;
       if (action.indexVar !== undefined) {
-        safeIndexVar = sanitizeLoopVar(action.indexVar, 'index');
+        safeIndexVar = sanitizeLoopVar(action.indexVar, 'index', ctx);
         if (safeItemVar === safeIndexVar) {
-          safeIndexVar = 'index';
+          safeIndexVar = ctx.registry.allocateInternal('index', `loop:index`);
           if (safeItemVar === safeIndexVar) {
-            safeItemVar = 'item';
+            safeItemVar = ctx.registry.allocateInternal('item', `loop:item`);
           }
         }
       }

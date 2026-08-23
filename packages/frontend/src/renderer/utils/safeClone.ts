@@ -123,7 +123,7 @@ export function cloneSanitizedSafe(
     return arr;
   }
   if (!isPlainObject(value)) return skipSymbol;
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = Object.create(null);
   seen.set(value as object, out);
   for (const key of Object.keys(value as Record<string, unknown>)) {
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
@@ -175,7 +175,7 @@ export function fallbackCloneSafe<T>(value: T, seen = new WeakMap<object, unknow
     return arr as unknown as T;
   }
   if (!isPlainObject(value)) {
-    const out: Record<string, unknown> = {};
+    const out: Record<string, unknown> = Object.create(null);
     seen.set(value as object, out);
     for (const k of Object.keys(value as Record<string, unknown>)) {
       if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
@@ -187,7 +187,7 @@ export function fallbackCloneSafe<T>(value: T, seen = new WeakMap<object, unknow
     }
     return out as unknown as T;
   }
-  const out: Record<string, unknown> = {};
+  const out: Record<string, unknown> = Object.create(null);
   seen.set(value as object, out);
   for (const k of Object.keys(value as Record<string, unknown>)) {
     if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;

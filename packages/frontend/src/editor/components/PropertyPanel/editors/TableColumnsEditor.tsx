@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import React, { useCallback, useMemo, useEffect, useRef } from 'react';
 import styles from '../PropertyPanel.module.scss';
 import { JsonEditor } from './JsonEditor';
 import {
@@ -89,15 +89,15 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     () => sanitizeTableColumnsValue(defaultTemplate, [DEFAULT_TABLE_COLUMN]),
     [defaultTemplate],
   );
-  // __stableId 本地 Map 映射：仅内部用于 React key 与 draft，不随 onChange 外泄
+  // __stableId 本地 Map 映射：仅内部用于 React key，不随 onChange 外泄
   // 5 步调和: legacy id -> unique key -> kind+dataIndex -> position -> UUID
   const stableIdByKeyRef = useRef<Map<string, string>>(new Map());
   const stableIdByKindDataRef = useRef<Map<string, string>>(new Map());
   const stableIdByPositionRef = useRef<Map<number, string>>(new Map());
   const stableButtonIdMapRef = useRef<Map<string, string>>(new Map());
   const prevSourceIdentityRef = useRef<string | undefined>(sourceIdentity);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  // P1-10 跨组件隔离：sourceIdentity 变化时清空所有内部映射与 draft，避免串台
+  // P1-10 跨组件隔离：sourceIdentity 变化时清空所有内部映射，避免串台
+  // Scheme A: 不再使用 drafts，改为立即发布（依赖 history mergeWindow:500 合并），避免切换组件时丢失未 blur 内容
   useEffect(() => {
     if (prevSourceIdentityRef.current !== sourceIdentity) {
       prevSourceIdentityRef.current = sourceIdentity;
@@ -105,7 +105,6 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
       stableIdByKindDataRef.current.clear();
       stableIdByPositionRef.current.clear();
       stableButtonIdMapRef.current.clear();
-      setDrafts({});
     }
   }, [sourceIdentity]);
   const columns = useMemo(() => {
@@ -269,88 +268,6 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     return nextColumns;
   }, [value, template]);
 
-  // 清理已删除列/按钮的 draft - 仅依赖 columns，避免 keystroke 全量对比
-  useEffect(() => {
-    const liveKeys = new Set<string>();
-    for (const col of columns) {
-      const sid = (col as TableColumnItem & { __stableId?: string }).__stableId;
-      if (!sid) continue;
-      liveKeys.add(`${sid}__title`);
-      liveKeys.add(`${sid}__key`);
-      liveKeys.add(`${sid}__dataIndex`);
-      liveKeys.add(`${sid}__textTemplate`);
-      liveKeys.add(`${sid}__width`);
-      if ('buttons' in col && Array.isArray((col as { buttons?: unknown[] }).buttons)) {
-        const buttons = (col as { buttons: Array<{ __stableId?: string }> }).buttons;
-        for (const b of buttons) {
-          if (b.__stableId) {
-            liveKeys.add(`${b.__stableId}__label`);
-          }
-        }
-      }
-    }
-    setDrafts((prev) => {
-      let needClean = false;
-      for (const k of Object.keys(prev)) {
-        if (!liveKeys.has(k)) {
-          needClean = true;
-          break;
-        }
-      }
-      if (!needClean) return prev;
-      const next: Record<string, string> = {};
-      for (const [k, v] of Object.entries(prev)) {
-        if (liveKeys.has(k)) next[k] = v;
-      }
-      return next;
-    });
-  }, [columns]);
-
-  const getDraftKey = useCallback(
-    (stableId: string | undefined, field: string, fallbackIndex: number) => {
-      const sid = stableId ?? `idx_${fallbackIndex}`;
-      return `${sid}__${field}`;
-    },
-    [],
-  );
-
-  const getDraftValue = useCallback(
-    (stableId: string | undefined, field: string, fallbackIndex: number, realValue: string) => {
-      const key = getDraftKey(stableId, field, fallbackIndex);
-      return drafts[key] !== undefined ? drafts[key] : realValue;
-    },
-    [drafts, getDraftKey],
-  );
-
-  const setDraftValue = useCallback(
-    (stableId: string | undefined, field: string, fallbackIndex: number, nextValue: string) => {
-      const key = getDraftKey(stableId, field, fallbackIndex);
-      setDrafts((prev) => ({ ...prev, [key]: nextValue }));
-    },
-    [getDraftKey],
-  );
-
-  const commitDraft = useCallback(
-    (
-      stableId: string | undefined,
-      field: string,
-      fallbackIndex: number,
-      handleCommit: (val: string) => void,
-    ) => {
-      const key = getDraftKey(stableId, field, fallbackIndex);
-      if (drafts[key] !== undefined) {
-        const val = drafts[key];
-        setDrafts((prev) => {
-          const next = { ...prev };
-          delete next[key];
-          return next;
-        });
-        handleCommit(val);
-      }
-    },
-    [drafts, getDraftKey],
-  );
-
   const emitColumns = useCallback(
     (nextColumns: TableColumnItem[]) => {
       const sanitized = sanitizeTableColumnsValue(nextColumns, template);
@@ -366,7 +283,7 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     warnDuplicateKeys(columns);
   }, [columns]);
 
-  // 注意：不在组件 unmount 时向外发布 Schema（风险：切页/旧页写入），仅 blur/save flush
+  // 注意：不在组件 unmount 时向外发布 Schema（风险：切页/旧页写入）；字段改为立即发布，依赖 history mergeWindow:500 合并
 
   const updateColumn = useCallback(
     (index: number, updater: (column: TableColumnItem) => TableColumnItem) => {
@@ -657,59 +574,32 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
 
                 <input
                   aria-label={`列${index + 1}标题`}
-                  value={getDraftValue(stableId, 'title', index, column.title)}
-                  onChange={(event) => setDraftValue(stableId, 'title', index, event.target.value)}
-                  onBlur={() =>
-                    commitDraft(stableId, 'title', index, (val) =>
-                      handleFieldChange(index, 'title', val),
-                    )
-                  }
+                  value={column.title}
+                  onChange={(event) => handleFieldChange(index, 'title', event.target.value)}
                   placeholder="标题"
                 />
 
                 {!isTableActionColumn(column) && (
                   <input
                     aria-label={`列${index + 1}字段`}
-                    value={getDraftValue(stableId, 'dataIndex', index, column.dataIndex)}
-                    onChange={(event) =>
-                      setDraftValue(stableId, 'dataIndex', index, event.target.value)
-                    }
-                    onBlur={() =>
-                      commitDraft(stableId, 'dataIndex', index, (val) =>
-                        handleFieldChange(index, 'dataIndex', val),
-                      )
-                    }
+                    value={column.dataIndex}
+                    onChange={(event) => handleFieldChange(index, 'dataIndex', event.target.value)}
                     placeholder="dataIndex"
                   />
                 )}
 
                 <input
                   aria-label={`列${index + 1}键名`}
-                  value={getDraftValue(stableId, 'key', index, column.key)}
-                  onChange={(event) => setDraftValue(stableId, 'key', index, event.target.value)}
-                  onBlur={() =>
-                    commitDraft(stableId, 'key', index, (val) =>
-                      handleFieldChange(index, 'key', val),
-                    )
-                  }
+                  value={column.key}
+                  onChange={(event) => handleFieldChange(index, 'key', event.target.value)}
                   placeholder="key"
                 />
 
                 <input
                   type="number"
                   aria-label={`列${index + 1}宽度`}
-                  value={getDraftValue(
-                    stableId,
-                    'width',
-                    index,
-                    column.width != null ? String(column.width) : '',
-                  )}
-                  onChange={(event) => setDraftValue(stableId, 'width', index, event.target.value)}
-                  onBlur={() =>
-                    commitDraft(stableId, 'width', index, (val) =>
-                      handleFieldChange(index, 'width', val),
-                    )
-                  }
+                  value={column.width != null ? String(column.width) : ''}
+                  onChange={(event) => handleFieldChange(index, 'width', event.target.value)}
                   placeholder="宽度"
                   min={1}
                 />
@@ -746,19 +636,9 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
                     {(column.textMode ?? 'value') === 'template' && (
                       <input
                         aria-label={`列${index + 1}文本模板`}
-                        value={getDraftValue(
-                          stableId,
-                          'textTemplate',
-                          index,
-                          typeof column.textTemplate === 'string' ? column.textTemplate : '',
-                        )}
+                        value={typeof column.textTemplate === 'string' ? column.textTemplate : ''}
                         onChange={(event) =>
-                          setDraftValue(stableId, 'textTemplate', index, event.target.value)
-                        }
-                        onBlur={() =>
-                          commitDraft(stableId, 'textTemplate', index, (val) =>
-                            handleLinkTextTemplateChange(index, val),
-                          )
+                          handleLinkTextTemplateChange(index, event.target.value)
                         }
                         placeholder="{{value}} 或 {{record.name}}"
                       />
@@ -806,27 +686,13 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
                           <div className={styles.complexEditorGrid}>
                             <input
                               aria-label={`列${index + 1}按钮${buttonIndex + 1}文本`}
-                              value={getDraftValue(
-                                btnStableId,
-                                'label',
-                                index * 1000 + buttonIndex,
-                                button.label,
-                              )}
+                              value={button.label}
                               onChange={(event) =>
-                                setDraftValue(
-                                  btnStableId,
+                                handleActionButtonFieldChange(
+                                  index,
+                                  buttonIndex,
                                   'label',
-                                  index * 1000 + buttonIndex,
                                   event.target.value,
-                                )
-                              }
-                              onBlur={() =>
-                                commitDraft(
-                                  btnStableId,
-                                  'label',
-                                  index * 1000 + buttonIndex,
-                                  (val) =>
-                                    handleActionButtonFieldChange(index, buttonIndex, 'label', val),
                                 )
                               }
                               placeholder="按钮文本"
