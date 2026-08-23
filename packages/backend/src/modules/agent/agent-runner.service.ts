@@ -17,8 +17,12 @@ import type {
   FocusContextResult,
   NodeCandidate,
 } from '../schema-context';
-import { buildAncestorChain, buildParentMap } from '../schema-context/utils/parent-map.builder';
+import { buildParentMap } from '../schema-context/utils/parent-map.builder';
 import { buildPatchPresentation } from './agent-preview.utils';
+import {
+  buildClarificationCandidates,
+  buildClarificationSummary,
+} from './agent-clarification.utils';
 import { AgentIntentConfirmationService } from './agent-intent-confirmation.service';
 import {
   AgentIntentNormalizationService,
@@ -51,20 +55,6 @@ import {
 } from './types/agent-edit.types';
 
 const CLARIFICATION_CANDIDATE_LIMIT = 3;
-const DEFAULT_LABEL_PROPS = [
-  'children',
-  'title',
-  'label',
-  'placeholder',
-  'message',
-  'description',
-  'header',
-  'tab',
-  'name',
-  'text',
-] as const;
-const MAX_LABEL_CHARS = 32;
-const MAX_PATH_SEGMENT_CHARS = 18;
 const READ_RETRYABLE_TOOLS = new Set([
   'get_page_schema',
   'get_focus_context',
@@ -483,16 +473,17 @@ export class AgentRunnerService {
       };
     }
 
-    const clarificationCandidates = this.buildClarificationCandidates(
+    const clarificationCandidates = buildClarificationCandidates(
       candidates.slice(0, CLARIFICATION_CANDIDATE_LIMIT),
       initialResult.schema,
+      this.componentMetaRegistry,
     );
 
     return {
       clarificationResponse: {
         mode: 'clarification',
         content: `我找到了多个可能的目标组件：${clarificationCandidates
-          .map((candidate) => this.buildClarificationSummary(candidate))
+          .map((candidate) => buildClarificationSummary(candidate))
           .join('、')}。请选择你要修改的对象。`,
         question: '请选择要继续编辑的目标组件',
         clarificationId: `${traceId}-clarify`,
@@ -1703,147 +1694,5 @@ export class AgentRunnerService {
     }
 
     return Array.from(leftSet).every((value) => rightSet.has(value));
-  }
-
-  private buildClarificationCandidates(
-    candidates: readonly NodeCandidate[],
-    schema: A2UISchema,
-  ): AgentClarificationCandidate[] {
-    const parentMap = buildParentMap(schema.components);
-    return candidates.map((candidate) => {
-      const component = schema.components[candidate.id];
-      const secondaryLabel = this.getTypeLabel(candidate.type);
-      const displayLabel =
-        this.extractComponentLabel(component) ??
-        this.buildFallbackDisplayLabel(candidate, schema, parentMap, secondaryLabel);
-
-      return {
-        id: candidate.id,
-        type: candidate.type,
-        score: candidate.score,
-        reason: candidate.reason,
-        displayLabel,
-        secondaryLabel,
-        pathLabel: component
-          ? this.buildCandidatePathLabel(component.id, schema, parentMap)
-          : undefined,
-      };
-    });
-  }
-
-  private buildClarificationSummary(candidate: AgentClarificationCandidate): string {
-    return candidate.pathLabel
-      ? `${candidate.displayLabel}（${candidate.pathLabel}）`
-      : candidate.displayLabel;
-  }
-
-  private extractComponentLabel(component?: A2UIComponent): string | undefined {
-    if (!component?.props) {
-      return undefined;
-    }
-
-    const labelProps = Array.from(
-      new Set([...this.componentMetaRegistry.getTextProps(component.type), ...DEFAULT_LABEL_PROPS]),
-    );
-
-    for (const propName of labelProps) {
-      const normalized = this.normalizeDisplayText(component.props[propName], MAX_LABEL_CHARS);
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    return undefined;
-  }
-
-  private buildFallbackDisplayLabel(
-    candidate: NodeCandidate,
-    schema: A2UISchema,
-    parentMap: ReadonlyMap<string, string>,
-    secondaryLabel: string,
-  ): string {
-    const parentId = parentMap.get(candidate.id);
-    if (!parentId) {
-      return secondaryLabel;
-    }
-
-    const siblingIds = schema.components[parentId]?.childrenIds ?? [];
-    const sameTypeSiblings = siblingIds.filter(
-      (siblingId) => schema.components[siblingId]?.type === candidate.type,
-    );
-    const siblingIndex = sameTypeSiblings.indexOf(candidate.id);
-    if (sameTypeSiblings.length > 1 && siblingIndex >= 0) {
-      return `${secondaryLabel} #${siblingIndex + 1}`;
-    }
-
-    return secondaryLabel;
-  }
-
-  private buildCandidatePathLabel(
-    componentId: string,
-    schema: A2UISchema,
-    parentMap: ReadonlyMap<string, string>,
-  ): string | undefined {
-    const ancestors = buildAncestorChain(componentId, parentMap, schema.components);
-    if (ancestors.length === 0) {
-      return undefined;
-    }
-
-    const segments = ancestors
-      .map((ancestor) => {
-        const component = schema.components[ancestor.id];
-        return this.buildPathSegmentLabel(component, ancestor.type);
-      })
-      .filter((segment): segment is string => Boolean(segment));
-
-    return segments.length > 0 ? segments.join(' > ') : undefined;
-  }
-
-  private buildPathSegmentLabel(component: A2UIComponent | undefined, type: string): string {
-    const label = this.extractComponentLabel(component);
-    if (label) {
-      return this.normalizeDisplayText(label, MAX_PATH_SEGMENT_CHARS) ?? label;
-    }
-
-    return this.getTypeLabel(type);
-  }
-
-  private getTypeLabel(type: string): string {
-    return this.componentMetaRegistry.getDisplayName(type) ?? type;
-  }
-
-  private normalizeDisplayText(value: unknown, maxLength: number): string | undefined {
-    if (typeof value === 'number') {
-      return String(value);
-    }
-
-    if (Array.isArray(value)) {
-      const normalizedParts = value
-        .map((item) => this.normalizeDisplayText(item, maxLength))
-        .filter((item): item is string => Boolean(item));
-      if (normalizedParts.length === 0) {
-        return undefined;
-      }
-      return this.truncateDisplayText(normalizedParts.join(' / '), maxLength);
-    }
-
-    if (typeof value !== 'string') {
-      return undefined;
-    }
-
-    const normalized = value.replace(/\s+/g, ' ').trim();
-    if (!normalized) {
-      return undefined;
-    }
-
-    return this.truncateDisplayText(normalized, maxLength);
-  }
-
-  private truncateDisplayText(value: string, maxLength: number): string {
-    if (value.length <= maxLength) {
-      return value;
-    }
-
-    return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
   }
 }
