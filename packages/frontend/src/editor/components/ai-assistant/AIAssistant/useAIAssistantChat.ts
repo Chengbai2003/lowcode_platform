@@ -498,6 +498,7 @@ export const useAIAssistantChat = ({
           const editorState = useEditorStore.getState();
           const sourceGeneration = editorState.generation;
           const documentSessionId = editorState.documentSessionId;
+          const schemaRevision = editorState.schemaRevision;
           updateAssistantMessage(messageId, (messageItem) => ({
             ...messageItem,
             content: fullContent,
@@ -519,6 +520,7 @@ export const useAIAssistantChat = ({
               basePageVersion: response.baseVersion ?? pageVersion ?? null,
               sourceGeneration,
               documentSessionId,
+              schemaRevision,
             },
             clarification: undefined,
             intentConfirmation: undefined,
@@ -762,7 +764,10 @@ export const useAIAssistantChat = ({
         updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
       }
-      if (previewBefore.sourceGeneration !== curBefore.generation) {
+      if (
+        previewBefore.sourceGeneration !== curBefore.generation ||
+        previewBefore.schemaRevision !== curBefore.schemaRevision
+      ) {
         message.error('当前页面已切换，该预览已过期，已拦截应用');
         updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
@@ -795,7 +800,8 @@ export const useAIAssistantChat = ({
         if (
           (latestItem.patchPreview.sourcePageId ?? null) !== (cur.currentPageId ?? null) ||
           latestItem.patchPreview.sourceGeneration !== cur.generation ||
-          latestItem.patchPreview.documentSessionId !== cur.documentSessionId
+          latestItem.patchPreview.documentSessionId !== cur.documentSessionId ||
+          latestItem.patchPreview.schemaRevision !== cur.schemaRevision
         ) {
           message.error('当前页面已切换，该预览已过期，已拦截应用');
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
@@ -821,7 +827,8 @@ export const useAIAssistantChat = ({
         if (
           (latestItem.patchPreview.sourcePageId ?? null) !== (cur.currentPageId ?? null) ||
           latestItem.patchPreview.sourceGeneration !== cur.generation ||
-          latestItem.patchPreview.documentSessionId !== cur.documentSessionId
+          latestItem.patchPreview.documentSessionId !== cur.documentSessionId ||
+          latestItem.patchPreview.schemaRevision !== cur.schemaRevision
         ) {
           message.error('当前页面已切换，该预览已过期，已拦截应用');
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
@@ -854,7 +861,8 @@ export const useAIAssistantChat = ({
         if (
           (previewForPayload.sourcePageId ?? null) !== (curPayloadCheck.currentPageId ?? null) ||
           previewForPayload.sourceGeneration !== curPayloadCheck.generation ||
-          previewForPayload.documentSessionId !== curPayloadCheck.documentSessionId
+          previewForPayload.documentSessionId !== curPayloadCheck.documentSessionId ||
+          previewForPayload.schemaRevision !== curPayloadCheck.schemaRevision
         ) {
           message.error('当前页面已切换，该预览已过期，已拦截应用');
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
@@ -878,6 +886,7 @@ export const useAIAssistantChat = ({
           basePageVersion: previewForPayload.basePageVersion ?? null,
           sourceGeneration: previewForPayload.sourceGeneration,
           documentSessionId: previewForPayload.documentSessionId,
+          schemaRevision: previewForPayload.schemaRevision,
         });
 
         if (!nextSchema) {

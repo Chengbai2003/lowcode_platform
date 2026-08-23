@@ -1,3 +1,5 @@
+import { cloneDateSafe, isPlainObject as isPlainObjectSafe } from '../utils/safeClone';
+
 /**
  * 基于代理的依赖追踪，用于响应式更新
  *
@@ -23,20 +25,42 @@ export function isTrackingProxy(value: unknown): boolean {
   return typeof value === 'object' && value !== null && trackingProxySet.has(value as object);
 }
 
-/** 需要忽略的原型污染键集合 */
+/** 需要忽略的原型污染键集合 (仅 get 层阻断，has/ownKeys/getOwnPropertyDescriptor 保持不变以满足 invariants) */
 const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
+const TRACKING_ARRAY_MUTATOR_BLOCK = new Set([
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'sort',
+  'reverse',
+  'fill',
+  'copyWithin',
+]);
+const TRACKING_ARRAY_SAFE_READONLY = new Set([
+  'slice',
+  'concat',
+  'includes',
+  'indexOf',
+  'lastIndexOf',
+  'join',
+  'at',
+  'flat',
+  'map',
+  'filter',
+  'find',
+  'findIndex',
+  'some',
+  'every',
+  'reduce',
+  'reduceRight',
+  'forEach',
+]);
+
 function isPlainObject(value: unknown): boolean {
-  if (value === null || typeof value !== 'object') return false;
-  if (Array.isArray(value)) return false;
-  const proto = Object.getPrototypeOf(value);
-  if (proto === Object.prototype || proto === null) return true;
-  // Handle { __proto__: {} } where proto is a plain object (test case for prototype pollution)
-  if (proto !== null && typeof proto === 'object' && (proto as any).constructor === Object) {
-    const protoProto = Object.getPrototypeOf(proto);
-    if (protoProto === Object.prototype || protoProto === null) return true;
-  }
-  return false;
+  return isPlainObjectSafe(value);
 }
 
 /**
@@ -203,7 +227,7 @@ export function createDeepTrackingProxy(
           return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker, c);
         }
         if (value instanceof Date) {
-          return new Date(value.getTime());
+          return cloneDateSafe(value as Date);
         }
         // Block non-plain objects: Map, Set, RegExp, WeakMap, class instances etc.
         return undefined;
@@ -223,67 +247,38 @@ export function createDeepTrackingProxy(
     },
 
     has(target, property): boolean {
+      if (typeof property === 'string' && PROTOTYPE_KEYS.has(property)) {
+        const desc = Object.getOwnPropertyDescriptor(target, property);
+        if (desc && !desc.configurable) return Reflect.has(target, property);
+        return false;
+      }
       if (typeof property === 'symbol') {
-        return false;
-      }
-      if (PROTOTYPE_KEYS.has(property as string)) {
-        return false;
-      }
-      const desc = Object.getOwnPropertyDescriptor(target, property as string);
-      if (desc) {
-        if (desc.get || desc.set) return false;
-        if (typeof desc.value === 'function') return false;
-      } else {
-        let proto = Object.getPrototypeOf(target);
-        while (proto) {
-          const pd = Object.getOwnPropertyDescriptor(proto, property as string);
-          if (pd) {
-            if (pd.get || pd.set) return false;
-            if (typeof pd.value === 'function') return false;
-            break;
-          }
-          proto = Object.getPrototypeOf(proto);
-        }
+        // Symbol `in` checks are not used for pollution but keep invariant via Reflect
+        return Reflect.has(target, property);
       }
       return Reflect.has(target, property);
     },
 
     ownKeys(target: Record<string, unknown>): ArrayLike<string | symbol> {
-      // Only filter prototype pollution keys, keep symbols and other keys to avoid invariant violation.
-      // Non-configurable filtering is handled at get level.
-      return Reflect.ownKeys(target).filter(
-        (key) => typeof key === 'symbol' || !PROTOTYPE_KEYS.has(key as string),
-      );
+      return Reflect.ownKeys(target).filter((key) => {
+        if (typeof key === 'symbol') return true;
+        if (!PROTOTYPE_KEYS.has(key as string)) return true;
+        const desc = Object.getOwnPropertyDescriptor(target, key as string);
+        // only keep non-configurable own keys to satisfy invariant, otherwise filter
+        return !!(desc && !desc.configurable);
+      });
     },
 
     getOwnPropertyDescriptor(
       target: Record<string, unknown>,
       property: string | symbol,
     ): PropertyDescriptor | undefined {
-      if (typeof property === 'symbol') {
-        return Reflect.getOwnPropertyDescriptor(target, property);
-      }
-      if (PROTOTYPE_KEYS.has(property as string)) {
+      if (typeof property === 'string' && PROTOTYPE_KEYS.has(property)) {
+        const desc = Object.getOwnPropertyDescriptor(target, property);
+        if (desc && !desc.configurable) return desc;
         return undefined;
       }
-      const descriptor = Reflect.getOwnPropertyDescriptor(target, property);
-      if (descriptor) {
-        // invariant-safe: only set writable false, don't flip configurable false to true
-        // For data descriptor, make writable false if possible
-        if ('writable' in descriptor) {
-          // If configurable or writable true, we can set writable false safely
-          // If non-configurable and writable false already, keep as is
-          try {
-            descriptor.writable = false;
-          } catch {
-            // ignore if cannot set
-          }
-        }
-        // Keep configurable as original; don't force to true if originally false
-        // Ensure enumerable stays as original
-        // For accessor descriptors, keep get/set as is (or optionally hide for configurable, but follow spec to keep)
-      }
-      return descriptor;
+      return Reflect.getOwnPropertyDescriptor(target, property);
     },
   };
 
@@ -352,18 +347,21 @@ function createArrayProxy(
         // For Array.prototype itself, don't block function yet; handle below
       }
 
-      // 处理数字索引
+      // 处理数字索引 — 稀疏 hole 不读取原型，避免 Array.prototype[0] getter 执行
       const numIndex = Number(property);
       if (!Number.isNaN(numIndex) && Number.isInteger(numIndex) && numIndex >= 0) {
         const fullPath = `${basePath}[${numIndex}]`;
         tracker(fullPath);
-
+        // hole: own descriptor missing => return undefined directly, don't read proto
+        if (!desc) {
+          return undefined;
+        }
         let value: unknown;
-        if (desc && 'value' in desc) {
+        if ('value' in desc) {
           value = desc.value;
         } else {
-          value = Reflect.get(target, property, receiver);
-          if (typeof value === 'function') return undefined;
+          // accessor (already blocked above, but keep fail-close)
+          return undefined;
         }
 
         if (value === null || value === undefined) return value;
@@ -376,7 +374,7 @@ function createArrayProxy(
           if (isPlainObject(value)) {
             return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker, c);
           }
-          if (value instanceof Date) return new Date(value.getTime());
+          if (value instanceof Date) return cloneDateSafe(value as Date);
           return undefined;
         }
         return value;
@@ -388,15 +386,22 @@ function createArrayProxy(
         return target.length;
       }
 
-      // 处理数组方法 - 使用 intrinsic 原型方法，避免自身被覆盖的污染
-      if (
-        typeof property === 'string' &&
-        typeof (Array.prototype as any)[property] === 'function'
-      ) {
-        // Check if target has own overridden function - already blocked above via desc check
-        // Only expose if not own blocked
-        const intrinsic = (Array.prototype as any)[property];
-        if (typeof intrinsic === 'function') {
+      // 处理数组方法 - 仅暴露只读方法，mutator 直接阻断
+      if (typeof property === 'string') {
+        if (TRACKING_ARRAY_MUTATOR_BLOCK.has(property)) {
+          return undefined;
+        }
+        const protoDesc = Object.getOwnPropertyDescriptor(Array.prototype, property as string);
+        if (
+          protoDesc &&
+          !protoDesc.get &&
+          !protoDesc.set &&
+          typeof protoDesc.value === 'function'
+        ) {
+          if (!TRACKING_ARRAY_SAFE_READONLY.has(property)) {
+            return undefined;
+          }
+          const intrinsic = protoDesc.value as (...args: unknown[]) => unknown;
           return (...args: unknown[]) => {
             tracker(`${basePath}.${property}()`);
             return intrinsic.apply(target, args);
@@ -426,7 +431,7 @@ function createArrayProxy(
         if (isPlainObject(value)) {
           return createDeepTrackingProxy(value as Record<string, unknown>, fullPath, tracker, c);
         }
-        if (value instanceof Date) return new Date(value.getTime());
+        if (value instanceof Date) return cloneDateSafe(value as Date);
         return undefined;
       }
 
@@ -442,37 +447,34 @@ function createArrayProxy(
     },
 
     has(target, property): boolean {
-      if (typeof property === 'symbol') return false;
-      if (PROTOTYPE_KEYS.has(property as string)) return false;
-      const desc = Object.getOwnPropertyDescriptor(target, property as string);
-      if (desc) {
-        if (desc.get || desc.set) return false;
-        if (typeof desc.value === 'function') return false;
+      if (typeof property === 'string' && PROTOTYPE_KEYS.has(property)) {
+        const desc = Object.getOwnPropertyDescriptor(target, property as string);
+        if (desc && !desc.configurable) return Reflect.has(target, property);
+        return false;
       }
+      if (typeof property === 'symbol') return Reflect.has(target, property);
       return Reflect.has(target, property);
     },
 
     ownKeys(target: unknown[]): ArrayLike<string | symbol> {
-      return Reflect.ownKeys(target).filter(
-        (key) => typeof key === 'symbol' || !PROTOTYPE_KEYS.has(key as string),
-      );
+      return Reflect.ownKeys(target).filter((key) => {
+        if (typeof key === 'symbol') return true;
+        if (!PROTOTYPE_KEYS.has(key as string)) return true;
+        const d = Object.getOwnPropertyDescriptor(target, key as string);
+        return !!(d && !d.configurable);
+      });
     },
 
     getOwnPropertyDescriptor(
       target: unknown[],
       property: string | symbol,
     ): PropertyDescriptor | undefined {
-      if (typeof property === 'symbol') {
-        return Reflect.getOwnPropertyDescriptor(target, property);
+      if (typeof property === 'string' && PROTOTYPE_KEYS.has(property)) {
+        const d = Object.getOwnPropertyDescriptor(target, property as string);
+        if (d && !d.configurable) return d;
+        return undefined;
       }
-      if (PROTOTYPE_KEYS.has(property as string)) return undefined;
-      const desc = Reflect.getOwnPropertyDescriptor(target, property);
-      if (desc && 'writable' in desc) {
-        try {
-          desc.writable = false;
-        } catch {}
-      }
-      return desc;
+      return Reflect.getOwnPropertyDescriptor(target, property);
     },
   };
 
@@ -491,11 +493,10 @@ function createArrayProxy(
 }
 
 /**
- * 清除代理缓存（用于测试或数据变更时）
+ * @deprecated clearProxyCache 为兼容旧测试保留，TrackingScope 每次 start() 已重建 WeakMap，无需全局清理
  */
 export function clearProxyCache(): void {
-  // WeakMap 没有 clear 方法，但我们可以创建一个新的
-  // 这主要用于测试目的
+  // no-op: per-scope WeakMap 已在 TrackingScope.start() 重建
 }
 
 /**

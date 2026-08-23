@@ -245,6 +245,7 @@ export interface AgentPatchApplyPayload {
   basePageVersion: number | null;
   sourceGeneration: number;
   documentSessionId: string;
+  schemaRevision: number;
 }
 
 export type AgentPatchApplyHandler = (

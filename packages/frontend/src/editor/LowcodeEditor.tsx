@@ -75,14 +75,18 @@ function LowcodeEditorInner({
     schemaVersionRef.current = schema.version;
   }, [schema.version]);
 
-  // P0-5 TOCTOU atomic: mounted guard for unmount race
+  // P0-5 TOCTOU atomic: mounted guard for unmount race + schema ref to avoid closure stale
   const mountedRef = useRef(true);
+  const schemaRef = useRef(schema);
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
   }, []);
+  useEffect(() => {
+    schemaRef.current = schema;
+  }, [schema]);
 
   const syncSchemaVersion = useCallback(
     (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema => {
@@ -224,6 +228,7 @@ function LowcodeEditorInner({
     (newSchema: A2UISchema) => {
       const normalizedSchema = syncSchemaVersion(newSchema);
       setSchema(normalizedSchema);
+      useEditorStore.getState().bumpSchemaRevision();
       onChange?.(normalizedSchema);
     },
     [onChange, syncSchemaVersion],
@@ -246,6 +251,7 @@ function LowcodeEditorInner({
   // 处理 Schema 变化（记录历史）
   const handleSchemaChange = useCallback(
     (newSchema: A2UISchema) => {
+      useEditorStore.getState().bumpSchemaRevision();
       updateSchema(syncSchemaVersion(newSchema), '更新 Schema');
     },
     [syncSchemaVersion, updateSchema],
@@ -253,6 +259,7 @@ function LowcodeEditorInner({
 
   const handleSchemaCommit = useCallback(
     (newSchema: A2UISchema) => {
+      useEditorStore.getState().bumpSchemaRevision();
       forceUpdateSchema(syncSchemaVersion(newSchema), '保存 Schema');
     },
     [forceUpdateSchema, syncSchemaVersion],
@@ -457,6 +464,7 @@ function LowcodeEditorInner({
         message.info(`已自动修复 ${result.fixes.length} 处 Schema 问题`);
       }
 
+      useEditorStore.getState().bumpSchemaRevision();
       forceUpdateSchema(syncSchemaVersion(result.data), 'AI 更新 Schema');
       message.success('Schema 已更新！');
       return true;
@@ -480,16 +488,18 @@ function LowcodeEditorInner({
       basePageVersion,
       sourceGeneration,
       documentSessionId,
+      schemaRevision,
     }: AgentPatchApplyPayload): Promise<A2UISchema | null> => {
-      // P0-5 TOCTOU atomic: early fail-close before any pollution
+      // P0-5 TOCTOU atomic + P1-9 schemaRevision: early fail-close before any pollution, use schemaRef to avoid closure stale
       const editorState = useEditorStore.getState();
       if (
         !mountedRef.current ||
         (sourcePageId ?? null) !== (editorState.currentPageId ?? null) ||
         sourceGeneration !== editorState.generation ||
-        documentSessionId !== editorState.documentSessionId
+        documentSessionId !== editorState.documentSessionId ||
+        schemaRevision !== editorState.schemaRevision
       ) {
-        message.error('页面已切换，AI 修改已过期，已拦截');
+        message.error('页面已切换或本地已编辑，AI 修改已过期，已拦截');
         return null;
       }
       if (basePageVersion !== null && basePageVersion !== pageVersionRef.current) {
@@ -497,15 +507,16 @@ function LowcodeEditorInner({
         return null;
       }
       try {
-        const baseSchema = syncSchemaVersion(schema);
+        const baseSchema = syncSchemaVersion(schemaRef.current);
         // P0-5 second atomic guard after syncSchemaVersion, before createPatchCommand (fail-close before pollution)
         const cur2 = useEditorStore.getState();
         if (
           (sourcePageId ?? null) !== (cur2.currentPageId ?? null) ||
           sourceGeneration !== cur2.generation ||
-          documentSessionId !== cur2.documentSessionId
+          documentSessionId !== cur2.documentSessionId ||
+          schemaRevision !== cur2.schemaRevision
         ) {
-          message.error('页面已切换，AI 修改已过期，已拦截');
+          message.error('页面已切换或本地已编辑，AI 修改已过期，已拦截');
           return null;
         }
         if (basePageVersion !== null && basePageVersion !== pageVersionRef.current) {

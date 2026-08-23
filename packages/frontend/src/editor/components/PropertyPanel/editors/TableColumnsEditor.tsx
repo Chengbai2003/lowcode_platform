@@ -23,6 +23,7 @@ interface TableColumnsEditorProps {
   onChange: (value: TableColumnItem[]) => void;
   description?: string;
   defaultTemplate?: unknown;
+  sourceIdentity?: string;
 }
 
 const ALIGN_OPTIONS: Array<{ label: string; value: TableColumnAlign }> = [
@@ -82,6 +83,7 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
   onChange,
   description,
   defaultTemplate,
+  sourceIdentity,
 }) => {
   const template = useMemo(
     () => sanitizeTableColumnsValue(defaultTemplate, [DEFAULT_TABLE_COLUMN]),
@@ -93,6 +95,19 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
   const stableIdByKindDataRef = useRef<Map<string, string>>(new Map());
   const stableIdByPositionRef = useRef<Map<number, string>>(new Map());
   const stableButtonIdMapRef = useRef<Map<string, string>>(new Map());
+  const prevSourceIdentityRef = useRef<string | undefined>(sourceIdentity);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  // P1-10 跨组件隔离：sourceIdentity 变化时清空所有内部映射与 draft，避免串台
+  useEffect(() => {
+    if (prevSourceIdentityRef.current !== sourceIdentity) {
+      prevSourceIdentityRef.current = sourceIdentity;
+      stableIdByKeyRef.current.clear();
+      stableIdByKindDataRef.current.clear();
+      stableIdByPositionRef.current.clear();
+      stableButtonIdMapRef.current.clear();
+      setDrafts({});
+    }
+  }, [sourceIdentity]);
   const columns = useMemo(() => {
     const sanitized = sanitizeTableColumnsValue(value, template);
     const rawArr = Array.isArray(value) ? (value as unknown[]) : [];
@@ -111,6 +126,15 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
       }
     }
 
+    const seenSids = new Set<string>();
+    const genNewSid = (): string => {
+      try {
+        const maybe =
+          typeof crypto !== 'undefined' && (crypto as { randomUUID?: () => string }).randomUUID;
+        if (maybe) return `col_${maybe.call(crypto)}`;
+      } catch {}
+      return `col_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    };
     const nextColumns = sanitized.map((col, idx) => {
       let sid = (col as unknown as { __stableId?: string }).__stableId;
       const rawItem = rawArr[idx] as Record<string, unknown> | undefined;
@@ -165,6 +189,12 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
         }
         // 5. UUID 已由 sanitize 生成，无需额外处理
       }
+
+      // 去重 legacy 重复 __stableId：若本轮已见则重生成
+      if (sid && seenSids.has(sid)) {
+        sid = genNewSid();
+      }
+      if (sid) seenSids.add(sid);
 
       // 缓存映射供下次调和
       if (sid) {
@@ -239,10 +269,6 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
     return nextColumns;
   }, [value, template]);
 
-  // Draft 态：输入过程中的原始字符串，允许空字符串等中间态，blur 时再提交 sanitized 值（P0-9）
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const prevStableIdsRef = useRef<Set<string>>(new Set());
-
   // 清理已删除列/按钮的 draft - 仅依赖 columns，避免 keystroke 全量对比
   useEffect(() => {
     const liveKeys = new Set<string>();
@@ -278,7 +304,6 @@ export const TableColumnsEditor: React.FC<TableColumnsEditorProps> = ({
       }
       return next;
     });
-    prevStableIdsRef.current = liveKeys;
   }, [columns]);
 
   const getDraftKey = useCallback(

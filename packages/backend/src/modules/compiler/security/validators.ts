@@ -126,7 +126,7 @@ const BUILTIN_MEMBER_ROOTS = new Set<string>(['Math', 'JSON', 'Date']);
 
 function isAllowedASTNode(
   node: any,
-  ctx?: { ctxFields?: Set<string>; reserved?: Set<string> },
+  ctx?: { ctxFields?: Set<string>; reserved?: Set<string>; localScope?: Set<string> },
 ): boolean {
   if (!node || typeof node !== 'object' || !node.type) return true;
   if (!ALLOWED_AST_TYPES.has(node.type)) return false;
@@ -150,9 +150,10 @@ function isAllowedASTNode(
               : '';
       if (propName && BLOCKED_CALLEE_NAMES.has(propName)) return false;
       // Validate object: allow builtin member roots directly without ctxFields, otherwise require ctxFields
+      const reservedSet = ctx?.reserved ?? RESERVED_GENERATED_IDENTIFIERS;
       let objectValid: boolean;
       if (obj && obj.type === 'Identifier' && BUILTIN_MEMBER_ROOTS.has(obj.name)) {
-        if (RESERVED_GENERATED_IDENTIFIERS.has(obj.name) || BLOCKED_CALLEE_NAMES.has(obj.name)) {
+        if (reservedSet.has(obj.name) || BLOCKED_CALLEE_NAMES.has(obj.name)) {
           objectValid = false;
         } else {
           objectValid = true;
@@ -219,10 +220,12 @@ function isAllowedASTNode(
       const name: string = node.name;
       if (!name || typeof name !== 'string') return false;
       if (BLOCKED_CALLEE_NAMES.has(name)) return false;
-      if (RESERVED_GENERATED_IDENTIFIERS.has(name)) return false;
+      const reservedSet = ctx?.reserved ?? RESERVED_GENERATED_IDENTIFIERS;
+      if (reservedSet.has(name)) return false;
       if (BUILTIN_DIRECT_CALLEES.has(name)) return false;
       if (BUILTIN_MEMBER_ROOTS.has(name)) return false;
       if (ctx?.ctxFields?.has(name)) return true;
+      if (ctx?.localScope?.has(name)) return true;
       return false;
     }
     default:
@@ -230,7 +233,11 @@ function isAllowedASTNode(
   }
 }
 
-export function isSafeInlineExpression(code: string, ctxFields?: Set<string>): boolean {
+export function isSafeInlineExpression(
+  code: string,
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): boolean {
   if (!code || typeof code !== 'string') return false;
   const trimmed = code.trim();
   if (!trimmed) return false;
@@ -268,6 +275,7 @@ export function isSafeInlineExpression(code: string, ctxFields?: Set<string>): b
     const ctx = {
       ctxFields: ctxFields ?? new Set<string>(),
       reserved: RESERVED_GENERATED_IDENTIFIERS,
+      localScope: localScope ?? new Set<string>(),
     };
     if (!isAllowedASTNode(ast, ctx)) return false;
   } catch {

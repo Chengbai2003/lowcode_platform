@@ -1,6 +1,22 @@
 import jsep from 'jsep';
 import jsepNew from '@jsep-plugin/new';
 import { pauseTracking, resumeTracking, isTrackingProxy } from '../../reactive/tracking';
+import {
+  cloneSanitizedSafe,
+  fallbackCloneSafe,
+  isPlainObject as isPlainObjectSafe,
+} from '../../utils/safeClone';
+
+function getIntrinsicSafe(obj: object, key: string): unknown {
+  try {
+    const desc = Object.getOwnPropertyDescriptor(obj, key);
+    if (!desc) return undefined;
+    if (desc.get || desc.set) return undefined;
+    return desc.value;
+  } catch {
+    return undefined;
+  }
+}
 
 jsep.plugins.register(jsepNew);
 // jsep 默认不将 typeof 视作一元运算符，需要手动注册
@@ -24,65 +40,10 @@ export const SAFE_GLOBALS: Record<string, any> = {
   false: false,
 };
 
-// P0-3: internal pure utils (descriptor-safe clone)
+// P0-3: internal pure utils (descriptor-safe clone via shared safeClone)
 const PURE_UTILS_KEYS_INTERNAL = ['formatDate', 'uuid', 'clone'] as const;
-function isPlainObjectPureInternal(o: unknown): boolean {
-  if (o === null || typeof o !== 'object') return false;
-  const proto = Object.getPrototypeOf(o);
-  return proto === Object.prototype || proto === null;
-}
 function fallbackClonePureInternal<T>(value: T, seen = new WeakMap<object, unknown>()): T {
-  if (value === null) return value;
-  if (typeof value !== 'object') {
-    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
-      return undefined as unknown as T;
-    return value;
-  }
-  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
-  if (seen.has(value as object)) return seen.get(value as object) as T;
-  if (Array.isArray(value)) {
-    const arr: unknown[] = [];
-    seen.set(value as object, arr);
-    for (let i = 0; i < (value as unknown[]).length; i++) {
-      const desc = Object.getOwnPropertyDescriptor(value, String(i));
-      if (desc && (desc.get || desc.set)) {
-        arr[i] = undefined;
-        continue;
-      }
-      const raw = (value as unknown[])[i];
-      if (typeof raw === 'function' || typeof raw === 'symbol') {
-        arr[i] = undefined;
-        continue;
-      }
-      const cloned = fallbackClonePureInternal(raw as T, seen);
-      arr[i] = cloned;
-    }
-    return arr as unknown as T;
-  }
-  if (!isPlainObjectPureInternal(value)) {
-    const out: Record<string, unknown> = {};
-    seen.set(value as object, out);
-    for (const k of Object.keys(value as Record<string, unknown>)) {
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-      const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
-      if (!desc || desc.get || desc.set) continue;
-      const raw = desc.value;
-      if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-      out[k] = fallbackClonePureInternal(raw, seen);
-    }
-    return out as unknown as T;
-  }
-  const out: Record<string, unknown> = {};
-  seen.set(value as object, out);
-  for (const k of Object.keys(value as Record<string, unknown>)) {
-    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
-    if (!desc || desc.get || desc.set) continue;
-    const raw = desc.value;
-    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-    out[k] = fallbackClonePureInternal(raw, seen);
-  }
-  return out as unknown as T;
+  return fallbackCloneSafe(value, seen);
 }
 const pureFormatDateInternal = (date: Date | string, _format = 'YYYY-MM-DD'): string =>
   String(date);
@@ -206,60 +167,13 @@ const ARRAY_CALLBACK_BLOCK = new Set([
 ]);
 const STRING_BLOCK = new Set(['match', 'search', 'matchAll', 'repeat', 'padStart', 'padEnd']);
 
-// ——— P0-2: 输入净化 ———
-// 只保留 plain object / array / primitive / Date 深拷贝，跳过 getter/setter、函数、类实例
+// ——— P0-2: 输入净化（via shared safeClone, descriptor-safe） ———
 const SANITIZE_SKIP = Symbol('sanitize-skip');
 function isPlainObject(o: unknown): boolean {
-  if (o === null || typeof o !== 'object') return false;
-  const proto = Object.getPrototypeOf(o);
-  return proto === Object.prototype || proto === null;
+  return isPlainObjectSafe(o);
 }
 function cloneSanitized(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
-  if (value === null) return null;
-  if (typeof value !== 'object') {
-    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
-      return SANITIZE_SKIP;
-    return value;
-  }
-  // 保留追踪代理以维持依赖收集；safe tracking membrane 已在 tracking.ts 阻断 getter/Symbol/function，
-  // 此处直接返回代理以保留依赖追踪能力，且不克隆成普通对象避免丢失追踪（P0-3）
-  if (isTrackingProxy(value)) return value;
-  if (value instanceof Date) return new Date(value.getTime());
-  if (seen.has(value as object)) return seen.get(value as object);
-  if (Array.isArray(value)) {
-    const arr: unknown[] = [];
-    seen.set(value as object, arr);
-    for (let i = 0; i < (value as unknown[]).length; i++) {
-      const desc = Object.getOwnPropertyDescriptor(value, String(i));
-      if (desc && (desc.get || desc.set)) {
-        arr[i] = undefined;
-        continue;
-      }
-      const raw = (value as unknown[])[i];
-      if (typeof raw === 'function' || typeof raw === 'symbol') {
-        arr[i] = undefined;
-        continue;
-      }
-      const cloned = cloneSanitized(raw, seen);
-      arr[i] = cloned === SANITIZE_SKIP ? undefined : cloned;
-    }
-    return arr;
-  }
-  if (!isPlainObject(value)) return SANITIZE_SKIP;
-  const out: Record<string, unknown> = {};
-  seen.set(value as object, out);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, key);
-    if (!desc) continue;
-    if (desc.get || desc.set) continue;
-    const raw = desc.value;
-    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-    const cloned = cloneSanitized(raw, seen);
-    if (cloned === SANITIZE_SKIP) continue;
-    out[key] = cloned;
-  }
-  return out;
+  return cloneSanitizedSafe(value, seen, SANITIZE_SKIP, { isTrackingProxy });
 }
 function sanitizeContext(context: Record<string, any> | undefined): Record<string, any> {
   if (!context || typeof context !== 'object') return {};
@@ -507,13 +421,13 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         const t = targetObj;
         if (typeof t === 'string' || t instanceof String) {
           if (!STRING_SAFE.has(funcName)) return undefined;
-          func = (String.prototype as unknown as Record<string, unknown>)[funcName];
+          func = getIntrinsicSafe(String.prototype, funcName);
         } else if (Array.isArray(t)) {
           if (!ARRAY_SAFE.has(funcName)) return undefined;
-          func = (Array.prototype as unknown as Record<string, unknown>)[funcName];
+          func = getIntrinsicSafe(Array.prototype, funcName);
         } else if (typeof t === 'number' || t instanceof Number) {
           if (!NUMBER_SAFE.has(funcName)) return undefined;
-          func = (Number.prototype as unknown as Record<string, unknown>)[funcName];
+          func = getIntrinsicSafe(Number.prototype, funcName);
         } else if (t instanceof Date) {
           // Date 实例仅允许白名单子集（valueOf/toString/toISOString/getTime 等），此处最小化：toString/valueOf/toISOString/getTime
           const DATE_SAFE = new Set([
@@ -526,13 +440,13 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
             'getDate',
           ]);
           if (!DATE_SAFE.has(funcName)) return undefined;
-          func = (Date.prototype as unknown as Record<string, unknown>)[funcName];
+          func = getIntrinsicSafe(Date.prototype, funcName);
         } else if (t === Math) {
           if (!MATH_SAFE.has(funcName)) return undefined;
-          func = (Math as unknown as Record<string, unknown>)[funcName];
+          func = getIntrinsicSafe(Math as unknown as object, funcName);
         } else if (t === JSON) {
           if (!JSON_SAFE.has(funcName)) return undefined;
-          func = (JSON as unknown as Record<string, unknown>)[funcName];
+          func = getIntrinsicSafe(JSON as unknown as object, funcName);
         } else if (
           t === (context as any).utils &&
           (PURE_UTILS_KEYS_INTERNAL as readonly string[]).includes(funcName)
@@ -584,26 +498,24 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
     }
 
     case 'NewExpression': {
-      // 类似 CallExpression，但用于初始化对象
-      const newNode = node as jsep.CallExpression; // JSEP 将 NewExpression 的结构定义得和 CallExpression 类似
-
+      // 仅允许 Date 作为构造器
+      const newNode = node as jsep.CallExpression;
       let className: string;
       let Cls: any;
-
       if (newNode.callee.type === 'Identifier') {
         className = (newNode.callee as jsep.Identifier).name;
-        // 只能实例化白名单中允许的类（比如 Date）
-        if (className in SAFE_GLOBALS) {
-          Cls = SAFE_GLOBALS[className];
+        if (className === 'Date') {
+          Cls = Date;
+        } else {
+          return undefined;
         }
+      } else {
+        return undefined;
       }
-
       if (typeof Cls !== 'function') {
-        return undefined; // 不是一个安全或允许的构造函数
+        return undefined;
       }
-
       const args = newNode.arguments.map((arg) => evaluateNode(arg, context));
-
       try {
         return new Cls(...args);
       } catch (err) {
@@ -618,12 +530,10 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'Compound': {
       const compoundNode = node as jsep.Compound;
-      if (!compoundNode.body || compoundNode.body.length === 0) {
+      if (!compoundNode.body || compoundNode.body.length !== 1) {
         return undefined;
       }
-
-      // 数据绑定表达式引擎应当仅为“单表达式（Single Expression）”计算。
-      // 拒绝多语句执行防止恶意的副作用串联注入 (如 {{ a=1, b=2, leak(b) }})
+      // 仅允许单表达式，拒绝多语句逗号串联
       return evaluateNode(compoundNode.body[0], context);
     }
 
@@ -679,8 +589,6 @@ export function safeEvaluate(expression: string, context: Record<string, any> = 
   }
   let sanitized: Record<string, any>;
   try {
-    // debug
-    // console.log('[safeEvaluate] before pause', expression, 'paused', (globalThis as any).__pauseCheck?.());
     pauseTracking();
     sanitized = sanitizeContext(context);
   } finally {
@@ -690,7 +598,6 @@ export function safeEvaluate(expression: string, context: Record<string, any> = 
       // ignore
     }
   }
-  // console.log('[safeEvaluate] after resume paused', (globalThis as any).__pauseCheck?.());
   try {
     const ast = getCachedAST(expression);
     return evaluateNode(ast, sanitized);

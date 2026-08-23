@@ -21,6 +21,7 @@ import {
   isStaticStringValue,
   isValidExpressionPath,
   normalizeValue,
+  RESERVED_GENERATED_IDENTIFIERS,
   sanitizeUrl,
 } from './security/validators';
 
@@ -172,6 +173,75 @@ interface TransformContext {
   fieldBySourceKey: Map<string, FieldInfo>;
   fieldByName: Map<string, FieldInfo>;
   reservedHandlerNames: Set<string>;
+}
+
+// Centralized generated identifier safety (P0-1)
+function isSafeGeneratedIdentifier(name: string): boolean {
+  return (
+    isValidIdentifier(name) && !RESERVED_GENERATED_IDENTIFIERS.has(name) && !name.startsWith('__')
+  );
+}
+
+function isSafeComponentType(name: string): boolean {
+  return isSafeGeneratedIdentifier(name) && /^[A-Z][A-Za-z0-9]*$/.test(name);
+}
+
+const BLOCKED_PROP_NAMES = new Set<string>([
+  '__proto__',
+  'prototype',
+  'constructor',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  'toJSON',
+]);
+
+function isSafePropName(name: string): boolean {
+  return isValidIdentifier(name) && !BLOCKED_PROP_NAMES.has(name) && !name.startsWith('__');
+}
+
+function isSafeEventName(name: string): boolean {
+  return isValidIdentifier(name) && /^on[A-Z]/.test(name) && isSafeGeneratedIdentifier(name);
+}
+
+function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): string | undefined {
+  if (!resultTo) return undefined;
+  if (ctx.fieldByName.has(resultTo)) return resultTo;
+  if (resultTo.startsWith('state.')) {
+    const suffix = resultTo.slice(6);
+    if (isSafeGeneratedIdentifier(suffix)) {
+      return resultTo;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function sanitizeStateKey(stateKey: string): string | undefined {
+  return isSafeGeneratedIdentifier(stateKey) ? stateKey : undefined;
+}
+
+const ALLOWED_FEEDBACK_LEVELS = new Set(['info', 'success', 'warning', 'error']);
+const ALLOWED_LOG_LEVELS = new Set(['info', 'success', 'warning', 'error', 'log', 'debug', 'warn']);
+
+function sanitizeFeedbackLevel(level: string | undefined, fallback = 'info'): string {
+  if (level && ALLOWED_FEEDBACK_LEVELS.has(level)) return level;
+  return fallback;
+}
+
+function sanitizeLogLevel(level: string | undefined, fallback = 'log'): string {
+  if (level && ALLOWED_LOG_LEVELS.has(level)) return level;
+  return fallback;
+}
+
+function sanitizeLoopVar(name: string | undefined, fallback: string): string {
+  if (name && isSafeGeneratedIdentifier(name)) return name;
+  return fallback;
+}
+
+function escapeComment(text: string): string {
+  return text.replace(/\*\//g, '* /').replace(/\/\*/g, '/ *');
 }
 
 const LABEL_WRAPPER_MARGIN_BOTTOM = 16;
@@ -361,16 +431,71 @@ function registerField(ctx: TransformContext, field: FieldInfo) {
   if (ctx.fieldBySourceKey.has(field.sourceKey)) {
     return;
   }
+  // P0-1: ensure generated field name is safe and unique
+  let safeName = field.name;
+  if (!isSafeGeneratedIdentifier(safeName)) {
+    const sanitized = toSafeIdentifier(safeName) || 'fieldValue';
+    if (isSafeGeneratedIdentifier(sanitized)) {
+      safeName = sanitized;
+    } else {
+      const withUnderscore = `${safeName}_`;
+      if (isSafeGeneratedIdentifier(withUnderscore)) {
+        safeName = withUnderscore;
+      } else {
+        safeName = 'fieldValue';
+      }
+    }
+  }
+  let candidate = safeName;
+  let counter = 2;
+  while (ctx.fieldByName.has(candidate)) {
+    candidate = `${safeName}_${counter}`;
+    counter += 1;
+  }
+  if (candidate !== field.name) {
+    field = { ...field, name: candidate, setterName: createSetterName(candidate) };
+  } else if (safeName !== field.name) {
+    field = { ...field, name: safeName, setterName: createSetterName(safeName) };
+  }
   ctx.fieldBySourceKey.set(field.sourceKey, field);
   ctx.fieldByName.set(field.name, field);
   ctx.fields.push(field);
 }
 
 function resolveFieldName(sourceKey: string, source: FieldInfo['source']): string {
+  let candidate: string;
   if (source === 'hiddenData') {
-    return isValidIdentifier(sourceKey) ? sourceKey : toSafeIdentifier(sourceKey);
+    candidate = isValidIdentifier(sourceKey) ? sourceKey : toSafeIdentifier(sourceKey);
+  } else {
+    const camel = toCamelCase(sourceKey);
+    if (camel && isValidIdentifier(camel)) {
+      candidate = camel;
+    } else {
+      candidate = toSafeIdentifier(camel || sourceKey) || 'fieldValue';
+    }
   }
-  return toCamelCase(sourceKey);
+  if (!candidate) candidate = 'fieldValue';
+  if (!isValidIdentifier(candidate)) {
+    candidate = toSafeIdentifier(candidate) || 'fieldValue';
+  }
+  if (!isSafeGeneratedIdentifier(candidate)) {
+    const sanitized = toSafeIdentifier(candidate) || 'fieldValue';
+    if (isSafeGeneratedIdentifier(sanitized)) {
+      candidate = sanitized;
+    } else {
+      const fallback = `${candidate}_`;
+      if (isSafeGeneratedIdentifier(fallback)) {
+        candidate = fallback;
+      } else {
+        candidate = `field_${toSafeIdentifier(sourceKey) || 'value'}`;
+        if (!isSafeGeneratedIdentifier(candidate)) candidate = 'fieldValue';
+      }
+    }
+  }
+  if (!isSafeGeneratedIdentifier(candidate)) {
+    candidate = 'fieldValue';
+  }
+  return candidate;
 }
 
 function collectFields(ctx: TransformContext) {
@@ -431,7 +556,7 @@ function collectImports(ctx: TransformContext) {
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
 
   for (const component of ctx.root.flatComponents) {
-    if (!/^[A-Z]/.test(component.componentType)) {
+    if (!isSafeComponentType(component.componentType)) {
       continue;
     }
     const source =
@@ -542,9 +667,10 @@ function registerEventHandler(
   eventName: string,
   actions: ActionNode[],
   ctx: TransformContext,
+  localScope: Set<string> = new Set(),
 ): string {
   return registerHandler(createEventHandlerName(componentId, eventName), ctx, [], (handlerName) =>
-    buildActionBlock(actions, ctx, handlerName),
+    buildActionBlock(actions, ctx, handlerName, localScope),
   ).name;
 }
 
@@ -554,9 +680,10 @@ function registerNestedActionHandler(
   actions: ActionNode[],
   ctx: TransformContext,
   params: string[] = [],
+  localScope: Set<string> = new Set(),
 ): { name: string; async: boolean } {
   return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, (handlerName) =>
-    buildActionBlock(actions, ctx, handlerName),
+    buildActionBlock(actions, ctx, handlerName, localScope),
   );
 }
 
@@ -578,6 +705,7 @@ function getExpressionCode(
   value: ValueNode | undefined,
   fallback = 'undefined',
   ctxFields?: Set<string>,
+  localScope?: Set<string>,
 ): string {
   if (!value) return fallback;
 
@@ -592,7 +720,7 @@ function getExpressionCode(
       const valid =
         value.source === 'legacy'
           ? isValidExpressionPath(code)
-          : isSafeInlineExpression(code, ctxFields);
+          : isSafeInlineExpression(code, ctxFields, localScope);
       return valid ? code : fallback;
     }
     case 'template':
@@ -600,16 +728,16 @@ function getExpressionCode(
         .map((part) =>
           part.kind === 'text'
             ? escapeTemplateText(part.value)
-            : `\${${getExpressionCode(part.value, '""', ctxFields)}}`,
+            : `\${${getExpressionCode(part.value, '""', ctxFields, localScope)}}`,
         )
         .join('')}\``;
     case 'array':
-      return `[${value.items.map((item) => getExpressionCode(item, 'undefined', ctxFields)).join(', ')}]`;
+      return `[${value.items.map((item) => getExpressionCode(item, 'undefined', ctxFields, localScope)).join(', ')}]`;
     case 'object':
       return `{ ${value.properties
         .map(
           (property) =>
-            `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined', ctxFields)}`,
+            `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined', ctxFields, localScope)}`,
         )
         .join(', ')} }`;
     default:
@@ -662,6 +790,7 @@ function createAttribute(
   value: ValueNode,
   fallback = 'undefined',
   ctxFields?: Set<string>,
+  localScope?: Set<string>,
 ): JSXAttributeNode {
   if (value.kind === 'literal' && typeof value.value === 'string') {
     return {
@@ -674,11 +803,15 @@ function createAttribute(
   return {
     name,
     mode: 'expression',
-    value: getExpressionCode(value, fallback, ctxFields),
+    value: getExpressionCode(value, fallback, ctxFields, localScope),
   };
 }
 
-function createValueChild(value: ValueNode, ctxFields?: Set<string>): JSXNode | null {
+function createValueChild(
+  value: ValueNode,
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): JSXNode | null {
   if (value.kind === 'literal') {
     if (value.value === null || value.value === undefined) {
       return null;
@@ -686,12 +819,12 @@ function createValueChild(value: ValueNode, ctxFields?: Set<string>): JSXNode | 
     if (typeof value.value === 'string') {
       return { kind: 'text', value: value.value };
     }
-    return { kind: 'expression', code: getExpressionCode(value, 'null', ctxFields) };
+    return { kind: 'expression', code: getExpressionCode(value, 'null', ctxFields, localScope) };
   }
 
   return {
     kind: 'expression',
-    code: getExpressionCode(value, '""', ctxFields),
+    code: getExpressionCode(value, '""', ctxFields, localScope),
   };
 }
 
@@ -770,6 +903,21 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     };
   }
 
+  if (!isSafeComponentType(node.componentType)) {
+    return {
+      kind: 'element',
+      tag: 'div',
+      attributes: [
+        {
+          name: 'style',
+          mode: 'expression',
+          value: '{ color: "red" }',
+        },
+      ],
+      children: [{ kind: 'text', value: 'Invalid component' }],
+    };
+  }
+
   const ctxFields = new Set(ctx.fieldByName.keys());
   const fieldProp = findProp(node, 'field');
   const labelProp = findProp(node, 'label');
@@ -792,6 +940,9 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     if (prop.name === 'label' && node.componentType === 'Input') {
       continue;
     }
+    if (!isSafePropName(prop.name)) {
+      continue;
+    }
 
     attributes.push(createAttribute(prop.name, prop.value, '""', ctxFields));
   }
@@ -808,6 +959,9 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
   }
 
   for (const event of node.events) {
+    if (!isSafeEventName(event.eventName)) {
+      continue;
+    }
     collectActionImports(event.actions, ctx);
     event.handlerName = registerEventHandler(node.id, event.eventName, event.actions, ctx);
     attributes.push({
@@ -933,26 +1087,34 @@ function resolveResultTarget(
   if (!resultTo) {
     return valueCode;
   }
-
-  const fieldInfo = getFieldInfo(ctx, resultTo);
+  const sanitized = sanitizeResultTo(resultTo, ctx);
+  if (!sanitized) {
+    return `/* invalid resultTo discarded */`;
+  }
+  const fieldInfo = getFieldInfo(ctx, sanitized);
   if (fieldInfo) {
     return `${fieldInfo.setterName}(${valueCode});`;
   }
-
-  if (resultTo.startsWith('state.')) {
-    const stateKey = resultTo.slice(6);
-    return `setState({ ${toObjectKeyCode(stateKey)}: ${valueCode} });`;
+  if (sanitized.startsWith('state.')) {
+    const stateKey = sanitized.slice(6);
+    const safeKey = sanitizeStateKey(stateKey);
+    if (!safeKey) {
+      return `/* invalid resultTo discarded */`;
+    }
+    return `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`;
   }
-
-  return `${resultTo} = ${valueCode};`;
+  return `/* invalid resultTo discarded */`;
 }
 
 function buildActionBlock(
   actions: ActionNode[],
   ctx: TransformContext,
   ownerHandlerName: string,
+  localScope: Set<string> = new Set(),
 ): { code: string; async: boolean } {
-  const segments = actions.map((action) => buildActionStatement(action, ctx, ownerHandlerName));
+  const segments = actions.map((action) =>
+    buildActionStatement(action, ctx, ownerHandlerName, localScope),
+  );
   return {
     code: segments
       .map((segment) => segment.code)
@@ -962,10 +1124,14 @@ function buildActionBlock(
   };
 }
 
-function buildNotificationObject(action: ActionNode, ctxFields?: Set<string>): string {
+function buildNotificationObject(
+  action: ActionNode,
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): string {
   const props: string[] = [
-    `message: ${getExpressionCode(action.title ?? { kind: 'literal', value: '通知' }, '"通知"', ctxFields)}`,
-    `description: ${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields)}`,
+    `message: ${getExpressionCode(action.title ?? { kind: 'literal', value: '通知' }, '"通知"', ctxFields, localScope)}`,
+    `description: ${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)}`,
   ];
 
   if (action.placement) {
@@ -982,6 +1148,7 @@ function buildActionStatement(
   action: ActionNode,
   ctx: TransformContext,
   ownerHandlerName: string,
+  localScope: Set<string> = new Set(),
 ): { code: string; async: boolean } {
   const ctxFields = new Set(ctx.fieldByName.keys());
   switch (action.type) {
@@ -990,6 +1157,7 @@ function buildActionStatement(
         action.value ?? { kind: 'literal', value: '' },
         'undefined',
         ctxFields,
+        localScope,
       );
       if (action.field) {
         const fieldInfo = getFieldInfo(ctx, action.field);
@@ -1005,13 +1173,17 @@ function buildActionStatement(
 
         if (action.field.startsWith('state.')) {
           const stateKey = action.field.slice(6);
-          return {
-            code: `setState({ ${toObjectKeyCode(stateKey)}: ${valueCode} });`,
-            async: false,
-          };
+          const safeKey = sanitizeStateKey(stateKey);
+          if (safeKey) {
+            return {
+              code: `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`,
+              async: false,
+            };
+          }
+          return { code: `/* invalid field discarded */`, async: false };
         }
 
-        return { code: `/* Field ${action.field} not found */`, async: false };
+        return { code: `/* Field not found */`, async: false };
       }
 
       return { code: '/* setValue missing field */', async: false };
@@ -1033,7 +1205,7 @@ function buildActionStatement(
       }
       if (action.body) {
         configParts.push(
-          `body: JSON.stringify(${getExpressionCode(action.body, 'undefined', ctxFields)})`,
+          `body: JSON.stringify(${getExpressionCode(action.body, 'undefined', ctxFields, localScope)})`,
         );
       }
 
@@ -1041,6 +1213,7 @@ function buildActionStatement(
         action.url ?? { kind: 'literal', value: '/' },
         '"/"',
         ctxFields,
+        localScope,
       );
       const paramsCode = action.params
         ? `const requestParams = ${getExpressionCode(
@@ -1050,9 +1223,12 @@ function buildActionStatement(
             },
             '{}',
             ctxFields,
+            localScope,
           )};\nconst queryString = new URLSearchParams(Object.entries(requestParams).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst requestUrl = queryString ? (${urlCode}).includes('?') ? ${urlCode} + '&' + queryString : ${urlCode} + '?' + queryString : ${urlCode};`
         : `const requestUrl = ${urlCode};`;
 
+      const successLocals = new Set(localScope);
+      successLocals.add('response');
       const successHandler =
         action.resultTo || (action.onSuccess?.length ?? 0) > 0
           ? registerNestedCodeHandler(
@@ -1061,7 +1237,12 @@ function buildActionStatement(
               ctx,
               ['response'],
               (handlerName) => {
-                const onSuccess = buildActionBlock(action.onSuccess ?? [], ctx, handlerName);
+                const onSuccess = buildActionBlock(
+                  action.onSuccess ?? [],
+                  ctx,
+                  handlerName,
+                  successLocals,
+                );
                 const successLines: string[] = [];
                 if (action.resultTo) {
                   successLines.push(resolveResultTarget(action.resultTo, ctx, 'response'));
@@ -1076,13 +1257,15 @@ function buildActionStatement(
               },
             )
           : undefined;
+      const errorLocals = new Set(localScope);
+      errorLocals.add('error');
       const errorHandler = registerNestedCodeHandler(
         ownerHandlerName,
         'OnError',
         ctx,
         ['error'],
         (handlerName) => {
-          const onError = buildActionBlock(action.onError ?? [], ctx, handlerName);
+          const onError = buildActionBlock(action.onError ?? [], ctx, handlerName, errorLocals);
           return {
             code: onError.code || 'console.error(error);',
             async: onError.async,
@@ -1111,15 +1294,15 @@ function buildActionStatement(
       };
     }
     case 'feedback': {
-      const level = action.level || 'info';
+      const level = sanitizeFeedbackLevel(action.level || 'info', 'info');
       if (action.kind === 'notification') {
         return {
-          code: `notification.${level}(${buildNotificationObject(action, ctxFields)});`,
+          code: `notification.${level}(${buildNotificationObject(action, ctxFields, localScope)});`,
           async: false,
         };
       }
       return {
-        code: `message.${level}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields)});`,
+        code: `message.${level}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)});`,
         async: false,
       };
     }
@@ -1129,20 +1312,29 @@ function buildActionStatement(
         action.title ?? { kind: 'literal', value: kind === 'confirm' ? '确认' : '提示' },
         kind === 'confirm' ? '"确认"' : '"提示"',
         ctxFields,
+        localScope,
       );
       const contentCode = getExpressionCode(
         action.content ?? { kind: 'literal', value: '' },
         '""',
         ctxFields,
+        localScope,
       );
       const objectParts = [`title: ${titleCode}`, `content: ${contentCode}`];
 
       if (kind === 'confirm') {
         const onOkHandler = action.onOk?.length
-          ? registerNestedActionHandler(ownerHandlerName, 'OnOk', action.onOk, ctx)
+          ? registerNestedActionHandler(ownerHandlerName, 'OnOk', action.onOk, ctx, [], localScope)
           : undefined;
         const onCancelHandler = action.onCancel?.length
-          ? registerNestedActionHandler(ownerHandlerName, 'OnCancel', action.onCancel, ctx)
+          ? registerNestedActionHandler(
+              ownerHandlerName,
+              'OnCancel',
+              action.onCancel,
+              ctx,
+              [],
+              localScope,
+            )
           : undefined;
 
         if (onOkHandler) {
@@ -1160,25 +1352,44 @@ function buildActionStatement(
       return { code: `Modal.info({ ${objectParts.join(', ')} });`, async: false };
     }
     case 'if': {
-      const thenBlock = buildActionBlock(action.then ?? [], ctx, ownerHandlerName);
-      const elseBlock = buildActionBlock(action.else ?? [], ctx, ownerHandlerName);
+      const thenBlock = buildActionBlock(action.then ?? [], ctx, ownerHandlerName, localScope);
+      const elseBlock = buildActionBlock(action.else ?? [], ctx, ownerHandlerName, localScope);
       const elseCode = elseBlock.code ? ` else {\n${indentBlock(elseBlock.code)}\n}` : '';
       return {
-        code: `if (${getExpressionCode(action.condition ?? { kind: 'literal', value: false }, 'false', ctxFields)}) {\n${indentBlock(thenBlock.code)}\n}${elseCode}`,
+        code: `if (${getExpressionCode(action.condition ?? { kind: 'literal', value: false }, 'false', ctxFields, localScope)}) {\n${indentBlock(thenBlock.code)}\n}${elseCode}`,
         async: thenBlock.async || elseBlock.async,
       };
     }
     case 'loop': {
-      const loopBlock = buildActionBlock(action.actions ?? [], ctx, ownerHandlerName);
-      const itemVar = action.itemVar || 'item';
-      if (action.indexVar) {
+      let safeItemVar = sanitizeLoopVar(action.itemVar, 'item');
+      let safeIndexVar: string | undefined;
+      if (action.indexVar !== undefined) {
+        safeIndexVar = sanitizeLoopVar(action.indexVar, 'index');
+        if (safeItemVar === safeIndexVar) {
+          safeIndexVar = 'index';
+          if (safeItemVar === safeIndexVar) {
+            safeItemVar = 'item';
+          }
+        }
+      }
+      const childScope = new Set(localScope);
+      childScope.add(safeItemVar);
+      if (safeIndexVar) childScope.add(safeIndexVar);
+      const loopBlock = buildActionBlock(action.actions ?? [], ctx, ownerHandlerName, childScope);
+      const overCode = getExpressionCode(
+        action.over ?? { kind: 'array', items: [] },
+        '[]',
+        ctxFields,
+        localScope,
+      );
+      if (safeIndexVar) {
         return {
-          code: `for (const [${action.indexVar}, ${itemVar}] of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]', ctxFields)}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
+          code: `for (const [${safeIndexVar}, ${safeItemVar}] of ${overCode}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
           async: loopBlock.async,
         };
       }
       return {
-        code: `for (const ${itemVar} of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]', ctxFields)}) {\n${indentBlock(loopBlock.code)}\n}`,
+        code: `for (const ${safeItemVar} of ${overCode}) {\n${indentBlock(loopBlock.code)}\n}`,
         async: loopBlock.async,
       };
     }
@@ -1189,18 +1400,18 @@ function buildActionStatement(
       };
     case 'log':
       return {
-        code: `console.${action.level || 'log'}(${getExpressionCode(action.value ?? { kind: 'literal', value: '' }, '""', ctxFields)});`,
+        code: `console.${sanitizeLogLevel(action.level || 'log', 'log')}(${getExpressionCode(action.value ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)});`,
         async: false,
       };
     case 'customScript': {
-      const snippet = (action.code || '').slice(0, 60).replace(/\s+/g, ' ').trim();
+      const snippet = escapeComment((action.code || '').slice(0, 60).replace(/\s+/g, ' ').trim());
       return {
         code: `/* Custom Script omitted${snippet ? `: ${snippet}` : ''} */`,
         async: false,
       };
     }
     default:
-      return { code: `/* Unknown action: ${action.type} */`, async: false };
+      return { code: `/* Unknown action: ${escapeComment(String(action.type))} */`, async: false };
   }
 }
 

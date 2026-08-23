@@ -101,6 +101,7 @@ describe('useAIAssistantChat', () => {
       currentPageId: 'page-1',
       generation: 0,
       documentSessionId: 'test-doc-session',
+      schemaRevision: 0,
     });
   });
 
@@ -244,6 +245,7 @@ describe('useAIAssistantChat', () => {
       basePageVersion: 3,
       sourceGeneration: 0,
       documentSessionId: 'test-doc-session',
+      schemaRevision: 0,
     });
     expect(result.current.messages[result.current.messages.length - 1].applyState).toBe('applied');
 

@@ -6,6 +6,7 @@
 import type { ParsedExpression } from '../../../types';
 import { safeEvaluate, SAFE_GLOBALS } from './safeEvaluator';
 import { getFlag } from '../../featureFlags';
+import { cloneSanitizedSafe, fallbackCloneSafe } from '../../utils/safeClone';
 
 const VALID_ALIAS_REGEX = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 const RESERVED_IDENTIFIERS = new Set([
@@ -60,56 +61,10 @@ const RESERVED_CONTEXT_KEYS = new Set([
   'prototype',
 ]);
 
-// ——— P0-2: 输入净化（同 safeEvaluator 复用逻辑，本地最小实现） ———
+// ——— P0-2: 输入净化（via shared safeClone, descriptor-safe） ———
 const SANITIZE_SKIP_EP = Symbol('sanitize-skip-ep');
-function isPlainObjectEp(o: unknown): boolean {
-  if (o === null || typeof o !== 'object') return false;
-  const proto = Object.getPrototypeOf(o);
-  return proto === Object.prototype || proto === null;
-}
 function cloneSanitizedEp(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
-  if (value === null) return null;
-  if (typeof value !== 'object') {
-    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
-      return SANITIZE_SKIP_EP;
-    return value;
-  }
-  if (value instanceof Date) return new Date(value.getTime());
-  if (seen.has(value as object)) return seen.get(value as object);
-  if (Array.isArray(value)) {
-    const arr: unknown[] = [];
-    seen.set(value as object, arr);
-    for (let i = 0; i < (value as unknown[]).length; i++) {
-      const desc = Object.getOwnPropertyDescriptor(value, String(i));
-      if (desc && (desc.get || desc.set)) {
-        arr[i] = undefined;
-        continue;
-      }
-      const raw = (value as unknown[])[i];
-      if (typeof raw === 'function' || typeof raw === 'symbol') {
-        arr[i] = undefined;
-        continue;
-      }
-      const cloned = cloneSanitizedEp(raw, seen);
-      arr[i] = cloned === SANITIZE_SKIP_EP ? undefined : cloned;
-    }
-    return arr;
-  }
-  if (!isPlainObjectEp(value)) return SANITIZE_SKIP_EP;
-  const out: Record<string, unknown> = {};
-  seen.set(value as object, out);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, key);
-    if (!desc) continue;
-    if (desc.get || desc.set) continue;
-    const raw = desc.value;
-    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-    const cloned = cloneSanitizedEp(raw, seen);
-    if (cloned === SANITIZE_SKIP_EP) continue;
-    out[key] = cloned;
-  }
-  return out;
+  return cloneSanitizedSafe(value, seen, SANITIZE_SKIP_EP);
 }
 function sanitizeContextEp(context: Record<string, any> | undefined): Record<string, any> {
   if (!context || typeof context !== 'object') return {};
@@ -140,64 +95,9 @@ const ALLOWED_EXTENSION_KEYS = [
 ] as const;
 const PURE_UTILS_KEYS = ['formatDate', 'uuid', 'clone'] as const;
 
-// ——— P0-3: 内部纯净 utils（不接受 context 覆盖），clone 为 descriptor-safe ———
-function isPlainObjectPure(o: unknown): boolean {
-  if (o === null || typeof o !== 'object') return false;
-  const proto = Object.getPrototypeOf(o);
-  return proto === Object.prototype || proto === null;
-}
+// ——— P0-3: 内部纯净 utils（via shared safeClone） ———
 function fallbackClonePure<T>(value: T, seen = new WeakMap<object, unknown>()): T {
-  if (value === null) return value;
-  if (typeof value !== 'object') {
-    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
-      return undefined as unknown as T;
-    return value;
-  }
-  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
-  if (seen.has(value as object)) return seen.get(value as object) as T;
-  if (Array.isArray(value)) {
-    const arr: unknown[] = [];
-    seen.set(value as object, arr);
-    for (let i = 0; i < (value as unknown[]).length; i++) {
-      const desc = Object.getOwnPropertyDescriptor(value, String(i));
-      if (desc && (desc.get || desc.set)) {
-        arr[i] = undefined;
-        continue;
-      }
-      const raw = (value as unknown[])[i];
-      if (typeof raw === 'function' || typeof raw === 'symbol') {
-        arr[i] = undefined;
-        continue;
-      }
-      const cloned = fallbackClonePure(raw as T, seen);
-      arr[i] = cloned;
-    }
-    return arr as unknown as T;
-  }
-  if (!isPlainObjectPure(value)) {
-    const out: Record<string, unknown> = {};
-    seen.set(value as object, out);
-    for (const k of Object.keys(value as Record<string, unknown>)) {
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-      const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
-      if (!desc || desc.get || desc.set) continue;
-      const raw = desc.value;
-      if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-      out[k] = fallbackClonePure(raw, seen);
-    }
-    return out as unknown as T;
-  }
-  const out: Record<string, unknown> = {};
-  seen.set(value as object, out);
-  for (const k of Object.keys(value as Record<string, unknown>)) {
-    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
-    if (!desc || desc.get || desc.set) continue;
-    const raw = desc.value;
-    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-    out[k] = fallbackClonePure(raw, seen);
-  }
-  return out as unknown as T;
+  return fallbackCloneSafe(value, seen);
 }
 const pureFormatDate = (date: Date | string, _format = 'YYYY-MM-DD'): string => {
   return String(date);

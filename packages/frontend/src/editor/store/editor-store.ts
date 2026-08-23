@@ -145,6 +145,8 @@ interface EditorState {
   currentPageId: string | null;
   generation: number;
   documentSessionId: string;
+  // Schema 修订号（P1-9：检测本地编辑导致 preview 过期）
+  schemaRevision: number;
   // UI 状态
   isHistoryDrawerOpen: boolean;
   isFloatingIslandOpen: boolean;
@@ -177,6 +179,8 @@ interface EditorState {
   getCurrentPageId: () => string | null;
   getGeneration: () => number;
   getDocumentSessionId: () => string;
+  bumpSchemaRevision: () => number;
+  getSchemaRevision: () => number;
 }
 
 export const useEditorStore = create<EditorState>()(
@@ -190,6 +194,7 @@ export const useEditorStore = create<EditorState>()(
       currentPageId: null,
       generation: 0,
       documentSessionId: genDocumentSessionId(),
+      schemaRevision: 0,
       isHistoryDrawerOpen: false,
       isFloatingIslandOpen: false,
       isLoading: false,
@@ -270,6 +275,7 @@ export const useEditorStore = create<EditorState>()(
           currentPageId: pageId,
           generation: state.generation + 1,
           documentSessionId: newSessionId,
+          schemaRevision: 0,
           aiScopeRootId: null,
           aiScopeTargetIds: [],
           aiScopeSourceMessageId: null,
@@ -286,6 +292,7 @@ export const useEditorStore = create<EditorState>()(
           currentPageId: pageId,
           generation: newGen,
           documentSessionId: newSessionId,
+          schemaRevision: 0,
           aiScopeRootId: null,
           aiScopeTargetIds: [],
           aiScopeSourceMessageId: null,
@@ -300,6 +307,14 @@ export const useEditorStore = create<EditorState>()(
       getGeneration: () => get().generation,
 
       getDocumentSessionId: () => get().documentSessionId,
+
+      bumpSchemaRevision: () => {
+        const next = get().schemaRevision + 1;
+        set({ schemaRevision: next });
+        return next;
+      },
+
+      getSchemaRevision: () => get().schemaRevision,
     }),
     { name: 'editor-store' },
   ),

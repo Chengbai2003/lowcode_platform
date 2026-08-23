@@ -9,6 +9,7 @@
  */
 
 import type { RuntimeSnapshot } from './types';
+import { fallbackCloneSafe } from '../utils/safeClone';
 
 /**
  * 深度冻结对象以防止修改。
@@ -66,65 +67,8 @@ function shallowClone<T extends Record<string, unknown>>(obj: T): T {
   return clone as T;
 }
 
-function isPlainObjectForSnapshot(o: unknown): boolean {
-  if (o === null || typeof o !== 'object') return false;
-  const proto = Object.getPrototypeOf(o);
-  return proto === Object.prototype || proto === null;
-}
-
 function fallbackClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
-  if (value === null) return value;
-  if (typeof value !== 'object') {
-    if (typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint')
-      return undefined as unknown as T;
-    return value;
-  }
-  if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
-  if (seen.has(value as object)) return seen.get(value as object) as T;
-  if (Array.isArray(value)) {
-    const arr: unknown[] = [];
-    seen.set(value as object, arr);
-    for (let i = 0; i < (value as unknown[]).length; i++) {
-      const desc = Object.getOwnPropertyDescriptor(value, String(i));
-      if (desc && (desc.get || desc.set)) {
-        arr[i] = undefined;
-        continue;
-      }
-      const raw = (value as unknown[])[i];
-      if (typeof raw === 'function' || typeof raw === 'symbol') {
-        arr[i] = undefined;
-        continue;
-      }
-      const cloned = fallbackClone(raw as T, seen);
-      arr[i] = cloned === (undefined as unknown) ? (undefined as unknown as T) : cloned;
-    }
-    return arr as unknown as T;
-  }
-  // 非普通对象：浅拷贝可枚举自有属性为普通对象，避免 shared 引用
-  if (!isPlainObjectForSnapshot(value)) {
-    const out: Record<string, unknown> = {};
-    seen.set(value as object, out);
-    for (const k of Object.keys(value as Record<string, unknown>)) {
-      if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-      const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
-      if (!desc || desc.get || desc.set) continue;
-      const raw = desc.value;
-      if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-      out[k] = fallbackClone(raw, seen);
-    }
-    return out as unknown as T;
-  }
-  const out: Record<string, unknown> = {};
-  seen.set(value as object, out);
-  for (const k of Object.keys(value as Record<string, unknown>)) {
-    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
-    const desc = Object.getOwnPropertyDescriptor(value as Record<string, unknown>, k);
-    if (!desc || desc.get || desc.set) continue;
-    const raw = desc.value;
-    if (typeof raw === 'function' || typeof raw === 'symbol') continue;
-    out[k] = fallbackClone(raw, seen);
-  }
-  return out as unknown as T;
+  return fallbackCloneSafe(value, seen);
 }
 
 function cloneOrThrow<T extends Record<string, unknown>>(value: T, ns: string): T {
