@@ -8,11 +8,9 @@ import type {
   LowcodeEditorProps,
   NotificationOptions,
 } from './types';
-import type { A2UISchema, A2UIComponent, AIMessageActionResult } from '../types';
+import type { A2UISchema, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
 import { builtInComponents } from '../renderer';
-import { validateAndAutoFixA2UISchema } from '../schema/schemaValidation';
-import { compileSchema } from './services/compilerApi';
 import {
   EditorHeader,
   PreviewPane,
@@ -23,14 +21,19 @@ import {
 import { ComponentTree } from './components/TreeView/ComponentTree';
 import { useFloatingIslandHotkey } from './hooks/useFloatingIslandHotkey';
 import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
-import { createPatchCommand } from './commands/schemaCommands';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
 import { useSelectionStore, useEditorStore } from './store/editor-store';
 import { createDefaultReactiveSchema } from './templates/reactiveSchema';
-import { pageSchemaApi } from './services/pageSchemaApi';
-import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
 import styles from './LowcodeEditor.module.scss';
+import { usePageLifecycle } from './hooks/usePageLifecycle';
+import { useAIPatch } from './hooks/useAIPatch';
+import { useEditorActions } from './hooks/useEditorActions';
+import {
+  applyComponentSnapshot as applyComponentSnapshotPure,
+  extractSchemaSnapshot,
+  resolveSchemaVersion,
+} from './services/schemaSync';
 
 /**
  * 编辑器内部组件
@@ -63,7 +66,6 @@ function LowcodeEditorInner({
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
   const [pageVersion, setPageVersion] = useState<number | null>(null);
-  const [isPageSaving, setIsPageSaving] = useState(false);
 
   // ponytail ultra: useRef 稳定化 syncSchemaVersion，避免 pageVersion 抖动触发重请求
   const pageVersionRef = useRef(pageVersion);
@@ -89,30 +91,10 @@ function LowcodeEditorInner({
   }, [schema]);
 
   const syncSchemaVersion = useCallback(
-    (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema => {
-      const resolvedVersion =
-        targetVersion ?? pageVersionRef.current ?? schemaVersionRef.current ?? nextSchema.version;
-      if (resolvedVersion === undefined) {
-        return nextSchema;
-      }
-      return {
-        ...nextSchema,
-        version: resolvedVersion,
-      };
-    },
+    (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema =>
+      resolveSchemaVersion(nextSchema, targetVersion, pageVersionRef, schemaVersionRef),
     [],
   );
-  // keep ref for load effect (stable identity not dep)
-  const syncSchemaVersionRef = useRef(syncSchemaVersion);
-  useEffect(() => {
-    syncSchemaVersionRef.current = syncSchemaVersion;
-  }, [syncSchemaVersion]);
-
-  // ponytail ultra: stable refs for initialSchema/onError to avoid effect re-trigger
-  const initialSchemaRef = useRef(initialSchemaObj);
-  useEffect(() => {
-    initialSchemaRef.current = initialSchemaObj;
-  }, [initialSchemaObj]);
   const onErrorRef = useRef(onError);
   useEffect(() => {
     onErrorRef.current = onError;
@@ -267,165 +249,25 @@ function LowcodeEditorInner({
 
   useUndoRedoShortcuts({ onUndo: undo, onRedo: redo });
 
-  useEffect(() => {
-    let cancelled = false;
-    const pageIdParam = pageId ?? null;
-    // Synchronous reset + generation capture in same tick (P0-4: atomic)
-    const requestGeneration = useEditorStore
-      .getState()
-      .resetForDocumentAndGetGeneration(pageIdParam);
-    const requestPageId = pageIdParam;
-    const requestDocumentSessionId = useEditorStore.getState().documentSessionId;
-    const initial = initialSchemaRef.current;
+  usePageLifecycle({
+    pageId,
+    initialSchemaObj,
+    setSchema,
+    setPageVersion,
+    syncSchemaVersion,
+    onErrorRef,
+  });
 
-    if (!pageIdParam) {
-      setSchema(initial);
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    pageSchemaApi
-      .getPageSchema(pageIdParam)
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        const currentGeneration = useEditorStore.getState().generation;
-        const currentPageId = useEditorStore.getState().currentPageId;
-        const currentSessionId = useEditorStore.getState().documentSessionId;
-        if (
-          currentGeneration !== requestGeneration ||
-          currentPageId !== requestPageId ||
-          currentSessionId !== requestDocumentSessionId
-        ) {
-          return;
-        }
-        setSchema(syncSchemaVersionRef.current(result.schema, result.version));
-        setPageVersion(result.version);
-      })
-      .catch(async (error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        const currentGeneration = useEditorStore.getState().generation;
-        const currentPageId = useEditorStore.getState().currentPageId;
-        const currentSessionId = useEditorStore.getState().documentSessionId;
-        if (
-          currentGeneration !== requestGeneration ||
-          currentPageId !== requestPageId ||
-          currentSessionId !== requestDocumentSessionId
-        ) {
-          return;
-        }
-
-        const status =
-          typeof error === 'object' && error ? (error as { status?: number }).status : undefined;
-        if (status === 404) {
-          try {
-            const bootstrapResult = await pageSchemaApi.savePageSchema(pageIdParam, initial);
-            if (cancelled) {
-              return;
-            }
-            const curGen = useEditorStore.getState().generation;
-            const curPageId = useEditorStore.getState().currentPageId;
-            const curSessionId = useEditorStore.getState().documentSessionId;
-            if (
-              curGen !== requestGeneration ||
-              curPageId !== requestPageId ||
-              curSessionId !== requestDocumentSessionId
-            ) {
-              return;
-            }
-            setSchema(syncSchemaVersionRef.current(initial, bootstrapResult.version));
-            setPageVersion(bootstrapResult.version);
-            message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
-          } catch (bootstrapError) {
-            const errorMessage =
-              bootstrapError instanceof Error ? bootstrapError.message : '页面初始化失败';
-            onErrorRef.current?.(errorMessage);
-            message.error(errorMessage);
-          }
-          return;
-        }
-
-        const errorMessage = error instanceof Error ? error.message : '页面加载失败';
-        onErrorRef.current?.(errorMessage);
-        message.error('页面加载失败，已回退到本地初始内容');
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [pageId]);
-
-  const handleSavePage = useCallback(async () => {
-    if (!pageId || isPageSaving) {
-      return;
-    }
-    const requestGeneration = useEditorStore.getState().generation;
-    const requestPageId = pageId ?? null;
-    setIsPageSaving(true);
-    try {
-      const schemaToSave = syncSchemaVersion(schema);
-      const result = await pageSchemaApi.savePageSchema(
-        pageId,
-        schemaToSave,
-        pageVersion ?? undefined,
-      );
-      const currentGeneration = useEditorStore.getState().generation;
-      const currentPageId = useEditorStore.getState().currentPageId;
-      if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
-        return;
-      }
-      setPageVersion(result.version);
-      setSchema((currentSchema) => syncSchemaVersion(currentSchema, result.version));
-      message.success(`页面已保存，当前版本 v${result.version}`);
-    } catch (error) {
-      const currentGeneration = useEditorStore.getState().generation;
-      const currentPageId = useEditorStore.getState().currentPageId;
-      if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
-        return;
-      }
-      const errorMessage = error instanceof Error ? error.message : '页面保存失败';
-      message.error(errorMessage);
-    } finally {
-      const currentGeneration = useEditorStore.getState().generation;
-      const currentPageId = useEditorStore.getState().currentPageId;
-      if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) {
-        setIsPageSaving(false);
-        return;
-      }
-      setIsPageSaving(false);
-    }
-  }, [isPageSaving, pageId, pageVersion, schema, syncSchemaVersion]);
-
-  // 处理编译（P0-4：generation+pageId 守卫 + abort 过期响应）
-  const handleCompile = useCallback(async () => {
-    if (!schema) {
-      message.warning('Schema 为空，无法编译');
-      setCompiledCode(null);
-      return;
-    }
-    const requestGeneration = useEditorStore.getState().generation;
-    const requestPageId = pageId ?? null;
-    try {
-      const code = await compileSchema(schema);
-      const curGen = useEditorStore.getState().generation;
-      const curPageId = useEditorStore.getState().currentPageId;
-      if (curGen !== requestGeneration || curPageId !== requestPageId) return;
-      setCompiledCode(code);
-      message.success('编译成功！');
-    } catch (e) {
-      const curGen = useEditorStore.getState().generation;
-      const curPageId = useEditorStore.getState().currentPageId;
-      if (curGen !== requestGeneration || curPageId !== requestPageId) return;
-      const errorMessage = e instanceof Error ? e.message : '未知错误';
-      onError?.(errorMessage);
-      message.error('编译失败：' + errorMessage);
-      setCompiledCode(null);
-    }
-  }, [onError, pageId, schema]);
+  const { handleSavePage, handleCompile, isPageSaving } = useEditorActions({
+    pageId,
+    schema,
+    pageVersion,
+    syncSchemaVersion,
+    setPageVersion,
+    setSchema,
+    setCompiledCode,
+    onError,
+  });
   // 处理模板应用
   const handleApplyTemplate = useCallback(
     (templateSchema: A2UISchema) => {
@@ -448,202 +290,25 @@ function LowcodeEditorInner({
     return { ...rendererComponents, ...componentsOnly, ...customComponents };
   }, [customComponents]);
 
-  const handleAISchemaUpdate = useCallback(
-    (newSchema: A2UISchema) => {
-      const whitelist = Object.keys(allComponents);
-      const result = validateAndAutoFixA2UISchema(newSchema, whitelist);
+  const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({
+    allComponents,
+    syncSchemaVersion,
+    handleSchemaUpdate,
+    forceUpdateSchema,
+    executeSchemaCommand,
+    schemaRef,
+    pageVersionRef,
+    mountedRef,
+    selectComponent,
+    onError,
+  });
 
-      if (!result.success) {
-        const errorMessage = result.error.issues[0]?.message || 'Schema 校验失败';
-        onError?.(errorMessage);
-        message.error(`AI Schema 无法应用：${errorMessage}`);
-        return false;
-      }
-
-      if (result.fixes.length > 0) {
-        message.info(`已自动修复 ${result.fixes.length} 处 Schema 问题`);
-      }
-
-      useEditorStore.getState().bumpSchemaRevision();
-      forceUpdateSchema(syncSchemaVersion(result.data), 'AI 更新 Schema');
-      message.success('Schema 已更新！');
-      return true;
-    },
-    [allComponents, forceUpdateSchema, onError, syncSchemaVersion],
+  // Helpers moved to services/schemaSync.ts — isA2UISchema / extractSchemaSnapshot / buildSubtreeSchema / applyComponentSnapshotPure
+  const applyComponentSnapshot = useCallback(
+    (snapshot: A2UISchema, componentId: string) =>
+      applyComponentSnapshotPure(schema, snapshot, componentId),
+    [schema],
   );
-
-  const describeAIPatch = useCallback((instruction: string, patchCount: number) => {
-    const trimmed = instruction.trim();
-    const summary = trimmed.length > 24 ? `${trimmed.slice(0, 24)}...` : trimmed;
-    return patchCount > 0 ? `AI 修改：${summary || '应用 patch'}` : 'AI 修改';
-  }, []);
-
-  const handleAIPatchApply = useCallback(
-    async ({
-      instruction,
-      patch,
-      resolvedSelectedId,
-      warnings,
-      sourcePageId,
-      basePageVersion,
-      sourceGeneration,
-      documentSessionId,
-      schemaRevision,
-    }: AgentPatchApplyPayload): Promise<A2UISchema | null> => {
-      // P0-5 TOCTOU atomic + P1-9 schemaRevision: early fail-close before any pollution, use schemaRef to avoid closure stale
-      const editorState = useEditorStore.getState();
-      if (
-        !mountedRef.current ||
-        (sourcePageId ?? null) !== (editorState.currentPageId ?? null) ||
-        sourceGeneration !== editorState.generation ||
-        documentSessionId !== editorState.documentSessionId ||
-        schemaRevision !== editorState.schemaRevision
-      ) {
-        message.error('页面已切换或本地已编辑，AI 修改已过期，已拦截');
-        return null;
-      }
-      const currentVersion = pageVersionRef.current ?? null;
-      if (basePageVersion !== currentVersion) {
-        message.error('页面版本已变化，该预览已过期，已拦截');
-        return null;
-      }
-      try {
-        const baseSchema = syncSchemaVersion(schemaRef.current);
-        // P0-5 second atomic guard after syncSchemaVersion, before createPatchCommand (fail-close before pollution)
-        const cur2 = useEditorStore.getState();
-        if (
-          (sourcePageId ?? null) !== (cur2.currentPageId ?? null) ||
-          sourceGeneration !== cur2.generation ||
-          documentSessionId !== cur2.documentSessionId ||
-          schemaRevision !== cur2.schemaRevision
-        ) {
-          message.error('页面已切换或本地已编辑，AI 修改已过期，已拦截');
-          return null;
-        }
-        const currentVersion2 = pageVersionRef.current ?? null;
-        if (basePageVersion !== currentVersion2) {
-          message.error('页面版本已变化，该预览已过期，已拦截');
-          return null;
-        }
-        const command = createPatchCommand(
-          baseSchema,
-          patch,
-          handleSchemaUpdate,
-          describeAIPatch(instruction, patch.length),
-        );
-
-        executeSchemaCommand(command);
-        const nextSchema = command.getNewSchema();
-
-        if (resolvedSelectedId && nextSchema.components[resolvedSelectedId]) {
-          selectComponent(resolvedSelectedId);
-        }
-
-        if (warnings && warnings.length > 0) {
-          message.info(`AI 修改已应用，并返回 ${warnings.length} 条提示`);
-        }
-
-        return nextSchema;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'AI patch 应用失败';
-        onError?.(errorMessage);
-        message.error(errorMessage);
-        return null;
-      }
-    },
-    [
-      describeAIPatch,
-      executeSchemaCommand,
-      handleSchemaUpdate,
-      onError,
-      schema,
-      selectComponent,
-      syncSchemaVersion,
-    ],
-  );
-
-  const isA2UISchema = (value: unknown): value is A2UISchema => {
-    if (!value || typeof value !== 'object') return false;
-    return 'rootId' in value && 'components' in value;
-  };
-
-  const extractSchemaSnapshot = (value: unknown): A2UISchema | null => {
-    if (isA2UISchema(value)) {
-      return value;
-    }
-    if (!value || typeof value !== 'object') return null;
-    const actionResult = value as Partial<AIMessageActionResult>;
-    if (isA2UISchema(actionResult.schemaSnapshot)) {
-      return actionResult.schemaSnapshot;
-    }
-    const maybeProps = (actionResult as { props?: unknown }).props;
-    if (isA2UISchema(maybeProps)) {
-      return maybeProps;
-    }
-    return null;
-  };
-
-  const buildSubtreeSchema = (source: A2UISchema, rootId: string): A2UISchema | null => {
-    const root = source.components[rootId];
-    if (!root) return null;
-
-    const components: Record<string, A2UIComponent> = {};
-    const stack = [rootId];
-
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (components[id]) continue;
-      const node = source.components[id];
-      if (!node) continue;
-      components[id] = node;
-      if (Array.isArray(node.childrenIds)) {
-        for (const childId of node.childrenIds) {
-          if (typeof childId === 'string' && source.components[childId]) {
-            stack.push(childId);
-          }
-        }
-      }
-    }
-
-    return { rootId, components };
-  };
-
-  const applyComponentSnapshot = (snapshot: A2UISchema, componentId: string): A2UISchema | null => {
-    if (!schema.components[componentId]) return null;
-
-    const subtree =
-      snapshot.rootId === componentId ? snapshot : buildSubtreeSchema(snapshot, componentId);
-    if (!subtree) return null;
-    if (!subtree.components[subtree.rootId]) return null;
-
-    const toRemove = new Set<string>();
-    const stack = [componentId];
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (toRemove.has(id)) continue;
-      toRemove.add(id);
-      const node = schema.components[id];
-      if (!node?.childrenIds) continue;
-      for (const childId of node.childrenIds) {
-        if (typeof childId === 'string' && schema.components[childId]) {
-          stack.push(childId);
-        }
-      }
-    }
-
-    const nextComponents = { ...schema.components };
-    for (const id of toRemove) {
-      delete nextComponents[id];
-    }
-    for (const [id, comp] of Object.entries(subtree.components)) {
-      nextComponents[id] = comp;
-    }
-
-    return {
-      ...schema,
-      components: nextComponents,
-    };
-  };
 
   const isPreviewMode = mode === 'preview';
 
