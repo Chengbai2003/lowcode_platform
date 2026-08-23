@@ -777,10 +777,7 @@ export const useAIAssistantChat = ({
         updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
       }
-      if (
-        previewBefore.basePageVersion !== null &&
-        previewBefore.basePageVersion !== (pageVersionRef.current ?? null)
-      ) {
+      if (previewBefore.basePageVersion !== (pageVersionRef.current ?? null)) {
         message.error('页面版本已变化，该预览已过期，请重新生成');
         updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
         return false;
@@ -807,10 +804,7 @@ export const useAIAssistantChat = ({
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
           return false;
         }
-        if (
-          latestItem.patchPreview.basePageVersion !== null &&
-          latestItem.patchPreview.basePageVersion !== (pageVersionRef.current ?? null)
-        ) {
+        if (latestItem.patchPreview.basePageVersion !== (pageVersionRef.current ?? null)) {
           message.error('页面版本已变化，该预览已过期，请重新生成');
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
           return false;
@@ -834,10 +828,7 @@ export const useAIAssistantChat = ({
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
           return false;
         }
-        if (
-          latestItem.patchPreview.basePageVersion !== null &&
-          latestItem.patchPreview.basePageVersion !== (pageVersionRef.current ?? null)
-        ) {
+        if (latestItem.patchPreview.basePageVersion !== (pageVersionRef.current ?? null)) {
           message.error('页面版本已变化，该预览已过期，请重新生成');
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
           return false;
@@ -868,10 +859,7 @@ export const useAIAssistantChat = ({
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
           return false;
         }
-        if (
-          previewForPayload.basePageVersion !== null &&
-          previewForPayload.basePageVersion !== (pageVersionRef.current ?? null)
-        ) {
+        if (previewForPayload.basePageVersion !== (pageVersionRef.current ?? null)) {
           message.error('页面版本已变化，该预览已过期，请重新生成');
           updateAssistantMessage(messageId, (c) => ({ ...c, applyState: 'failed' }));
           return false;

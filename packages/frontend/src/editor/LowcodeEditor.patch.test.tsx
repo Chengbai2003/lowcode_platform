@@ -270,7 +270,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
   });
 
   it('blocks when basePageVersion is null vs mismatch still blocked via generation etc, but null version is allowed', async () => {
-    // This test ensures that when basePageVersion is null (no version), guard does not block on version check
+    // Strict version equality: null payload vs version 3 should be rejected (only null/null allows)
     const { unmount } = render(
       <LowcodeEditor pageId="page-1" projectName="test" initialSchema={baseSchema} />,
     );
@@ -302,9 +302,10 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
       result = await handleAIPatchApply(payloadWithNullVersion);
     });
 
-    // null version should bypass version check and succeed
-    expect(result).toEqual(nextSchema);
-    expect(mockCreatePatchCommand).toHaveBeenCalled();
+    // null vs 3 should be rejected under strict equality (null/null would be allowed for local page)
+    expect(result).toBeNull();
+    expect(mockCreatePatchCommand).not.toHaveBeenCalled();
+    expect(messageMock.error).toHaveBeenCalledWith(expect.stringContaining('页面版本已变化'));
 
     unmount();
   });

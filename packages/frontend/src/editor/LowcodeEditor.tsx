@@ -502,7 +502,8 @@ function LowcodeEditorInner({
         message.error('页面已切换或本地已编辑，AI 修改已过期，已拦截');
         return null;
       }
-      if (basePageVersion !== null && basePageVersion !== pageVersionRef.current) {
+      const currentVersion = pageVersionRef.current ?? null;
+      if (basePageVersion !== currentVersion) {
         message.error('页面版本已变化，该预览已过期，已拦截');
         return null;
       }
@@ -519,7 +520,8 @@ function LowcodeEditorInner({
           message.error('页面已切换或本地已编辑，AI 修改已过期，已拦截');
           return null;
         }
-        if (basePageVersion !== null && basePageVersion !== pageVersionRef.current) {
+        const currentVersion2 = pageVersionRef.current ?? null;
+        if (basePageVersion !== currentVersion2) {
           message.error('页面版本已变化，该预览已过期，已拦截');
           return null;
         }
