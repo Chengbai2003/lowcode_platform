@@ -1,11 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
 import { MAX_SCHEMA_SIZE_BYTES } from './dto/save-page-schema.dto';
+import { getActionValidationError, hasCustomScriptInValue } from './action-validation';
 
 interface A2UIComponentShape {
   id?: string;
   type?: string;
   props?: Record<string, unknown>;
-  childrenIds?: unknown[];
+  childrenIds?: string[];
   events?: Record<string, unknown>;
 }
 
@@ -54,102 +55,113 @@ export function assertValidPageSchema(
       throw new BadRequestException(`Component ${componentId} type is required`);
     }
 
-    if (typedComponent.id !== undefined && typedComponent.id !== componentId) {
-      throw new BadRequestException(`Component ${componentId} id must match its key when provided`);
+    if (typeof typedComponent.id !== 'string' || !typedComponent.id.trim()) {
+      throw new BadRequestException(`Component ${componentId} id is required`);
+    }
+    if (typedComponent.id !== componentId) {
+      throw new BadRequestException(`Component ${componentId} id must match its key`);
     }
 
     if (typedComponent.childrenIds !== undefined && !Array.isArray(typedComponent.childrenIds)) {
       throw new BadRequestException(`Component ${componentId} childrenIds must be an array`);
     }
+    if (
+      typedComponent.events !== undefined &&
+      (!typedComponent.events ||
+        typeof typedComponent.events !== 'object' ||
+        Array.isArray(typedComponent.events))
+    ) {
+      throw new BadRequestException(`Component ${componentId} events must be an object`);
+    }
 
     if (Array.isArray(typedComponent.childrenIds)) {
+      const childIds = new Set<string>();
       for (const childId of typedComponent.childrenIds) {
         if (typeof childId !== 'string' || !(childId in components)) {
           throw new BadRequestException(
             `Component ${componentId} references missing child ${String(childId)}`,
           );
         }
+        if (childIds.has(childId)) {
+          throw new BadRequestException(
+            `Component ${componentId} references child ${childId} more than once`,
+          );
+        }
+        childIds.add(childId);
       }
     }
   }
 
-  if (hasCustomScriptInSchema(typedSchema as A2UISchemaShape)) {
-    throw new BadRequestException('customScript is not allowed in schema');
-  }
+  assertValidComponentGraph(typedSchema as A2UISchemaShape);
+  assertValidComponentActions(typedSchema as A2UISchemaShape);
 }
 
-function hasCustomScriptInSchema(schema: A2UISchemaShape): boolean {
+function assertValidComponentActions(schema: A2UISchemaShape): void {
   for (const component of Object.values(schema.components)) {
-    if (hasCustomScriptInComponent(component as A2UIComponentShape)) {
-      return true;
-    }
+    assertValidComponentActionsForComponent(component as A2UIComponentShape);
   }
-  return false;
 }
 
-function hasCustomScriptInComponent(component: A2UIComponentShape): boolean {
+function assertValidComponentActionsForComponent(component: A2UIComponentShape): void {
   if (
     component.events &&
     typeof component.events === 'object' &&
     !Array.isArray(component.events)
   ) {
     for (const actions of Object.values(component.events)) {
-      if (hasCustomScriptInActions(actions)) {
-        return true;
-      }
+      const error = getActionValidationError(actions);
+      if (error) throw new BadRequestException(error);
     }
   }
   if (component.props && hasCustomScriptInValue(component.props)) {
-    return true;
+    throw new BadRequestException('customScript is not allowed in schema');
   }
-  return false;
 }
 
-function hasCustomScriptInActions(value: unknown): boolean {
-  if (!Array.isArray(value)) {
-    return false;
-  }
-  for (const action of value) {
-    if (hasCustomScriptInAction(action)) {
-      return true;
+function assertValidComponentGraph(schema: A2UISchemaShape): void {
+  const parentCounts = new Map<string, number>();
+  for (const component of Object.values(schema.components)) {
+    for (const childId of component.childrenIds ?? []) {
+      const count = (parentCounts.get(childId) ?? 0) + 1;
+      if (count > 1) throw new BadRequestException(`Component ${childId} has multiple parents`);
+      parentCounts.set(childId, count);
     }
   }
-  return false;
-}
 
-function hasCustomScriptInAction(action: unknown): boolean {
-  if (!action || typeof action !== 'object' || Array.isArray(action)) {
-    return false;
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (componentId: string) => {
+    if (visiting.has(componentId))
+      throw new BadRequestException('Schema contains a component cycle');
+    if (visited.has(componentId)) return;
+    visiting.add(componentId);
+    for (const childId of schema.components[componentId].childrenIds ?? []) visit(childId);
+    visiting.delete(componentId);
+    visited.add(componentId);
+  };
+  for (const componentId of Object.keys(schema.components)) visit(componentId);
+
+  const reachable = new Set<string>();
+  const stack = [schema.rootId];
+  while (stack.length) {
+    const componentId = stack.pop()!;
+    if (reachable.has(componentId)) continue;
+    reachable.add(componentId);
+    stack.push(...(schema.components[componentId].childrenIds ?? []));
   }
-  const typed = action as Record<string, unknown>;
-  if (typed.type === 'customScript') {
-    return true;
-  }
-  const nestedKeys = ['then', 'else', 'actions', 'onSuccess', 'onError', 'onOk', 'onCancel'];
-  for (const key of nestedKeys) {
-    const nested = typed[key];
-    if (Array.isArray(nested)) {
-      for (const nestedAction of nested) {
-        if (hasCustomScriptInAction(nestedAction)) {
-          return true;
-        }
-      }
+  for (const [componentId, component] of Object.entries(schema.components)) {
+    if (!reachable.has(componentId) && !isDetachedHiddenDataNode(component)) {
+      throw new BadRequestException(`Schema contains orphaned components: ${componentId}`);
     }
   }
-  return false;
 }
 
-// TODO: dedupe with patch-validation.service.ts hasCustomScript* helpers - extract to shared/customScriptGuard.ts on next iteration
-function hasCustomScriptInValue(value: unknown): boolean {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  if (Array.isArray(value)) {
-    return value.some((item) => hasCustomScriptInValue(item));
-  }
-  const record = value as Record<string, unknown>;
-  if (record.type === 'customScript') {
-    return true;
-  }
-  return Object.values(record).some((v) => hasCustomScriptInValue(v));
+function isDetachedHiddenDataNode(component: A2UIComponentShape): boolean {
+  const props = component.props;
+  return (
+    component.type === 'Div' &&
+    props?.visible === false &&
+    Object.prototype.hasOwnProperty.call(props, 'initialValue') &&
+    (component.childrenIds?.length ?? 0) === 0
+  );
 }

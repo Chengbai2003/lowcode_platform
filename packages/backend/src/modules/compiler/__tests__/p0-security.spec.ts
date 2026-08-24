@@ -1,4 +1,12 @@
-import { compileSchemaToCode } from '../pipeline';
+import { execFileSync } from 'node:child_process';
+import { compileSchemaToCode, generate, parseSchema, transform } from '../pipeline';
+import { CompilerService } from '../compiler.service';
+import { CompileRequestDto } from '../dto/compile-request.dto';
+
+jest.mock('../generator', () => ({
+  compileToCode: jest.fn(),
+  formatCode: jest.fn(),
+}));
 
 function compileToCode(s: any) {
   return compileSchemaToCode(s);
@@ -10,6 +18,19 @@ function makeSchema(overrides: any) {
     rootId: 'page_root',
     components: overrides,
   } as any;
+}
+
+function formatWithPrettier(code: string): string {
+  const script = [
+    "const prettier = require('prettier');",
+    "let source = '';",
+    "process.stdin.on('data', (chunk) => { source += chunk; });",
+    "process.stdin.on('end', async () => {",
+    "  process.stdout.write(await prettier.format(source, { parser: 'babel' }));",
+    '});',
+  ].join('\n');
+
+  return execFileSync(process.execPath, ['-e', script], { input: code }).toString();
 }
 
 describe('P0 compiler security', () => {
@@ -183,5 +204,53 @@ describe('P0 compiler security', () => {
       },
     });
     expect(() => compileToCode(schema)).not.toThrow();
+  });
+
+  it('rejects malicious cycle identifiers at compile entry', () => {
+    const maliciousId = 'x*/}{globalThis.__PWNED__=true}{/*';
+    expect(() =>
+      compileToCode(
+        makeSchema({
+          page_root: { id: 'page_root', type: 'Page', childrenIds: [maliciousId] },
+          [maliciousId]: { id: maliciousId, type: 'Div', childrenIds: [maliciousId] },
+        }),
+      ),
+    ).toThrow(/component cycle|multiple parents/);
+  });
+
+  it('keeps malicious cycle identifiers out of parser-valid generated source', () => {
+    const maliciousId = 'x*/}{globalThis.__PWNED__=true}{/*';
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: [maliciousId] },
+      [maliciousId]: { id: maliciousId, type: 'Div', childrenIds: [maliciousId] },
+    });
+    const ast = parseSchema(schema as any);
+    transform(ast);
+    const code = generate(ast);
+    expect(code).not.toContain('*/}{globalThis.__PWNED__=true}{/*');
+    expect(code).toContain('Circular reference omitted');
+    const formatted = formatWithPrettier(code);
+    expect(formatted).not.toContain('__PWNED__');
+    expect(formatted).toContain('Circular reference omitted');
+  });
+
+  it('rejects invalid component graphs through CompilerService', async () => {
+    const dto = new CompileRequestDto();
+    dto.schema = {
+      rootId: 'root',
+      components: {
+        root: { type: 'Page', childrenIds: ['missing'] },
+      },
+    } as any;
+    // generator is mocked above; CompilerService delegates validation to compileSchemaToCode,
+    // so ensure mocked compileToCode still validates (or bypass mock for this case)
+    const { compileToCode: mockedCompile } = require('../generator') as {
+      compileToCode: jest.Mock;
+    };
+    mockedCompile.mockImplementationOnce((s: any) => compileSchemaToCode(s));
+
+    await expect(new CompilerService().compile(dto)).rejects.toThrow(
+      'Component root id is required',
+    );
   });
 });

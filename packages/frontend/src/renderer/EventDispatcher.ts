@@ -22,7 +22,6 @@ export class EventDispatcher {
 
     this.dslExecutor = new DSLExecutor({
       debug: process.env.NODE_ENV !== 'production',
-      enableCustomScript: context.enableCustomScript ?? false,
       onError: (error, action) => {
         console.error('[DSL Error]', error.message, { action });
       },

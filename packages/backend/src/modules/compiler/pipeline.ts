@@ -31,6 +31,7 @@ import {
   isSafeComponentType,
   isSafeGeneratedIdentifier,
 } from './registry';
+import { assertValidPageSchema } from '../page-schema/schema-validation';
 
 interface PropNode {
   name: string;
@@ -908,7 +909,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
   if (node.kind === 'cycle') {
     return {
       kind: 'fragment',
-      children: [createCommentNode(`Circular ref: ${node.id}`)],
+      children: [createCommentNode('Circular reference omitted')],
     };
   }
 
@@ -1483,7 +1484,7 @@ function genJsx(node: JSXNode): string {
     case 'expression':
       return `{${node.code}}`;
     case 'comment':
-      return `{/* ${node.text} */}`;
+      return `{/* ${escapeComment(node.text)} */}`;
     case 'conditional':
       return `{${node.condition} ? ${genJsxValue(node.consequent)} : ${
         node.alternate ? genJsxValue(node.alternate) : 'null'
@@ -1555,6 +1556,7 @@ export function generate(root: RootNode): string {
 }
 
 export function compileSchemaToCode(schema: A2UISchema, options?: CompileOptions): string {
+  assertValidPageSchema(schema as unknown);
   const ast = parseSchema(schema, options);
   transform(ast);
   return generate(ast);

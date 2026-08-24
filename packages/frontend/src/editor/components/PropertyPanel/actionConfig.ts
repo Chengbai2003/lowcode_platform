@@ -8,7 +8,6 @@ import {
   Database,
   MessageSquare,
   ArrowRight,
-  Code,
   LayoutTemplate,
   Clock,
   FileText,
@@ -28,8 +27,10 @@ export const ACTION_TYPE = {
   loop: 'loop',
   delay: 'delay',
   log: 'log',
-  customScript: 'customScript',
 } as const;
+
+/** 保留历史读取：customScript 已永久禁用，仅用于识别历史数据 */
+export const HISTORIC_CUSTOM_SCRIPT_TYPE = 'customScript' as const;
 
 export type ActionType = (typeof ACTION_TYPE)[keyof typeof ACTION_TYPE];
 export type ActionUpdate = (partial: Partial<Action>) => void;
@@ -42,9 +43,10 @@ export type NavigateActionItem = Extract<Action, { type: typeof ACTION_TYPE.navi
 export type DialogActionItem = Extract<Action, { type: typeof ACTION_TYPE.dialog }>;
 export type DelayActionItem = Extract<Action, { type: typeof ACTION_TYPE.delay }>;
 export type LogActionItem = Extract<Action, { type: typeof ACTION_TYPE.log }>;
-export type CustomScriptActionItem = Extract<Action, { type: typeof ACTION_TYPE.customScript }>;
 export type IfActionItem = Extract<Action, { type: typeof ACTION_TYPE.if }>;
 export type LoopActionItem = Extract<Action, { type: typeof ACTION_TYPE.loop }>;
+/** 历史 customScript 类型，仅用于展示禁用态 */
+export type HistoricCustomScriptActionItem = Extract<Action, { type: 'customScript' }>;
 
 /** Action 类型配置 */
 export const ACTION_TYPE_CONFIG: Record<
@@ -119,13 +121,6 @@ export const ACTION_TYPE_CONFIG: Record<
     bg: 'bg-slate-100',
     title: '日志',
     desc: '输出调试日志',
-  },
-  [ACTION_TYPE.customScript]: {
-    icon: Code,
-    color: 'text-red-600',
-    bg: 'bg-red-100',
-    title: '自定义脚本',
-    desc: '执行 JavaScript',
   },
 };
 

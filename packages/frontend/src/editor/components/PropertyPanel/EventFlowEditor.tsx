@@ -51,6 +51,9 @@ export const EventFlowEditor = ({
 
   const getActionSummary = (action: Action) => {
     const type = action.type;
+    if (type === 'customScript') {
+      return '历史 customScript 已永久禁用，请删除';
+    }
     switch (type) {
       case ACTION_TYPE.setValue:
         return `设置 ${action.field}`;
@@ -76,6 +79,15 @@ export const EventFlowEditor = ({
   };
 
   const renderActionEditor = (action: Action, index: number) => {
+    if (action.type === 'customScript') {
+      return (
+        <div className={styles.actionEditor}>
+          <div className={styles.actionHint} style={{ color: '#dc2626' }}>
+            该历史 customScript 动作已永久禁用，请删除后重新保存。代码不会被执行。
+          </div>
+        </div>
+      );
+    }
     const updateAction = (partial: Partial<Action>) => {
       onUpdateAction(flow.trigger, index, { ...action, ...partial } as Action);
     };

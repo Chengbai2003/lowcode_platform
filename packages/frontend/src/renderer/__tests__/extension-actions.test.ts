@@ -1,189 +1,86 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DSLExecutor } from '../executor';
 import { EventDispatcher } from '../EventDispatcher';
-import { customScript } from '../executor/actions/extensionActions';
-import type { CustomScriptAction, ExecutionContext } from '../../types';
+import type { ExecutionContext } from '../../types';
 
 function createExecutionContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
   return DSLExecutor.createContext(overrides);
 }
 
-describe('extensionActions customScript', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('allows $.set for component IDs from context.components', async () => {
-    const context = createExecutionContext({
-      components: {
-        inputB: { id: 'inputB' },
-      },
-    });
-
-    const action: CustomScriptAction = {
-      type: 'customScript',
-      code: "$.set('inputB', 'hello')",
-    };
-
-    await customScript(action, context);
-
-    expect(context.runtime.get('inputB')).toBe('hello');
-    expect(context.data.inputB).toBe('hello');
-  });
-
-  it('allows $.patch and updates runtime in one batch', async () => {
-    const context = createExecutionContext({
-      components: {
-        inputA: { id: 'inputA' },
-        inputB: { id: 'inputB' },
-      },
-    });
-
-    await customScript(
-      {
-        type: 'customScript',
-        code: "$.patch({ inputA: 'A', inputB: 'B' })",
-      },
-      context,
-    );
-
-    expect(context.runtime.get('inputA')).toBe('A');
-    expect(context.runtime.get('inputB')).toBe('B');
-  });
-
-  it('reads frozen runtime snapshots inside the sandbox', async () => {
-    const context = createExecutionContext({
-      data: {
-        profile: {
-          name: 'alice',
-        },
-      },
-      components: {
-        profile: { id: 'profile' },
-      },
-    });
-
-    await expect(
-      customScript(
-        {
-          type: 'customScript',
-          code: "data.profile.name = 'bob'; return data.profile.name",
-        },
-        context,
-      ),
-    ).resolves.toBe('alice');
-    expect((context.data as any).profile.name).toBe('alice');
-  });
-
-  it('falls back when structuredClone is unavailable', async () => {
-    const originalStructuredClone = (globalThis as any).structuredClone;
-
-    try {
-      (globalThis as any).structuredClone = undefined;
-
-      const context = createExecutionContext({
-        data: {
-          profile: {
-            name: 'alice',
-          },
-        },
-        components: {
-          profile: { id: 'profile' },
-        },
-      });
-
-      await expect(
-        customScript(
-          {
-            type: 'customScript',
-            code: 'return data.profile.name',
-          },
-          context,
-        ),
-      ).resolves.toBe('alice');
-    } finally {
-      (globalThis as any).structuredClone = originalStructuredClone;
-    }
-  });
-
-  it('blocks dynamic import escape hatch', async () => {
-    const context = createExecutionContext();
-
-    await expect(
-      customScript(
-        {
-          type: 'customScript',
-          code: "return import('data:text/javascript,export default 1')",
-        },
-        context,
-      ),
-    ).rejects.toThrow('Dynamic import is not allowed in customScript');
-  });
-});
-
-describe('enableCustomScript security check', () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it('throws error when customScript is disabled (default)', async () => {
-    const executor = new DSLExecutor({
-      enableCustomScript: false,
-    });
-
+describe('customScript permanently disabled', () => {
+  it('rejects direct execution', async () => {
+    const executor = new DSLExecutor();
     const result = await executor.execute(
-      [
-        {
-          type: 'customScript',
-          code: 'return "evil"',
-        },
-      ],
-      createExecutionContext({
-        data: { input1: 'test' },
-      }),
+      [{ type: 'customScript', code: "$.set('inputB', 'hello')" } as any],
+      createExecutionContext({ components: { inputB: { id: 'inputB' } } }),
     );
-
     expect(result.failed).toBe(1);
-    expect(result.results[0].success).toBe(false);
-    expect((result.results[0] as any).error?.message).toContain('customScript is disabled');
+    expect((result.results[0] as any).error?.message).toContain('in-realm execution is unsafe');
   });
 
-  it('allows customScript when explicitly enabled', async () => {
-    const executor = new DSLExecutor({
-      enableCustomScript: true,
-    });
-
-    const result = await executor.execute(
-      [
-        {
-          type: 'customScript',
-          code: 'return data.input1',
-        },
-      ],
-      createExecutionContext({
-        data: { input1: 'test' },
-      }),
+  it('rejects constructor customHandlers.customScript', async () => {
+    const handler = vi.fn();
+    expect(() => new DSLExecutor({ customHandlers: { customScript: handler } as any })).toThrow(
+      'customScript is permanently disabled',
     );
-
-    expect(result.success).toBe(1);
-    expect(result.results[0].success).toBe(true);
-    expect((result.results[0] as any).value).toBe('test');
   });
 
-  it('keeps customScript enabled in renderer EventDispatcher path when explicitly enabled', async () => {
-    const dispatcher = new EventDispatcher({ enableCustomScript: true }, vi.fn(), vi.fn());
+  it('rejects registerHandler customScript', async () => {
+    const executor = new DSLExecutor();
+    const handler = vi.fn();
+    expect(() => executor.registerHandler('customScript', handler as any)).toThrow(
+      'customScript is permanently disabled',
+    );
+    expect(executor.hasHandler('customScript')).toBe(false);
+  });
 
+  it('rejects registerHandlers customScript atomically', async () => {
+    const executor = new DSLExecutor();
+    const okHandler = vi.fn();
+    const badHandler = vi.fn();
+    expect(() =>
+      executor.registerHandlers({ myCustomOk: okHandler as any, customScript: badHandler as any }),
+    ).toThrow('customScript is permanently disabled');
+    // other handler should not be partially registered
+    expect(executor.hasHandler('myCustomOk')).toBe(false);
+    expect(executor.hasHandler('customScript')).toBe(false);
+  });
+
+  it('rejects customScript even when legacy enableCustomScript true is passed', async () => {
+    const executor = new DSLExecutor({ enableCustomScript: true } as any);
+    const result = await executor.execute(
+      [{ type: 'customScript', code: 'return data.input1' } as any],
+      createExecutionContext({ data: { input1: 'test' } }),
+    );
+    expect(result.failed).toBe(1);
+    expect((result.results[0] as any).error?.message).toContain('in-realm execution is unsafe');
+  });
+
+  it('rejects constructor escapes via EventDispatcher', async () => {
+    const marker = '__CUSTOM_SCRIPT_PWNED__';
+    Reflect.deleteProperty(globalThis, marker);
+    const dispatcher = new EventDispatcher({} as any, vi.fn(), vi.fn());
     const result = await dispatcher.execute(
       [
         {
           type: 'customScript',
-          code: 'return 42',
-        },
+          code: `({}).constructor.constructor('return globalThis')().${marker} = true`,
+        } as any,
       ],
       undefined,
     );
+    expect(result.failed).toBe(1);
+    expect((result.results[0] as any).error?.message).toContain('in-realm execution is unsafe');
+    expect((globalThis as Record<string, unknown>)[marker]).toBeUndefined();
+  });
 
-    expect(result.success).toBe(1);
-    expect((result.results[0] as any).value).toBe(42);
+  it('rejects executeSingle customScript', async () => {
+    const executor = new DSLExecutor();
+    await expect(
+      executor.executeSingle(
+        { type: 'customScript', code: 'alert(1)' } as any,
+        createExecutionContext(),
+      ),
+    ).rejects.toThrow('in-realm execution is unsafe');
   });
 });

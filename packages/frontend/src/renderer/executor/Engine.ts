@@ -20,7 +20,6 @@ import navActions from './actions/navActions';
 import flowActions from './actions/flowActions';
 import asyncActions from './actions/asyncActions';
 import debugActions from './actions/debugActions';
-import extensionActions from './actions/extensionActions';
 import { ReactiveRuntime } from '../reactive/runtime';
 import { buildNavigationTarget } from '../utils/sanitizeUrl';
 
@@ -36,7 +35,6 @@ import { buildNavigationTarget } from '../utils/sanitizeUrl';
  * | 弹窗 | dialog | 模态框/确认框 |
  * | 控制 | if, loop | 条件分支/循环 |
  * | 工具 | delay, log | 延迟/日志 |
- * | 逃生舱 | customScript | 自定义脚本 |
  */
 const BUILTIN_HANDLERS: ActionRegistry = {
   // 数据
@@ -61,10 +59,13 @@ const BUILTIN_HANDLERS: ActionRegistry = {
   // 工具
   delay: asyncActions.delay,
   log: debugActions.log,
-
-  // 逃生舱
-  customScript: extensionActions.customScript,
 };
+
+function assertRegistrableActionType(type: string): void {
+  if (type === 'customScript') {
+    throw new Error('customScript is permanently disabled: in-realm execution is unsafe');
+  }
+}
 
 /**
  * DSL执行引擎类
@@ -75,10 +76,14 @@ export class DSLExecutor {
   private executionId = 0;
 
   constructor(options: ExecutorOptions = {}) {
+    if (options.customHandlers) {
+      for (const type of Object.keys(options.customHandlers)) {
+        assertRegistrableActionType(type);
+      }
+    }
     this.options = {
       debug: options.debug ?? false,
       maxExecutionTime: options.maxExecutionTime ?? 30000,
-      enableCustomScript: options.enableCustomScript ?? false,
       enablePlugins: options.enablePlugins ?? false,
       customHandlers: options.customHandlers ?? {},
       onError: options.onError ?? (() => {}),
@@ -197,9 +202,8 @@ export class DSLExecutor {
   private async _executeAction(action: Action, context: ExecutionContext): Promise<any> {
     const actionType = action.type;
 
-    // customScript: 可信代码任意执行，非安全沙箱，需 enableCustomScript 显式开启
-    if (actionType === 'customScript' && !this.options.enableCustomScript) {
-      throw new Error('customScript is disabled. Enable it via options.enableCustomScript: true');
+    if (actionType === 'customScript') {
+      throw new Error('customScript is unavailable because in-realm execution is unsafe');
     }
 
     const handler = this.handlers[actionType];
@@ -215,6 +219,7 @@ export class DSLExecutor {
    * 注册自定义Action处理器
    */
   registerHandler(type: string, handler: ActionHandler): void {
+    assertRegistrableActionType(type);
     this.handlers[type] = handler;
     this.log('info', `Registered custom handler: ${type}`);
   }
@@ -223,6 +228,9 @@ export class DSLExecutor {
    * 批量注册Action处理器
    */
   registerHandlers(handlers: ActionRegistry): void {
+    for (const type of Object.keys(handlers)) {
+      assertRegistrableActionType(type);
+    }
     Object.assign(this.handlers, handlers);
     this.log('info', `Registered ${Object.keys(handlers).length} custom handlers`);
   }
