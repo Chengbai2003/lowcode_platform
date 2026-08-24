@@ -1,0 +1,1 @@
+export const MAX_SCHEMA_SIZE_BYTES = 1024 * 1024;

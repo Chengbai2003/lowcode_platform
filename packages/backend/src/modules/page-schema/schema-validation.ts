@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { MAX_SCHEMA_SIZE_BYTES } from './dto/save-page-schema.dto';
+import { MAX_SCHEMA_SIZE_BYTES } from './page-schema.constants';
 import { getActionValidationError, hasCustomScriptInValue } from './action-validation';
 
 interface A2UIComponentShape {
@@ -16,6 +16,9 @@ export interface A2UISchemaShape {
   version?: number;
 }
 
+const hasOwn = (target: object, key: PropertyKey): boolean =>
+  Object.prototype.hasOwnProperty.call(target, key);
+
 export function assertValidPageSchema(
   schema: unknown,
   maxSizeBytes: number = MAX_SCHEMA_SIZE_BYTES,
@@ -24,7 +27,16 @@ export function assertValidPageSchema(
     throw new BadRequestException('Schema must be an object');
   }
 
-  const serialized = JSON.stringify(schema);
+  let serialized: string;
+  try {
+    const result = JSON.stringify(schema);
+    if (typeof result !== 'string') {
+      throw new TypeError();
+    }
+    serialized = result;
+  } catch {
+    throw new BadRequestException('Schema must be JSON serializable');
+  }
   if (Buffer.byteLength(serialized, 'utf-8') > maxSizeBytes) {
     throw new BadRequestException(`Schema must not exceed ${maxSizeBytes} bytes`);
   }
@@ -41,7 +53,7 @@ export function assertValidPageSchema(
     throw new BadRequestException('Schema components must be an object');
   }
 
-  if (!(rootId in components)) {
+  if (!hasOwn(components, rootId)) {
     throw new BadRequestException(`Schema rootId ${rootId} does not exist in components`);
   }
 
@@ -77,7 +89,7 @@ export function assertValidPageSchema(
     if (Array.isArray(typedComponent.childrenIds)) {
       const childIds = new Set<string>();
       for (const childId of typedComponent.childrenIds) {
-        if (typeof childId !== 'string' || !(childId in components)) {
+        if (typeof childId !== 'string' || !hasOwn(components, childId)) {
           throw new BadRequestException(
             `Component ${componentId} references missing child ${String(childId)}`,
           );
@@ -128,18 +140,39 @@ function assertValidComponentGraph(schema: A2UISchemaShape): void {
     }
   }
 
-  const visited = new Set<string>();
-  const visiting = new Set<string>();
-  const visit = (componentId: string) => {
-    if (visiting.has(componentId))
-      throw new BadRequestException('Schema contains a component cycle');
-    if (visited.has(componentId)) return;
-    visiting.add(componentId);
-    for (const childId of schema.components[componentId].childrenIds ?? []) visit(childId);
-    visiting.delete(componentId);
-    visited.add(componentId);
-  };
-  for (const componentId of Object.keys(schema.components)) visit(componentId);
+  const state = new Map<string, 'visiting' | 'visited'>();
+
+  for (const startId of Object.keys(schema.components)) {
+    if (state.has(startId)) continue;
+
+    const stack: Array<{ id: string; nextChildIndex: number }> = [
+      { id: startId, nextChildIndex: 0 },
+    ];
+    state.set(startId, 'visiting');
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const children = schema.components[frame.id].childrenIds ?? [];
+
+      if (frame.nextChildIndex >= children.length) {
+        state.set(frame.id, 'visited');
+        stack.pop();
+        continue;
+      }
+
+      const childId = children[frame.nextChildIndex++];
+      const childState = state.get(childId);
+
+      if (childState === 'visiting') {
+        throw new BadRequestException('Schema contains a component cycle');
+      }
+
+      if (childState !== 'visited') {
+        state.set(childId, 'visiting');
+        stack.push({ id: childId, nextChildIndex: 0 });
+      }
+    }
+  }
 
   const reachable = new Set<string>();
   const stack = [schema.rootId];
