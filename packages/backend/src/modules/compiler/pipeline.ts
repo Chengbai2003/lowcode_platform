@@ -704,6 +704,26 @@ function registerNestedCodeHandler(
   return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, build);
 }
 
+function getCapturedLocals(
+  localScope: Set<string>,
+  shadowedNames: readonly string[] = [],
+): string[] {
+  const shadowed = new Set(shadowedNames);
+  return Array.from(localScope).filter((name) => !shadowed.has(name));
+}
+
+function buildCallbackReference(
+  handlerName: string,
+  runtimeParams: readonly string[],
+  capturedLocals: readonly string[],
+): string {
+  if (capturedLocals.length === 0) {
+    return handlerName;
+  }
+  const args = [...runtimeParams, ...capturedLocals];
+  return `(${runtimeParams.join(', ')}) => ${handlerName}(${args.join(', ')})`;
+}
+
 function getFieldInfo(ctx: TransformContext, sourceKey: string): FieldInfo | undefined {
   return ctx.fieldBySourceKey.get(sourceKey) ?? ctx.fieldByName.get(sourceKey);
 }
@@ -1207,6 +1227,7 @@ function buildActionStatement(
             },
             '{}',
             ctxFields,
+            localScope,
           )}`,
         );
       }
@@ -1222,18 +1243,23 @@ function buildActionStatement(
         ctxFields,
         localScope,
       );
-      const paramsCode = action.params
-        ? `const requestParams = ${getExpressionCode(
-            {
-              kind: 'object',
-              properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
-            },
-            '{}',
-            ctxFields,
-            localScope,
-          )};\nconst queryString = new URLSearchParams(Object.entries(requestParams).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst requestUrl = queryString ? (${urlCode}).includes('?') ? ${urlCode} + '&' + queryString : ${urlCode} + '?' + queryString : ${urlCode};`
-        : `const requestUrl = ${urlCode};`;
+      const requestUrlVar = ctx.registry.allocateInternal('__requestUrl', 'api:url');
+      let paramsCode = `const ${requestUrlVar} = ${urlCode};`;
+      if (action.params) {
+        const requestParamsVar = ctx.registry.allocateInternal('__requestParams', 'api:params');
+        const queryStringVar = ctx.registry.allocateInternal('__queryString', 'api:query');
+        paramsCode = `const ${requestParamsVar} = ${getExpressionCode(
+          {
+            kind: 'object',
+            properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
+          },
+          '{}',
+          ctxFields,
+          localScope,
+        )};\nconst ${queryStringVar} = new URLSearchParams(Object.entries(${requestParamsVar}).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst ${requestUrlVar} = ${queryStringVar} ? (${urlCode}).includes('?') ? ${urlCode} + '&' + ${queryStringVar} : ${urlCode} + '?' + ${queryStringVar} : ${urlCode};`;
+      }
 
+      const successCapturedLocals = getCapturedLocals(localScope, ['response']);
       const successLocals = new Set(localScope);
       successLocals.add('response');
       const successHandler =
@@ -1242,7 +1268,7 @@ function buildActionStatement(
               ownerHandlerName,
               'OnSuccess',
               ctx,
-              ['response'],
+              ['response', ...successCapturedLocals],
               (handlerName) => {
                 const onSuccess = buildActionBlock(
                   action.onSuccess ?? [],
@@ -1264,13 +1290,14 @@ function buildActionStatement(
               },
             )
           : undefined;
+      const errorCapturedLocals = getCapturedLocals(localScope, ['error']);
       const errorLocals = new Set(localScope);
       errorLocals.add('error');
       const errorHandler = registerNestedCodeHandler(
         ownerHandlerName,
         'OnError',
         ctx,
-        ['error'],
+        ['error', ...errorCapturedLocals],
         (handlerName) => {
           const onError = buildActionBlock(action.onError ?? [], ctx, handlerName, errorLocals);
           return {
@@ -1280,10 +1307,17 @@ function buildActionStatement(
         },
       );
 
-      const successChain = successHandler ? `\n  .then(${successHandler.name})` : '';
+      const successChain = successHandler
+        ? `\n  .then(${buildCallbackReference(successHandler.name, ['response'], successCapturedLocals)})`
+        : '';
+      const errorReference = buildCallbackReference(
+        errorHandler.name,
+        ['error'],
+        errorCapturedLocals,
+      );
 
       return {
-        code: `${paramsCode}\nfetch(requestUrl, { ${configParts.join(', ')} })\n  .then((res) => res.json())${successChain}\n  .catch(${errorHandler.name});`,
+        code: `${paramsCode}\nfetch(${requestUrlVar}, { ${configParts.join(', ')} })\n  .then((res) => res.json())${successChain}\n  .catch(${errorReference});`,
         async: Boolean(successHandler?.async) || errorHandler.async,
       };
     }
@@ -1330,8 +1364,16 @@ function buildActionStatement(
       const objectParts = [`title: ${titleCode}`, `content: ${contentCode}`];
 
       if (kind === 'confirm') {
+        const capturedLocals = getCapturedLocals(localScope);
         const onOkHandler = action.onOk?.length
-          ? registerNestedActionHandler(ownerHandlerName, 'OnOk', action.onOk, ctx, [], localScope)
+          ? registerNestedActionHandler(
+              ownerHandlerName,
+              'OnOk',
+              action.onOk,
+              ctx,
+              capturedLocals,
+              localScope,
+            )
           : undefined;
         const onCancelHandler = action.onCancel?.length
           ? registerNestedActionHandler(
@@ -1339,16 +1381,18 @@ function buildActionStatement(
               'OnCancel',
               action.onCancel,
               ctx,
-              [],
+              capturedLocals,
               localScope,
             )
           : undefined;
 
         if (onOkHandler) {
-          objectParts.push(`onOk: ${onOkHandler.name}`);
+          objectParts.push(`onOk: ${buildCallbackReference(onOkHandler.name, [], capturedLocals)}`);
         }
         if (onCancelHandler) {
-          objectParts.push(`onCancel: ${onCancelHandler.name}`);
+          objectParts.push(
+            `onCancel: ${buildCallbackReference(onCancelHandler.name, [], capturedLocals)}`,
+          );
         }
         return {
           code: `Modal.confirm({ ${objectParts.join(', ')} });`,
