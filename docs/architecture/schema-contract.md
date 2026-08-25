@@ -24,13 +24,19 @@ interface PageRecord {
   pageId: string;
   systemId: string;
   pageVersion: number;
+  componentPresetId: string;
+  componentPresetVersion: string;
+  rendererVersion: string;
   schema: PageSchema;
 }
 ```
 
 - `schemaVersion` 描述 DSL 格式。
 - `pageVersion` 描述页面内容修订，用于乐观锁、Patch Preview 和快照。
+- `componentPresetId`、`componentPresetVersion` 和 `rendererVersion` 随每个页面版本及快照持久化，用于历史复现。
 - Repository 不再通过修改 Schema 的协议版本表达页面修订。
+
+运行时仍由服务端根据 `systemId` 解析当前可信 `SystemRuntimeProfile`；持久化的版本字段不能由客户端或 Agent 自报。恢复历史快照时必须使用快照记录的精确 Preset/Renderer 版本，不可用时 fail-close 为原始 JSON 只读。
 
 ## 基础结构
 

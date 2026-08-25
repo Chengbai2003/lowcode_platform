@@ -160,7 +160,7 @@ M4 初期只输出报告；规则稳定后再选择低误报规则进入阻断�
 
 ## 18 个 Epic 清单
 
-1. `[M0-1] [Architecture] 建立 DSL 单一真相源、版本字段边界与首个正式 Schema V1`
+1. `[M0-1] [Architecture] 建立 DSL 单一真相源与 schemaVersion/pageVersion 边界`
 2. `[M0-2] [Quality] 修复剩余 3 组 Nest 测试并恢复后端 36/36 全量门禁`
 3. `[M0-3] [Eval] 建立确定性离线评测 Harness 与首批 20 个基线用例`
 4. `[M0-4] [Architecture] 抽离独立 Renderer Package、单系统 ComponentPreset 与 RuntimeSession 隔离`
