@@ -1,12 +1,29 @@
 import jsep from 'jsep';
 import jsepNew from '@jsep-plugin/new';
+import { pauseTracking, resumeTracking, isTrackingProxy } from '../../reactive/tracking';
+import {
+  cloneSanitizedSafe,
+  fallbackCloneSafe,
+  isPlainObject as isPlainObjectSafe,
+} from '../../utils/safeClone';
+
+function getIntrinsicSafe(obj: object, key: string): unknown {
+  try {
+    const desc = Object.getOwnPropertyDescriptor(obj, key);
+    if (!desc) return undefined;
+    if (desc.get || desc.set) return undefined;
+    return desc.value;
+  } catch {
+    return undefined;
+  }
+}
 
 jsep.plugins.register(jsepNew);
 // jsep 默认不将 typeof 视作一元运算符，需要手动注册
 jsep.addUnaryOp('typeof');
 
-// 白名单：允许在表达式中使用的全局对象与方法
-export const SAFE_GLOBALS: Record<string, any> = {
+// 白名单：允许在表达式中使用的全局对象与方法 — null-prototype, frozen
+export const SAFE_GLOBALS: Record<string, any> = Object.assign(Object.create(null), {
   Math,
   JSON,
   Date,
@@ -21,7 +38,184 @@ export const SAFE_GLOBALS: Record<string, any> = {
   null: null,
   true: true,
   false: false,
+});
+Object.freeze(SAFE_GLOBALS);
+
+const hasOwn = (t: object, k: PropertyKey): boolean => Object.prototype.hasOwnProperty.call(t, k);
+
+// P0-3: internal pure utils (descriptor-safe clone via shared safeClone)
+const PURE_UTILS_KEYS_INTERNAL = ['formatDate', 'uuid', 'clone'] as const;
+function fallbackClonePureInternal<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  return fallbackCloneSafe(value, seen);
+}
+const pureFormatDateInternal = (date: Date | string, _format = 'YYYY-MM-DD'): string =>
+  String(date);
+const pureUuidInternal = (): string => {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID)
+    return (crypto as any).randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 };
+const pureCloneInternal = <T>(obj: T): T => fallbackClonePureInternal(obj);
+const INTERNAL_PURE_UTILS: Record<string, unknown> = {
+  formatDate: pureFormatDateInternal,
+  uuid: pureUuidInternal,
+  clone: pureCloneInternal,
+};
+
+const BLOCKED_MEMBER_PROPS = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+  'toJSON',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+]);
+
+const BLOCKED_CALL_METHODS = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+  'assign',
+  'defineProperty',
+  'setPrototypeOf',
+  'freeze',
+  'seal',
+  'preventExtensions',
+  'toJSON',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+]);
+
+// ——— P0-2: intrinsic 白名单（只允许原生原型方法且未被自有属性覆盖） ———
+const STRING_SAFE = new Set([
+  'slice',
+  'substring',
+  'split',
+  'includes',
+  'startsWith',
+  'endsWith',
+  'toLowerCase',
+  'toUpperCase',
+  'trim',
+  'trimStart',
+  'trimEnd',
+  'indexOf',
+  'lastIndexOf',
+  'charAt',
+  'charCodeAt',
+  'replace',
+  'replaceAll',
+  'toString',
+  'valueOf',
+]);
+const ARRAY_SAFE = new Set([
+  'slice',
+  'concat',
+  'includes',
+  'indexOf',
+  'lastIndexOf',
+  'join',
+  'at',
+  'flat',
+]);
+const NUMBER_SAFE = new Set(['toString', 'toFixed', 'toPrecision', 'toExponential', 'valueOf']);
+const MATH_SAFE = new Set([
+  'abs',
+  'ceil',
+  'floor',
+  'round',
+  'max',
+  'min',
+  'pow',
+  'sqrt',
+  'trunc',
+  'sign',
+  'random',
+]);
+const JSON_SAFE = new Set(['stringify', 'parse']);
+
+const ARRAY_MUTATOR_BLOCK = new Set([
+  'push',
+  'pop',
+  'shift',
+  'unshift',
+  'splice',
+  'sort',
+  'reverse',
+  'fill',
+  'copyWithin',
+]);
+const ARRAY_CALLBACK_BLOCK = new Set([
+  'map',
+  'filter',
+  'find',
+  'findIndex',
+  'findLast',
+  'findLastIndex',
+  'some',
+  'every',
+  'reduce',
+  'reduceRight',
+  'flatMap',
+  'forEach',
+  'sort',
+]);
+const STRING_BLOCK = new Set(['match', 'search', 'matchAll', 'repeat', 'padStart', 'padEnd']);
+
+const DATE_SAFE = new Set([
+  'valueOf',
+  'getTime',
+  'getFullYear',
+  'getMonth',
+  'getDate',
+  'getDay',
+  'getHours',
+  'getMinutes',
+  'getSeconds',
+  'getMilliseconds',
+  'getUTCFullYear',
+  'getUTCMonth',
+  'getUTCDate',
+  'getUTCDay',
+  'getUTCHours',
+  'getUTCMinutes',
+  'getUTCSeconds',
+  'getUTCMilliseconds',
+  'getTimezoneOffset',
+  'toString',
+  'toISOString',
+  'toUTCString',
+]);
+
+// ——— P0-2: 输入净化（via shared safeClone, descriptor-safe） ———
+const SANITIZE_SKIP = Symbol('sanitize-skip');
+function isPlainObject(o: unknown): boolean {
+  return isPlainObjectSafe(o);
+}
+function cloneSanitized(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
+  return cloneSanitizedSafe(value, seen, SANITIZE_SKIP, { isTrackingProxy });
+}
+function sanitizeContext(context: Record<string, any> | undefined): Record<string, any> {
+  if (!context || typeof context !== 'object') return {};
+  const cloned = cloneSanitized(context) as Record<string, any>;
+  const out = (cloned as Record<string, any>) ?? {};
+  // P0-3: reconstruct pure utils with internal implementations, not accepting context override
+  const filtered: Record<string, any> = {};
+  for (const kk of PURE_UTILS_KEYS_INTERNAL) {
+    const fn = (INTERNAL_PURE_UTILS as Record<string, any>)[kk];
+    if (typeof fn === 'function') filtered[kk] = fn;
+  }
+  if (Object.keys(filtered).length > 0) out.utils = filtered;
+  return out;
+}
 
 /**
  * 安全计算 AST 节点
@@ -36,11 +230,11 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'Identifier': {
       const name = (node as jsep.Identifier).name;
-      // 优先从上下文获取，其次是从白名单全局对象获取
-      if (context && typeof context === 'object' && name in context) {
+      // 优先从上下文获取，其次是从白名单全局对象获取 — own-only (P1-high #3)
+      if (context && typeof context === 'object' && hasOwn(context, name)) {
         return context[name];
       }
-      if (name in SAFE_GLOBALS) {
+      if (hasOwn(SAFE_GLOBALS, name)) {
         return SAFE_GLOBALS[name];
       }
       return undefined;
@@ -63,15 +257,41 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         propertyName = (memberNode.property as jsep.Identifier).name;
       }
 
-      // 安全检查：阻止访问原型链和构造函数
-      if (
-        propertyName === '__proto__' ||
-        propertyName === 'prototype' ||
-        propertyName === 'constructor'
-      ) {
+      // 安全检查：阻止访问原型链、构造函数及危险方法
+      if (typeof propertyName === 'symbol') return undefined;
+      if (typeof propertyName === 'string' && BLOCKED_MEMBER_PROPS.has(propertyName)) {
         return undefined;
       }
 
+      // For tracking proxy, use direct access to trigger dependency collection (membrane handles security)
+      if (isTrackingProxy(obj)) {
+        return obj[propertyName];
+      }
+      // descriptor-safe access: block getter/setter if any (for non-proxy plain objects, sanitize already stripped getters)
+      try {
+        const desc = Object.getOwnPropertyDescriptor(obj, String(propertyName));
+        if (desc && (desc.get || desc.set)) return undefined;
+        if (desc && typeof desc.value === 'function') {
+          return undefined;
+        }
+      } catch {
+        return undefined;
+      }
+
+      // Use descriptor value if available to avoid invoking getter
+      const desc2 = Object.getOwnPropertyDescriptor(obj, String(propertyName));
+      if (desc2 && 'value' in desc2) return desc2.value;
+      // For prototype chain, check for getter/function to block
+      let proto = Object.getPrototypeOf(obj);
+      while (proto) {
+        const pd = Object.getOwnPropertyDescriptor(proto, String(propertyName));
+        if (pd) {
+          if (pd.get || pd.set) return undefined;
+          if (typeof pd.value === 'function') return undefined;
+          break;
+        }
+        proto = Object.getPrototypeOf(proto);
+      }
       return obj[propertyName];
     }
 
@@ -79,6 +299,16 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       const binaryNode = node as jsep.BinaryExpression;
       const left = evaluateNode(binaryNode.left, context);
       const right = evaluateNode(binaryNode.right, context);
+
+      // P0-3: block implicit coercion via Symbol.toPrimitive / valueOf: object operands fail-close for arithmetic/comparison
+      const isObj = (v: unknown) => v !== null && typeof v === 'object';
+      const op = binaryNode.operator;
+      if (
+        (isObj(left) || isObj(right)) &&
+        ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op)
+      ) {
+        return undefined;
+      }
 
       switch (binaryNode.operator) {
         case '+':
@@ -134,14 +364,14 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
     case 'UnaryExpression': {
       const unaryNode = node as jsep.UnaryExpression;
 
-      // 特殊处理 typeof，因为它允许操作未定义的变量而不报错
+      // 特殊处理 typeof，因为它允许操作未定义的变量而不报错 — own-only
       if (unaryNode.operator === 'typeof') {
         if (unaryNode.argument.type === 'Identifier') {
           const name = (unaryNode.argument as jsep.Identifier).name;
-          if (context && typeof context === 'object' && name in context) {
+          if (context && typeof context === 'object' && hasOwn(context, name)) {
             return typeof context[name];
           }
-          if (name in SAFE_GLOBALS) {
+          if (hasOwn(SAFE_GLOBALS, name)) {
             return typeof SAFE_GLOBALS[name];
           }
           return 'undefined';
@@ -175,10 +405,6 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'CallExpression': {
       const callNode = node as jsep.CallExpression;
-
-      // 我们只支持对象方法的调用 (如 Math.max)，或者 context 里提供的安全函数
-      // 不支持直接全局函数调用（比如未在 context 或白名单声明的 alert()）
-
       let funcName: string;
       let targetObj: any;
       let func: any;
@@ -186,80 +412,128 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       if (callNode.callee.type === 'MemberExpression') {
         const memberNode = callNode.callee as jsep.MemberExpression;
         targetObj = evaluateNode(memberNode.object, context);
-
         if (targetObj === undefined || targetObj === null) return undefined;
-
         if (memberNode.computed) {
           funcName = evaluateNode(memberNode.property, context);
         } else {
           funcName = (memberNode.property as jsep.Identifier).name;
         }
-
-        // 安全拦截
+        if (typeof funcName !== 'string') return undefined;
+        if (BLOCKED_CALL_METHODS.has(funcName)) return undefined;
         if (
-          funcName === '__proto__' ||
-          funcName === 'prototype' ||
-          funcName === 'constructor' ||
-          [
-            'assign',
-            'defineProperty',
-            'setPrototypeOf',
-            'freeze',
-            'seal',
-            'preventExtensions',
-          ].includes(funcName)
+          STRING_BLOCK.has(funcName) ||
+          ARRAY_MUTATOR_BLOCK.has(funcName) ||
+          ARRAY_CALLBACK_BLOCK.has(funcName)
+        )
+          return undefined;
+        // P0-3/P1: hasOwnProperty 仅对业务 plain 对象生效，对 Math/JSON/String/Number/Array/Date/utils 等 intrinsic 跳过
+        const isUtilsTarget = targetObj === (context as any).utils;
+        const isIntrinsicTarget =
+          targetObj === Math ||
+          targetObj === JSON ||
+          typeof targetObj === 'string' ||
+          targetObj instanceof String ||
+          Array.isArray(targetObj) ||
+          typeof targetObj === 'number' ||
+          targetObj instanceof Number ||
+          targetObj instanceof Date ||
+          isUtilsTarget;
+        const isBusinessPlainForCall =
+          !isIntrinsicTarget &&
+          targetObj !== null &&
+          typeof targetObj === 'object' &&
+          isPlainObject(targetObj);
+        if (isBusinessPlainForCall && Object.prototype.hasOwnProperty.call(targetObj, funcName))
+          return undefined;
+        // 固定 intrinsic 对比，不先读 target[funcName] — 先校验白名单再求值参数，避免对已拦截方法仍执行参数中的副作用
+        const t = targetObj;
+        if (typeof t === 'string' || t instanceof String) {
+          if (!STRING_SAFE.has(funcName)) return undefined;
+          func = getIntrinsicSafe(String.prototype, funcName);
+        } else if (Array.isArray(t)) {
+          if (!ARRAY_SAFE.has(funcName)) return undefined;
+          func = getIntrinsicSafe(Array.prototype, funcName);
+        } else if (typeof t === 'number' || t instanceof Number) {
+          if (!NUMBER_SAFE.has(funcName)) return undefined;
+          func = getIntrinsicSafe(Number.prototype, funcName);
+        } else if (t instanceof Date) {
+          if (!DATE_SAFE.has(funcName)) return undefined;
+          func = getIntrinsicSafe(Date.prototype, funcName);
+        } else if (t === Math) {
+          if (!MATH_SAFE.has(funcName)) return undefined;
+          func = getIntrinsicSafe(Math as unknown as object, funcName);
+        } else if (t === JSON) {
+          if (!JSON_SAFE.has(funcName)) return undefined;
+          func = getIntrinsicSafe(JSON as unknown as object, funcName);
+        } else if (
+          t === (context as any).utils &&
+          (PURE_UTILS_KEYS_INTERNAL as readonly string[]).includes(funcName)
         ) {
+          // utils 命名空间：仅允许 PURE_UTILS 白名单，且从内部纯净实现取函数
+          func = (INTERNAL_PURE_UTILS as Record<string, unknown>)[funcName];
+        } else {
           return undefined;
         }
-
-        func = targetObj[funcName];
+        if (typeof func !== 'function') return undefined;
+        // 仅在白名单校验通过后求值参数
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        if (args.some((a) => typeof a === 'function')) return undefined;
+        try {
+          return func.apply(t, args);
+        } catch {
+          return undefined;
+        }
       } else if (callNode.callee.type === 'Identifier') {
         funcName = (callNode.callee as jsep.Identifier).name;
-
-        if (context && funcName in context) {
-          func = context[funcName];
-          targetObj = context; // 函数的 this 绑定到 context
-        } else if (funcName in SAFE_GLOBALS) {
-          func = SAFE_GLOBALS[funcName];
-          targetObj = SAFE_GLOBALS; // 函数的 this 绑定到 SAFE_GLOBALS
+        if (BLOCKED_CALL_METHODS.has(funcName)) return undefined;
+        if (
+          STRING_BLOCK.has(funcName) ||
+          ARRAY_MUTATOR_BLOCK.has(funcName) ||
+          ARRAY_CALLBACK_BLOCK.has(funcName)
+        )
+          return undefined;
+        if (context && hasOwn(context, funcName)) {
+          // context 中函数已被 sanitize 去除，此处若仍存在则为潜在污染，直接拒绝 — own-only
+          return undefined;
         }
-      }
-
-      if (typeof func !== 'function') {
-        return undefined; // 不是一个可调用的函数
-      }
-
-      // 计算参数
-      const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
-
-      try {
-        return func.apply(targetObj, args);
-      } catch (err) {
-        return undefined; // 函数内部报错，安全静默
+        if (hasOwn(SAFE_GLOBALS, funcName)) {
+          func = SAFE_GLOBALS[funcName];
+          targetObj = undefined;
+        } else {
+          return undefined;
+        }
+        if (typeof func !== 'function') return undefined;
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        if (args.some((a) => typeof a === 'function')) return undefined;
+        try {
+          return func.apply(targetObj, args);
+        } catch {
+          return undefined;
+        }
+      } else {
+        return undefined;
       }
     }
 
     case 'NewExpression': {
-      // 类似 CallExpression，但用于初始化对象
-      const newNode = node as jsep.CallExpression; // JSEP 将 NewExpression 的结构定义得和 CallExpression 类似
-
+      // 仅允许 Date 作为构造器
+      const newNode = node as jsep.CallExpression;
       let className: string;
       let Cls: any;
-
       if (newNode.callee.type === 'Identifier') {
         className = (newNode.callee as jsep.Identifier).name;
-        // 只能实例化白名单中允许的类（比如 Date）
-        if (className in SAFE_GLOBALS) {
-          Cls = SAFE_GLOBALS[className];
+        if (className === 'Date') {
+          Cls = Date;
+        } else {
+          return undefined;
         }
+      } else {
+        return undefined;
       }
-
       if (typeof Cls !== 'function') {
-        return undefined; // 不是一个安全或允许的构造函数
+        return undefined;
       }
-
       const args = newNode.arguments.map((arg) => evaluateNode(arg, context));
-
       try {
         return new Cls(...args);
       } catch (err) {
@@ -274,12 +548,10 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'Compound': {
       const compoundNode = node as jsep.Compound;
-      if (!compoundNode.body || compoundNode.body.length === 0) {
+      if (!compoundNode.body || compoundNode.body.length !== 1) {
         return undefined;
       }
-
-      // 数据绑定表达式引擎应当仅为“单表达式（Single Expression）”计算。
-      // 拒绝多语句执行防止恶意的副作用串联注入 (如 {{ a=1, b=2, leak(b) }})
+      // 仅允许单表达式，拒绝多语句逗号串联
       return evaluateNode(compoundNode.body[0], context);
     }
 
@@ -333,10 +605,20 @@ export function safeEvaluate(expression: string, context: Record<string, any> = 
   if (typeof expression !== 'string' || !expression.trim()) {
     return undefined;
   }
-
+  let sanitized: Record<string, any>;
+  try {
+    pauseTracking();
+    sanitized = sanitizeContext(context);
+  } finally {
+    try {
+      resumeTracking();
+    } catch {
+      // ignore
+    }
+  }
   try {
     const ast = getCachedAST(expression);
-    return evaluateNode(ast, context);
+    return evaluateNode(ast, sanitized);
   } catch (error) {
     // 表达式语法报错，安全返回 undefined
     return undefined;

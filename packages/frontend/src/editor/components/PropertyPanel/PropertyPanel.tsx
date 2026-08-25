@@ -229,9 +229,10 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         case 'tableColumns':
           return (
             <TableColumnsEditor
-              key={prop.key}
+              key={`${selectedId}:${prop.key}`}
               {...commonProps}
               defaultTemplate={prop.defaultValue}
+              sourceIdentity={selectedId ?? undefined}
             />
           );
         case 'formRules':

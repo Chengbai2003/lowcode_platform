@@ -17,12 +17,22 @@ import {
   toSafeIdentifier,
 } from './helpers/codeHelpers';
 import {
+  BLOCKED_PROP_NAMES,
+  BUILTIN_IDENTIFIERS,
+  collectInlineExpressionIdentifiers,
   isSafeInlineExpression,
   isStaticStringValue,
   isValidExpressionPath,
   normalizeValue,
+  RESERVED_GENERATED_IDENTIFIERS,
   sanitizeUrl,
 } from './security/validators';
+import {
+  GeneratedIdentifierRegistry,
+  isSafeComponentType,
+  isSafeGeneratedIdentifier,
+} from './registry';
+import { assertValidPageSchema } from '../page-schema/schema-validation';
 
 interface PropNode {
   name: string;
@@ -172,6 +182,59 @@ interface TransformContext {
   fieldBySourceKey: Map<string, FieldInfo>;
   fieldByName: Map<string, FieldInfo>;
   reservedHandlerNames: Set<string>;
+  registry: GeneratedIdentifierRegistry;
+}
+
+function isSafePropName(name: string): boolean {
+  return isValidIdentifier(name) && !BLOCKED_PROP_NAMES.has(name) && !name.startsWith('__');
+}
+
+function isSafeEventName(name: string): boolean {
+  return isValidIdentifier(name) && /^on[A-Z]/.test(name) && isSafeGeneratedIdentifier(name);
+}
+
+function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): string | undefined {
+  if (!resultTo) return undefined;
+  if (ctx.fieldByName.has(resultTo)) return resultTo;
+  if (resultTo.startsWith('state.')) {
+    const suffix = resultTo.slice(6);
+    if (isSafeGeneratedIdentifier(suffix)) {
+      return resultTo;
+    }
+    return undefined;
+  }
+  return undefined;
+}
+
+function sanitizeStateKey(stateKey: string): string | undefined {
+  return isSafeGeneratedIdentifier(stateKey) ? stateKey : undefined;
+}
+
+const ALLOWED_FEEDBACK_LEVELS = new Set(['info', 'success', 'warning', 'error']);
+const ALLOWED_LOG_LEVELS = new Set(['info', 'success', 'warning', 'error', 'log', 'debug', 'warn']);
+
+function sanitizeFeedbackLevel(level: string | undefined, fallback = 'info'): string {
+  if (level && ALLOWED_FEEDBACK_LEVELS.has(level)) return level;
+  return fallback;
+}
+
+function sanitizeLogLevel(level: string | undefined, fallback = 'log'): string {
+  if (level && ALLOWED_LOG_LEVELS.has(level)) return level;
+  return fallback;
+}
+
+function sanitizeLoopVar(name: string | undefined, fallback: string): string {
+  if (name === undefined) {
+    return fallback;
+  }
+  if (!isSafeGeneratedIdentifier(name)) {
+    throw new Error(`非法循环变量标识符: "${name}"`);
+  }
+  return name;
+}
+
+function escapeComment(text: string): string {
+  return text.replace(/\*\//g, '* /').replace(/\/\*/g, '/ *');
 }
 
 const LABEL_WRAPPER_MARGIN_BOTTOM = 16;
@@ -229,13 +292,17 @@ function parseAction(action: unknown): ActionNode {
     body: record.body !== undefined ? normalizeValue(record.body) : undefined,
     headers: normalizeValueRecord(record.headers),
     params: normalizeValueRecord(record.params),
-    actions: Array.isArray(record.actions) ? record.actions.map((item) => parseAction(item)) : undefined,
+    actions: Array.isArray(record.actions)
+      ? record.actions.map((item) => parseAction(item))
+      : undefined,
     then: Array.isArray(record.then) ? record.then.map((item) => parseAction(item)) : undefined,
     else: Array.isArray(record.else) ? record.else.map((item) => parseAction(item)) : undefined,
     onSuccess: Array.isArray(record.onSuccess)
       ? record.onSuccess.map((item) => parseAction(item))
       : undefined,
-    onError: Array.isArray(record.onError) ? record.onError.map((item) => parseAction(item)) : undefined,
+    onError: Array.isArray(record.onError)
+      ? record.onError.map((item) => parseAction(item))
+      : undefined,
     onOk: Array.isArray(record.onOk) ? record.onOk.map((item) => parseAction(item)) : undefined,
     onCancel: Array.isArray(record.onCancel)
       ? record.onCancel.map((item) => parseAction(item))
@@ -301,7 +368,9 @@ function buildComponentTree(
       eventName: event.eventName,
       actions: event.actions.map((action) => cloneActionNode(action)),
     })),
-    children: flatComponent.childIds.map((childId) => buildComponentTree(childId, componentMap, nextPath)),
+    children: flatComponent.childIds.map((childId) =>
+      buildComponentTree(childId, componentMap, nextPath),
+    ),
   };
 }
 
@@ -329,7 +398,10 @@ export function parseSchema(schema: A2UISchema, options?: CompileOptions): RootN
   };
 }
 
-function findProp(component: FlatComponentNode | ResolvedComponentNode, name: string): PropNode | undefined {
+function findProp(
+  component: FlatComponentNode | ResolvedComponentNode,
+  name: string,
+): PropNode | undefined {
   return component.props.find((prop) => prop.name === name);
 }
 
@@ -352,31 +424,82 @@ function registerField(ctx: TransformContext, field: FieldInfo) {
   if (ctx.fieldBySourceKey.has(field.sourceKey)) {
     return;
   }
+  const candidate = field.name;
+  const setter = createSetterName(candidate);
+  ctx.registry.assertAvailable(candidate, `field:${field.sourceKey}`);
+  ctx.registry.assertAvailable(setter, `setter:${field.sourceKey}`);
+  ctx.registry.reserveExact(candidate, `field:${field.sourceKey}`);
+  ctx.registry.reserveExact(setter, `setter:${field.sourceKey}`);
   ctx.fieldBySourceKey.set(field.sourceKey, field);
   ctx.fieldByName.set(field.name, field);
   ctx.fields.push(field);
 }
 
 function resolveFieldName(sourceKey: string, source: FieldInfo['source']): string {
-  if (source === 'hiddenData') {
-    return isValidIdentifier(sourceKey) ? sourceKey : toSafeIdentifier(sourceKey);
+  // 禁止危险名称在规范化过程中被洗白，保留原名交 registerField/registry 明确抛错（__proto__→_Proto__ 等）
+  if (RESERVED_GENERATED_IDENTIFIERS.has(sourceKey) || BUILTIN_IDENTIFIERS.has(sourceKey)) {
+    return sourceKey;
   }
-  return toCamelCase(sourceKey);
+  let candidate: string;
+  if (source === 'hiddenData') {
+    candidate = isValidIdentifier(sourceKey) ? sourceKey : toSafeIdentifier(sourceKey);
+  } else {
+    const camel = toCamelCase(sourceKey);
+    if (camel && isValidIdentifier(camel)) {
+      candidate = camel;
+    } else {
+      candidate = toSafeIdentifier(camel || sourceKey) || 'fieldValue';
+    }
+  }
+  if (!candidate) candidate = 'fieldValue';
+  if (!isValidIdentifier(candidate)) {
+    candidate = toSafeIdentifier(candidate) || 'fieldValue';
+  }
+  // Keep reserved/builtin as-is so registerField can throw with proper owner info instead of silently renaming
+  if (RESERVED_GENERATED_IDENTIFIERS.has(candidate) || BUILTIN_IDENTIFIERS.has(candidate)) {
+    return candidate;
+  }
+  if (!isSafeGeneratedIdentifier(candidate)) {
+    const sanitized = toSafeIdentifier(candidate) || 'fieldValue';
+    if (isSafeGeneratedIdentifier(sanitized)) {
+      candidate = sanitized;
+    } else {
+      const fallback = `${candidate}_`;
+      if (isSafeGeneratedIdentifier(fallback)) {
+        candidate = fallback;
+      } else {
+        candidate = `field_${toSafeIdentifier(sourceKey) || 'value'}`;
+        if (!isSafeGeneratedIdentifier(candidate)) candidate = 'fieldValue';
+      }
+    }
+  }
+  if (!isSafeGeneratedIdentifier(candidate)) {
+    candidate = 'fieldValue';
+  }
+  return candidate;
 }
 
 function collectFields(ctx: TransformContext) {
   for (const component of ctx.root.flatComponents) {
     const fieldProp = findProp(component, 'field');
-    if (fieldProp && fieldProp.value.kind === 'literal' && typeof fieldProp.value.value === 'string') {
+    if (
+      fieldProp &&
+      fieldProp.value.kind === 'literal' &&
+      typeof fieldProp.value.value === 'string'
+    ) {
       const rawFieldName = fieldProp.value.value;
-      const initialValue =
-        findProp(component, 'defaultValue')?.value ??
+      const initialValue = findProp(component, 'defaultValue')?.value ??
         findProp(component, 'value')?.value ??
         findProp(component, 'initialValue')?.value ?? { kind: 'literal', value: '' as const };
 
       registerField(
         ctx,
-        createFieldInfo(resolveFieldName(rawFieldName, 'field'), rawFieldName, 'field', initialValue),
+        createFieldInfo(
+          resolveFieldName(rawFieldName, 'field'),
+          rawFieldName,
+          'field',
+          initialValue,
+        ),
       );
       continue;
     }
@@ -406,20 +529,35 @@ function addImport(ctx: TransformContext, source: string, name: string) {
   if (!ctx.imports.has(source)) {
     ctx.imports.set(source, new Set());
   }
-  ctx.imports.get(source)?.add(name);
+  const set = ctx.imports.get(source);
+  if (set?.has(name)) return;
+  set?.add(name);
+  if (!ctx.registry.has(name)) {
+    ctx.registry.reserveExact(name, `import:${name}`);
+  }
 }
 
 function collectImports(ctx: TransformContext) {
   ctx.imports.set('react', new Set(['useState']));
+  if (!ctx.registry.has('useState')) ctx.registry.reserveExact('useState', 'import:useState');
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
+  if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
   for (const component of ctx.root.flatComponents) {
-    if (!/^[A-Z]/.test(component.componentType)) {
+    if (!isSafeComponentType(component.componentType)) {
       continue;
     }
     const source =
       ctx.root.options.componentSources[component.componentType] || ctx.root.options.defaultLibrary;
     addImport(ctx, source, component.componentType);
+  }
+}
+
+function preCollectAllActionImports(ctx: TransformContext) {
+  for (const component of ctx.root.flatComponents) {
+    for (const event of component.events) {
+      collectActionImports(event.actions, ctx);
+    }
   }
 }
 
@@ -449,6 +587,18 @@ function collectActionImports(actions: ActionNode[], ctx: TransformContext) {
 }
 
 function createTransformContext(root: RootNode): TransformContext {
+  const registry = new GeneratedIdentifierRegistry();
+  for (const name of RESERVED_GENERATED_IDENTIFIERS) {
+    registry.reserveExact(name, `reserved:${name}`);
+  }
+  for (const name of BUILTIN_IDENTIFIERS) {
+    // avoid double-reserve if already in RESERVED (none overlap but keep safe)
+    if (!registry.has(name)) registry.reserveExact(name, `builtin:${name}`);
+  }
+  const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
+  for (const name of reservedHandlerNames) {
+    if (!registry.has(name)) registry.reserveExact(name, `handler:${name}`);
+  }
   return {
     root,
     imports: root.imports,
@@ -456,7 +606,8 @@ function createTransformContext(root: RootNode): TransformContext {
     handlers: root.handlers,
     fieldBySourceKey: new Map(),
     fieldByName: new Map(),
-    reservedHandlerNames: new Set(root.handlers.map((handler) => handler.name)),
+    reservedHandlerNames,
+    registry,
   };
 }
 
@@ -468,22 +619,32 @@ function toPascalIdentifier(value: string, fallback: string): string {
 
 function createEventHandlerName(componentId: string, eventName: string): string {
   const componentPart = toPascalIdentifier(componentId, 'Component');
-  const rawEventName = eventName.startsWith('on') && eventName.length > 2 ? eventName.slice(2) : eventName;
+  const rawEventName =
+    eventName.startsWith('on') && eventName.length > 2 ? eventName.slice(2) : eventName;
   const eventPart = toPascalIdentifier(rawEventName, 'Event');
   return `handle${componentPart}${eventPart}`;
 }
 
-function reserveHandlerName(ctx: TransformContext, baseName: string): string {
-  let candidate = baseName;
-  let suffix = 2;
-
-  while (ctx.reservedHandlerNames.has(candidate)) {
-    candidate = `${baseName}${suffix}`;
-    suffix += 1;
+function reserveHandlerName(
+  ctx: TransformContext,
+  baseName: string,
+  unavailableNames: ReadonlySet<string> = new Set(),
+): string {
+  const owner = `handler:${baseName}`;
+  if (!ctx.registry.has(baseName) && !unavailableNames.has(baseName)) {
+    ctx.registry.reserveExact(baseName, owner);
+    ctx.reservedHandlerNames.add(baseName);
+    return baseName;
   }
-
-  ctx.reservedHandlerNames.add(candidate);
-  return candidate;
+  let suffix = 2;
+  let allocated = `${baseName}_${suffix}`;
+  while (ctx.registry.has(allocated) || unavailableNames.has(allocated)) {
+    suffix += 1;
+    allocated = `${baseName}_${suffix}`;
+  }
+  ctx.registry.reserveExact(allocated, owner);
+  ctx.reservedHandlerNames.add(allocated);
+  return allocated;
 }
 
 function createHandlerCode(
@@ -502,8 +663,9 @@ function registerHandler(
   ctx: TransformContext,
   params: string[],
   build: (handlerName: string) => { code: string; async: boolean },
+  unavailableNames: ReadonlySet<string> = new Set(),
 ): { name: string; async: boolean } {
-  const handlerName = reserveHandlerName(ctx, baseName);
+  const handlerName = reserveHandlerName(ctx, baseName, unavailableNames);
   const handler: HandlerDeclaration = {
     name: handlerName,
     code: '',
@@ -524,9 +686,10 @@ function registerEventHandler(
   eventName: string,
   actions: ActionNode[],
   ctx: TransformContext,
+  localScope: Set<string> = new Set(),
 ): string {
   return registerHandler(createEventHandlerName(componentId, eventName), ctx, [], (handlerName) =>
-    buildActionBlock(actions, ctx, handlerName),
+    buildActionBlock(actions, ctx, handlerName, localScope),
   ).name;
 }
 
@@ -536,9 +699,14 @@ function registerNestedActionHandler(
   actions: ActionNode[],
   ctx: TransformContext,
   params: string[] = [],
+  localScope: Set<string> = new Set(),
 ): { name: string; async: boolean } {
-  return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, (handlerName) =>
-    buildActionBlock(actions, ctx, handlerName),
+  return registerHandler(
+    `${parentHandlerName}${suffix}`,
+    ctx,
+    params,
+    (handlerName) => buildActionBlock(actions, ctx, handlerName, localScope),
+    localScope,
   );
 }
 
@@ -548,15 +716,165 @@ function registerNestedCodeHandler(
   ctx: TransformContext,
   params: string[],
   build: (handlerName: string) => { code: string; async: boolean },
+  unavailableNames: ReadonlySet<string> = new Set(),
 ): { name: string; async: boolean } {
-  return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, build);
+  return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, build, unavailableNames);
+}
+
+function collectValueLocalReferences(
+  value: ValueNode | undefined,
+  visibleLocals: ReadonlySet<string>,
+  referenced: Set<string>,
+): void {
+  if (!value) return;
+  if (value.kind === 'expression') {
+    for (const name of collectInlineExpressionIdentifiers(value.code)) {
+      if (visibleLocals.has(name)) referenced.add(name);
+    }
+    return;
+  }
+  if (value.kind === 'template') {
+    for (const part of value.parts) {
+      if (part.kind === 'expression') {
+        collectValueLocalReferences(part.value, visibleLocals, referenced);
+      }
+    }
+    return;
+  }
+  if (value.kind === 'array') {
+    for (const item of value.items) {
+      collectValueLocalReferences(item, visibleLocals, referenced);
+    }
+    return;
+  }
+  if (value.kind === 'object') {
+    for (const property of value.properties) {
+      collectValueLocalReferences(property.value, visibleLocals, referenced);
+    }
+  }
+}
+
+function collectActionLocalReferences(
+  actions: readonly ActionNode[],
+  visibleLocals: ReadonlySet<string>,
+  referenced: Set<string>,
+): void {
+  for (const action of actions) {
+    for (const value of [
+      action.value,
+      action.url,
+      action.to,
+      action.content,
+      action.title,
+      action.condition,
+      action.over,
+      action.body,
+    ]) {
+      collectValueLocalReferences(value, visibleLocals, referenced);
+    }
+    for (const record of [action.headers, action.params]) {
+      for (const value of Object.values(record ?? {})) {
+        collectValueLocalReferences(value, visibleLocals, referenced);
+      }
+    }
+
+    for (const nested of [action.then, action.else, action.onOk, action.onCancel]) {
+      if (nested) collectActionLocalReferences(nested, visibleLocals, referenced);
+    }
+
+    if (action.type === 'loop' && action.actions) {
+      const nestedLocals = new Set(visibleLocals);
+      nestedLocals.delete(action.itemVar ?? 'item');
+      if (action.indexVar !== undefined) nestedLocals.delete(action.indexVar);
+      collectActionLocalReferences(action.actions, nestedLocals, referenced);
+    } else if (action.actions) {
+      collectActionLocalReferences(action.actions, visibleLocals, referenced);
+    }
+
+    if (action.onSuccess) {
+      const successLocals = new Set(visibleLocals);
+      successLocals.delete('response');
+      collectActionLocalReferences(action.onSuccess, successLocals, referenced);
+    }
+    if (action.onError) {
+      const errorLocals = new Set(visibleLocals);
+      errorLocals.delete('error');
+      collectActionLocalReferences(action.onError, errorLocals, referenced);
+    }
+  }
+}
+
+function actionListUsesGeneratedBinding(
+  actions: readonly ActionNode[],
+  ctx: TransformContext,
+  bindingName: string,
+): boolean {
+  for (const action of actions) {
+    if (action.type === 'setValue' && action.field) {
+      const fieldInfo = getFieldInfo(ctx, action.field);
+      if (fieldInfo?.setterName === bindingName) return true;
+    }
+    for (const nested of [action.then, action.else]) {
+      if (nested && actionListUsesGeneratedBinding(nested, ctx, bindingName)) return true;
+    }
+    if (action.type === 'loop' && action.actions) {
+      const shadowsBinding =
+        (action.itemVar ?? 'item') === bindingName || action.indexVar === bindingName;
+      if (!shadowsBinding && actionListUsesGeneratedBinding(action.actions, ctx, bindingName)) {
+        return true;
+      }
+    } else if (action.actions && actionListUsesGeneratedBinding(action.actions, ctx, bindingName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getCapturedLocals(
+  actions: readonly ActionNode[],
+  localScope: Set<string>,
+  ctx: TransformContext,
+  shadowedNames: readonly string[] = [],
+  additionalGeneratedBindings: ReadonlySet<string> = new Set(),
+): string[] {
+  const visibleLocals = new Set(localScope);
+  for (const name of shadowedNames) visibleLocals.delete(name);
+  const referenced = new Set<string>();
+  collectActionLocalReferences(actions, visibleLocals, referenced);
+  const captured = Array.from(localScope).filter((name) => referenced.has(name));
+  for (const name of captured) {
+    if (
+      additionalGeneratedBindings.has(name) ||
+      actionListUsesGeneratedBinding(actions, ctx, name)
+    ) {
+      throw new Error(`回调捕获变量 "${name}" 与生成标识符冲突`);
+    }
+  }
+  return captured;
+}
+
+function buildCallbackReference(
+  handlerName: string,
+  runtimeParams: readonly string[],
+  capturedLocals: readonly string[],
+): string {
+  if (capturedLocals.length === 0) {
+    return handlerName;
+  }
+  const args = [...runtimeParams, ...capturedLocals];
+  return `(${runtimeParams.join(', ')}) => ${handlerName}(${args.join(', ')})`;
 }
 
 function getFieldInfo(ctx: TransformContext, sourceKey: string): FieldInfo | undefined {
   return ctx.fieldBySourceKey.get(sourceKey) ?? ctx.fieldByName.get(sourceKey);
 }
 
-function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined'): string {
+function getExpressionCode(
+  value: ValueNode | undefined,
+  fallback = 'undefined',
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): string {
   if (!value) return fallback;
 
   switch (value.kind) {
@@ -567,7 +885,10 @@ function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined')
     case 'expression': {
       const code = value.code.trim();
       if (!code) return fallback;
-      const valid = value.source === 'legacy' ? isValidExpressionPath(code) : isSafeInlineExpression(code);
+      const valid =
+        value.source === 'legacy'
+          ? isValidExpressionPath(code)
+          : isSafeInlineExpression(code, ctxFields, localScope);
       return valid ? code : fallback;
     }
     case 'template':
@@ -575,14 +896,17 @@ function getExpressionCode(value: ValueNode | undefined, fallback = 'undefined')
         .map((part) =>
           part.kind === 'text'
             ? escapeTemplateText(part.value)
-            : `\${${getExpressionCode(part.value, '""')}}`,
+            : `\${${getExpressionCode(part.value, '""', ctxFields, localScope)}}`,
         )
         .join('')}\``;
     case 'array':
-      return `[${value.items.map((item) => getExpressionCode(item, 'undefined')).join(', ')}]`;
+      return `[${value.items.map((item) => getExpressionCode(item, 'undefined', ctxFields, localScope)).join(', ')}]`;
     case 'object':
       return `{ ${value.properties
-        .map((property) => `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined')}`)
+        .map(
+          (property) =>
+            `${toObjectKeyCode(property.key)}: ${getExpressionCode(property.value, 'undefined', ctxFields, localScope)}`,
+        )
         .join(', ')} }`;
     default:
       return fallback;
@@ -629,7 +953,13 @@ function valueNodeToPlain(value: ValueNode): unknown {
   }
 }
 
-function createAttribute(name: string, value: ValueNode, fallback = 'undefined'): JSXAttributeNode {
+function createAttribute(
+  name: string,
+  value: ValueNode,
+  fallback = 'undefined',
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): JSXAttributeNode {
   if (value.kind === 'literal' && typeof value.value === 'string') {
     return {
       name,
@@ -641,11 +971,15 @@ function createAttribute(name: string, value: ValueNode, fallback = 'undefined')
   return {
     name,
     mode: 'expression',
-    value: getExpressionCode(value, fallback),
+    value: getExpressionCode(value, fallback, ctxFields, localScope),
   };
 }
 
-function createValueChild(value: ValueNode): JSXNode | null {
+function createValueChild(
+  value: ValueNode,
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): JSXNode | null {
   if (value.kind === 'literal') {
     if (value.value === null || value.value === undefined) {
       return null;
@@ -653,12 +987,12 @@ function createValueChild(value: ValueNode): JSXNode | null {
     if (typeof value.value === 'string') {
       return { kind: 'text', value: value.value };
     }
-    return { kind: 'expression', code: getExpressionCode(value, 'null') };
+    return { kind: 'expression', code: getExpressionCode(value, 'null', ctxFields, localScope) };
   }
 
   return {
     kind: 'expression',
-    code: getExpressionCode(value, '""'),
+    code: getExpressionCode(value, '""', ctxFields, localScope),
   };
 }
 
@@ -733,10 +1067,26 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
   if (node.kind === 'cycle') {
     return {
       kind: 'fragment',
-      children: [createCommentNode(`Circular ref: ${node.id}`)],
+      children: [createCommentNode('Circular reference omitted')],
     };
   }
 
+  if (!isSafeComponentType(node.componentType)) {
+    return {
+      kind: 'element',
+      tag: 'div',
+      attributes: [
+        {
+          name: 'style',
+          mode: 'expression',
+          value: '{ color: "red" }',
+        },
+      ],
+      children: [{ kind: 'text', value: 'Invalid component' }],
+    };
+  }
+
+  const ctxFields = new Set(ctx.fieldByName.keys());
   const fieldProp = findProp(node, 'field');
   const labelProp = findProp(node, 'label');
   const styleProp = findProp(node, 'style');
@@ -758,11 +1108,18 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     if (prop.name === 'label' && node.componentType === 'Input') {
       continue;
     }
+    if (!isSafePropName(prop.name)) {
+      continue;
+    }
 
-    attributes.push(createAttribute(prop.name, prop.value, '""'));
+    attributes.push(createAttribute(prop.name, prop.value, '""', ctxFields));
   }
 
-  if (fieldProp && fieldProp.value.kind === 'literal' && typeof fieldProp.value.value === 'string') {
+  if (
+    fieldProp &&
+    fieldProp.value.kind === 'literal' &&
+    typeof fieldProp.value.value === 'string'
+  ) {
     const fieldInfo = getFieldInfo(ctx, fieldProp.value.value);
     if (fieldInfo) {
       attributes.push(...buildFieldBinding(fieldInfo));
@@ -770,6 +1127,9 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
   }
 
   for (const event of node.events) {
+    if (!isSafeEventName(event.eventName)) {
+      continue;
+    }
     collectActionImports(event.actions, ctx);
     event.handlerName = registerEventHandler(node.id, event.eventName, event.actions, ctx);
     attributes.push({
@@ -802,14 +1162,14 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
         attributes.push({
           name: 'style',
           mode: 'expression',
-          value: getExpressionCode(normalizeValue(compiled.styleObj), '{}'),
+          value: getExpressionCode(normalizeValue(compiled.styleObj), '{}', ctxFields),
         });
       }
     } else {
       attributes.push({
         name: 'style',
         mode: 'expression',
-        value: getExpressionCode(styleProp.value, '{}'),
+        value: getExpressionCode(styleProp.value, '{}', ctxFields),
       });
     }
   } else {
@@ -821,7 +1181,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
         value: classNameProp.value.value,
       });
     } else if (classNameProp) {
-      attributes.push(createAttribute('className', classNameProp.value, '""'));
+      attributes.push(createAttribute('className', classNameProp.value, '""', ctxFields));
     }
   }
 
@@ -831,7 +1191,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
       children.push(buildComponentNode(child, ctx));
     }
   } else if (childrenProp) {
-    const childNode = createValueChild(childrenProp.value);
+    const childNode = createValueChild(childrenProp.value, ctxFields);
     if (childNode) {
       children.push(childNode);
     }
@@ -857,7 +1217,7 @@ function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode
     return componentNode;
   }
 
-  const conditionCode = getExpressionCode(visibleProp.value, 'false');
+  const conditionCode = getExpressionCode(visibleProp.value, 'false', ctxFields);
   if (visibleProp.value.kind === 'literal' && visibleProp.value.value === true) {
     return componentNode;
   }
@@ -887,40 +1247,59 @@ function needsAsync(actions: ActionNode[]): boolean {
   });
 }
 
-function resolveResultTarget(resultTo: string | undefined, ctx: TransformContext, valueCode: string): string {
+function resolveResultTarget(
+  resultTo: string | undefined,
+  ctx: TransformContext,
+  valueCode: string,
+): string {
   if (!resultTo) {
     return valueCode;
   }
-
-  const fieldInfo = getFieldInfo(ctx, resultTo);
+  const sanitized = sanitizeResultTo(resultTo, ctx);
+  if (!sanitized) {
+    return `/* invalid resultTo discarded */`;
+  }
+  const fieldInfo = getFieldInfo(ctx, sanitized);
   if (fieldInfo) {
     return `${fieldInfo.setterName}(${valueCode});`;
   }
-
-  if (resultTo.startsWith('state.')) {
-    const stateKey = resultTo.slice(6);
-    return `setState({ ${toObjectKeyCode(stateKey)}: ${valueCode} });`;
+  if (sanitized.startsWith('state.')) {
+    const stateKey = sanitized.slice(6);
+    const safeKey = sanitizeStateKey(stateKey);
+    if (!safeKey) {
+      return `/* invalid resultTo discarded */`;
+    }
+    return `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`;
   }
-
-  return `${resultTo} = ${valueCode};`;
+  return `/* invalid resultTo discarded */`;
 }
 
 function buildActionBlock(
   actions: ActionNode[],
   ctx: TransformContext,
   ownerHandlerName: string,
+  localScope: Set<string> = new Set(),
 ): { code: string; async: boolean } {
-  const segments = actions.map((action) => buildActionStatement(action, ctx, ownerHandlerName));
+  const segments = actions.map((action) =>
+    buildActionStatement(action, ctx, ownerHandlerName, localScope),
+  );
   return {
-    code: segments.map((segment) => segment.code).filter(Boolean).join('\n'),
+    code: segments
+      .map((segment) => segment.code)
+      .filter(Boolean)
+      .join('\n'),
     async: segments.some((segment) => segment.async),
   };
 }
 
-function buildNotificationObject(action: ActionNode): string {
+function buildNotificationObject(
+  action: ActionNode,
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): string {
   const props: string[] = [
-    `message: ${getExpressionCode(action.title ?? { kind: 'literal', value: '通知' }, '"通知"')}`,
-    `description: ${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""')}`,
+    `message: ${getExpressionCode(action.title ?? { kind: 'literal', value: '通知' }, '"通知"', ctxFields, localScope)}`,
+    `description: ${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)}`,
   ];
 
   if (action.placement) {
@@ -933,10 +1312,21 @@ function buildNotificationObject(action: ActionNode): string {
   return `{ ${props.join(', ')} }`;
 }
 
-function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHandlerName: string): { code: string; async: boolean } {
+function buildActionStatement(
+  action: ActionNode,
+  ctx: TransformContext,
+  ownerHandlerName: string,
+  localScope: Set<string> = new Set(),
+): { code: string; async: boolean } {
+  const ctxFields = new Set(ctx.fieldByName.keys());
   switch (action.type) {
     case 'setValue': {
-      const valueCode = getExpressionCode(action.value ?? { kind: 'literal', value: '' }, 'undefined');
+      const valueCode = getExpressionCode(
+        action.value ?? { kind: 'literal', value: '' },
+        'undefined',
+        ctxFields,
+        localScope,
+      );
       if (action.field) {
         const fieldInfo = getFieldInfo(ctx, action.field);
         if (fieldInfo) {
@@ -951,13 +1341,17 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
 
         if (action.field.startsWith('state.')) {
           const stateKey = action.field.slice(6);
-          return {
-            code: `setState({ ${toObjectKeyCode(stateKey)}: ${valueCode} });`,
-            async: false,
-          };
+          const safeKey = sanitizeStateKey(stateKey);
+          if (safeKey) {
+            return {
+              code: `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`,
+              async: false,
+            };
+          }
+          return { code: `/* invalid field discarded */`, async: false };
         }
 
-        return { code: `/* Field ${action.field} not found */`, async: false };
+        return { code: `/* Field not found */`, async: false };
       }
 
       return { code: '/* setValue missing field */', async: false };
@@ -973,53 +1367,113 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
               properties: Object.entries(action.headers).map(([key, value]) => ({ key, value })),
             },
             '{}',
+            ctxFields,
+            localScope,
           )}`,
         );
       }
       if (action.body) {
-        configParts.push(`body: JSON.stringify(${getExpressionCode(action.body, 'undefined')})`);
+        configParts.push(
+          `body: JSON.stringify(${getExpressionCode(action.body, 'undefined', ctxFields, localScope)})`,
+        );
       }
 
-      const urlCode = getExpressionCode(action.url ?? { kind: 'literal', value: '/' }, '"/"');
-      const paramsCode = action.params
-        ? `const requestParams = ${getExpressionCode(
-            {
-              kind: 'object',
-              properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
-            },
-            '{}',
-          )};\nconst queryString = new URLSearchParams(Object.entries(requestParams).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst requestUrl = queryString ? (${urlCode}).includes('?') ? ${urlCode} + '&' + queryString : ${urlCode} + '?' + queryString : ${urlCode};`
-        : `const requestUrl = ${urlCode};`;
+      const urlCode = getExpressionCode(
+        action.url ?? { kind: 'literal', value: '/' },
+        '"/"',
+        ctxFields,
+        localScope,
+      );
+      const requestUrlVar = ctx.registry.allocateInternal('__requestUrl', 'api:url');
+      let paramsCode = `const ${requestUrlVar} = ${urlCode};`;
+      if (action.params) {
+        const requestParamsVar = ctx.registry.allocateInternal('__requestParams', 'api:params');
+        const queryStringVar = ctx.registry.allocateInternal('__queryString', 'api:query');
+        paramsCode = `const ${requestParamsVar} = ${getExpressionCode(
+          {
+            kind: 'object',
+            properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
+          },
+          '{}',
+          ctxFields,
+          localScope,
+        )};\nconst ${queryStringVar} = new URLSearchParams(Object.entries(${requestParamsVar}).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst ${requestUrlVar} = ${queryStringVar} ? (${urlCode}).includes('?') ? ${urlCode} + '&' + ${queryStringVar} : ${urlCode} + '?' + ${queryStringVar} : ${urlCode};`;
+      }
 
+      const successGeneratedBindings = new Set<string>();
+      if (action.resultTo) {
+        const resultField = getFieldInfo(ctx, action.resultTo);
+        if (resultField) successGeneratedBindings.add(resultField.setterName);
+      }
+      const successCapturedLocals = getCapturedLocals(
+        action.onSuccess ?? [],
+        localScope,
+        ctx,
+        ['response'],
+        successGeneratedBindings,
+      );
+      const successLocals = new Set(localScope);
+      successLocals.add('response');
       const successHandler =
         action.resultTo || (action.onSuccess?.length ?? 0) > 0
-          ? registerNestedCodeHandler(ownerHandlerName, 'OnSuccess', ctx, ['response'], (handlerName) => {
-              const onSuccess = buildActionBlock(action.onSuccess ?? [], ctx, handlerName);
-              const successLines: string[] = [];
-              if (action.resultTo) {
-                successLines.push(resolveResultTarget(action.resultTo, ctx, 'response'));
-              }
-              if (onSuccess.code) {
-                successLines.push(onSuccess.code);
-              }
-              return {
-                code: successLines.join('\n'),
-                async: onSuccess.async,
-              };
-            })
+          ? registerNestedCodeHandler(
+              ownerHandlerName,
+              'OnSuccess',
+              ctx,
+              ['response', ...successCapturedLocals],
+              (handlerName) => {
+                const onSuccess = buildActionBlock(
+                  action.onSuccess ?? [],
+                  ctx,
+                  handlerName,
+                  successLocals,
+                );
+                const successLines: string[] = [];
+                if (action.resultTo) {
+                  successLines.push(resolveResultTarget(action.resultTo, ctx, 'response'));
+                }
+                if (onSuccess.code) {
+                  successLines.push(onSuccess.code);
+                }
+                return {
+                  code: successLines.join('\n'),
+                  async: onSuccess.async,
+                };
+              },
+              localScope,
+            )
           : undefined;
-      const errorHandler = registerNestedCodeHandler(ownerHandlerName, 'OnError', ctx, ['error'], (handlerName) => {
-        const onError = buildActionBlock(action.onError ?? [], ctx, handlerName);
-        return {
-          code: onError.code || 'console.error(error);',
-          async: onError.async,
-        };
-      });
+      const errorCapturedLocals = getCapturedLocals(action.onError ?? [], localScope, ctx, [
+        'error',
+      ]);
+      const errorLocals = new Set(localScope);
+      errorLocals.add('error');
+      const errorHandler = registerNestedCodeHandler(
+        ownerHandlerName,
+        'OnError',
+        ctx,
+        ['error', ...errorCapturedLocals],
+        (handlerName) => {
+          const onError = buildActionBlock(action.onError ?? [], ctx, handlerName, errorLocals);
+          return {
+            code: onError.code || 'console.error(error);',
+            async: onError.async,
+          };
+        },
+        localScope,
+      );
 
-      const successChain = successHandler ? `\n  .then(${successHandler.name})` : '';
+      const successChain = successHandler
+        ? `\n  .then(${buildCallbackReference(successHandler.name, ['response'], successCapturedLocals)})`
+        : '';
+      const errorReference = buildCallbackReference(
+        errorHandler.name,
+        ['error'],
+        errorCapturedLocals,
+      );
 
       return {
-        code: `${paramsCode}\nfetch(requestUrl, { ${configParts.join(', ')} })\n  .then((res) => res.json())${successChain}\n  .catch(${errorHandler.name});`,
+        code: `${paramsCode}\nfetch(${requestUrlVar}, { ${configParts.join(', ')} })\n  .then((res) => res.json())${successChain}\n  .catch(${errorReference});`,
         async: Boolean(successHandler?.async) || errorHandler.async,
       };
     }
@@ -1030,18 +1484,22 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
           async: false,
         };
       }
+      // ponytail: P0 保守降级，动态导航统一降级为 '/'，防 javascript:/data: 与可控跳转
       return {
-        code: `window.location.href = ${getExpressionCode(action.to ?? { kind: 'literal', value: '/' }, '"/"')};`,
+        code: `window.location.href = '/';`,
         async: false,
       };
     }
     case 'feedback': {
-      const level = action.level || 'info';
+      const level = sanitizeFeedbackLevel(action.level || 'info', 'info');
       if (action.kind === 'notification') {
-        return { code: `notification.${level}(${buildNotificationObject(action)});`, async: false };
+        return {
+          code: `notification.${level}(${buildNotificationObject(action, ctxFields, localScope)});`,
+          async: false,
+        };
       }
       return {
-        code: `message.${level}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""')});`,
+        code: `message.${level}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)});`,
         async: false,
       };
     }
@@ -1050,23 +1508,50 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
       const titleCode = getExpressionCode(
         action.title ?? { kind: 'literal', value: kind === 'confirm' ? '确认' : '提示' },
         kind === 'confirm' ? '"确认"' : '"提示"',
+        ctxFields,
+        localScope,
       );
-      const contentCode = getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""');
+      const contentCode = getExpressionCode(
+        action.content ?? { kind: 'literal', value: '' },
+        '""',
+        ctxFields,
+        localScope,
+      );
       const objectParts = [`title: ${titleCode}`, `content: ${contentCode}`];
 
       if (kind === 'confirm') {
+        const onOkCapturedLocals = getCapturedLocals(action.onOk ?? [], localScope, ctx);
+        const onCancelCapturedLocals = getCapturedLocals(action.onCancel ?? [], localScope, ctx);
         const onOkHandler = action.onOk?.length
-          ? registerNestedActionHandler(ownerHandlerName, 'OnOk', action.onOk, ctx)
+          ? registerNestedActionHandler(
+              ownerHandlerName,
+              'OnOk',
+              action.onOk,
+              ctx,
+              onOkCapturedLocals,
+              localScope,
+            )
           : undefined;
         const onCancelHandler = action.onCancel?.length
-          ? registerNestedActionHandler(ownerHandlerName, 'OnCancel', action.onCancel, ctx)
+          ? registerNestedActionHandler(
+              ownerHandlerName,
+              'OnCancel',
+              action.onCancel,
+              ctx,
+              onCancelCapturedLocals,
+              localScope,
+            )
           : undefined;
 
         if (onOkHandler) {
-          objectParts.push(`onOk: ${onOkHandler.name}`);
+          objectParts.push(
+            `onOk: ${buildCallbackReference(onOkHandler.name, [], onOkCapturedLocals)}`,
+          );
         }
         if (onCancelHandler) {
-          objectParts.push(`onCancel: ${onCancelHandler.name}`);
+          objectParts.push(
+            `onCancel: ${buildCallbackReference(onCancelHandler.name, [], onCancelCapturedLocals)}`,
+          );
         }
         return {
           code: `Modal.confirm({ ${objectParts.join(', ')} });`,
@@ -1077,25 +1562,47 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
       return { code: `Modal.info({ ${objectParts.join(', ')} });`, async: false };
     }
     case 'if': {
-      const thenBlock = buildActionBlock(action.then ?? [], ctx, ownerHandlerName);
-      const elseBlock = buildActionBlock(action.else ?? [], ctx, ownerHandlerName);
+      const thenBlock = buildActionBlock(action.then ?? [], ctx, ownerHandlerName, localScope);
+      const elseBlock = buildActionBlock(action.else ?? [], ctx, ownerHandlerName, localScope);
       const elseCode = elseBlock.code ? ` else {\n${indentBlock(elseBlock.code)}\n}` : '';
       return {
-        code: `if (${getExpressionCode(action.condition ?? { kind: 'literal', value: false }, 'false')}) {\n${indentBlock(thenBlock.code)}\n}${elseCode}`,
+        code: `if (${getExpressionCode(action.condition ?? { kind: 'literal', value: false }, 'false', ctxFields, localScope)}) {\n${indentBlock(thenBlock.code)}\n}${elseCode}`,
         async: thenBlock.async || elseBlock.async,
       };
     }
     case 'loop': {
-      const loopBlock = buildActionBlock(action.actions ?? [], ctx, ownerHandlerName);
-      const itemVar = action.itemVar || 'item';
-      if (action.indexVar) {
+      const safeItemVar = sanitizeLoopVar(action.itemVar, 'item');
+      let safeIndexVar: string | undefined;
+      if (action.indexVar !== undefined) {
+        safeIndexVar = sanitizeLoopVar(action.indexVar, 'index');
+        if (safeItemVar === safeIndexVar) {
+          throw new Error(`循环变量 itemVar 与 indexVar 不能相同: "${safeItemVar}"`);
+        }
+      }
+      for (const loopBinding of [safeItemVar, safeIndexVar]) {
+        if (loopBinding && actionListUsesGeneratedBinding(action.actions ?? [], ctx, loopBinding)) {
+          throw new Error(`循环变量 "${loopBinding}" 与循环体生成标识符冲突`);
+        }
+      }
+      const sourceVar = ctx.registry.allocateInternal('__loopSource', 'loop:source');
+      const childScope = new Set(localScope);
+      childScope.add(safeItemVar);
+      if (safeIndexVar) childScope.add(safeIndexVar);
+      const loopBlock = buildActionBlock(action.actions ?? [], ctx, ownerHandlerName, childScope);
+      const overCode = getExpressionCode(
+        action.over ?? { kind: 'array', items: [] },
+        '[]',
+        ctxFields,
+        localScope,
+      );
+      if (safeIndexVar) {
         return {
-          code: `for (const [${action.indexVar}, ${itemVar}] of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]')}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
+          code: `const ${sourceVar} = ${overCode};\nfor (const [${safeIndexVar}, ${safeItemVar}] of ${sourceVar}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
           async: loopBlock.async,
         };
       }
       return {
-        code: `for (const ${itemVar} of ${getExpressionCode(action.over ?? { kind: 'array', items: [] }, '[]')}) {\n${indentBlock(loopBlock.code)}\n}`,
+        code: `const ${sourceVar} = ${overCode};\nfor (const ${safeItemVar} of ${sourceVar}) {\n${indentBlock(loopBlock.code)}\n}`,
         async: loopBlock.async,
       };
     }
@@ -1106,24 +1613,25 @@ function buildActionStatement(action: ActionNode, ctx: TransformContext, ownerHa
       };
     case 'log':
       return {
-        code: `console.${action.level || 'log'}(${getExpressionCode(action.value ?? { kind: 'literal', value: '' }, '""')});`,
+        code: `console.${sanitizeLogLevel(action.level || 'log', 'log')}(${getExpressionCode(action.value ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)});`,
         async: false,
       };
     case 'customScript': {
-      const snippet = (action.code || '').slice(0, 60).replace(/\s+/g, ' ').trim();
+      const snippet = escapeComment((action.code || '').slice(0, 60).replace(/\s+/g, ' ').trim());
       return {
         code: `/* Custom Script omitted${snippet ? `: ${snippet}` : ''} */`,
         async: false,
       };
     }
     default:
-      return { code: `/* Unknown action: ${action.type} */`, async: false };
+      return { code: `/* Unknown action: ${escapeComment(String(action.type))} */`, async: false };
   }
 }
 
 export function transform(root: RootNode): void {
   const ctx = createTransformContext(root);
   collectImports(ctx);
+  preCollectAllActionImports(ctx);
   collectFields(ctx);
 
   root.imports = ctx.imports;
@@ -1179,7 +1687,7 @@ function genJsx(node: JSXNode): string {
     case 'expression':
       return `{${node.code}}`;
     case 'comment':
-      return `{/* ${node.text} */}`;
+      return `{/* ${escapeComment(node.text)} */}`;
     case 'conditional':
       return `{${node.condition} ? ${genJsxValue(node.consequent)} : ${
         node.alternate ? genJsxValue(node.alternate) : 'null'
@@ -1206,7 +1714,9 @@ function genImports(imports: Map<string, Set<string>>): string {
     if (names.size === 0) continue;
     const sortedNames = Array.from(names).sort();
     if (source === 'react') {
-      statements.push(`import React, { ${sortedNames.join(', ')} } from ${toQuotedString(source)};`);
+      statements.push(
+        `import React, { ${sortedNames.join(', ')} } from ${toQuotedString(source)};`,
+      );
       continue;
     }
     statements.push(`import { ${sortedNames.join(', ')} } from ${toQuotedString(source)};`);
@@ -1215,10 +1725,11 @@ function genImports(imports: Map<string, Set<string>>): string {
 }
 
 function genStateHooks(fields: FieldInfo[]): string {
+  const ctxFields = new Set(fields.map((field) => field.name));
   return fields
     .map(
       (field) =>
-        `const [${field.name}, ${field.setterName}] = useState(${getExpressionCode(field.initialValue, 'undefined')});`,
+        `const [${field.name}, ${field.setterName}] = useState(${getExpressionCode(field.initialValue, 'undefined', ctxFields)});`,
     )
     .join('\n');
 }
@@ -1248,12 +1759,8 @@ export function generate(root: RootNode): string {
 }
 
 export function compileSchemaToCode(schema: A2UISchema, options?: CompileOptions): string {
+  assertValidPageSchema(schema as unknown);
   const ast = parseSchema(schema, options);
   transform(ast);
   return generate(ast);
 }
-
-
-
-
-

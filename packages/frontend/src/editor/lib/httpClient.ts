@@ -143,8 +143,12 @@ export class HttpClient {
    * 发送流式请求（用于 AI 流式响应）
    * 直接返回 Response，业务层通过 .body.getReader() 获取流
    */
-  async streamRequest(url: string, body?: any): Promise<Response> {
-    const response = await this.request(url, { method: 'POST', body });
+  async streamRequest(
+    url: string,
+    body?: any,
+    options?: { signal?: AbortSignal },
+  ): Promise<Response> {
+    const response = await this.request(url, { method: 'POST', body, signal: options?.signal });
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;

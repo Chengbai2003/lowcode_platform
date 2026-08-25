@@ -1,9 +1,6 @@
 import type { A2UISchema } from '../schema.types';
 
-function createSchema(
-  components: A2UISchema['components'],
-  rootId = 'page_root',
-): A2UISchema {
+function createSchema(components: A2UISchema['components'], rootId = 'page_root'): A2UISchema {
   return {
     version: 1,
     rootId,
@@ -287,7 +284,10 @@ export const behaviorSchemas = {
             url: 'https://example.com/api/list',
             method: 'GET',
             resultTo: 'hidden_rows',
-            onSuccess: [{ type: 'delay', ms: 50 }, { type: 'log', value: '{{ hidden_rows }}' }],
+            onSuccess: [
+              { type: 'delay', ms: 50 },
+              { type: 'log', value: '{{ hidden_rows }}' },
+            ],
             onError: [{ type: 'feedback', level: 'error', content: '加载失败' }],
           },
         ],
@@ -350,7 +350,7 @@ export const behaviorSchemas = {
       childrenIds: [],
     },
   }),
-  customScriptAndUnsafeNavigate: createSchema({
+  customScriptSchema: createSchema({
     page_root: {
       id: 'page_root',
       type: 'Page',
@@ -359,33 +359,46 @@ export const behaviorSchemas = {
     btn_legacy: {
       id: 'btn_legacy',
       type: 'Button',
-      props: {
-        children: 'Legacy',
-      },
-      events: {
-        onClick: [
-          { type: 'customScript', code: 'alert(1)' },
-          { type: 'navigate', to: 'javascript:alert(1)' },
-        ],
-      },
+      props: { children: 'Legacy' },
+      events: { onClick: [{ type: 'customScript', code: 'alert(1)' }] },
+      childrenIds: [],
+    },
+  }),
+  unsafeNavigateSchema: createSchema({
+    page_root: {
+      id: 'page_root',
+      type: 'Page',
+      childrenIds: ['btn_nav'],
+    },
+    btn_nav: {
+      id: 'btn_nav',
+      type: 'Button',
+      props: { children: 'Go' },
+      events: { onClick: [{ type: 'navigate', to: 'javascript:alert(1)' }] },
+      childrenIds: [],
+    },
+  }),
+  cycleSchema: createSchema({
+    page_root: { id: 'page_root', type: 'Page', childrenIds: ['node_a'] },
+    node_a: { id: 'node_a', type: 'Div', childrenIds: ['page_root'] },
+  }),
+  missingNodeSchema: createSchema({
+    page_root: { id: 'page_root', type: 'Page', childrenIds: ['missing_child'] },
+  }),
+  // deprecated combined aliases (kept for backward compat, do not use in new tests)
+  customScriptAndUnsafeNavigate: createSchema({
+    page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn_legacy'] },
+    btn_legacy: {
+      id: 'btn_legacy',
+      type: 'Button',
+      props: { children: 'Legacy' },
+      events: { onClick: [{ type: 'customScript', code: 'alert(1)' }] },
       childrenIds: [],
     },
   }),
   cycleAndMissingNode: createSchema({
-    page_root: {
-      id: 'page_root',
-      type: 'Page',
-      childrenIds: ['node_a', 'missing_child'],
-    },
-    node_a: {
-      id: 'node_a',
-      type: 'Div',
-      childrenIds: ['node_b'],
-    },
-    node_b: {
-      id: 'node_b',
-      type: 'Div',
-      childrenIds: ['node_a'],
-    },
+    page_root: { id: 'page_root', type: 'Page', childrenIds: ['node_a'] },
+    node_a: { id: 'node_a', type: 'Div', childrenIds: ['node_b'] },
+    node_b: { id: 'node_b', type: 'Div', childrenIds: ['node_a'] },
   }),
 };

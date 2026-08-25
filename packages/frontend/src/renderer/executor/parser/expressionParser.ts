@@ -6,6 +6,7 @@
 import type { ParsedExpression } from '../../../types';
 import { safeEvaluate, SAFE_GLOBALS } from './safeEvaluator';
 import { getFlag } from '../../featureFlags';
+import { cloneSanitizedSafe, fallbackCloneSafe } from '../../utils/safeClone';
 
 const VALID_ALIAS_REGEX = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
 const RESERVED_IDENTIFIERS = new Set([
@@ -54,10 +55,98 @@ const RESERVED_CONTEXT_KEYS = new Set([
   'dispatch',
   'getState',
   'components',
+  'runtime',
   '__proto__',
   'constructor',
   'prototype',
 ]);
+
+// ——— P0-2: 输入净化（via shared safeClone, descriptor-safe） ———
+const hasOwnEp = (t: object, k: PropertyKey): boolean => Object.prototype.hasOwnProperty.call(t, k);
+const SANITIZE_SKIP_EP = Symbol('sanitize-skip-ep');
+function cloneSanitizedEp(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
+  return cloneSanitizedSafe(value, seen, SANITIZE_SKIP_EP);
+}
+function sanitizeContextEp(context: Record<string, any> | undefined): Record<string, any> {
+  if (!context || typeof context !== 'object') return {};
+  const cloned = cloneSanitizedEp(context) as Record<string, any>;
+  return (cloned as Record<string, any>) ?? {};
+}
+
+const ALLOWED_EXPRESSION_KEYS = [
+  'data',
+  'state',
+  'formData',
+  'user',
+  'route',
+  'components',
+] as const;
+// 行上下文/循环变量等合法扩展键（Table record/value、loop item/index 等），不在真白名单核心但需放行以支撑模板；仍受 RESERVED_CONTEXT_KEYS / isValidAliasKey 阻断
+const ALLOWED_EXTENSION_KEYS = [
+  'record',
+  'value',
+  'rowIndex',
+  'item',
+  'index',
+  'componentId',
+  'event',
+  'row',
+  'response',
+  'error',
+] as const;
+const PURE_UTILS_KEYS = ['formatDate', 'uuid', 'clone'] as const;
+
+// ——— P0-3: 内部纯净 utils（via shared safeClone） ———
+function fallbackClonePure<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  return fallbackCloneSafe(value, seen);
+}
+const pureFormatDate = (date: Date | string, _format = 'YYYY-MM-DD'): string => {
+  return String(date);
+};
+const pureUuid = (): string => {
+  if (typeof crypto !== 'undefined' && (crypto as any).randomUUID) {
+    return (crypto as any).randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+const pureClone = <T>(obj: T): T => fallbackClonePure(obj);
+const INTERNAL_PURE_UTILS: Record<string, unknown> = {
+  formatDate: pureFormatDate,
+  uuid: pureUuid,
+  clone: pureClone,
+};
+
+// 真白名单：核心命名空间 + 合法扩展键（record/item/index 等），其余自定义顶层字段不暴露，数据别名另由 buildExpressionContext 处理 — own-only (P1-high #3)
+function pickAllowedContext(context: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = Object.create(null);
+  for (const k of ALLOWED_EXPRESSION_KEYS) {
+    if (hasOwnEp(context, k)) out[k] = (context as Record<string, any>)[k];
+  }
+  for (const k of ALLOWED_EXTENSION_KEYS) {
+    if (hasOwnEp(context, k)) out[k] = (context as Record<string, any>)[k];
+  }
+  // 兼容任意合法循环变量：isValidAliasKey 且非保留键，已存在于 sanitized context 的额外键（如自定义 itemVar）
+  for (const [k, v] of Object.entries(context)) {
+    if ((ALLOWED_EXPRESSION_KEYS as readonly string[]).includes(k)) continue;
+    if ((ALLOWED_EXTENSION_KEYS as readonly string[]).includes(k)) continue;
+    if (k === 'utils') continue;
+    if (!isValidAliasKey(k, out)) continue;
+    // 仅放行已存在于 sanitized context 的额外键，且其值非敏感对象（已在 sanitize 阶段去函数/getter）
+    out[k] = v;
+  }
+  // 只暴露内建纯净 utils，不接受 context 覆盖（P0-3）
+  const filtered: Record<string, any> = {};
+  for (const kk of PURE_UTILS_KEYS) {
+    const fn = (INTERNAL_PURE_UTILS as Record<string, any>)[kk];
+    if (typeof fn === 'function') filtered[kk] = fn;
+  }
+  if (Object.keys(filtered).length > 0) out.utils = filtered;
+  return out;
+}
 
 /**
  * 表达式正则表达式
@@ -88,42 +177,71 @@ function isReservedLiteral(str: string): boolean {
 function isValidAliasKey(key: string, context: Record<string, any>): boolean {
   if (!VALID_ALIAS_REGEX.test(key)) return false;
   if (RESERVED_CONTEXT_KEYS.has(key)) return false;
-  if (key in Object.prototype) return false;
-  if (Object.prototype.hasOwnProperty.call(context, key)) return false;
+  if (hasOwnEp(Object.prototype, key)) return false;
+  if (hasOwnEp(context, key)) return false;
   return true;
 }
 
 export function buildExpressionContext(context: Record<string, any> = {}): Record<string, any> {
-  if (!context || typeof context !== 'object') {
+  const sanitized = sanitizeContextEp(context);
+  if (!sanitized || typeof sanitized !== 'object') {
     return {};
   }
 
-  const data = (context as Record<string, any>).data;
+  const data = (sanitized as Record<string, any>).data;
+  const allowedBase = pickAllowedContext(sanitized);
 
   if (!data || typeof data !== 'object') {
-    return { ...context };
+    return allowedBase;
   }
 
-  // Proxy 惰性别名，按需读取而非全量展开
+  // Proxy 惰性别名，按需读取而非全量展开；补 ownKeys/getOwnPropertyDescriptor 使 Object.keys / sanitize 能捕获别名 — own-only
   if (getFlag('selectiveEvaluation')) {
-    return new Proxy(context, {
+    const aliasKeys = () =>
+      Object.keys(data as Record<string, unknown>).filter(
+        (k) => isValidAliasKey(k, allowedBase) && !hasOwnEp(allowedBase, k),
+      );
+    return new Proxy(allowedBase, {
       get(target, key: string) {
-        if (key in target) return target[key];
-        if (typeof key === 'string' && isValidAliasKey(key, target) && key in data) {
-          return data[key];
+        if (hasOwnEp(target, key)) return (target as Record<string, any>)[key];
+        if (
+          typeof key === 'string' &&
+          isValidAliasKey(key, target) &&
+          hasOwnEp(data as object, key)
+        ) {
+          return (data as Record<string, any>)[key];
         }
         return undefined;
       },
       has(target, key: string) {
-        if (key in target) return true;
-        return typeof key === 'string' && isValidAliasKey(key, target) && key in data;
+        if (hasOwnEp(target, key)) return true;
+        return (
+          typeof key === 'string' && isValidAliasKey(key, target) && hasOwnEp(data as object, key)
+        );
+      },
+      ownKeys(target) {
+        return [...Reflect.ownKeys(target), ...aliasKeys()];
+      },
+      getOwnPropertyDescriptor(target, key) {
+        if (hasOwnEp(target, key as string)) {
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        }
+        if (typeof key === 'string' && aliasKeys().includes(key)) {
+          return {
+            value: (data as Record<string, unknown>)[key],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          };
+        }
+        return undefined;
       },
     });
   }
 
   // 默认路径：全量展开（向后兼容）
-  const resolvedContext: Record<string, any> = { ...context };
-  for (const [key, value] of Object.entries(data)) {
+  const resolvedContext: Record<string, any> = { ...allowedBase };
+  for (const [key, value] of Object.entries(data as Record<string, any>)) {
     if (!isValidAliasKey(key, resolvedContext)) continue;
     resolvedContext[key] = value;
   }
@@ -435,29 +553,57 @@ function buildExpressionContextWithProxy(
   proxy: Record<string, any>,
   context: Record<string, any> = {},
 ): Record<string, any> {
+  const sanitized = sanitizeContextEp(context);
+  const allowed = pickAllowedContext(sanitized);
   const baseContext: Record<string, any> = {
-    ...context,
+    ...allowed,
     data: proxy.data,
     state: proxy.state,
     formData: proxy.formData,
     components: proxy.components,
   };
 
-  // Proxy 惰性别名，按需读取
+  // Proxy 惰性别名，按需读取；ownKeys 使 sanitizer 能捕获别名 — own-only
   if (getFlag('selectiveEvaluation')) {
+    const aliasKeysWithProxy = (target: Record<string, any>) => {
+      const d = (target.data || {}) as Record<string, unknown>;
+      if (!d || typeof d !== 'object') return [] as string[];
+      return Object.keys(d).filter((k) => isValidAliasKey(k, target) && !hasOwnEp(target, k));
+    };
     return new Proxy(baseContext, {
       get(target, key: string) {
-        if (key in target) return target[key];
-        if (typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})) {
+        if (hasOwnEp(target, key)) return target[key];
+        if (
+          typeof key === 'string' &&
+          isValidAliasKey(key, target) &&
+          hasOwnEp((target.data || {}) as object, key)
+        ) {
           return (target.data as Record<string, any>)[key];
         }
         return undefined;
       },
       has(target, key: string) {
-        if (key in target) return true;
+        if (hasOwnEp(target, key)) return true;
         return (
-          typeof key === 'string' && isValidAliasKey(key, target) && key in (target.data || {})
+          typeof key === 'string' &&
+          isValidAliasKey(key, target) &&
+          hasOwnEp((target.data || {}) as object, key)
         );
+      },
+      ownKeys(target) {
+        return [...Reflect.ownKeys(target), ...aliasKeysWithProxy(target)];
+      },
+      getOwnPropertyDescriptor(target, key) {
+        if (hasOwnEp(target, key as string)) return Reflect.getOwnPropertyDescriptor(target, key);
+        if (typeof key === 'string' && aliasKeysWithProxy(target).includes(key)) {
+          return {
+            value: (target.data as Record<string, unknown>)[key],
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          };
+        }
+        return undefined;
       },
     });
   }

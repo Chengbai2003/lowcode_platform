@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const Module = require('node:module');
 
 const worktreeRoot = path.resolve(__dirname, '../../..');
-const workspaceRoot = path.resolve(worktreeRoot, '../../..');
+const workspaceRoot = worktreeRoot;
 const defaultOutputDir = path.resolve(
   workspaceRoot,
   '.codex',
@@ -15,7 +15,7 @@ const defaultOutputDir = path.resolve(
 );
 
 const ts = require(path.resolve(workspaceRoot, 'node_modules', 'typescript'));
-const prettier = require(path.resolve(workspaceRoot, 'packages/backend/node_modules/prettier'));
+const prettier = require(path.resolve(workspaceRoot, 'node_modules', 'prettier'));
 
 function parseArgs(argv) {
   const args = {};

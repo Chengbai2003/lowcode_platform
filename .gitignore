@@ -13,3 +13,6 @@ coverage
 .env
 .env.*
 !.env.example
+
+.pnpm-store
+.codex

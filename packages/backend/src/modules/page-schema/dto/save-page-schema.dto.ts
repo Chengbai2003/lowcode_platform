@@ -8,8 +8,7 @@ import {
   ValidationOptions,
   registerDecorator,
 } from 'class-validator';
-
-export const MAX_SCHEMA_SIZE_BYTES = 1024 * 1024;
+import { MAX_SCHEMA_SIZE_BYTES } from '../page-schema.constants';
 
 function MaxSerializedSize(maxBytes: number, validationOptions?: ValidationOptions) {
   return (target: object, propertyName: string) => {

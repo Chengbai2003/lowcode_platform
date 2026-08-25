@@ -1,10 +1,10 @@
 /**
- * 调试类 Action 编辑器（Log, CustomScript）
+ * 调试类 Action 编辑器（Log, 历史 CustomScript 只读）
  */
 import {
   ActionUpdate,
   LogActionItem,
-  CustomScriptActionItem,
+  HistoricCustomScriptActionItem,
   formatValue,
   parseValueInput,
 } from '../actionConfig';
@@ -49,22 +49,17 @@ export const LogActionEditor = ({
   </div>
 );
 
-/** CustomScript 动作编辑器 */
+/** 历史 CustomScript 只读提示（已永久禁用） */
 export const CustomScriptActionEditor = ({
   action,
-  updateAction,
 }: {
-  action: CustomScriptActionItem;
+  action: HistoricCustomScriptActionItem;
   updateAction: ActionUpdate;
 }) => (
   <div className={styles.actionEditor}>
-    <div className={styles.actionField}>
-      <label>脚本内容</label>
-      <textarea
-        value={action.code}
-        aria-label="脚本内容"
-        onChange={(event) => updateAction({ code: event.target.value })}
-      />
+    <div className={styles.actionHint} style={{ color: '#dc2626' }}>
+      该历史 customScript 动作已永久禁用，请删除后重新保存。
+      {action.code ? `原代码长度 ${action.code.length}` : ''}
     </div>
   </div>
 );

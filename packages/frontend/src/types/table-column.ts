@@ -11,6 +11,8 @@ export interface BaseTableColumnItem {
   key: string;
   width?: number;
   align?: TableColumnAlign;
+  /** 隐藏稳定 ID，用于 React key，避免使用可编辑的 key/dataIndex 导致 remount */
+  __stableId?: string;
 }
 
 export interface TableDataColumnItem extends BaseTableColumnItem {
@@ -31,6 +33,7 @@ export interface TableActionColumnButton {
   buttonType?: TableActionButtonType;
   danger?: boolean;
   actions: ActionList;
+  __stableId?: string;
 }
 
 export interface TableActionColumnItem extends BaseTableColumnItem {
@@ -91,6 +94,51 @@ function toPositiveNumber(value: unknown): number | undefined {
   return undefined;
 }
 
+function generateStableId(): string {
+  try {
+    // 优先使用 crypto.randomUUID，降级到时间戳+随机数
+    const maybeCrypto =
+      typeof crypto !== 'undefined' && (crypto as { randomUUID?: () => string }).randomUUID;
+    if (maybeCrypto) {
+      return `col_${maybeCrypto.call(crypto)}`;
+    }
+  } catch {
+    // ignore
+  }
+  return `col_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+export function cloneInternalColumn<T extends TableColumnItem>(col: T): T & { __stableId: string } {
+  const cloned = {
+    ...(col as unknown as Record<string, unknown>),
+  } as unknown as T & { __stableId?: string };
+  if (
+    'buttons' in (cloned as unknown as Record<string, unknown>) &&
+    Array.isArray((cloned as unknown as { buttons: unknown }).buttons)
+  ) {
+    (cloned as unknown as { buttons: Array<Record<string, unknown>> }).buttons = (
+      cloned as unknown as { buttons: Array<Record<string, unknown>> }
+    ).buttons.map((b) => ({ ...(b as unknown as Record<string, unknown>) }));
+  }
+  return cloned as T & { __stableId: string };
+}
+
+export function findDuplicateKeys(columns: TableColumnItem[]): string[] {
+  const counts = new Map<string, number>();
+  for (const col of columns) {
+    const key = col.key;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+}
+
+export function warnDuplicateKeys(columns: TableColumnItem[]): void {
+  const dups = findDuplicateKeys(columns);
+  if (dups.length > 0) {
+    console.warn(`[TableColumnsEditor] duplicate column keys: ${dups.join(', ')}`);
+  }
+}
+
 function sanitizeActionList(value: unknown): ActionList {
   if (!Array.isArray(value)) {
     return [];
@@ -111,6 +159,7 @@ export function createDefaultTableActionButton(index: number): TableActionColumn
     buttonType: 'text',
     danger: false,
     actions: [],
+    __stableId: generateStableId(),
   };
 }
 
@@ -126,6 +175,7 @@ export function createDefaultTableColumn(
       title: '操作',
       key: no === 1 ? 'actions' : `actions${no}`,
       buttons: [createDefaultTableActionButton(0)],
+      __stableId: generateStableId(),
     };
   }
 
@@ -137,6 +187,7 @@ export function createDefaultTableColumn(
       key: `col${no}`,
       textMode: 'value',
       actions: [],
+      __stableId: generateStableId(),
     };
   }
 
@@ -145,6 +196,7 @@ export function createDefaultTableColumn(
     title: `列${no}`,
     dataIndex: `col${no}`,
     key: `col${no}`,
+    __stableId: generateStableId(),
   };
 }
 
@@ -177,12 +229,20 @@ export function sanitizeTableActionButtons(
           ? (record.buttonType as TableActionButtonType)
           : defaultButton.buttonType;
       const danger = typeof record.danger === 'boolean' ? record.danger : false;
+      const __stableId =
+        typeof record.__stableId === 'string' && record.__stableId.trim()
+          ? record.__stableId.trim()
+          : typeof (record as Record<string, unknown>)._stableId === 'string' &&
+              ((record as Record<string, unknown>)._stableId as string).trim()
+            ? ((record as Record<string, unknown>)._stableId as string).trim()
+            : generateStableId();
 
       return {
         label,
         buttonType,
         danger,
         actions: sanitizeActionList(record.actions),
+        __stableId,
       };
     })
     .filter((item): item is TableActionColumnButton => item !== null);
@@ -212,6 +272,16 @@ export function sanitizeTableColumnsValue(
       typeof record.align === 'string' && TABLE_ALIGN_SET.has(record.align as TableColumnAlign)
         ? (record.align as TableColumnAlign)
         : undefined;
+    const __stableId =
+      typeof record.__stableId === 'string' && record.__stableId.trim()
+        ? record.__stableId.trim()
+        : typeof (record as Record<string, unknown>)._stableId === 'string' &&
+            ((record as Record<string, unknown>)._stableId as string).trim()
+          ? ((record as Record<string, unknown>)._stableId as string).trim()
+          : typeof (record as Record<string, unknown>)._id === 'string' &&
+              ((record as Record<string, unknown>)._id as string).trim()
+            ? ((record as Record<string, unknown>)._id as string).trim()
+            : generateStableId();
 
     if (kind === 'action') {
       const defaultActionColumn = defaultColumn as TableActionColumnItem;
@@ -226,6 +296,7 @@ export function sanitizeTableColumnsValue(
         width,
         align,
         buttons: sanitizeTableActionButtons(record.buttons, defaultActionColumn.buttons),
+        __stableId,
       };
     }
 
@@ -260,6 +331,7 @@ export function sanitizeTableColumnsValue(
         textMode,
         textTemplate,
         actions: sanitizeActionList(record.actions),
+        __stableId,
       };
     }
 
@@ -270,6 +342,7 @@ export function sanitizeTableColumnsValue(
       key,
       width,
       align,
+      __stableId,
     };
   };
 

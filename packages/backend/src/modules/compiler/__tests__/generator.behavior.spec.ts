@@ -1,4 +1,5 @@
 import { compileToCode, formatCode } from '../generator';
+import { parseSchema, transform, generate } from '../pipeline';
 import { behaviorSchemas, snapshotSchemas } from './compilerTestSchemas';
 
 async function compileFormatted(schema: unknown) {
@@ -25,7 +26,9 @@ describe('compiler generator behavior', () => {
   it('merges compiled style classes without duplicating className', async () => {
     const code = await compileFormatted(snapshotSchemas.styleClassMerge);
 
-    expect(code).toContain('<Div className="banner-shell mb-[16] flex text-[#1f2937]">系统公告</Div>');
+    expect(code).toContain(
+      '<Div className="banner-shell mb-[16] flex text-[#1f2937]">系统公告</Div>',
+    );
     expect(code).not.toContain('className="banner-shell" className=');
   });
 
@@ -74,19 +77,33 @@ describe('compiler generator behavior', () => {
     expect(code).toContain('const [isEnabled, setIsEnabled] = useState(false);');
   });
 
-  it('keeps customScript compatibility and sanitizes unsafe navigate urls', async () => {
-    const code = await compileFormatted(behaviorSchemas.customScriptAndUnsafeNavigate);
+  it('rejects customScript at compile entry', async () => {
+    expect(() => compileToCode(behaviorSchemas.customScriptSchema as any)).toThrow(
+      'customScript is not allowed',
+    );
+  });
 
-    expect(code).toContain('const handleBtnLegacyClick = () => {');
-    expect(code).toContain('onClick={handleBtnLegacyClick}');
-    expect(code).toContain('Custom Script omitted');
+  it('sanitizes unsafe navigate urls', async () => {
+    const code = await compileFormatted(behaviorSchemas.unsafeNavigateSchema);
     expect(code).toContain('window.location.href = "/"');
   });
 
-  it('falls back safely for cycles and missing nodes', async () => {
-    const code = await compileFormatted(behaviorSchemas.cycleAndMissingNode);
+  it('rejects cycle schemas at compile entry', async () => {
+    expect(() => compileToCode(behaviorSchemas.cycleSchema as any)).toThrow('component cycle');
+  });
 
-    expect(code).toContain('Circular ref: node_a');
-    expect(code).toContain('Node missing_child Not Found');
+  it('rejects missing node schemas at compile entry', async () => {
+    expect(() => compileToCode(behaviorSchemas.missingNodeSchema as any)).toThrow(
+      'references missing child',
+    );
+  });
+
+  it('keeps bypass generate safe with fixed circular comment', async () => {
+    const ast = parseSchema(behaviorSchemas.cycleSchema as any);
+    transform(ast);
+    const code = generate(ast);
+    const formatted = await formatCode(code);
+    expect(formatted).not.toContain('__PWNED__');
+    expect(formatted).toContain('Circular reference omitted');
   });
 });

@@ -241,6 +241,11 @@ export interface AgentPatchApplyPayload {
   resolvedSelectedId?: string;
   warnings?: string[];
   traceId: string;
+  sourcePageId: string | null;
+  basePageVersion: number | null;
+  sourceGeneration: number;
+  documentSessionId: string;
+  schemaRevision: number;
 }
 
 export type AgentPatchApplyHandler = (
@@ -310,12 +315,16 @@ export interface AgentStreamResponseResult {
 export interface AIService {
   name: string;
   isAvailable(): boolean | Promise<boolean>;
-  generateResponse(request: AgentEditRequest): Promise<AgentEditResponse>;
+  generateResponse(
+    request: AgentEditRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<AgentEditResponse>;
   streamResponse?(
     request: AgentEditRequest,
     handlers: {
       onEvent: (event: AgentStreamEvent) => void | Promise<void>;
     },
+    options?: { signal?: AbortSignal },
   ): Promise<AgentStreamResponseResult>;
 }
 

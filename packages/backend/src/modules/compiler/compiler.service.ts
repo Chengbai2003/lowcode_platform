@@ -18,7 +18,7 @@ export class CompilerService {
     this.logger.log('[compile] Starting compilation');
 
     try {
-      // 编译代码
+      // 统一入口校验已在 compileSchemaToCode 首行完成，避免重复校验
       const code = compileToCode(dto.schema, dto.options);
 
       // 格式化代码

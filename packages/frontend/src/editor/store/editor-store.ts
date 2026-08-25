@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import type { AISessionMeta } from '../../types';
+import { useHistoryStore } from './history';
+
+const genDocumentSessionId = (): string => {
+  if (typeof crypto !== 'undefined' && typeof (crypto as Crypto).randomUUID === 'function') {
+    return (crypto as Crypto).randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+};
 
 // ============================================
 // Selection Store - 组件选择状态
@@ -10,19 +18,33 @@ interface SelectionState {
   selectedId: string | null;
   hoverId: string | null;
   selectedIds: string[];
+  currentPageId: string | null;
+  generation: number;
+  documentSessionId: string;
   selectComponent: (id: string | null) => void;
   setHover: (id: string | null) => void;
   clearSelection: () => void;
   addToSelection: (id: string) => void;
   removeFromSelection: (id: string) => void;
+  setCurrentPageId: (pageId: string | null) => void;
+  setPageContext: (pageId: string | null) => void;
+  clearForPage: (pageId: string | null) => void;
+  resetForDocument: (pageId: string | null) => void;
+  resetForDocumentAndGetGeneration: (pageId: string | null) => number;
+  getCurrentPageId: () => string | null;
+  getGeneration: () => number;
+  getDocumentSessionId: () => string;
 }
 
 export const useSelectionStore = create<SelectionState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       selectedId: null,
       hoverId: null,
       selectedIds: [],
+      currentPageId: null,
+      generation: 0,
+      documentSessionId: genDocumentSessionId(),
 
       selectComponent: (id) => set({ selectedId: id, selectedIds: id ? [id] : [] }),
 
@@ -48,6 +70,61 @@ export const useSelectionStore = create<SelectionState>()(
             selectedId: newIds.length === 1 ? newIds[0] : state.selectedId,
           };
         }),
+
+      setCurrentPageId: (pageId) => {
+        const state = get();
+        if (state.currentPageId === pageId) return;
+        set({
+          currentPageId: pageId,
+          selectedId: null,
+          hoverId: null,
+          selectedIds: [],
+          generation: state.generation + 1,
+        });
+      },
+
+      setPageContext: (pageId) => {
+        get().setCurrentPageId(pageId);
+      },
+
+      clearForPage: (pageId) => {
+        get().setCurrentPageId(pageId);
+      },
+
+      resetForDocument: (pageId) => {
+        // ponytail ultra: force per-document reset, bump generation even if same id
+        const state = get();
+        const newSessionId = genDocumentSessionId();
+        set({
+          currentPageId: pageId,
+          selectedId: null,
+          hoverId: null,
+          selectedIds: [],
+          generation: state.generation + 1,
+          documentSessionId: newSessionId,
+        });
+      },
+
+      resetForDocumentAndGetGeneration: (pageId) => {
+        const state = get();
+        const newSessionId = genDocumentSessionId();
+        const newGen = state.generation + 1;
+        set({
+          currentPageId: pageId,
+          selectedId: null,
+          hoverId: null,
+          selectedIds: [],
+          generation: newGen,
+          documentSessionId: newSessionId,
+        });
+        return newGen;
+      },
+
+      getCurrentPageId: () => get().currentPageId,
+
+      getGeneration: () => get().generation,
+
+      getDocumentSessionId: () => get().documentSessionId,
     }),
     { name: 'selection-store' },
   ),
@@ -64,6 +141,12 @@ interface EditorState {
   aiScopeRootId: string | null;
   aiScopeTargetIds: string[];
   aiScopeSourceMessageId: string | null;
+  // Page 隔离
+  currentPageId: string | null;
+  generation: number;
+  documentSessionId: string;
+  // Schema 修订号（P1-9：检测本地编辑导致 preview 过期）
+  schemaRevision: number;
   // UI 状态
   isHistoryDrawerOpen: boolean;
   isFloatingIslandOpen: boolean;
@@ -88,16 +171,30 @@ interface EditorState {
   setFloatingIslandOpen: (open: boolean) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setCurrentPageId: (pageId: string | null) => void;
+  setPageContext: (pageId: string | null) => void;
+  clearForPage: (pageId: string | null) => void;
+  resetForDocument: (pageId: string | null) => void;
+  resetForDocumentAndGetGeneration: (pageId: string | null) => number;
+  getCurrentPageId: () => string | null;
+  getGeneration: () => number;
+  getDocumentSessionId: () => string;
+  bumpSchemaRevision: () => number;
+  getSchemaRevision: () => number;
 }
 
 export const useEditorStore = create<EditorState>()(
   devtools(
-    (set) => ({
+    (set, get) => ({
       currentSessionId: null,
       sessions: [],
       aiScopeRootId: null,
       aiScopeTargetIds: [],
       aiScopeSourceMessageId: null,
+      currentPageId: null,
+      generation: 0,
+      documentSessionId: genDocumentSessionId(),
+      schemaRevision: 0,
       isHistoryDrawerOpen: false,
       isFloatingIslandOpen: false,
       isLoading: false,
@@ -152,6 +249,72 @@ export const useEditorStore = create<EditorState>()(
       setLoading: (loading) => set({ isLoading: loading }),
 
       setError: (error) => set({ error }),
+
+      setCurrentPageId: (pageId) => {
+        const state = get();
+        if (state.currentPageId === pageId) return;
+        set({ currentPageId: pageId, generation: state.generation + 1 });
+        // 同步清理 history 与 selection，实现 per-page 隔离
+        useHistoryStore.getState().setCurrentPageId(pageId);
+        useSelectionStore.getState().setCurrentPageId(pageId);
+      },
+
+      setPageContext: (pageId) => {
+        get().setCurrentPageId(pageId);
+      },
+
+      clearForPage: (pageId) => {
+        get().setCurrentPageId(pageId);
+      },
+
+      resetForDocument: (pageId) => {
+        const state = get();
+        const newSessionId = genDocumentSessionId();
+        // force bump even if same id to isolate document singletons
+        set({
+          currentPageId: pageId,
+          generation: state.generation + 1,
+          documentSessionId: newSessionId,
+          schemaRevision: 0,
+          aiScopeRootId: null,
+          aiScopeTargetIds: [],
+          aiScopeSourceMessageId: null,
+        });
+        useHistoryStore.getState().resetForDocument(pageId);
+        useSelectionStore.getState().resetForDocument(pageId);
+      },
+
+      resetForDocumentAndGetGeneration: (pageId) => {
+        const state = get();
+        const newSessionId = genDocumentSessionId();
+        const newGen = state.generation + 1;
+        set({
+          currentPageId: pageId,
+          generation: newGen,
+          documentSessionId: newSessionId,
+          schemaRevision: 0,
+          aiScopeRootId: null,
+          aiScopeTargetIds: [],
+          aiScopeSourceMessageId: null,
+        });
+        useHistoryStore.getState().resetForDocument(pageId);
+        useSelectionStore.getState().resetForDocument(pageId);
+        return newGen;
+      },
+
+      getCurrentPageId: () => get().currentPageId,
+
+      getGeneration: () => get().generation,
+
+      getDocumentSessionId: () => get().documentSessionId,
+
+      bumpSchemaRevision: () => {
+        const next = get().schemaRevision + 1;
+        set({ schemaRevision: next });
+        return next;
+      },
+
+      getSchemaRevision: () => get().schemaRevision,
     }),
     { name: 'editor-store' },
   ),

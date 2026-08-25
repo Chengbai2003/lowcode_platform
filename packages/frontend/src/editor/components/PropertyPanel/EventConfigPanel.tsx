@@ -144,9 +144,6 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
           value: { type: 'literal', value: 'Debug log' },
           level: 'info' as const,
         }),
-        ...(actionType === 'customScript' && {
-          code: '// 输入自定义 JavaScript 代码',
-        }),
       } as Action;
 
       const currentActions = events[activeTrigger] || [];

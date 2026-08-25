@@ -1,10 +1,5 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { SavePageSchemaDto } from './dto/save-page-schema.dto';
-import {
-  PageRecord,
-  PageSchemaRepository,
-  PageSchemaSnapshotRecord,
-} from './repositories/page-schema.repository';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { PageSchemaRepository } from './repositories/page-schema.repository';
 import { assertValidPageSchema } from './schema-validation';
 
 export interface SavedPageSchemaResult {
@@ -22,57 +17,24 @@ export interface LoadedPageSchemaResult extends SavedPageSchemaResult {
 export class PageSchemaService {
   constructor(private readonly repository: PageSchemaRepository) {}
 
-  async saveSchema(pageId: string, dto: SavePageSchemaDto): Promise<SavedPageSchemaResult> {
-    assertValidPageSchema(dto.schema);
+  async saveSchema(params: {
+    pageId: string;
+    schema: Record<string, unknown>;
+    baseVersion?: number;
+  }): Promise<SavedPageSchemaResult> {
+    assertValidPageSchema(params.schema);
 
-    const existingPage = this.repository.getPage(pageId);
-    const currentVersion = existingPage?.currentVersion ?? 0;
-
-    if (existingPage && dto.baseVersion === undefined) {
-      throw new ConflictException({
-        message: 'Page version mismatch',
-        pageId,
-        expectedVersion: currentVersion,
-        receivedVersion: null,
-      });
-    }
-
-    if (dto.baseVersion !== undefined && dto.baseVersion !== currentVersion) {
-      throw new ConflictException({
-        message: 'Page version mismatch',
-        pageId,
-        expectedVersion: currentVersion,
-        receivedVersion: dto.baseVersion,
-      });
-    }
-
-    const nextVersion = currentVersion + 1;
-    const savedAt = new Date().toISOString();
-    const snapshotId = `${pageId}-v${nextVersion}-${Date.now()}`;
-    const normalizedSchema = this.withSchemaVersion(dto.schema, nextVersion);
-    const snapshot: PageSchemaSnapshotRecord = {
-      id: snapshotId,
-      pageId,
-      version: nextVersion,
-      schema: normalizedSchema,
-      createdAt: savedAt,
-    };
-
-    const page: PageRecord = {
-      id: pageId,
-      currentVersion: nextVersion,
-      latestSnapshotId: snapshotId,
-      createdAt: existingPage?.createdAt || savedAt,
-      updatedAt: savedAt,
-    };
-
-    await this.repository.saveSnapshot(snapshot, page);
+    const { page, snapshot } = await this.repository.saveSchema({
+      pageId: params.pageId,
+      schema: params.schema,
+      baseVersion: params.baseVersion,
+    });
 
     return {
-      pageId,
-      version: nextVersion,
-      snapshotId,
-      savedAt,
+      pageId: page.id,
+      version: page.currentVersion,
+      snapshotId: snapshot.id,
+      savedAt: snapshot.createdAt,
     };
   }
 

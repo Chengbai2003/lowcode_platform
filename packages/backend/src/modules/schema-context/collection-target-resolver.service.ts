@@ -177,9 +177,14 @@ export class CollectionTargetResolverService {
   private collectDescendants(schema: A2UISchema, rootId: string) {
     const descendants: Array<{ id: string; type: string }> = [];
     const stack = [...(schema.components[rootId]?.childrenIds ?? [])].reverse();
+    const visited = new Set<string>([rootId]);
 
     while (stack.length > 0) {
       const currentId = stack.pop()!;
+      if (visited.has(currentId)) {
+        continue;
+      }
+      visited.add(currentId);
       const component = schema.components[currentId];
       if (!component) {
         continue;

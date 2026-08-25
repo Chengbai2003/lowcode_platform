@@ -7,7 +7,6 @@ import type { ExecutionContext, ActionRegistry } from './context';
 export interface ExecutorOptions {
   debug?: boolean;
   maxExecutionTime?: number;
-  enableCustomScript?: boolean;
   enablePlugins?: boolean;
   customHandlers?: ActionRegistry;
   onError?: (error: Error, action: Action, context: ExecutionContext) => void;

@@ -28,6 +28,7 @@
     "@nestjs/throttler": "^5.1.1",
     "@lowcode-platform/frontend": "workspace:*",
     "ai": "^6.0.101",
+    "jsep": "^1.4.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "express": "^4.22.1",
@@ -50,7 +51,7 @@
     "typescript": "^5.3.3"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   },
   "private": true
 }

@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { getCoreActionTypes } from '../ai/prompt-builder';
 import { AIService, AIToolCallingError } from '../ai/ai.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
@@ -18,8 +17,12 @@ import type {
   FocusContextResult,
   NodeCandidate,
 } from '../schema-context';
-import { buildAncestorChain, buildParentMap } from '../schema-context/utils/parent-map.builder';
 import { buildPatchPresentation } from './agent-preview.utils';
+import {
+  buildClarificationCandidates,
+  buildClarificationSummary,
+} from './agent-clarification.utils';
+import { normalizeFinalPatch } from './agent-patch-normalizer.utils';
 import { AgentIntentConfirmationService } from './agent-intent-confirmation.service';
 import {
   AgentIntentNormalizationService,
@@ -29,14 +32,26 @@ import { AgentScopeConfirmationService } from './agent-scope-confirmation.servic
 import { AgentTraceService } from './agent-trace.service';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 import { AgentConversationContext } from './agent-session-memory.service';
-import {
-  buildCompactContextSections,
-  MAX_HISTORY_MESSAGE_CHARS,
-  MAX_INSTRUCTION_PROMPT_CHARS,
-  sanitizePromptText,
-} from './agent-prompt.utils';
 import { AgentPatchRunProfile, AgentPolicyService, AgentRunMetrics } from './agent-policy.service';
 import { AgentProgressReporter, NOOP_AGENT_PROGRESS_REPORTER } from './types/agent-progress.types';
+import {
+  buildBatchPatchPrompt,
+  buildBatchPatchSystemPrompt,
+  buildBatchScopePrompt,
+  buildBatchScopeSystemPrompt,
+  buildPrompt,
+  buildSystemPrompt,
+} from './agent-prompt.builder';
+import {
+  buildCollectionContainerClarification,
+  createCollectionClarificationResponse,
+  createIntentConfirmationResponse,
+  createScopeConfirmationResponse,
+  planBatchScopeForIntent,
+  runBatchScopePlanning,
+  runConfirmedBatchPatch,
+  runConfirmedIntentScopePlanning,
+} from './agent-batch.planner';
 import {
   AgentCollectionScope,
   AgentClarificationCandidate,
@@ -50,20 +65,6 @@ import {
 } from './types/agent-edit.types';
 
 const CLARIFICATION_CANDIDATE_LIMIT = 3;
-const DEFAULT_LABEL_PROPS = [
-  'children',
-  'title',
-  'label',
-  'placeholder',
-  'message',
-  'description',
-  'header',
-  'tab',
-  'name',
-  'text',
-] as const;
-const MAX_LABEL_CHARS = 32;
-const MAX_PATH_SEGMENT_CHARS = 18;
 const READ_RETRYABLE_TOOLS = new Set([
   'get_page_schema',
   'get_focus_context',
@@ -75,8 +76,6 @@ const READ_RETRYABLE_TOOLS = new Set([
   'auto_fix_patch',
 ]);
 const COLLECTION_INTENT_REGEX = /所有|全部|每个|当前.+(?:下|内|中)/;
-const BATCH_SCOPE_TOOL_NAMES = new Set(['resolve_collection_scope', 'get_component_meta']);
-const BATCH_PATCH_TOOL_NAMES = new Set(['update_components_props', 'get_component_meta']);
 
 @Injectable()
 export class AgentRunnerService {
@@ -251,7 +250,7 @@ export class AgentRunnerService {
       selectedId: resolvedSelectedId,
       focusContextResult,
     });
-    const prompt = this.buildPrompt(
+    const prompt = buildPrompt(
       dto,
       focusContextResult,
       resolvedSelectedId,
@@ -286,7 +285,7 @@ export class AgentRunnerService {
         });
 
         const result = await this.aiService.runToolCalling({
-          system: this.buildSystemPrompt(focusContextResult.componentList),
+          system: buildSystemPrompt(focusContextResult.componentList),
           prompt,
           provider: dto.provider,
           modelId: dto.modelId,
@@ -482,16 +481,17 @@ export class AgentRunnerService {
       };
     }
 
-    const clarificationCandidates = this.buildClarificationCandidates(
+    const clarificationCandidates = buildClarificationCandidates(
       candidates.slice(0, CLARIFICATION_CANDIDATE_LIMIT),
       initialResult.schema,
+      this.componentMetaRegistry,
     );
 
     return {
       clarificationResponse: {
         mode: 'clarification',
         content: `我找到了多个可能的目标组件：${clarificationCandidates
-          .map((candidate) => this.buildClarificationSummary(candidate))
+          .map((candidate) => buildClarificationSummary(candidate))
           .join('、')}。请选择你要修改的对象。`,
         question: '请选择要继续编辑的目标组件',
         clarificationId: `${traceId}-clarify`,
@@ -508,64 +508,6 @@ export class AgentRunnerService {
     };
   }
 
-  private buildSystemPrompt(componentList: readonly string[]): string {
-    const allowedActionTypes = getCoreActionTypes().filter((type) => type !== 'customScript');
-
-    return [
-      '你是一个受限的低代码页面编辑 Agent。',
-      '你只能通过工具读取页面信息并生成最小 patch；不要输出整页 schema，不要编造不存在的组件 ID。',
-      '优先做局部修改，尽量复用已有组件和结构。',
-      '禁止生成 customScript。',
-      `可用组件类型: ${componentList.join(', ') || '未知'}`,
-      `允许的事件 Action 类型: ${allowedActionTypes.join(', ')}`,
-      "feedback 动作必须使用 content/level 字段，例如 { type: 'feedback', kind: 'message', content: '操作成功', level: 'success' }；不要使用 message/type_/messageType。",
-      'Button 的红色/危险样式请设置 props.danger=true；不要把 Button.props.type 写成 danger，type 仅用于 default/primary/dashed/link/text。',
-      '如果你已经完成修改，就停止继续调用工具。',
-    ].join('\n');
-  }
-
-  private buildPrompt(
-    dto: AgentEditRequestDto,
-    focusContextResult: FocusContextResult,
-    resolvedSelectedId?: string,
-    conversationContext?: AgentConversationContext,
-  ): string {
-    const chunks = buildCompactContextSections(focusContextResult);
-
-    if (resolvedSelectedId) {
-      chunks.push(`默认编辑目标组件: ${resolvedSelectedId}`);
-    }
-
-    if (conversationContext?.summary) {
-      chunks.push(`会话摘要:\n${conversationContext.summary}`);
-    }
-
-    const conversationHistory = (dto.conversationHistory || [])
-      .filter((message) => message.role === 'user' || message.role === 'assistant')
-      .slice(-4)
-      .map(
-        (message) =>
-          `${message.role}: ${sanitizePromptText(message.content, MAX_HISTORY_MESSAGE_CHARS)}`,
-      );
-
-    if (conversationHistory.length > 0) {
-      chunks.push(`最近对话:\n${conversationHistory.join('\n')}`);
-    }
-
-    chunks.push(`用户指令: ${sanitizePromptText(dto.instruction, MAX_INSTRUCTION_PROMPT_CHARS)}`);
-    chunks.push(
-      [
-        '建议策略:',
-        '1. 简单文案或属性修改优先调用 update_component_props。',
-        '2. 绑定事件使用 bind_event，并只替换目标 trigger 的 action 列表。',
-        '3. 新增组件使用 insert_component，组件需带 id/type。',
-        '4. 删除或移动前确认目标组件明确。',
-      ].join('\n'),
-    );
-
-    return chunks.join('\n\n');
-  }
-
   private hasCollectionIntent(instruction: string): boolean {
     return COLLECTION_INTENT_REGEX.test(instruction.trim());
   }
@@ -576,27 +518,7 @@ export class AgentRunnerService {
     traceId: string,
     routeDecision?: AgentRouteDecision,
   ): AgentEditClarificationResponse | undefined {
-    const selectedId = dto.selectedId?.trim();
-    if (!selectedId) {
-      return this.createCollectionClarificationResponse(
-        dto,
-        traceId,
-        routeDecision,
-        '批量修改需要先选中父级或祖先容器，请先在编辑器中选中一个容器后再继续。',
-      );
-    }
-
-    const selectedComponent = context.workingSchema.components[selectedId];
-    if (!selectedComponent || !this.componentMetaRegistry.isContainer(selectedComponent.type)) {
-      return this.createCollectionClarificationResponse(
-        dto,
-        traceId,
-        routeDecision,
-        '当前选中目标不是容器。请先选中要批量修改范围的父级或祖先容器，再继续发起批量修改。',
-      );
-    }
-
-    return undefined;
+    return buildCollectionContainerClarification(this, dto, context, traceId, routeDecision);
   }
 
   private createCollectionClarificationResponse(
@@ -605,21 +527,7 @@ export class AgentRunnerService {
     routeDecision: AgentRouteDecision | undefined,
     content: string,
   ): AgentEditClarificationResponse {
-    return {
-      mode: 'clarification',
-      content,
-      question: '请先选中父级或祖先容器',
-      clarificationId: `${traceId}-collection-clarify`,
-      candidates: [],
-      warnings: [],
-      traceId,
-      route: routeDecision?.route ?? {
-        requestedMode: dto.responseMode ?? 'patch',
-        resolvedMode: 'patch',
-        reason: 'manual_patch',
-        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
-      },
-    };
+    return createCollectionClarificationResponse(this, dto, traceId, routeDecision, content);
   }
 
   private async createIntentConfirmationResponse(
@@ -631,46 +539,16 @@ export class AgentRunnerService {
     routeDecision: AgentRouteDecision | undefined,
     options: NormalizedIntentOption[],
   ): Promise<AgentEditIntentConfirmationResponse> {
-    if (!resolvedSelectedId || !dto.sessionId?.trim()) {
-      this.policyService.throwPolicyBlocked(traceId, '语义确认需要有效的会话与容器范围');
-    }
-
-    const pendingIntent = this.intentConfirmationService.create({
-      sessionId: dto.sessionId,
-      instruction: dto.instruction,
-      pageId: dto.pageId,
-      rootId: resolvedSelectedId,
+    return createIntentConfirmationResponse(
+      this,
+      dto,
+      context,
+      traceId,
+      resolvedSelectedId,
+      reporter,
+      routeDecision,
       options,
-      traceId,
-    });
-    const responseOptions: AgentIntentConfirmationOption[] = pendingIntent.options.map((option) => ({
-      intentId: option.intentId,
-      label: option.label,
-      description: option.description,
-    }));
-
-    await reporter.emitStatus({
-      stage: 'awaiting_intent_confirmation',
-      label: '已识别到多种可能语义，等待确认',
-      targetId: resolvedSelectedId,
-      detail: responseOptions.map((option) => option.label).join(' / '),
-    });
-
-    return {
-      mode: 'intent_confirmation',
-      content: `我还需要先确认你的意思。当前“${dto.instruction.trim()}”在这个容器里可能对应多种集合语义，请先选择你要统一修改的那一类组件。`,
-      question: '请先确认你说的是哪一类组件',
-      intentConfirmationId: pendingIntent.intentConfirmationId,
-      options: responseOptions,
-      warnings: [...context.warnings],
-      traceId,
-      route: routeDecision?.route ?? {
-        requestedMode: dto.responseMode ?? 'patch',
-        resolvedMode: 'patch',
-        reason: 'manual_patch',
-        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
-      },
-    };
+    );
   }
 
   private async runConfirmedIntentScopePlanning(
@@ -681,46 +559,14 @@ export class AgentRunnerService {
     reporter: AgentProgressReporter,
     routeDecision: AgentRouteDecision | undefined,
   ): Promise<AgentEditScopeConfirmationResponse> {
-    const confirmedIntentId = dto.confirmedIntentId?.trim();
-    const sessionId = dto.sessionId?.trim();
-    if (!confirmedIntentId || !sessionId || !resolvedSelectedId) {
-      this.policyService.throwPolicyBlocked(traceId, '语义确认参数不完整，请重新发起批量修改');
-    }
-
-    const confirmedIntent = this.intentConfirmationService.getConfirmedOption(sessionId, confirmedIntentId);
-    if (!confirmedIntent) {
-      this.policyService.throwPolicyBlocked(traceId, '语义确认已失效，请重新发起批量修改');
-    }
-
-    if (dto.instruction.trim() !== confirmedIntent.pending.instruction) {
-      this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
-      this.policyService.throwPolicyBlocked(traceId, '语义确认与当前指令不一致，请重新发起批量修改');
-    }
-
-    if (dto.pageId !== confirmedIntent.pending.pageId) {
-      this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
-      this.policyService.throwPolicyBlocked(traceId, '语义确认对应的页面已变化，请重新发起批量修改');
-    }
-
-    if (
-      dto.selectedId?.trim() !== confirmedIntent.pending.rootId ||
-      resolvedSelectedId !== confirmedIntent.pending.rootId
-    ) {
-      this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
-      this.policyService.throwPolicyBlocked(traceId, '当前选中容器已变化，请重新发起批量修改');
-    }
-
-    this.intentConfirmationService.clear(sessionId, confirmedIntent.pending.intentConfirmationId);
-
-    return this.planBatchScopeForIntent(
+    return runConfirmedIntentScopePlanning(
+      this,
       dto,
       context,
       traceId,
       resolvedSelectedId,
       reporter,
       routeDecision,
-      confirmedIntent.option,
-      '正在根据已确认语义解析批量范围',
     );
   }
 
@@ -734,56 +580,16 @@ export class AgentRunnerService {
     intent: Pick<NormalizedIntentOption, 'targetType' | 'label'>,
     label: string,
   ): Promise<AgentEditScopeConfirmationResponse> {
-    if (!resolvedSelectedId || !dto.sessionId?.trim()) {
-      this.policyService.throwPolicyBlocked(traceId, '批量修改需要有效的会话与容器范围');
-    }
-
-    await reporter.emitStatus({
-      stage: 'planning_scope',
-      label,
-      targetId: resolvedSelectedId,
-      detail: `语义: ${intent.label}`,
-    });
-
-    const toolResult = await this.executeToolWithRetry(
-      'resolve_collection_scope',
-      {
-        rootId: resolvedSelectedId,
-        instruction: dto.instruction,
-        targetType: intent.targetType,
-      },
-      context,
-      traceId,
-      reporter,
-    );
-    const resolvedScope = toolResult.data as CollectionTargetResolution | undefined;
-    if (!resolvedScope || resolvedScope.status !== 'matched') {
-      this.policyService.throwPolicyBlocked(
-        traceId,
-        this.describeCollectionResolutionFailure(
-          resolvedScope ?? {
-            status: 'no_match',
-            rootId: resolvedSelectedId,
-            reason: `未找到 ${intent.label}`,
-          },
-        ),
-      );
-    }
-
-    await reporter.emitStatus({
-      stage: 'awaiting_scope_confirmation',
-      label: '已识别批量范围，等待用户确认',
-      targetId: resolvedSelectedId,
-      detail: `${resolvedScope.targetCount} 个 ${resolvedScope.matchedDisplayName}`,
-    });
-
-    return this.createScopeConfirmationResponse(
+    return planBatchScopeForIntent(
+      this,
       dto,
+      context,
       traceId,
       resolvedSelectedId,
+      reporter,
       routeDecision,
-      context,
-      resolvedScope,
+      intent,
+      label,
     );
   }
 
@@ -795,38 +601,15 @@ export class AgentRunnerService {
     context: ToolExecutionContext,
     resolvedScope: Extract<CollectionTargetResolution, { status: 'matched' }>,
   ): Promise<AgentEditScopeConfirmationResponse> {
-    const scope: AgentCollectionScope = {
-      rootId: resolvedScope.rootId,
-      matchedType: resolvedScope.matchedType,
-      matchedDisplayName: resolvedScope.matchedDisplayName,
-      targetIds: [...resolvedScope.componentIds],
-      targetCount: resolvedScope.targetCount,
-    };
-
-    const pendingScope = this.scopeConfirmationService.create({
-      sessionId: dto.sessionId!,
-      instruction: dto.instruction,
-      pageId: dto.pageId,
-      rootId: resolvedSelectedId,
-      scope,
+    return createScopeConfirmationResponse(
+      this,
+      dto,
       traceId,
-    });
-
-    return {
-      mode: 'scope_confirmation',
-      content: `已识别到当前容器下 ${scope.targetCount} 个${scope.matchedDisplayName}，请先确认这批组件是否就是你要统一修改的范围。`,
-      question: `确认修改当前容器下的 ${scope.targetCount} 个${scope.matchedDisplayName}`,
-      scopeConfirmationId: pendingScope.scopeConfirmationId,
-      scope,
-      warnings: [...context.warnings],
-      traceId,
-      route: routeDecision?.route ?? {
-        requestedMode: dto.responseMode ?? 'patch',
-        resolvedMode: 'patch',
-        reason: 'manual_patch',
-        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
-      },
-    };
+      resolvedSelectedId,
+      routeDecision,
+      context,
+      resolvedScope,
+    );
   }
 
   private async runBatchScopePlanning(
@@ -839,116 +622,16 @@ export class AgentRunnerService {
     conversationContext: AgentConversationContext | undefined,
     routeDecision: AgentRouteDecision | undefined,
   ): Promise<AgentEditScopeConfirmationResponse> {
-    if (!resolvedSelectedId || !dto.sessionId?.trim()) {
-      this.policyService.throwPolicyBlocked(traceId, '批量修改需要有效的会话与容器范围');
-    }
-
-    const limits = this.policyService.getLimits('batch_patch');
-    const agentTools = this.getToolDefinitions(BATCH_SCOPE_TOOL_NAMES);
-    let resolvedScope: CollectionTargetResolution | undefined;
-
-    await reporter.emitStatus({
-      stage: 'planning_scope',
-      label: '正在规划批量修改范围',
-      targetId: resolvedSelectedId,
-    });
-
-    try {
-      await this.aiService.runToolCalling({
-        system: this.buildBatchScopeSystemPrompt(
-          focusContextResult.componentList,
-          resolvedSelectedId,
-        ),
-        prompt: this.buildBatchScopePrompt(
-          dto,
-          focusContextResult,
-          resolvedSelectedId,
-          conversationContext,
-        ),
-        provider: dto.provider,
-        modelId: dto.modelId,
-        temperature: dto.temperature,
-        maxTokens: dto.maxTokens,
-        timeoutMs: limits.timeoutMs,
-        maxSteps: limits.maxSteps,
-        maxToolCalls: limits.maxToolCalls,
-        toolDefinitions: agentTools,
-        executeTool: async (name, input) => {
-          if (!BATCH_SCOPE_TOOL_NAMES.has(name)) {
-            this.policyService.throwPolicyBlocked(
-              traceId,
-              `批量范围规划阶段不允许调用工具 ${name}`,
-            );
-          }
-
-          if (name === 'resolve_collection_scope') {
-            const requestedRootId = typeof input.rootId === 'string' ? input.rootId.trim() : '';
-            if (requestedRootId !== resolvedSelectedId) {
-              this.policyService.throwPolicyBlocked(
-                traceId,
-                '批量范围规划必须显式使用当前选中的容器 ID 作为 rootId',
-                {
-                  requestedRootId,
-                  resolvedSelectedId,
-                },
-              );
-            }
-          }
-
-          const toolResult = await this.executeToolWithRetry(name, input, context, traceId, reporter);
-          if (name === 'resolve_collection_scope') {
-            resolvedScope = toolResult.data as CollectionTargetResolution | undefined;
-          }
-          return toolResult.data ?? { ok: true };
-        },
-        onToolCallStart: (event) => {
-          void reporter.emitStatus({
-            stage: 'calling_tool',
-            label: `正在执行工具 ${event.toolCall.toolName}`,
-            toolName: event.toolCall.toolName,
-            targetId: resolvedSelectedId,
-            stepNumber: event.stepNumber,
-          });
-        },
-      });
-    } catch (error) {
-      if (error instanceof AgentToolException) {
-        throw error;
-      }
-      if (error instanceof AIToolCallingError) {
-        this.policyService.throwPolicyBlocked(traceId, error.message, error.details);
-      }
-      throw error;
-    }
-
-    if (!resolvedScope) {
-      this.policyService.throwPolicyBlocked(
-        traceId,
-        '批量修改必须先解析稳定的范围，请重新明确目标类型后再试',
-      );
-    }
-
-    if (resolvedScope.status !== 'matched') {
-      this.policyService.throwPolicyBlocked(
-        traceId,
-        this.describeCollectionResolutionFailure(resolvedScope),
-      );
-    }
-
-    await reporter.emitStatus({
-      stage: 'awaiting_scope_confirmation',
-      label: '已识别批量范围，等待用户确认',
-      targetId: resolvedSelectedId,
-      detail: `${resolvedScope.targetCount} 个 ${resolvedScope.matchedDisplayName}`,
-    });
-
-    return this.createScopeConfirmationResponse(
+    return runBatchScopePlanning(
+      this,
       dto,
+      context,
       traceId,
       resolvedSelectedId,
+      focusContextResult,
+      reporter,
+      conversationContext,
       routeDecision,
-      context,
-      resolvedScope,
     );
   }
 
@@ -962,252 +645,17 @@ export class AgentRunnerService {
     conversationContext: AgentConversationContext | undefined,
     routeDecision: AgentRouteDecision | undefined,
   ): Promise<AgentEditPatchResponse> {
-    const confirmedScopeId = dto.confirmedScopeId?.trim();
-    const sessionId = dto.sessionId?.trim();
-    if (!confirmedScopeId || !sessionId || !resolvedSelectedId) {
-      this.policyService.throwPolicyBlocked(traceId, '批量范围确认参数不完整');
-    }
-
-    const pendingScope = this.scopeConfirmationService.get(sessionId, confirmedScopeId);
-    if (!pendingScope) {
-      this.policyService.throwPolicyBlocked(traceId, '批量范围确认已失效，请重新发起批量修改');
-    }
-
-    if (dto.instruction.trim() !== pendingScope.instruction) {
-      this.scopeConfirmationService.clear(sessionId);
-      this.policyService.throwPolicyBlocked(traceId, '批量范围确认与当前指令不一致，请重新发起');
-    }
-
-    if (dto.pageId !== pendingScope.pageId) {
-      this.scopeConfirmationService.clear(sessionId);
-      this.policyService.throwPolicyBlocked(traceId, '批量范围确认对应的页面已变化，请重新发起');
-    }
-
-    if (
-      dto.selectedId?.trim() !== pendingScope.rootId ||
-      resolvedSelectedId !== pendingScope.rootId
-    ) {
-      this.scopeConfirmationService.clear(sessionId);
-      this.policyService.throwPolicyBlocked(traceId, '当前选中容器已变化，请重新发起批量修改');
-    }
-
-    const revalidatedScope = this.collectionTargetResolver.resolve({
-      rootId: pendingScope.rootId,
-      instruction: pendingScope.instruction,
-      schema: context.workingSchema,
-    });
-
-    if (
-      revalidatedScope.status !== 'matched' ||
-      !this.areStringSetsEqual(revalidatedScope.componentIds, pendingScope.scope.targetIds)
-    ) {
-      this.scopeConfirmationService.clear(sessionId);
-      this.policyService.throwPolicyBlocked(
-        traceId,
-        '页面结构已变化，批量范围确认已失效，请重新发起',
-      );
-    }
-
-    this.scopeConfirmationService.clear(sessionId);
-
-    const limits = this.policyService.getLimits('batch_patch');
-    const agentTools = this.getToolDefinitions(BATCH_PATCH_TOOL_NAMES);
-    const metrics: AgentRunMetrics = { stepCount: 0, toolCallCount: 0 };
-    let retryCount = 0;
-
-    await reporter.emitStatus({
-      stage: 'calling_model',
-      label: '正在生成批量修改预览',
-      targetId: resolvedSelectedId,
-      detail: `范围: ${pendingScope.scope.targetCount} 个 ${pendingScope.scope.matchedDisplayName}`,
-    });
-
-    try {
-      const result = await this.aiService.runToolCalling({
-        system: this.buildBatchPatchSystemPrompt(
-          focusContextResult.componentList,
-          pendingScope.scope,
-        ),
-        prompt: this.buildBatchPatchPrompt(
-          dto,
-          focusContextResult,
-          pendingScope.scope,
-          conversationContext,
-        ),
-        provider: dto.provider,
-        modelId: dto.modelId,
-        temperature: dto.temperature,
-        maxTokens: dto.maxTokens,
-        timeoutMs: limits.timeoutMs,
-        maxSteps: limits.maxSteps,
-        maxToolCalls: limits.maxToolCalls,
-        toolDefinitions: agentTools,
-        executeTool: async (name, input) => {
-          if (!BATCH_PATCH_TOOL_NAMES.has(name)) {
-            this.policyService.throwPolicyBlocked(traceId, `批量 patch 阶段不允许调用工具 ${name}`);
-          }
-
-          if (name === 'update_components_props') {
-            this.assertBatchToolTargets(traceId, input, pendingScope.scope);
-          }
-
-          const toolResult = await this.executeToolWithRetry(name, input, context, traceId, reporter, () => {
-            retryCount += 1;
-          });
-          return toolResult.data ?? { ok: true };
-        },
-        onStepFinish: (event) => {
-          metrics.stepCount = Math.max(metrics.stepCount, event.stepNumber + 1);
-        },
-        onToolCallStart: (event) => {
-          metrics.toolCallCount += 1;
-          void reporter.emitStatus({
-            stage: 'calling_tool',
-            label: `正在执行工具 ${event.toolCall.toolName}`,
-            toolName: event.toolCall.toolName,
-            stepNumber: event.stepNumber,
-            targetId: resolvedSelectedId,
-          });
-        },
-      });
-
-      metrics.stepCount = Math.max(metrics.stepCount, result.steps.length);
-      metrics.toolCallCount = Math.max(metrics.toolCallCount, result.toolCallCount);
-    } catch (error) {
-      if (error instanceof AgentToolException) {
-        throw error;
-      }
-
-      if (error instanceof AIToolCallingError) {
-        if (error.reason === 'timeout') {
-          this.policyService.throwTimeout(traceId, metrics);
-        }
-
-        this.policyService.throwPolicyBlocked(traceId, error.message, error.details);
-      }
-
-      throw error;
-    }
-
-    await reporter.emitStatus({
-      stage: 'validating_output',
-      label: '正在校验和预览批量 patch',
-      targetId: resolvedSelectedId,
-    });
-
-    const { patch, previewSchema, previewSummary, changeGroups, risk, scopeSummary } =
-      await this.finalizePatch(
-        dto,
-        context,
-        traceId,
-        resolvedSelectedId,
-        'batch_patch',
-        reporter,
-        () => {
-          retryCount += 1;
-        },
-        pendingScope.scope,
-      );
-
-    await reporter.emitStatus({
-      stage: 'completed',
-      label: '批量修改预览已生成',
-      targetId: resolvedSelectedId,
-    });
-
-    return {
-      mode: 'patch',
-      pageId: context.pageId,
-      baseVersion: dto.version,
-      resolvedVersion: context.resolvedVersion,
-      resolvedSelectedId,
-      patch,
-      previewSchema,
-      previewSummary,
-      changeGroups,
-      risk,
-      requiresConfirmation: risk.requiresConfirmation,
-      warnings: [...context.warnings],
+    return runConfirmedBatchPatch(
+      this,
+      dto,
+      context,
       traceId,
-      route: routeDecision?.route ?? {
-        requestedMode: dto.responseMode ?? 'patch',
-        resolvedMode: 'patch',
-        reason: 'manual_patch',
-        manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
-      },
-      retryCount,
-      scopeSummary,
-    };
-  }
-
-  private buildBatchScopeSystemPrompt(componentList: readonly string[], rootId: string): string {
-    return [
-      '你正在执行批量修改的范围规划阶段。',
-      '本阶段不能生成 patch，也不能调用任何写工具。',
-      `当前选中的容器 rootId=${rootId}。`,
-      '如果用户要做集合修改，你必须调用 resolve_collection_scope。',
-      '调用 resolve_collection_scope 时，rootId 必须等于当前选中的容器 ID。',
-      `可用组件类型: ${componentList.join(', ') || '未知'}`,
-      '当 resolve_collection_scope 返回 matched 后即可停止。',
-    ].join('\n');
-  }
-
-  private buildBatchScopePrompt(
-    dto: AgentEditRequestDto,
-    focusContextResult: FocusContextResult,
-    resolvedSelectedId: string,
-    conversationContext?: AgentConversationContext,
-  ): string {
-    const chunks = buildCompactContextSections(focusContextResult);
-    chunks.push(`当前已选中的容器: ${resolvedSelectedId}`);
-    chunks.push('当前是批量修改第一阶段，请只规划范围，不要生成 patch。');
-
-    if (conversationContext?.summary) {
-      chunks.push(`会话摘要:\n${conversationContext.summary}`);
-    }
-
-    chunks.push(`用户指令: ${sanitizePromptText(dto.instruction, MAX_INSTRUCTION_PROMPT_CHARS)}`);
-    chunks.push('你必须先调用 resolve_collection_scope(rootId=当前容器ID)。');
-
-    return chunks.join('\n\n');
-  }
-
-  private buildBatchPatchSystemPrompt(
-    componentList: readonly string[],
-    scope: AgentCollectionScope,
-  ): string {
-    return [
-      '你正在执行批量修改的 patch 生成阶段。',
-      '范围已经由用户确认，不能自行扩展目标集合。',
-      `已确认 rootId=${scope.rootId}。`,
-      `已确认目标类型=${scope.matchedType} (${scope.matchedDisplayName})。`,
-      `已确认目标数量=${scope.targetCount}。`,
-      `可用组件类型: ${componentList.join(', ') || '未知'}`,
-      '你只能对已确认 targetIds 做统一 props 更新。',
-      '禁止插入、删除、移动组件，禁止绑定事件。',
-      '优先使用 update_components_props 一次完成批量更新。',
-    ].join('\n');
-  }
-
-  private buildBatchPatchPrompt(
-    dto: AgentEditRequestDto,
-    focusContextResult: FocusContextResult,
-    scope: AgentCollectionScope,
-    conversationContext?: AgentConversationContext,
-  ): string {
-    const chunks = buildCompactContextSections(focusContextResult);
-
-    if (conversationContext?.summary) {
-      chunks.push(`会话摘要:\n${conversationContext.summary}`);
-    }
-
-    chunks.push(`用户指令: ${sanitizePromptText(dto.instruction, MAX_INSTRUCTION_PROMPT_CHARS)}`);
-    chunks.push(`已确认 rootId: ${scope.rootId}`);
-    chunks.push(`已确认目标类型: ${scope.matchedDisplayName} (${scope.matchedType})`);
-    chunks.push(`已确认 targetIds: ${scope.targetIds.join(', ')}`);
-    chunks.push('只能修改这些 targetIds，且只能生成统一 props 更新。');
-
-    return chunks.join('\n\n');
+      resolvedSelectedId,
+      focusContextResult,
+      reporter,
+      conversationContext,
+      routeDecision,
+    );
   }
 
   private describeCollectionResolutionFailure(
@@ -1263,7 +711,7 @@ export class AgentRunnerService {
   }> {
     const guardContext = this.createGuardContext(context);
     const baseSchema = guardContext.workingSchema;
-    const rawPatch = this.normalizeFinalPatch(baseSchema, context.accumulatedPatch);
+    const rawPatch = normalizeFinalPatch(baseSchema, context.accumulatedPatch);
     this.policyService.assertPatchProduced(rawPatch, traceId);
     this.policyService.assertPatchWithinLimits(rawPatch, traceId, profile);
 
@@ -1547,75 +995,6 @@ export class AgentRunnerService {
     };
   }
 
-  private normalizeFinalPatch(
-    baseSchema: A2UISchema,
-    patch: readonly EditorPatchOperation[],
-  ): EditorPatchOperation[] {
-    const parentMap = buildParentMap(baseSchema.components);
-    const deduped: EditorPatchOperation[] = [];
-    const seen = new Set<string>();
-
-    for (const operation of patch) {
-      const normalized = { ...operation };
-      const key = JSON.stringify(normalized);
-      if (seen.has(key)) {
-        continue;
-      }
-      seen.add(key);
-
-      switch (normalized.op) {
-        case 'insertComponent': {
-          const componentId =
-            typeof normalized.component.id === 'string' ? normalized.component.id : undefined;
-          if (componentId && baseSchema.components[componentId]) {
-            continue;
-          }
-          break;
-        }
-        case 'updateProps': {
-          const currentProps = baseSchema.components[normalized.componentId]?.props ?? {};
-          const hasChange = Object.entries(normalized.props).some(
-            ([keyName, value]) => JSON.stringify(currentProps[keyName]) !== JSON.stringify(value),
-          );
-          if (!hasChange) {
-            continue;
-          }
-          break;
-        }
-        case 'bindEvent': {
-          const currentActions =
-            baseSchema.components[normalized.componentId]?.events?.[normalized.event] ?? [];
-          if (JSON.stringify(currentActions) === JSON.stringify(normalized.actions)) {
-            continue;
-          }
-          break;
-        }
-        case 'removeComponent':
-          if (!baseSchema.components[normalized.componentId]) {
-            continue;
-          }
-          break;
-        case 'moveComponent': {
-          const currentParentId = parentMap.get(normalized.componentId);
-          const currentIndex =
-            currentParentId === undefined
-              ? -1
-              : (baseSchema.components[currentParentId]?.childrenIds ?? []).indexOf(
-                  normalized.componentId,
-                );
-          if (currentParentId === normalized.newParentId && currentIndex === normalized.newIndex) {
-            continue;
-          }
-          break;
-        }
-      }
-
-      deduped.push(normalized);
-    }
-
-    return deduped;
-  }
-
   private assertInstructionConsistency(
     dto: AgentEditRequestDto,
     patch: readonly EditorPatchOperation[],
@@ -1812,147 +1191,5 @@ export class AgentRunnerService {
     }
 
     return Array.from(leftSet).every((value) => rightSet.has(value));
-  }
-
-  private buildClarificationCandidates(
-    candidates: readonly NodeCandidate[],
-    schema: A2UISchema,
-  ): AgentClarificationCandidate[] {
-    const parentMap = buildParentMap(schema.components);
-    return candidates.map((candidate) => {
-      const component = schema.components[candidate.id];
-      const secondaryLabel = this.getTypeLabel(candidate.type);
-      const displayLabel =
-        this.extractComponentLabel(component) ??
-        this.buildFallbackDisplayLabel(candidate, schema, parentMap, secondaryLabel);
-
-      return {
-        id: candidate.id,
-        type: candidate.type,
-        score: candidate.score,
-        reason: candidate.reason,
-        displayLabel,
-        secondaryLabel,
-        pathLabel: component
-          ? this.buildCandidatePathLabel(component.id, schema, parentMap)
-          : undefined,
-      };
-    });
-  }
-
-  private buildClarificationSummary(candidate: AgentClarificationCandidate): string {
-    return candidate.pathLabel
-      ? `${candidate.displayLabel}（${candidate.pathLabel}）`
-      : candidate.displayLabel;
-  }
-
-  private extractComponentLabel(component?: A2UIComponent): string | undefined {
-    if (!component?.props) {
-      return undefined;
-    }
-
-    const labelProps = Array.from(
-      new Set([...this.componentMetaRegistry.getTextProps(component.type), ...DEFAULT_LABEL_PROPS]),
-    );
-
-    for (const propName of labelProps) {
-      const normalized = this.normalizeDisplayText(component.props[propName], MAX_LABEL_CHARS);
-      if (normalized) {
-        return normalized;
-      }
-    }
-
-    return undefined;
-  }
-
-  private buildFallbackDisplayLabel(
-    candidate: NodeCandidate,
-    schema: A2UISchema,
-    parentMap: ReadonlyMap<string, string>,
-    secondaryLabel: string,
-  ): string {
-    const parentId = parentMap.get(candidate.id);
-    if (!parentId) {
-      return secondaryLabel;
-    }
-
-    const siblingIds = schema.components[parentId]?.childrenIds ?? [];
-    const sameTypeSiblings = siblingIds.filter(
-      (siblingId) => schema.components[siblingId]?.type === candidate.type,
-    );
-    const siblingIndex = sameTypeSiblings.indexOf(candidate.id);
-    if (sameTypeSiblings.length > 1 && siblingIndex >= 0) {
-      return `${secondaryLabel} #${siblingIndex + 1}`;
-    }
-
-    return secondaryLabel;
-  }
-
-  private buildCandidatePathLabel(
-    componentId: string,
-    schema: A2UISchema,
-    parentMap: ReadonlyMap<string, string>,
-  ): string | undefined {
-    const ancestors = buildAncestorChain(componentId, parentMap, schema.components);
-    if (ancestors.length === 0) {
-      return undefined;
-    }
-
-    const segments = ancestors
-      .map((ancestor) => {
-        const component = schema.components[ancestor.id];
-        return this.buildPathSegmentLabel(component, ancestor.type);
-      })
-      .filter((segment): segment is string => Boolean(segment));
-
-    return segments.length > 0 ? segments.join(' > ') : undefined;
-  }
-
-  private buildPathSegmentLabel(component: A2UIComponent | undefined, type: string): string {
-    const label = this.extractComponentLabel(component);
-    if (label) {
-      return this.normalizeDisplayText(label, MAX_PATH_SEGMENT_CHARS) ?? label;
-    }
-
-    return this.getTypeLabel(type);
-  }
-
-  private getTypeLabel(type: string): string {
-    return this.componentMetaRegistry.getDisplayName(type) ?? type;
-  }
-
-  private normalizeDisplayText(value: unknown, maxLength: number): string | undefined {
-    if (typeof value === 'number') {
-      return String(value);
-    }
-
-    if (Array.isArray(value)) {
-      const normalizedParts = value
-        .map((item) => this.normalizeDisplayText(item, maxLength))
-        .filter((item): item is string => Boolean(item));
-      if (normalizedParts.length === 0) {
-        return undefined;
-      }
-      return this.truncateDisplayText(normalizedParts.join(' / '), maxLength);
-    }
-
-    if (typeof value !== 'string') {
-      return undefined;
-    }
-
-    const normalized = value.replace(/\s+/g, ' ').trim();
-    if (!normalized) {
-      return undefined;
-    }
-
-    return this.truncateDisplayText(normalized, maxLength);
-  }
-
-  private truncateDisplayText(value: string, maxLength: number): string {
-    if (value.length <= maxLength) {
-      return value;
-    }
-
-    return `${value.slice(0, Math.max(0, maxLength - 3))}...`;
   }
 }

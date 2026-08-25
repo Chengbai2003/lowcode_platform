@@ -8,11 +8,9 @@ import type {
   LowcodeEditorProps,
   NotificationOptions,
 } from './types';
-import type { A2UISchema, A2UIComponent, AIMessageActionResult } from '../types';
+import type { A2UISchema, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
 import { builtInComponents } from '../renderer';
-import { validateAndAutoFixA2UISchema } from '../schema/schemaValidation';
-import { compileSchema } from './services/compilerApi';
 import {
   EditorHeader,
   PreviewPane,
@@ -23,14 +21,19 @@ import {
 import { ComponentTree } from './components/TreeView/ComponentTree';
 import { useFloatingIslandHotkey } from './hooks/useFloatingIslandHotkey';
 import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
-import { createPatchCommand } from './commands/schemaCommands';
 import { FloatingIsland } from './components/ai-assistant/FloatingIsland';
 import { HistoryDrawer } from './components/ai-assistant/HistoryDrawer';
-import { useSelectionStore } from './store/editor-store';
+import { useSelectionStore, useEditorStore } from './store/editor-store';
 import { createDefaultReactiveSchema } from './templates/reactiveSchema';
-import { pageSchemaApi } from './services/pageSchemaApi';
-import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
 import styles from './LowcodeEditor.module.scss';
+import { usePageLifecycle } from './hooks/usePageLifecycle';
+import { useAIPatch } from './hooks/useAIPatch';
+import { useEditorActions } from './hooks/useEditorActions';
+import {
+  applyComponentSnapshot as applyComponentSnapshotPure,
+  extractSchemaSnapshot,
+  resolveSchemaVersion,
+} from './services/schemaSync';
 
 /**
  * 编辑器内部组件
@@ -63,22 +66,39 @@ function LowcodeEditorInner({
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
   const [pageVersion, setPageVersion] = useState<number | null>(null);
-  const [isPageSaving, setIsPageSaving] = useState(false);
+
+  // ponytail ultra: useRef 稳定化 syncSchemaVersion，避免 pageVersion 抖动触发重请求
+  const pageVersionRef = useRef(pageVersion);
+  const schemaVersionRef = useRef<number | undefined>(schema.version);
+  useEffect(() => {
+    pageVersionRef.current = pageVersion;
+  }, [pageVersion]);
+  useEffect(() => {
+    schemaVersionRef.current = schema.version;
+  }, [schema.version]);
+
+  // P0-5 TOCTOU atomic: mounted guard for unmount race + schema ref to avoid closure stale
+  const mountedRef = useRef(true);
+  const schemaRef = useRef(schema);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    schemaRef.current = schema;
+  }, [schema]);
 
   const syncSchemaVersion = useCallback(
-    (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema => {
-      const resolvedVersion = targetVersion ?? pageVersion ?? schema.version ?? nextSchema.version;
-      if (resolvedVersion === undefined) {
-        return nextSchema;
-      }
-
-      return {
-        ...nextSchema,
-        version: resolvedVersion,
-      };
-    },
-    [pageVersion, schema.version],
+    (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema =>
+      resolveSchemaVersion(nextSchema, targetVersion, pageVersionRef, schemaVersionRef),
+    [],
   );
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const uiContext = useMemo<EventUIContext>(() => {
     const modal = {
@@ -190,6 +210,7 @@ function LowcodeEditorInner({
     (newSchema: A2UISchema) => {
       const normalizedSchema = syncSchemaVersion(newSchema);
       setSchema(normalizedSchema);
+      useEditorStore.getState().bumpSchemaRevision();
       onChange?.(normalizedSchema);
     },
     [onChange, syncSchemaVersion],
@@ -212,6 +233,7 @@ function LowcodeEditorInner({
   // 处理 Schema 变化（记录历史）
   const handleSchemaChange = useCallback(
     (newSchema: A2UISchema) => {
+      useEditorStore.getState().bumpSchemaRevision();
       updateSchema(syncSchemaVersion(newSchema), '更新 Schema');
     },
     [syncSchemaVersion, updateSchema],
@@ -219,6 +241,7 @@ function LowcodeEditorInner({
 
   const handleSchemaCommit = useCallback(
     (newSchema: A2UISchema) => {
+      useEditorStore.getState().bumpSchemaRevision();
       forceUpdateSchema(syncSchemaVersion(newSchema), '保存 Schema');
     },
     [forceUpdateSchema, syncSchemaVersion],
@@ -226,101 +249,25 @@ function LowcodeEditorInner({
 
   useUndoRedoShortcuts({ onUndo: undo, onRedo: redo });
 
-  useEffect(() => {
-    let cancelled = false;
+  usePageLifecycle({
+    pageId,
+    initialSchemaObj,
+    setSchema,
+    setPageVersion,
+    syncSchemaVersion,
+    onErrorRef,
+  });
 
-    if (!pageId) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    pageSchemaApi
-      .getPageSchema(pageId)
-      .then((result) => {
-        if (cancelled) {
-          return;
-        }
-        setSchema(syncSchemaVersion(result.schema, result.version));
-        setPageVersion(result.version);
-      })
-      .catch(async (error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-
-        const status =
-          typeof error === 'object' && error ? (error as { status?: number }).status : undefined;
-        if (status === 404) {
-          try {
-            const bootstrapResult = await pageSchemaApi.savePageSchema(pageId, initialSchemaObj);
-            if (cancelled) {
-              return;
-            }
-            setSchema(syncSchemaVersion(initialSchemaObj, bootstrapResult.version));
-            setPageVersion(bootstrapResult.version);
-            message.info(`已为页面 ${pageId} 初始化默认 Schema`);
-          } catch (bootstrapError) {
-            const errorMessage =
-              bootstrapError instanceof Error ? bootstrapError.message : '页面初始化失败';
-            onError?.(errorMessage);
-            message.error(errorMessage);
-          }
-          return;
-        }
-
-        const errorMessage = error instanceof Error ? error.message : '页面加载失败';
-        onError?.(errorMessage);
-        message.error('页面加载失败，已回退到本地初始内容');
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [initialSchemaObj, onError, pageId, syncSchemaVersion]);
-
-  const handleSavePage = useCallback(async () => {
-    if (!pageId || isPageSaving) {
-      return;
-    }
-
-    setIsPageSaving(true);
-    try {
-      const schemaToSave = syncSchemaVersion(schema);
-      const result = await pageSchemaApi.savePageSchema(
-        pageId,
-        schemaToSave,
-        pageVersion ?? undefined,
-      );
-      setPageVersion(result.version);
-      setSchema((currentSchema) => syncSchemaVersion(currentSchema, result.version));
-      message.success(`页面已保存，当前版本 v${result.version}`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '页面保存失败';
-      message.error(errorMessage);
-    } finally {
-      setIsPageSaving(false);
-    }
-  }, [isPageSaving, pageId, pageVersion, schema, syncSchemaVersion]);
-
-  // 处理编译
-  const handleCompile = useCallback(async () => {
-    if (schema) {
-      try {
-        const code = await compileSchema(schema);
-        setCompiledCode(code);
-        message.success('编译成功！');
-      } catch (e) {
-        const errorMessage = e instanceof Error ? e.message : '未知错误';
-        onError?.(errorMessage);
-        message.error('编译失败：' + errorMessage);
-        setCompiledCode(null);
-      }
-    } else {
-      message.warning('Schema 为空，无法编译');
-      setCompiledCode(null);
-    }
-  }, [schema]);
+  const { handleSavePage, handleCompile, isPageSaving } = useEditorActions({
+    pageId,
+    schema,
+    pageVersion,
+    syncSchemaVersion,
+    setPageVersion,
+    setSchema,
+    setCompiledCode,
+    onError,
+  });
   // 处理模板应用
   const handleApplyTemplate = useCallback(
     (templateSchema: A2UISchema) => {
@@ -343,163 +290,25 @@ function LowcodeEditorInner({
     return { ...rendererComponents, ...componentsOnly, ...customComponents };
   }, [customComponents]);
 
-  const handleAISchemaUpdate = useCallback(
-    (newSchema: A2UISchema) => {
-      const whitelist = Object.keys(allComponents);
-      const result = validateAndAutoFixA2UISchema(newSchema, whitelist);
+  const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({
+    allComponents,
+    syncSchemaVersion,
+    handleSchemaUpdate,
+    forceUpdateSchema,
+    executeSchemaCommand,
+    schemaRef,
+    pageVersionRef,
+    mountedRef,
+    selectComponent,
+    onError,
+  });
 
-      if (!result.success) {
-        const errorMessage = result.error.issues[0]?.message || 'Schema 校验失败';
-        onError?.(errorMessage);
-        message.error(`AI Schema 无法应用：${errorMessage}`);
-        return false;
-      }
-
-      if (result.fixes.length > 0) {
-        message.info(`已自动修复 ${result.fixes.length} 处 Schema 问题`);
-      }
-
-      forceUpdateSchema(syncSchemaVersion(result.data), 'AI 更新 Schema');
-      message.success('Schema 已更新！');
-      return true;
-    },
-    [allComponents, forceUpdateSchema, onError, syncSchemaVersion],
+  // Helpers moved to services/schemaSync.ts — isA2UISchema / extractSchemaSnapshot / buildSubtreeSchema / applyComponentSnapshotPure
+  const applyComponentSnapshot = useCallback(
+    (snapshot: A2UISchema, componentId: string) =>
+      applyComponentSnapshotPure(schema, snapshot, componentId),
+    [schema],
   );
-
-  const describeAIPatch = useCallback((instruction: string, patchCount: number) => {
-    const trimmed = instruction.trim();
-    const summary = trimmed.length > 24 ? `${trimmed.slice(0, 24)}...` : trimmed;
-    return patchCount > 0 ? `AI 修改：${summary || '应用 patch'}` : 'AI 修改';
-  }, []);
-
-  const handleAIPatchApply = useCallback(
-    async ({
-      instruction,
-      patch,
-      resolvedSelectedId,
-      warnings,
-    }: AgentPatchApplyPayload): Promise<A2UISchema | null> => {
-      try {
-        const baseSchema = syncSchemaVersion(schema);
-        const command = createPatchCommand(
-          baseSchema,
-          patch,
-          handleSchemaUpdate,
-          describeAIPatch(instruction, patch.length),
-        );
-
-        executeSchemaCommand(command);
-        const nextSchema = command.getNewSchema();
-
-        if (resolvedSelectedId && nextSchema.components[resolvedSelectedId]) {
-          selectComponent(resolvedSelectedId);
-        }
-
-        if (warnings && warnings.length > 0) {
-          message.info(`AI 修改已应用，并返回 ${warnings.length} 条提示`);
-        }
-
-        return nextSchema;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'AI patch 应用失败';
-        onError?.(errorMessage);
-        message.error(errorMessage);
-        return null;
-      }
-    },
-    [
-      describeAIPatch,
-      executeSchemaCommand,
-      handleSchemaUpdate,
-      onError,
-      schema,
-      selectComponent,
-      syncSchemaVersion,
-    ],
-  );
-
-  const isA2UISchema = (value: unknown): value is A2UISchema => {
-    if (!value || typeof value !== 'object') return false;
-    return 'rootId' in value && 'components' in value;
-  };
-
-  const extractSchemaSnapshot = (value: unknown): A2UISchema | null => {
-    if (isA2UISchema(value)) {
-      return value;
-    }
-    if (!value || typeof value !== 'object') return null;
-    const actionResult = value as Partial<AIMessageActionResult>;
-    if (isA2UISchema(actionResult.schemaSnapshot)) {
-      return actionResult.schemaSnapshot;
-    }
-    const maybeProps = (actionResult as { props?: unknown }).props;
-    if (isA2UISchema(maybeProps)) {
-      return maybeProps;
-    }
-    return null;
-  };
-
-  const buildSubtreeSchema = (source: A2UISchema, rootId: string): A2UISchema | null => {
-    const root = source.components[rootId];
-    if (!root) return null;
-
-    const components: Record<string, A2UIComponent> = {};
-    const stack = [rootId];
-
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (components[id]) continue;
-      const node = source.components[id];
-      if (!node) continue;
-      components[id] = node;
-      if (Array.isArray(node.childrenIds)) {
-        for (const childId of node.childrenIds) {
-          if (typeof childId === 'string' && source.components[childId]) {
-            stack.push(childId);
-          }
-        }
-      }
-    }
-
-    return { rootId, components };
-  };
-
-  const applyComponentSnapshot = (snapshot: A2UISchema, componentId: string): A2UISchema | null => {
-    if (!schema.components[componentId]) return null;
-
-    const subtree =
-      snapshot.rootId === componentId ? snapshot : buildSubtreeSchema(snapshot, componentId);
-    if (!subtree) return null;
-    if (!subtree.components[subtree.rootId]) return null;
-
-    const toRemove = new Set<string>();
-    const stack = [componentId];
-    while (stack.length > 0) {
-      const id = stack.pop()!;
-      if (toRemove.has(id)) continue;
-      toRemove.add(id);
-      const node = schema.components[id];
-      if (!node?.childrenIds) continue;
-      for (const childId of node.childrenIds) {
-        if (typeof childId === 'string' && schema.components[childId]) {
-          stack.push(childId);
-        }
-      }
-    }
-
-    const nextComponents = { ...schema.components };
-    for (const id of toRemove) {
-      delete nextComponents[id];
-    }
-    for (const [id, comp] of Object.entries(subtree.components)) {
-      nextComponents[id] = comp;
-    }
-
-    return {
-      ...schema,
-      components: nextComponents,
-    };
-  };
 
   const isPreviewMode = mode === 'preview';
 
@@ -677,10 +486,12 @@ function LowcodeEditorInner({
 /**
  * JSON Schema 编辑器，支持实时预览
  * 使用 ErrorBoundary 包裹以捕获渲染错误
+ * ponytail ultra: key 移至 ErrorBoundary 以在 document 切换时清除错误边界状态；Inner 内同步 reset 避免 generation 竞态
  */
 export function LowcodeEditor(props: LowcodeEditorProps) {
+  const documentKey = `doc::${props.pageId ?? '__local'}`;
   return (
-    <ErrorBoundary>
+    <ErrorBoundary key={documentKey}>
       <LowcodeEditorInner {...props} />
     </ErrorBoundary>
   );

@@ -10,7 +10,6 @@ import {
   DialogActionEditor,
   DelayActionEditor,
   LogActionEditor,
-  CustomScriptActionEditor,
   IfActionEditor,
   LoopActionEditor,
   UnsupportedActionEditor,
@@ -52,6 +51,9 @@ export const EventFlowEditor = ({
 
   const getActionSummary = (action: Action) => {
     const type = action.type;
+    if (type === 'customScript') {
+      return '历史 customScript 已永久禁用，请删除';
+    }
     switch (type) {
       case ACTION_TYPE.setValue:
         return `设置 ${action.field}`;
@@ -71,14 +73,21 @@ export const EventFlowEditor = ({
         return `delay(${action.ms ?? 0}ms)`;
       case ACTION_TYPE.log:
         return `${action.level || 'info'}: ${String(action.value)}`;
-      case ACTION_TYPE.customScript:
-        return '// 自定义代码';
       default:
         return '请配置详细参数...';
     }
   };
 
   const renderActionEditor = (action: Action, index: number) => {
+    if (action.type === 'customScript') {
+      return (
+        <div className={styles.actionEditor}>
+          <div className={styles.actionHint} style={{ color: '#dc2626' }}>
+            该历史 customScript 动作已永久禁用，请删除后重新保存。代码不会被执行。
+          </div>
+        </div>
+      );
+    }
     const updateAction = (partial: Partial<Action>) => {
       onUpdateAction(flow.trigger, index, { ...action, ...partial } as Action);
     };
@@ -98,8 +107,6 @@ export const EventFlowEditor = ({
         return <DelayActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.log:
         return <LogActionEditor action={action} updateAction={updateAction} />;
-      case ACTION_TYPE.customScript:
-        return <CustomScriptActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.if:
         return <IfActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.loop:

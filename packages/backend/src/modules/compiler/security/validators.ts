@@ -7,7 +7,6 @@ import {
   isPlainObject,
 } from '../helpers/codeHelpers';
 
-const ALLOWED_PROTOCOLS = ['http:', 'https:', ''];
 const DANGEROUS_TOKENS = [
   '__proto__',
   'prototype',
@@ -22,6 +21,7 @@ const DANGEROUS_TOKENS = [
   'window.',
   'window[',
   'XMLHttpRequest',
+  'fetch(',
 ];
 
 const MUSTACHE_REGEX = /\{\{([\s\S]+?)\}\}/g;
@@ -51,7 +51,286 @@ export function isValidExpressionPath(code: string): boolean {
   return /^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*|\[\d+\])*$/.test(code);
 }
 
-export function isSafeInlineExpression(code: string): boolean {
+// P0 保守白名单：仅允许的直接调用与 Math/Date 成员调用；Identifier 根白名单需动态结合 schema 字段（动态字段无法静态枚举），此处依靠 DANGEROUS_TOKENS + 调用白名单兜底
+const ALLOWED_DIRECT_CALLS = new Set<string>([
+  'String',
+  'Number',
+  'Boolean',
+  'parseInt',
+  'parseFloat',
+]);
+const ALLOWED_MEMBER_CALLS: Record<string, Set<string>> = {
+  Math: new Set(['abs', 'max', 'min', 'round', 'floor', 'ceil']),
+  Date: new Set(['now', 'parse', 'UTC']),
+};
+
+const ALLOWED_AST_TYPES = new Set([
+  'Literal',
+  'Identifier',
+  'MemberExpression',
+  'BinaryExpression',
+  'LogicalExpression',
+  'UnaryExpression',
+  'ConditionalExpression',
+  'CallExpression',
+  'ArrayExpression',
+  'Compound',
+]);
+
+const BLOCKED_CALLEE_NAMES = new Set([
+  '__proto__',
+  'prototype',
+  'constructor',
+  'toJSON',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  'assign',
+  'defineProperty',
+  'setPrototypeOf',
+  'freeze',
+  'seal',
+  'preventExtensions',
+  'eval',
+  'Function',
+]);
+
+// Prop-level denylist — intentional subset of BLOCKED_CALLEE_NAMES for JSX prop names
+export const BLOCKED_PROP_NAMES = new Set<string>([
+  '__proto__',
+  'prototype',
+  'constructor',
+  '__defineGetter__',
+  '__defineSetter__',
+  '__lookupGetter__',
+  '__lookupSetter__',
+  'toJSON',
+]);
+
+export const JS_RESERVED_WORDS = new Set<string>([
+  'await',
+  'break',
+  'case',
+  'catch',
+  'class',
+  'const',
+  'continue',
+  'debugger',
+  'default',
+  'delete',
+  'do',
+  'else',
+  'enum',
+  'export',
+  'extends',
+  'false',
+  'finally',
+  'for',
+  'function',
+  'if',
+  'import',
+  'in',
+  'instanceof',
+  'new',
+  'null',
+  'return',
+  'super',
+  'switch',
+  'this',
+  'throw',
+  'true',
+  'try',
+  'typeof',
+  'var',
+  'void',
+  'while',
+  'with',
+  'yield',
+  'implements',
+  'interface',
+  'let',
+  'package',
+  'private',
+  'protected',
+  'public',
+  'static',
+]);
+
+export const RESERVED_GENERATED_IDENTIFIERS = new Set<string>([
+  'React',
+  'useState',
+  'useMemo',
+  'useEffect',
+  'useCallback',
+  'useRef',
+  'window',
+  'document',
+  'location',
+  'globalThis',
+  'global',
+  'process',
+  'GeneratedPage',
+  'props',
+  'exports',
+  'module',
+  'require',
+  'import',
+  'console',
+  'fetch',
+  'alert',
+  'XMLHttpRequest',
+  // 生成代码直接依赖的宿主全局；禁止用户绑定遮蔽，否则会破坏请求/延迟代码。
+  'Object',
+  'URLSearchParams',
+  'Promise',
+  'setTimeout',
+  'message',
+  'notification',
+  'Modal',
+  'undefined',
+  'NaN',
+  'Infinity',
+  'arguments',
+  // 安全不变量：表达式层禁止的危险名称，不得成为生成代码中的用户绑定名；随 BLOCKED_CALLEE_NAMES 自动同步
+  ...BLOCKED_CALLEE_NAMES,
+  ...JS_RESERVED_WORDS,
+]);
+
+export const BUILTIN_IDENTIFIERS = new Set<string>([
+  'String',
+  'Number',
+  'Boolean',
+  'Math',
+  'Date',
+  'JSON',
+  'parseInt',
+  'parseFloat',
+  'isNaN',
+  'isFinite',
+]);
+
+export function isReservedGenerated(name: string): boolean {
+  return RESERVED_GENERATED_IDENTIFIERS.has(name) || BUILTIN_IDENTIFIERS.has(name);
+}
+
+const BUILTIN_DIRECT_CALLEES = ALLOWED_DIRECT_CALLS;
+const BUILTIN_MEMBER_ROOTS = new Set<string>(['Math', 'JSON', 'Date']);
+
+function isAllowedASTNode(
+  node: any,
+  ctx?: { ctxFields?: Set<string>; reserved?: Set<string>; localScope?: Set<string> },
+): boolean {
+  if (!node || typeof node !== 'object' || !node.type) return true;
+  if (!ALLOWED_AST_TYPES.has(node.type)) return false;
+  switch (node.type) {
+    case 'Compound': {
+      const body = (node as any).body;
+      if (!Array.isArray(body) || body.length !== 1) return false;
+      return isAllowedASTNode(body[0], ctx);
+    }
+    case 'MemberExpression': {
+      const isComputed = (node as any).computed;
+      const obj = (node as any).object;
+      const prop = (node as any).property;
+      const propName =
+        !isComputed && prop && prop.type === 'Identifier'
+          ? prop.name
+          : typeof prop?.value === 'string'
+            ? prop.value
+            : typeof prop?.name === 'string'
+              ? prop.name
+              : '';
+      if (propName && BLOCKED_CALLEE_NAMES.has(propName)) return false;
+      // Validate object: allow builtin member roots directly without ctxFields, otherwise require ctxFields
+      const reservedSet = ctx?.reserved ?? RESERVED_GENERATED_IDENTIFIERS;
+      let objectValid: boolean;
+      if (obj && obj.type === 'Identifier' && BUILTIN_MEMBER_ROOTS.has(obj.name)) {
+        if (reservedSet.has(obj.name) || BLOCKED_CALLEE_NAMES.has(obj.name)) {
+          objectValid = false;
+        } else {
+          objectValid = true;
+        }
+      } else {
+        objectValid = isAllowedASTNode(obj, ctx);
+      }
+      if (!objectValid) return false;
+      if (isComputed) {
+        return isAllowedASTNode(prop, ctx);
+      }
+      return true;
+    }
+    case 'BinaryExpression':
+    case 'LogicalExpression': {
+      return (
+        isAllowedASTNode((node as any).left, ctx) && isAllowedASTNode((node as any).right, ctx)
+      );
+    }
+    case 'UnaryExpression': {
+      return isAllowedASTNode((node as any).argument, ctx);
+    }
+    case 'ConditionalExpression': {
+      return (
+        isAllowedASTNode((node as any).test, ctx) &&
+        isAllowedASTNode((node as any).consequent, ctx) &&
+        isAllowedASTNode((node as any).alternate, ctx)
+      );
+    }
+    case 'CallExpression': {
+      const callee = (node as any).callee;
+      if (!callee) return false;
+      const args = (node as any).arguments || [];
+      for (const arg of args) {
+        if (!isAllowedASTNode(arg, ctx)) return false;
+      }
+      if (callee.type === 'Identifier') {
+        // fail-close: 仅允许白名单直调
+        return ALLOWED_DIRECT_CALLS.has(callee.name);
+      }
+      if (callee.type === 'MemberExpression') {
+        // 仅允许静态 Math.xxx / Date.xxx 且方法在白名单，禁止计算属性与数据链调用
+        if ((callee as any).computed) return false;
+        const obj = (callee as any).object;
+        const prop = (callee as any).property;
+        if (!obj || obj.type !== 'Identifier') return false;
+        if (!prop || prop.type !== 'Identifier') return false;
+        const allowed = ALLOWED_MEMBER_CALLS[obj.name];
+        if (!allowed) return false;
+        return allowed.has(prop.name);
+      }
+      return false;
+    }
+    case 'ArrayExpression': {
+      const elems = (node as any).elements || [];
+      for (const el of elems) {
+        if (el && !isAllowedASTNode(el, ctx)) return false;
+      }
+      return true;
+    }
+    case 'Literal':
+      return true;
+    case 'Identifier': {
+      const name: string = node.name;
+      if (!name || typeof name !== 'string') return false;
+      if (BLOCKED_CALLEE_NAMES.has(name)) return false;
+      const reservedSet = ctx?.reserved ?? RESERVED_GENERATED_IDENTIFIERS;
+      if (reservedSet.has(name)) return false;
+      if (BUILTIN_DIRECT_CALLEES.has(name)) return false;
+      if (BUILTIN_MEMBER_ROOTS.has(name)) return false;
+      if (ctx?.ctxFields?.has(name)) return true;
+      if (ctx?.localScope?.has(name)) return true;
+      return false;
+    }
+    default:
+      return false;
+  }
+}
+
+export function isSafeInlineExpression(
+  code: string,
+  ctxFields?: Set<string>,
+  localScope?: Set<string>,
+): boolean {
   if (!code || typeof code !== 'string') return false;
   const trimmed = code.trim();
   if (!trimmed) return false;
@@ -74,7 +353,72 @@ export function isSafeInlineExpression(code: string): boolean {
     return false;
   }
 
+  // AST whitelist (primary) - fail-close if parser unavailable
+  try {
+    let jsep: any = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+      jsep = require('jsep');
+    } catch {
+      return false;
+    }
+    const parseFn = typeof jsep === 'function' ? jsep : jsep.default || jsep.parse;
+    if (typeof parseFn !== 'function') return false;
+    const ast = parseFn(trimmed);
+    const ctx = {
+      ctxFields: ctxFields ?? new Set<string>(),
+      reserved: RESERVED_GENERATED_IDENTIFIERS,
+      localScope: localScope ?? new Set<string>(),
+    };
+    if (!isAllowedASTNode(ast, ctx)) return false;
+  } catch {
+    return false;
+  }
+
   return true;
+}
+
+/**
+ * Collect identifier references from an inline expression without treating
+ * non-computed member names (the `id` in `item.id`) as variable references.
+ * Invalid expressions fail closed and report no references; the caller still
+ * validates the expression separately before emitting code.
+ */
+export function collectInlineExpressionIdentifiers(code: string): Set<string> {
+  const identifiers = new Set<string>();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    const jsepModule = require('jsep');
+    const parseFn =
+      typeof jsepModule === 'function' ? jsepModule : jsepModule.default || jsepModule.parse;
+    if (typeof parseFn !== 'function') return identifiers;
+
+    const visit = (node: unknown, parent?: Record<string, unknown>, parentKey?: string): void => {
+      if (!node || typeof node !== 'object') return;
+      const nodeRecord = node as Record<string, unknown>;
+      if (nodeRecord.type === 'Identifier') {
+        const isStaticMemberProperty =
+          parent?.type === 'MemberExpression' && parentKey === 'property' && !parent.computed;
+        if (!isStaticMemberProperty && typeof nodeRecord.name === 'string') {
+          identifiers.add(nodeRecord.name);
+        }
+        return;
+      }
+      for (const [key, child] of Object.entries(nodeRecord)) {
+        if (key === 'type') continue;
+        if (Array.isArray(child)) {
+          for (const item of child) visit(item, nodeRecord, key);
+        } else {
+          visit(child, nodeRecord, key);
+        }
+      }
+    };
+
+    visit(parseFn(code));
+  } catch {
+    // Expression validation is responsible for rejection; never guess names.
+  }
+  return identifiers;
 }
 
 export function containsMustache(value: string): boolean {
@@ -183,48 +527,28 @@ export function normalizeLegacyExpression(value: ExpressionNode): ExpressionValu
   };
 }
 
-export function sanitizeUrl(url: string): string {
-  if (!url || typeof url !== 'string') return '/';
-
-  const trimmedUrl = url.trim();
-  const lowerUrl = trimmedUrl.toLowerCase();
-
-  if (
-    lowerUrl.startsWith('javascript:') ||
-    lowerUrl.startsWith('data:') ||
-    lowerUrl.startsWith('file:')
-  ) {
-    return '/';
-  }
-
-  if (trimmedUrl.startsWith('/') || trimmedUrl.startsWith('#') || !trimmedUrl.includes('://')) {
-    return trimmedUrl;
-  }
-
+const ENCODED_BACKSLASH_RE = /%(?:25)*5c/i;
+export function sanitizeUrl(url: unknown): string {
+  if (typeof url !== 'string') return '/';
+  if (/[\x00-\x20\x7f\\]/.test(url)) return '/';
+  if (ENCODED_BACKSLASH_RE.test(url)) return '/';
+  if (url !== url.trim()) return '/';
+  const v = url.trim();
+  if (!v || !v.startsWith('/') || v.startsWith('//')) return '/';
   try {
-    const urlObj = new URL(trimmedUrl);
-    if (!ALLOWED_PROTOCOLS.includes(urlObj.protocol)) {
+    const base = new URL('https://lowcode.internal');
+    const parsed = new URL(v, base);
+    if (parsed.origin !== base.origin) return '/';
+    const lower = parsed.href.toLowerCase();
+    if (
+      lower.startsWith('javascript:') ||
+      lower.startsWith('data:') ||
+      lower.startsWith('vbscript:') ||
+      lower.startsWith('file:')
+    ) {
       return '/';
     }
-
-    const hostname = urlObj.hostname.toLowerCase();
-    const blockedPatterns = [
-      /^localhost$/i,
-      /^127\./,
-      /^10\./,
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-      /^192\.168\./,
-      /^0\.0\.0\.0$/,
-      /^::1$/,
-      /^fc00:/i,
-      /^fe80:/i,
-    ];
-
-    if (blockedPatterns.some((pattern) => pattern.test(hostname))) {
-      return '/';
-    }
-
-    return trimmedUrl;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/';
   } catch {
     return '/';
   }
@@ -233,5 +557,3 @@ export function sanitizeUrl(url: string): string {
 export function isStaticStringValue(node: ValueNode): node is { kind: 'literal'; value: string } {
   return node.kind === 'literal' && typeof node.value === 'string';
 }
-
-

@@ -22,7 +22,10 @@ class ServerAIService implements AIService {
     }
   }
 
-  async generateResponse(request: AgentEditRequest): Promise<AgentEditResponse> {
+  async generateResponse(
+    request: AgentEditRequest,
+    options?: { signal?: AbortSignal },
+  ): Promise<AgentEditResponse> {
     try {
       const payload = {
         instruction: request.instruction,
@@ -43,12 +46,21 @@ class ServerAIService implements AIService {
         responseMode: request.responseMode ?? 'schema',
       };
 
-      const response = await fetchApp.post<AgentEditResponse | ApiEnvelope<AgentEditResponse>>(
-        '/api/v1/agent/edit',
-        payload,
-      );
+      const response = options?.signal
+        ? await fetchApp.post<AgentEditResponse | ApiEnvelope<AgentEditResponse>>(
+            '/api/v1/agent/edit',
+            payload,
+            { signal: options.signal },
+          )
+        : await fetchApp.post<AgentEditResponse | ApiEnvelope<AgentEditResponse>>(
+            '/api/v1/agent/edit',
+            payload,
+          );
       return unwrapApiEnvelope(response);
     } catch (error) {
+      // ponytail: abort 不转 AIServiceError，直接透出让调用方静默忽略
+      if ((error as Error)?.name === 'AbortError' || (error as DOMException)?.name === 'AbortError')
+        throw error;
       throw toAIServiceError(error);
     }
   }
@@ -58,6 +70,7 @@ class ServerAIService implements AIService {
     handlers: {
       onEvent: (event: AgentStreamEvent) => void | Promise<void>;
     },
+    options?: { signal?: AbortSignal },
   ): Promise<AgentStreamResponseResult> {
     try {
       const payload = {
@@ -79,7 +92,11 @@ class ServerAIService implements AIService {
         responseMode: request.responseMode ?? 'schema',
       };
 
-      const response = await fetchApp.streamRequest('/api/v1/agent/edit/stream', payload);
+      const response = options?.signal
+        ? await fetchApp.streamRequest('/api/v1/agent/edit/stream', payload, {
+            signal: options.signal,
+          })
+        : await fetchApp.streamRequest('/api/v1/agent/edit/stream', payload);
       if (!response.body) {
         throw new Error('Empty stream response body');
       }
@@ -144,6 +161,8 @@ class ServerAIService implements AIService {
 
       return { terminal };
     } catch (error) {
+      if ((error as Error)?.name === 'AbortError' || (error as DOMException)?.name === 'AbortError')
+        throw error;
       throw toAIServiceError(error);
     }
   }

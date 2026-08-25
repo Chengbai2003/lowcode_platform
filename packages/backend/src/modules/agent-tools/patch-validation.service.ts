@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { getCoreActionTypes } from '../ai/prompt-builder';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import { A2UISchema } from '../schema-context/types/schema.types';
+import { getActionValidationError, hasCustomScriptInValue } from '../page-schema/action-validation';
 import { assertValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
-import { EditorAction, EditorActionList } from './types/editor-action.types';
 import { EditorPatchOperation } from './types/editor-patch.types';
 
 @Injectable()
 export class PatchValidationService {
-  private readonly allowedActionTypes = new Set(
-    getCoreActionTypes().filter((type) => type !== 'customScript'),
-  );
-
   constructor(
     private readonly metaRegistry: ComponentMetaRegistry,
     private readonly patchApplyService: PatchApplyService,
@@ -184,6 +179,31 @@ export class PatchValidationService {
         traceId,
       });
     }
+
+    this.assertComponentActionsValid(operation.component, traceId);
+  }
+
+  private assertComponentActionsValid(component: Record<string, unknown>, traceId: string): void {
+    const events = component.events;
+    if (events !== undefined && (!events || typeof events !== 'object' || Array.isArray(events))) {
+      throw new AgentToolException({
+        code: 'PATCH_INVALID',
+        message: 'insertComponent component.events must be an object',
+        traceId,
+      });
+    }
+    if (events) {
+      for (const actions of Object.values(events as Record<string, unknown>)) {
+        this.assertActionListValid(actions, traceId);
+      }
+    }
+    if (component.props && hasCustomScriptInValue(component.props)) {
+      throw new AgentToolException({
+        code: 'PATCH_POLICY_BLOCKED',
+        message: 'customScript is not allowed in schema',
+        traceId,
+      });
+    }
   }
 
   private assertMoveValid(
@@ -223,62 +243,17 @@ export class PatchValidationService {
     }
   }
 
-  private assertActionListValid(actions: EditorActionList, traceId: string) {
-    for (const action of actions) {
-      this.assertActionValid(action, traceId);
-    }
-  }
-
-  private assertActionValid(action: EditorAction, traceId: string) {
-    if (!action || typeof action !== 'object' || Array.isArray(action)) {
-      throw new AgentToolException({
-        code: 'PATCH_INVALID',
-        message: 'Each action must be an object',
-        traceId,
-      });
-    }
-
-    if (typeof action.type !== 'string' || !action.type.trim()) {
-      throw new AgentToolException({
-        code: 'PATCH_INVALID',
-        message: 'Action type is required',
-        traceId,
-      });
-    }
-
-    if (action.type === 'customScript') {
+  private assertActionListValid(actions: unknown, traceId: string) {
+    const error = getActionValidationError(actions);
+    if (!error) return;
+    if (error === 'customScript is not allowed in schema') {
       throw new AgentToolException({
         code: 'PATCH_POLICY_BLOCKED',
-        message: 'customScript is blocked in bindEvent patches',
+        message: error,
         traceId,
       });
     }
-
-    if (!this.allowedActionTypes.has(action.type)) {
-      throw new AgentToolException({
-        code: 'PATCH_INVALID',
-        message: `Unsupported action type ${action.type}`,
-        traceId,
-      });
-    }
-
-    const nestedLists = ['then', 'else', 'actions', 'onSuccess', 'onError', 'onOk', 'onCancel'];
-    for (const key of nestedLists) {
-      const nested = action[key];
-      if (nested === undefined) {
-        continue;
-      }
-      if (!Array.isArray(nested)) {
-        throw new AgentToolException({
-          code: 'PATCH_INVALID',
-          message: `Action field ${key} must be an array`,
-          traceId,
-        });
-      }
-      for (const nestedAction of nested) {
-        this.assertActionValid(nestedAction as EditorAction, traceId);
-      }
-    }
+    throw new AgentToolException({ code: 'PATCH_INVALID', message: error, traceId });
   }
 
   private assertReachable(schema: A2UISchema, traceId: string) {
@@ -338,11 +313,14 @@ export class PatchValidationService {
 
   private isDescendant(schema: A2UISchema, candidateId: string, ancestorId: string): boolean {
     const stack = [...(schema.components[ancestorId]?.childrenIds ?? [])];
+    const visited = new Set<string>();
     while (stack.length > 0) {
       const currentId = stack.pop()!;
       if (currentId === candidateId) {
         return true;
       }
+      if (visited.has(currentId)) continue;
+      visited.add(currentId);
       const component = schema.components[currentId];
       if (component?.childrenIds?.length) {
         stack.push(...component.childrenIds);

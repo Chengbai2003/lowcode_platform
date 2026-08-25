@@ -23,6 +23,12 @@ export interface AIPatchPreviewState {
   risk: AgentPatchRiskAssessment;
   requiresConfirmation: boolean;
   scopeSummary?: AgentPatchScopeSummary;
+  // ponytail: P0-4 跨页隔离双重校验 + P0-5 TOCTOU atomic (capture generation at preview creation) + P1-9 schemaRevision
+  sourcePageId: string | null;
+  basePageVersion: number | null;
+  sourceGeneration: number;
+  documentSessionId: string;
+  schemaRevision: number;
 }
 
 export interface AIClarificationState {

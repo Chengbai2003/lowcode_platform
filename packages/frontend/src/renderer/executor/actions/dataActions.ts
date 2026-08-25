@@ -6,14 +6,7 @@
 import type { ActionHandler } from '../../../types';
 import type { SetValueAction } from '../../../types/dsl/actions/data';
 import { resolveValue } from '../parser';
-
-/**
- * 检查键名是否安全，防止原型污染
- */
-function isSafeKey(key: string): boolean {
-  const unsafeKeys = ['__proto__', 'constructor', 'prototype'];
-  return !unsafeKeys.includes(key);
-}
+import { isSafeKey } from '../../reactive/guards';
 
 function validateFieldPath(field: string): void {
   if (!field) {

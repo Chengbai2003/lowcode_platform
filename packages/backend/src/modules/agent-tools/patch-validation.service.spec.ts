@@ -156,6 +156,33 @@ describe('PatchValidationService', () => {
     }, 'PATCH_POLICY_BLOCKED');
   });
 
+  it('rejects unsupported actions in insertComponent events', async () => {
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'insertComponent',
+        parentId: 'form',
+        component: {
+          id: 'unsafe-button',
+          type: 'Button',
+          events: { onClick: [{ type: 'unsupported' }] },
+        },
+      },
+    ];
+
+    await expectToolError(
+      () => {
+        service.validatePatchAgainstSchema(
+          createSchema(),
+          patch,
+          createSchema(),
+          'trace-insert-events',
+        );
+      },
+      'PATCH_INVALID',
+      'Unsupported action type unsupported',
+    );
+  });
+
   it('rejects missing componentId targets', async () => {
     const patch: EditorPatchOperation[] = [
       {

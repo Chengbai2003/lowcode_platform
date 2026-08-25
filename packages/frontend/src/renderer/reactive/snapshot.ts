@@ -9,6 +9,7 @@
  */
 
 import type { RuntimeSnapshot } from './types';
+import { fallbackCloneSafe } from '../utils/safeClone';
 
 /**
  * 深度冻结对象以防止修改。
@@ -66,6 +67,25 @@ function shallowClone<T extends Record<string, unknown>>(obj: T): T {
   return clone as T;
 }
 
+function fallbackClone<T>(value: T, seen = new WeakMap<object, unknown>()): T {
+  return fallbackCloneSafe(value, seen);
+}
+
+function cloneOrThrow<T extends Record<string, unknown>>(value: T, ns: string): T {
+  // P0-3: fallbackClone 优先，避免 structuredClone 触发 enumerable getter
+  try {
+    const fallback = fallbackClone(value);
+    if (fallback !== undefined) return fallback;
+  } catch {
+    // ignore fallback error, try structuredClone
+  }
+  try {
+    return structuredClone(value);
+  } catch (e) {
+    throw new Error(`snapshot clone failed for ${ns}: ${(e as Error).message}`);
+  }
+}
+
 /**
  * SnapshotManager 处理不可变运行时快照的创建和缓存。
  *
@@ -100,22 +120,26 @@ export class SnapshotManager {
       return this.cachedSnapshot;
     }
 
-    // 在冻结前创建浅拷贝，避免修改原始数据
+    // data/state/formData: try { structuredClone } catch 抛错，再 deepFreeze
+    const dataClone = cloneOrThrow(data, 'data');
+    const stateClone = cloneOrThrow(state, 'state');
+    const formDataClone = cloneOrThrow(formData, 'formData');
+    deepFreeze(dataClone);
+    deepFreeze(stateClone);
+    deepFreeze(formDataClone);
+
+    // components 保持浅拷贝浅冻结
+    const componentsClone = shallowClone(components);
+    Object.freeze(componentsClone);
+
     const snapshot: RuntimeSnapshot = {
-      data: shallowClone(data),
-      state: shallowClone(state),
-      formData: shallowClone(formData),
-      components: shallowClone(components),
+      data: dataClone,
+      state: stateClone,
+      formData: formDataClone,
+      components: componentsClone,
       version,
     };
 
-    // 深度冻结快照使其不可变
-    deepFreeze(snapshot.data);
-    deepFreeze(snapshot.state);
-    deepFreeze(snapshot.formData);
-    // 注意：components 引用通常与 schema 共享，
-    // 我们浅冻结容器但不深度冻结 components
-    Object.freeze(snapshot.components);
     Object.freeze(snapshot);
 
     // 缓存以供后续请求使用
