@@ -1,7 +1,7 @@
 # A2UI 低代码平台
 
 > 一个围绕 **A2UI Schema** 构建的低代码编辑器与页面编辑 Agent。  
-> 当前状态：**Agent Phase 6.4 已落地**。
+> 当前状态：**P0 安全加固已合入，进入 M0 工程与运行时地基阶段**。
 
 ## 项目概览
 
@@ -19,8 +19,8 @@
 
 环境要求：
 
-- Node.js >= 18
-- pnpm >= 8
+- Node.js >= 22
+- pnpm >= 11
 
 安装依赖：
 
@@ -101,12 +101,20 @@ packages/
 ## 当前边界
 
 - 页面快照已有接口和版本语义，但底层仍是 file-backed store
-- Agent 主链路已成型，但 `Domain Pack` 仍分散在工具、prompt、规则和元数据里
-- `agent-runner.service.ts` 与 `useAIAssistantChat.ts` 已经偏大，后续扩展前需要拆职责
+- Schema 类型仍分散在前后端，尚未抽成独立 Contract Package
+- Renderer 仍位于前端编辑器包内，尚未成为可独立消费的运行包
+- Agent 主链路和首轮模块拆分已落地，但 `Domain Pack` 仍分散在工具、Prompt、规则和元数据中
+- CI 暂时排除 3 组历史 Nest 装配测试；M0 将恢复后端 36/36 suites 全量门禁
 
 ## 文档入口
 
-- `project_summary.md`：当前仓库状态与架构判断
-- `packages/backend/README.md`：后端服务说明
-- `低代码平台-接入agent路线图.md`：完整路线图
-- `低代码平台-Agent-Phase6.4-执行计划.md`：Phase 6.4 实施记录
+- [`docs/README.md`](docs/README.md)：当前有效文档索引与真相源说明
+- [`docs/roadmap/a2ui-evolution-roadmap.md`](docs/roadmap/a2ui-evolution-roadmap.md)：M0～M5 完整演进路线、阶段门槛与 Epic 清单
+- [`docs/architecture/target-architecture.md`](docs/architecture/target-architecture.md)：目标架构、包边界与六端一致性原则
+- [`docs/architecture/schema-contract.md`](docs/architecture/schema-contract.md)：Schema Contract、版本边界与 fail-close 规则
+- [`docs/architecture/renderer-and-component-preset.md`](docs/architecture/renderer-and-component-preset.md)：独立 Renderer、单系统单组件库与 RuntimeSession 隔离
+- [`docs/architecture/security-boundaries.md`](docs/architecture/security-boundaries.md)：Schema、Agent、Renderer、DataSource 与 MCP 安全边界
+- [`docs/adr/README.md`](docs/adr/README.md)：已接受的架构决策记录
+- [`packages/backend/README.md`](packages/backend/README.md)：后端服务说明
+
+根目录中的 `project_summary.md`、阶段路线图与 Phase 执行计划保留作历史追溯，不再作为当前架构真相源。
