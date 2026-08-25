@@ -804,11 +804,38 @@ function collectActionLocalReferences(
   }
 }
 
+function actionListUsesGeneratedBinding(
+  actions: readonly ActionNode[],
+  ctx: TransformContext,
+  bindingName: string,
+): boolean {
+  for (const action of actions) {
+    if (action.type === 'setValue' && action.field) {
+      const fieldInfo = getFieldInfo(ctx, action.field);
+      if (fieldInfo?.setterName === bindingName) return true;
+    }
+    for (const nested of [action.then, action.else]) {
+      if (nested && actionListUsesGeneratedBinding(nested, ctx, bindingName)) return true;
+    }
+    if (action.type === 'loop' && action.actions) {
+      const shadowsBinding =
+        (action.itemVar ?? 'item') === bindingName || action.indexVar === bindingName;
+      if (!shadowsBinding && actionListUsesGeneratedBinding(action.actions, ctx, bindingName)) {
+        return true;
+      }
+    } else if (action.actions && actionListUsesGeneratedBinding(action.actions, ctx, bindingName)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function getCapturedLocals(
   actions: readonly ActionNode[],
   localScope: Set<string>,
   ctx: TransformContext,
   shadowedNames: readonly string[] = [],
+  additionalGeneratedBindings: ReadonlySet<string> = new Set(),
 ): string[] {
   const visibleLocals = new Set(localScope);
   for (const name of shadowedNames) visibleLocals.delete(name);
@@ -816,7 +843,10 @@ function getCapturedLocals(
   collectActionLocalReferences(actions, visibleLocals, referenced);
   const captured = Array.from(localScope).filter((name) => referenced.has(name));
   for (const name of captured) {
-    if (ctx.registry.has(name)) {
+    if (
+      additionalGeneratedBindings.has(name) ||
+      actionListUsesGeneratedBinding(actions, ctx, name)
+    ) {
       throw new Error(`回调捕获变量 "${name}" 与生成标识符冲突`);
     }
   }
@@ -1370,9 +1400,18 @@ function buildActionStatement(
         )};\nconst ${queryStringVar} = new URLSearchParams(Object.entries(${requestParamsVar}).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst ${requestUrlVar} = ${queryStringVar} ? (${urlCode}).includes('?') ? ${urlCode} + '&' + ${queryStringVar} : ${urlCode} + '?' + ${queryStringVar} : ${urlCode};`;
       }
 
-      const successCapturedLocals = getCapturedLocals(action.onSuccess ?? [], localScope, ctx, [
-        'response',
-      ]);
+      const successGeneratedBindings = new Set<string>();
+      if (action.resultTo) {
+        const resultField = getFieldInfo(ctx, action.resultTo);
+        if (resultField) successGeneratedBindings.add(resultField.setterName);
+      }
+      const successCapturedLocals = getCapturedLocals(
+        action.onSuccess ?? [],
+        localScope,
+        ctx,
+        ['response'],
+        successGeneratedBindings,
+      );
       const successLocals = new Set(localScope);
       successLocals.add('response');
       const successHandler =
@@ -1538,6 +1577,11 @@ function buildActionStatement(
         safeIndexVar = sanitizeLoopVar(action.indexVar, 'index');
         if (safeItemVar === safeIndexVar) {
           throw new Error(`循环变量 itemVar 与 indexVar 不能相同: "${safeItemVar}"`);
+        }
+      }
+      for (const loopBinding of [safeItemVar, safeIndexVar]) {
+        if (loopBinding && actionListUsesGeneratedBinding(action.actions ?? [], ctx, loopBinding)) {
+          throw new Error(`循环变量 "${loopBinding}" 与循环体生成标识符冲突`);
         }
       }
       const sourceVar = ctx.registry.allocateInternal('__loopSource', 'loop:source');

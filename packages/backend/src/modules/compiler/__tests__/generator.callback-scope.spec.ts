@@ -116,6 +116,128 @@ describe('compiler callback scope', () => {
     expect(updates).toEqual(['updated']);
   });
 
+  it('allows a captured loop local to match an unused field setter', async () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['input', 'btn'] },
+      input: {
+        id: 'input',
+        type: 'Input',
+        props: { field: 'foo' },
+        childrenIds: [],
+      },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'load' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'setFoo',
+              over: [{ id: 'row-1' }],
+              actions: [
+                {
+                  type: 'apiCall',
+                  url: '/api/items',
+                  onSuccess: [{ type: 'log', value: '{{ setFoo.id }}' }],
+                },
+              ],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+    const code = compileSchemaToCode(schema);
+
+    expect(code).toContain('const handleBtnClickOnSuccess = (response, setFoo) =>');
+
+    const logs: unknown[] = [];
+    const fetchMock = jest.fn(() => Promise.resolve({ json: () => Promise.resolve({}) }));
+    const handlerFactory = new Function(
+      'fetch',
+      'useState',
+      'console',
+      `${extractGeneratedHandlers(code)}\nreturn handleBtnClick;`,
+    );
+    const handler = handlerFactory(fetchMock, () => ['', jest.fn()], {
+      log: (value: unknown) => logs.push(value),
+    });
+
+    expect(() => handler()).not.toThrow();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(logs).toEqual(['row-1']);
+  });
+
+  it('rejects a captured loop local that shadows a setter used by the callback', () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['input', 'btn'] },
+      input: {
+        id: 'input',
+        type: 'Input',
+        props: { field: 'foo' },
+        childrenIds: [],
+      },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'load' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'setFoo',
+              over: [{ id: 'row-1' }],
+              actions: [
+                {
+                  type: 'apiCall',
+                  url: '/api/items',
+                  onSuccess: [
+                    { type: 'log', value: '{{ setFoo.id }}' },
+                    { type: 'setValue', field: 'foo', value: '{{ response.value }}' },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+
+    expect(() => compileSchemaToCode(schema)).toThrow('回调捕获变量 "setFoo" 与生成标识符冲突');
+  });
+
+  it('rejects a loop local that shadows a setter used directly in the loop body', () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['input', 'btn'] },
+      input: {
+        id: 'input',
+        type: 'Input',
+        props: { field: 'foo' },
+        childrenIds: [],
+      },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'update' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'setFoo',
+              over: [{ id: 'row-1' }],
+              actions: [{ type: 'setValue', field: 'foo', value: 'updated' }],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+
+    expect(() => compileSchemaToCode(schema)).toThrow('循环变量 "setFoo" 与循环体生成标识符冲突');
+  });
+
   it('suffixes a detached handler name that is shadowed at its call site', async () => {
     const schema = makeSchema({
       page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
