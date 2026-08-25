@@ -39,9 +39,9 @@ jobs:
       - name: Frontend Vitest Suite
         run: pnpm --filter @lowcode-platform/frontend test run
 
-      - name: Backend Security & Core Tests
+      - name: Backend Tests
         run: |
-          CI=true ./packages/backend/node_modules/.bin/jest -c packages/backend/jest.config.js packages/backend/src/modules/compiler packages/backend/src/modules/page-schema packages/backend/src/modules/agent-tools
+          CI=true ./packages/backend/node_modules/.bin/jest -c packages/backend/jest.config.js --runInBand --testPathIgnorePatterns="ai.controller.e2e-spec.ts|ai.controller.spec.ts|ai-provider.factory.spec.ts"
 
       - name: Compiler Template Regression
         run: node packages/backend/scripts/compiler-template-regression.cjs

@@ -1376,6 +1376,7 @@ function buildActionStatement(
           throw new Error(`循环变量 itemVar 与 indexVar 不能相同: "${safeItemVar}"`);
         }
       }
+      const sourceVar = ctx.registry.allocateInternal('__loopSource', 'loop:source');
       const childScope = new Set(localScope);
       childScope.add(safeItemVar);
       if (safeIndexVar) childScope.add(safeIndexVar);
@@ -1388,12 +1389,12 @@ function buildActionStatement(
       );
       if (safeIndexVar) {
         return {
-          code: `for (const [${safeIndexVar}, ${safeItemVar}] of ${overCode}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
+          code: `const ${sourceVar} = ${overCode};\nfor (const [${safeIndexVar}, ${safeItemVar}] of ${sourceVar}.entries()) {\n${indentBlock(loopBlock.code)}\n}`,
           async: loopBlock.async,
         };
       }
       return {
-        code: `for (const ${safeItemVar} of ${overCode}) {\n${indentBlock(loopBlock.code)}\n}`,
+        code: `const ${sourceVar} = ${overCode};\nfor (const ${safeItemVar} of ${sourceVar}) {\n${indentBlock(loopBlock.code)}\n}`,
         async: loopBlock.async,
       };
     }

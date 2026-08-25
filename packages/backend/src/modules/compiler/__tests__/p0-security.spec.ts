@@ -283,9 +283,11 @@ describe('P0 compiler security', () => {
     const code = compileToCode(schema);
     expect(code).not.toContain('item_2');
     expect(code).toContain('console.log(item.name)');
+    expect(code).toContain('const __loopSource =');
+    expect(code).toContain('const __loopSource_2 =');
   });
 
-  it('allows nested loops to shadow item and resolves inner scope correctly', () => {
+  it('allows nested loops to shadow item and resolves inner scope correctly without TDZ', () => {
     const schema = makeSchema({
       page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
       btn: {
@@ -297,7 +299,7 @@ describe('P0 compiler security', () => {
             {
               type: 'loop',
               itemVar: 'item',
-              over: [{ list: [{ val: 'inner' }] }],
+              over: [{ list: [{ val: 'inner1' }, { val: 'inner2' }] }],
               actions: [
                 {
                   type: 'loop',
@@ -314,7 +316,19 @@ describe('P0 compiler security', () => {
     });
     const code = compileToCode(schema);
     expect(code).not.toContain('item_2');
+    expect(code).toContain('const __loopSource_2 = item.list');
+    expect(code).not.toContain('for (const item of item.list)');
     expect(code).toContain('console.log(item.val)');
+
+    // Execute the generated handler body at runtime to verify no TDZ ReferenceError occurs
+    const logs: string[] = [];
+    const customConsole = { log: (msg: string) => logs.push(msg) };
+    const handlerMatch = code.match(/const handleBtnClick = (?:async )?\(\) => {([\s\S]*?)};\n/);
+    expect(handlerMatch).toBeTruthy();
+    const handlerBody = handlerMatch![1];
+    const runHandler = new Function('console', handlerBody);
+    expect(() => runHandler(customConsole)).not.toThrow();
+    expect(logs).toEqual(['inner1', 'inner2']);
   });
 
   it('rejects loop when itemVar and indexVar are identical', () => {
