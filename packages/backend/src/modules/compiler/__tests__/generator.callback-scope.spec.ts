@@ -23,6 +23,45 @@ function extractGeneratedHandlers(code: string): string {
 }
 
 describe('compiler callback scope', () => {
+  it.each(['Object', 'URLSearchParams', 'Promise', 'setTimeout'])(
+    'rejects loop binding %s that would shadow a generated runtime dependency',
+    (itemVar) => {
+      const schema = makeSchema({
+        page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'load' },
+          events: {
+            onClick: [
+              {
+                type: 'loop',
+                itemVar,
+                over: [{ id: 'row-1' }],
+                actions: [
+                  {
+                    type: 'apiCall',
+                    url: '/api/outer',
+                    onSuccess: [
+                      {
+                        type: 'apiCall',
+                        url: '/api/inner',
+                        params: { id: '{{ response.id }}' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          childrenIds: [],
+        },
+      });
+
+      expect(() => compileSchemaToCode(schema)).toThrow(`非法循环变量标识符: "${itemVar}"`);
+    },
+  );
+
   it('captures loop locals in api callbacks and keeps request temporaries collision-safe', async () => {
     const schema = makeSchema({
       page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },

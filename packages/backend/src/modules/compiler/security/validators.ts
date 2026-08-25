@@ -180,6 +180,11 @@ export const RESERVED_GENERATED_IDENTIFIERS = new Set<string>([
   'fetch',
   'alert',
   'XMLHttpRequest',
+  // 生成代码直接依赖的宿主全局；禁止用户绑定遮蔽，否则会破坏请求/延迟代码。
+  'Object',
+  'URLSearchParams',
+  'Promise',
+  'setTimeout',
   'message',
   'notification',
   'Modal',
