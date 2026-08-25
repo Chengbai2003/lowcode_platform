@@ -2,6 +2,6 @@ packages:
   - 'packages/*'
   - 'examples/*'
 allowBuilds:
-  '@nestjs/core': set this to true or false
-  '@parcel/watcher': set this to true or false
-  esbuild: set this to true or false
+  '@nestjs/core': true
+  '@parcel/watcher': true
+  esbuild: true

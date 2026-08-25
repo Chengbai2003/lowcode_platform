@@ -253,4 +253,117 @@ describe('P0 compiler security', () => {
       'Component root id is required',
     );
   });
+
+  it('allows sibling loops to reuse item without renaming or degrading expressions', () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'click' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'item',
+              over: [{ name: 'a' }],
+              actions: [{ type: 'log', value: '{{ item.name }}' }],
+            },
+            {
+              type: 'loop',
+              itemVar: 'item',
+              over: [{ name: 'b' }],
+              actions: [{ type: 'log', value: '{{ item.name }}' }],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+    const code = compileToCode(schema);
+    expect(code).not.toContain('item_2');
+    expect(code).toContain('console.log(item.name)');
+  });
+
+  it('allows nested loops to shadow item and resolves inner scope correctly', () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'click' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'item',
+              over: [{ list: [{ val: 'inner' }] }],
+              actions: [
+                {
+                  type: 'loop',
+                  itemVar: 'item',
+                  over: '{{ item.list }}',
+                  actions: [{ type: 'log', value: '{{ item.val }}' }],
+                },
+              ],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+    const code = compileToCode(schema);
+    expect(code).not.toContain('item_2');
+    expect(code).toContain('console.log(item.val)');
+  });
+
+  it('rejects loop when itemVar and indexVar are identical', () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'click' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'i',
+              indexVar: 'i',
+              over: [1, 2, 3],
+              actions: [{ type: 'log', value: '{{ i }}' }],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+    expect(() => compileToCode(schema)).toThrow('循环变量 itemVar 与 indexVar 不能相同: "i"');
+  });
+
+  it('rejects unsafe identifier names as loop variables', () => {
+    const unsafeVars = ['eval', 'arguments', 'constructor', '__proto__', 'class', '123bad'];
+    for (const badVar of unsafeVars) {
+      const schema = makeSchema({
+        page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'click' },
+          events: {
+            onClick: [
+              {
+                type: 'loop',
+                itemVar: badVar,
+                over: [1, 2],
+                actions: [{ type: 'log', value: 'hi' }],
+              },
+            ],
+          },
+          childrenIds: [],
+        },
+      });
+      expect(() => compileToCode(schema)).toThrow(/非法循环变量标识符/);
+    }
+  });
 });

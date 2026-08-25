@@ -222,17 +222,14 @@ function sanitizeLogLevel(level: string | undefined, fallback = 'log'): string {
   return fallback;
 }
 
-function sanitizeLoopVar(
-  name: string | undefined,
-  fallback: string,
-  ctx: TransformContext,
-): string {
-  const base = name && isSafeGeneratedIdentifier(name) ? name : fallback;
-  if (!ctx.registry.has(base)) {
-    ctx.registry.reserveExact(base, `loop:${base}`);
-    return base;
+function sanitizeLoopVar(name: string | undefined, fallback: string): string {
+  if (name === undefined) {
+    return fallback;
   }
-  return ctx.registry.allocateInternal(base, `loop:${base}`);
+  if (!isSafeGeneratedIdentifier(name)) {
+    throw new Error(`非法循环变量标识符: "${name}"`);
+  }
+  return name;
 }
 
 function escapeComment(text: string): string {
@@ -1371,15 +1368,12 @@ function buildActionStatement(
       };
     }
     case 'loop': {
-      let safeItemVar = sanitizeLoopVar(action.itemVar, 'item', ctx);
+      const safeItemVar = sanitizeLoopVar(action.itemVar, 'item');
       let safeIndexVar: string | undefined;
       if (action.indexVar !== undefined) {
-        safeIndexVar = sanitizeLoopVar(action.indexVar, 'index', ctx);
+        safeIndexVar = sanitizeLoopVar(action.indexVar, 'index');
         if (safeItemVar === safeIndexVar) {
-          safeIndexVar = ctx.registry.allocateInternal('index', `loop:index`);
-          if (safeItemVar === safeIndexVar) {
-            safeItemVar = ctx.registry.allocateInternal('item', `loop:item`);
-          }
+          throw new Error(`循环变量 itemVar 与 indexVar 不能相同: "${safeItemVar}"`);
         }
       }
       const childScope = new Set(localScope);
