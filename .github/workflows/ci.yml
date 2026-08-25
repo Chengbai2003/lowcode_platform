@@ -36,6 +36,9 @@ jobs:
       - name: Type Check
         run: pnpm type-check
 
+      - name: Schema Contract Tests
+        run: pnpm --filter @lowcode-platform/schema-contract test
+
       - name: Frontend Vitest Suite
         run: pnpm --filter @lowcode-platform/frontend test run
 
