@@ -378,6 +378,49 @@ export function isSafeInlineExpression(
   return true;
 }
 
+/**
+ * Collect identifier references from an inline expression without treating
+ * non-computed member names (the `id` in `item.id`) as variable references.
+ * Invalid expressions fail closed and report no references; the caller still
+ * validates the expression separately before emitting code.
+ */
+export function collectInlineExpressionIdentifiers(code: string): Set<string> {
+  const identifiers = new Set<string>();
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    const jsepModule = require('jsep');
+    const parseFn =
+      typeof jsepModule === 'function' ? jsepModule : jsepModule.default || jsepModule.parse;
+    if (typeof parseFn !== 'function') return identifiers;
+
+    const visit = (node: unknown, parent?: Record<string, unknown>, parentKey?: string): void => {
+      if (!node || typeof node !== 'object') return;
+      const nodeRecord = node as Record<string, unknown>;
+      if (nodeRecord.type === 'Identifier') {
+        const isStaticMemberProperty =
+          parent?.type === 'MemberExpression' && parentKey === 'property' && !parent.computed;
+        if (!isStaticMemberProperty && typeof nodeRecord.name === 'string') {
+          identifiers.add(nodeRecord.name);
+        }
+        return;
+      }
+      for (const [key, child] of Object.entries(nodeRecord)) {
+        if (key === 'type') continue;
+        if (Array.isArray(child)) {
+          for (const item of child) visit(item, nodeRecord, key);
+        } else {
+          visit(child, nodeRecord, key);
+        }
+      }
+    };
+
+    visit(parseFn(code));
+  } catch {
+    // Expression validation is responsible for rejection; never guess names.
+  }
+  return identifiers;
+}
+
 export function containsMustache(value: string): boolean {
   return /\{\{([\s\S]+?)\}\}/.test(value);
 }

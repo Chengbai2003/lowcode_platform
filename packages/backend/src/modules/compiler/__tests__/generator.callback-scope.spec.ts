@@ -62,6 +62,107 @@ describe('compiler callback scope', () => {
     },
   );
 
+  it('does not capture an unused loop local that matches a generated field setter', async () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['input', 'btn'] },
+      input: {
+        id: 'input',
+        type: 'Input',
+        props: { field: 'foo' },
+        childrenIds: [],
+      },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'load' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'setFoo',
+              over: [{ id: 'row-1' }],
+              actions: [
+                {
+                  type: 'apiCall',
+                  url: '/api/items',
+                  onSuccess: [{ type: 'setValue', field: 'foo', value: '{{ response.value }}' }],
+                },
+              ],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+    const code = compileSchemaToCode(schema);
+
+    expect(code).toContain('const handleBtnClickOnSuccess = (response) =>');
+    expect(code).toContain('.then(handleBtnClickOnSuccess)');
+    expect(code).not.toContain('(response, setFoo)');
+
+    const updates: unknown[] = [];
+    const fetchMock = jest.fn(() =>
+      Promise.resolve({ json: () => Promise.resolve({ value: 'updated' }) }),
+    );
+    const handlerFactory = new Function(
+      'fetch',
+      'useState',
+      `${extractGeneratedHandlers(code)}\nreturn handleBtnClick;`,
+    );
+    const handler = handlerFactory(fetchMock, () => ['', (value: unknown) => updates.push(value)]);
+
+    expect(() => handler()).not.toThrow();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(updates).toEqual(['updated']);
+  });
+
+  it('suffixes a detached handler name that is shadowed at its call site', async () => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'load' },
+        events: {
+          onClick: [
+            {
+              type: 'loop',
+              itemVar: 'handleBtnClickOnSuccess',
+              over: [{ id: 'row-1' }],
+              actions: [
+                {
+                  type: 'apiCall',
+                  url: '/api/items',
+                  onSuccess: [{ type: 'log', value: '{{ response.value }}' }],
+                },
+              ],
+            },
+          ],
+        },
+        childrenIds: [],
+      },
+    });
+    const code = compileSchemaToCode(schema);
+
+    expect(code).toContain('const handleBtnClickOnSuccess_2 = (response) =>');
+    expect(code).toContain('.then(handleBtnClickOnSuccess_2)');
+
+    const logs: unknown[] = [];
+    const fetchMock = jest.fn(() =>
+      Promise.resolve({ json: () => Promise.resolve({ value: 'ok' }) }),
+    );
+    const handlerFactory = new Function(
+      'fetch',
+      'console',
+      `${extractGeneratedHandlers(code)}\nreturn handleBtnClick;`,
+    );
+    const handler = handlerFactory(fetchMock, { log: (value: unknown) => logs.push(value) });
+
+    expect(() => handler()).not.toThrow();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(logs).toEqual(['ok']);
+  });
+
   it('captures loop locals in api callbacks and keeps request temporaries collision-safe', async () => {
     const schema = makeSchema({
       page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },

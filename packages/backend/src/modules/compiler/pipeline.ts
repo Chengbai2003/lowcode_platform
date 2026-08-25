@@ -19,6 +19,7 @@ import {
 import {
   BLOCKED_PROP_NAMES,
   BUILTIN_IDENTIFIERS,
+  collectInlineExpressionIdentifiers,
   isSafeInlineExpression,
   isStaticStringValue,
   isValidExpressionPath,
@@ -624,14 +625,24 @@ function createEventHandlerName(componentId: string, eventName: string): string 
   return `handle${componentPart}${eventPart}`;
 }
 
-function reserveHandlerName(ctx: TransformContext, baseName: string): string {
+function reserveHandlerName(
+  ctx: TransformContext,
+  baseName: string,
+  unavailableNames: ReadonlySet<string> = new Set(),
+): string {
   const owner = `handler:${baseName}`;
-  if (!ctx.registry.has(baseName)) {
+  if (!ctx.registry.has(baseName) && !unavailableNames.has(baseName)) {
     ctx.registry.reserveExact(baseName, owner);
     ctx.reservedHandlerNames.add(baseName);
     return baseName;
   }
-  const allocated = ctx.registry.allocateInternal(baseName, owner);
+  let suffix = 2;
+  let allocated = `${baseName}_${suffix}`;
+  while (ctx.registry.has(allocated) || unavailableNames.has(allocated)) {
+    suffix += 1;
+    allocated = `${baseName}_${suffix}`;
+  }
+  ctx.registry.reserveExact(allocated, owner);
   ctx.reservedHandlerNames.add(allocated);
   return allocated;
 }
@@ -652,8 +663,9 @@ function registerHandler(
   ctx: TransformContext,
   params: string[],
   build: (handlerName: string) => { code: string; async: boolean },
+  unavailableNames: ReadonlySet<string> = new Set(),
 ): { name: string; async: boolean } {
-  const handlerName = reserveHandlerName(ctx, baseName);
+  const handlerName = reserveHandlerName(ctx, baseName, unavailableNames);
   const handler: HandlerDeclaration = {
     name: handlerName,
     code: '',
@@ -689,8 +701,12 @@ function registerNestedActionHandler(
   params: string[] = [],
   localScope: Set<string> = new Set(),
 ): { name: string; async: boolean } {
-  return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, (handlerName) =>
-    buildActionBlock(actions, ctx, handlerName, localScope),
+  return registerHandler(
+    `${parentHandlerName}${suffix}`,
+    ctx,
+    params,
+    (handlerName) => buildActionBlock(actions, ctx, handlerName, localScope),
+    localScope,
   );
 }
 
@@ -700,16 +716,111 @@ function registerNestedCodeHandler(
   ctx: TransformContext,
   params: string[],
   build: (handlerName: string) => { code: string; async: boolean },
+  unavailableNames: ReadonlySet<string> = new Set(),
 ): { name: string; async: boolean } {
-  return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, build);
+  return registerHandler(`${parentHandlerName}${suffix}`, ctx, params, build, unavailableNames);
+}
+
+function collectValueLocalReferences(
+  value: ValueNode | undefined,
+  visibleLocals: ReadonlySet<string>,
+  referenced: Set<string>,
+): void {
+  if (!value) return;
+  if (value.kind === 'expression') {
+    for (const name of collectInlineExpressionIdentifiers(value.code)) {
+      if (visibleLocals.has(name)) referenced.add(name);
+    }
+    return;
+  }
+  if (value.kind === 'template') {
+    for (const part of value.parts) {
+      if (part.kind === 'expression') {
+        collectValueLocalReferences(part.value, visibleLocals, referenced);
+      }
+    }
+    return;
+  }
+  if (value.kind === 'array') {
+    for (const item of value.items) {
+      collectValueLocalReferences(item, visibleLocals, referenced);
+    }
+    return;
+  }
+  if (value.kind === 'object') {
+    for (const property of value.properties) {
+      collectValueLocalReferences(property.value, visibleLocals, referenced);
+    }
+  }
+}
+
+function collectActionLocalReferences(
+  actions: readonly ActionNode[],
+  visibleLocals: ReadonlySet<string>,
+  referenced: Set<string>,
+): void {
+  for (const action of actions) {
+    for (const value of [
+      action.value,
+      action.url,
+      action.to,
+      action.content,
+      action.title,
+      action.condition,
+      action.over,
+      action.body,
+    ]) {
+      collectValueLocalReferences(value, visibleLocals, referenced);
+    }
+    for (const record of [action.headers, action.params]) {
+      for (const value of Object.values(record ?? {})) {
+        collectValueLocalReferences(value, visibleLocals, referenced);
+      }
+    }
+
+    for (const nested of [action.then, action.else, action.onOk, action.onCancel]) {
+      if (nested) collectActionLocalReferences(nested, visibleLocals, referenced);
+    }
+
+    if (action.type === 'loop' && action.actions) {
+      const nestedLocals = new Set(visibleLocals);
+      nestedLocals.delete(action.itemVar ?? 'item');
+      if (action.indexVar !== undefined) nestedLocals.delete(action.indexVar);
+      collectActionLocalReferences(action.actions, nestedLocals, referenced);
+    } else if (action.actions) {
+      collectActionLocalReferences(action.actions, visibleLocals, referenced);
+    }
+
+    if (action.onSuccess) {
+      const successLocals = new Set(visibleLocals);
+      successLocals.delete('response');
+      collectActionLocalReferences(action.onSuccess, successLocals, referenced);
+    }
+    if (action.onError) {
+      const errorLocals = new Set(visibleLocals);
+      errorLocals.delete('error');
+      collectActionLocalReferences(action.onError, errorLocals, referenced);
+    }
+  }
 }
 
 function getCapturedLocals(
+  actions: readonly ActionNode[],
   localScope: Set<string>,
+  ctx: TransformContext,
   shadowedNames: readonly string[] = [],
 ): string[] {
-  const shadowed = new Set(shadowedNames);
-  return Array.from(localScope).filter((name) => !shadowed.has(name));
+  const visibleLocals = new Set(localScope);
+  for (const name of shadowedNames) visibleLocals.delete(name);
+  const referenced = new Set<string>();
+  collectActionLocalReferences(actions, visibleLocals, referenced);
+  const captured = Array.from(localScope).filter((name) => referenced.has(name));
+  for (const name of captured) {
+    if (ctx.registry.has(name)) {
+      throw new Error(`回调捕获变量 "${name}" 与生成标识符冲突`);
+    }
+  }
+  return captured;
 }
 
 function buildCallbackReference(
@@ -1259,7 +1370,9 @@ function buildActionStatement(
         )};\nconst ${queryStringVar} = new URLSearchParams(Object.entries(${requestParamsVar}).filter(([, value]) => value !== undefined && value !== null).map(([key, value]) => [key, String(value)])).toString();\nconst ${requestUrlVar} = ${queryStringVar} ? (${urlCode}).includes('?') ? ${urlCode} + '&' + ${queryStringVar} : ${urlCode} + '?' + ${queryStringVar} : ${urlCode};`;
       }
 
-      const successCapturedLocals = getCapturedLocals(localScope, ['response']);
+      const successCapturedLocals = getCapturedLocals(action.onSuccess ?? [], localScope, ctx, [
+        'response',
+      ]);
       const successLocals = new Set(localScope);
       successLocals.add('response');
       const successHandler =
@@ -1288,9 +1401,12 @@ function buildActionStatement(
                   async: onSuccess.async,
                 };
               },
+              localScope,
             )
           : undefined;
-      const errorCapturedLocals = getCapturedLocals(localScope, ['error']);
+      const errorCapturedLocals = getCapturedLocals(action.onError ?? [], localScope, ctx, [
+        'error',
+      ]);
       const errorLocals = new Set(localScope);
       errorLocals.add('error');
       const errorHandler = registerNestedCodeHandler(
@@ -1305,6 +1421,7 @@ function buildActionStatement(
             async: onError.async,
           };
         },
+        localScope,
       );
 
       const successChain = successHandler
@@ -1364,14 +1481,15 @@ function buildActionStatement(
       const objectParts = [`title: ${titleCode}`, `content: ${contentCode}`];
 
       if (kind === 'confirm') {
-        const capturedLocals = getCapturedLocals(localScope);
+        const onOkCapturedLocals = getCapturedLocals(action.onOk ?? [], localScope, ctx);
+        const onCancelCapturedLocals = getCapturedLocals(action.onCancel ?? [], localScope, ctx);
         const onOkHandler = action.onOk?.length
           ? registerNestedActionHandler(
               ownerHandlerName,
               'OnOk',
               action.onOk,
               ctx,
-              capturedLocals,
+              onOkCapturedLocals,
               localScope,
             )
           : undefined;
@@ -1381,17 +1499,19 @@ function buildActionStatement(
               'OnCancel',
               action.onCancel,
               ctx,
-              capturedLocals,
+              onCancelCapturedLocals,
               localScope,
             )
           : undefined;
 
         if (onOkHandler) {
-          objectParts.push(`onOk: ${buildCallbackReference(onOkHandler.name, [], capturedLocals)}`);
+          objectParts.push(
+            `onOk: ${buildCallbackReference(onOkHandler.name, [], onOkCapturedLocals)}`,
+          );
         }
         if (onCancelHandler) {
           objectParts.push(
-            `onCancel: ${buildCallbackReference(onCancelHandler.name, [], capturedLocals)}`,
+            `onCancel: ${buildCallbackReference(onCancelHandler.name, [], onCancelCapturedLocals)}`,
           );
         }
         return {
