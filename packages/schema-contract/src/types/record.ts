@@ -10,32 +10,7 @@ export interface RuntimeCompatibility {
 }
 
 /**
- * 页面数据库记录/指针 (StoredPageRecord)
- * 不直接存储 Schema，指向 latestSnapshotId
- */
-export interface StoredPageRecord {
-  readonly pageId: string;
-  readonly systemId: string;
-  readonly currentPageVersion: number;
-  readonly latestSnapshotId: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-/**
- * 页面不可变快照记录 (PageSnapshotRecord)
- */
-export interface PageSnapshotRecord {
-  readonly snapshotId: string;
-  readonly pageId: string;
-  readonly pageVersion: number;
-  readonly runtimeCompatibility: RuntimeCompatibility;
-  readonly schema: PageSchema;
-  readonly createdAt: string;
-}
-
-/**
- * 对外 API 返回模型 (PageDocument)
+ * 对外 API 返回与前后端共享的页面文档传输模型 (PageDocument)
  */
 export interface PageDocument {
   readonly pageId: string;

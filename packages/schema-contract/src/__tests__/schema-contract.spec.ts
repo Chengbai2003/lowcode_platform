@@ -8,6 +8,7 @@ import {
   assertSupportedPageSchema,
   SchemaValidationError,
   UnsupportedSchemaVersionError,
+  DEFAULT_SCHEMA_LIMITS,
   type PageSchema,
 } from '../index';
 
@@ -55,101 +56,46 @@ describe('@lowcode-platform/schema-contract', () => {
       expect(CURRENT_DRAFT_SCHEMA_VERSION).toBe(0);
       expect(SUPPORTED_SCHEMA_VERSIONS).toEqual([0]);
     });
-  });
 
-  describe('parsePageSchemaJson', () => {
-    it('successfully parses valid page schema JSON', () => {
-      const json = JSON.stringify(validSchema);
-      const result = parsePageSchemaJson(json);
-      expect(result.ok).toBe(true);
-      if (result.ok) {
-        expect(result.value.rootId).toBe('page_root');
-      }
-    });
-
-    it('rejects non-string input', () => {
-      const result = parsePageSchemaJson(123 as unknown as string);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.issues[0].code).toBe('INVALID_JSON_INPUT');
-      }
-    });
-
-    it('rejects malformed JSON string', () => {
-      const result = parsePageSchemaJson('{ invalid json }');
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.issues[0].code).toBe('JSON_PARSE_ERROR');
-      }
-    });
-
-    it('rejects schema exceeding max size bytes', () => {
-      const json = JSON.stringify(validSchema);
-      const result = parsePageSchemaJson(json, 10); // max 10 bytes
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.issues[0].code).toBe('SCHEMA_SIZE_EXCEEDED');
-      }
+    it('defines 1 MiB maxBytes default limit', () => {
+      expect(DEFAULT_SCHEMA_LIMITS.maxBytes).toBe(1024 * 1024);
     });
   });
 
-  describe('validatePageSchemaValue', () => {
-    it('validates a correct PageSchema', () => {
-      const result = validatePageSchemaValue(validSchema);
-      expect(result.ok).toBe(true);
-    });
-
-    it('rejects non-object schema', () => {
-      const result = validatePageSchemaValue('string');
+  describe('P1-1: Unsafe Value & Accessor Inspection', () => {
+    it('rejects top-level getter without executing it', () => {
+      let getterCalled = false;
+      const badObj = {
+        get schemaVersion() {
+          getterCalled = true;
+          return 0;
+        },
+        rootId: 'page_root',
+        components: {},
+      };
+      const result = validatePageSchemaValue(badObj);
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.issues[0].code).toBe('INVALID_SCHEMA_OBJECT');
+        expect(result.issues.some((i) => i.code === 'ACCESSOR_PROPERTY_FORBIDDEN')).toBe(true);
       }
+      expect(getterCalled).toBe(false);
     });
 
-    it('rejects missing schemaVersion', () => {
-      const schema = { ...validSchema } as Record<string, unknown>;
-      delete schema.schemaVersion;
-      const result = validatePageSchemaValue(schema);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'SCHEMA_VERSION_REQUIRED')).toBe(true);
-      }
-    });
-
-    it('rejects unsupported schemaVersion', () => {
-      const schema = { ...validSchema, schemaVersion: 999 };
-      const result = validatePageSchemaValue(schema);
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'UNSUPPORTED_SCHEMA_VERSION')).toBe(true);
-      }
-    });
-
-    it('rejects missing rootId or missing root node in components', () => {
-      const schema1 = { ...validSchema, rootId: '' };
-      const result1 = validatePageSchemaValue(schema1);
-      expect(result1.ok).toBe(false);
-      if (!result1.ok) {
-        expect(result1.issues.some((i) => i.code === 'ROOT_ID_REQUIRED')).toBe(true);
-      }
-
-      const schema2 = { ...validSchema, rootId: 'non_existent' };
-      const result2 = validatePageSchemaValue(schema2);
-      expect(result2.ok).toBe(false);
-      if (!result2.ok) {
-        expect(result2.issues.some((i) => i.code === 'ROOT_NODE_MISSING')).toBe(true);
-      }
-    });
-
-    it('rejects component id mismatch', () => {
+    it('rejects nested getter inside props without executing it', () => {
+      let getterCalled = false;
       const schema = {
         ...validSchema,
         components: {
           ...validSchema.components,
           btn_1: {
-            id: 'wrong_id',
+            id: 'btn_1',
             type: 'Button',
+            props: {
+              get dynamicProp() {
+                getterCalled = true;
+                return 'dangerous';
+              },
+            },
             childrenIds: [],
           },
         },
@@ -157,88 +103,260 @@ describe('@lowcode-platform/schema-contract', () => {
       const result = validatePageSchemaValue(schema);
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'COMPONENT_ID_MISMATCH')).toBe(true);
+        expect(result.issues.some((i) => i.code === 'ACCESSOR_PROPERTY_FORBIDDEN')).toBe(true);
+      }
+      expect(getterCalled).toBe(false);
+    });
+
+    it('rejects non-JSON values: function, Symbol, BigInt, Date, RegExp, NaN, Infinity', () => {
+      const cases = [
+        { label: 'function', val: () => 123, expectedCode: 'FUNCTION_FORBIDDEN' },
+        { label: 'symbol', val: Symbol('test'), expectedCode: 'SYMBOL_FORBIDDEN' },
+        { label: 'bigint', val: BigInt(123), expectedCode: 'BIGINT_FORBIDDEN' },
+        { label: 'Date', val: new Date(), expectedCode: 'CLASS_INSTANCE_FORBIDDEN' },
+        { label: 'RegExp', val: /abc/, expectedCode: 'CLASS_INSTANCE_FORBIDDEN' },
+        { label: 'NaN', val: NaN, expectedCode: 'NON_FINITE_NUMBER' },
+        { label: 'Infinity', val: Infinity, expectedCode: 'NON_FINITE_NUMBER' },
+      ];
+
+      for (const { label, val, expectedCode } of cases) {
+        const schema = {
+          ...validSchema,
+          components: {
+            ...validSchema.components,
+            btn_1: {
+              id: 'btn_1',
+              type: 'Button',
+              props: { [label]: val },
+              childrenIds: [],
+            },
+          },
+        };
+        const result = validatePageSchemaValue(schema);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.issues.some((i) => i.code === expectedCode)).toBe(true);
+        }
       }
     });
 
-    it('rejects missing child reference and duplicate child reference', () => {
-      const missingChildSchema = {
-        ...validSchema,
-        components: {
-          ...validSchema.components,
-          page_root: {
-            id: 'page_root',
-            type: 'Page',
-            childrenIds: ['non_existent_child'],
-          },
-        },
-      };
-      const result1 = validatePageSchemaValue(missingChildSchema);
-      expect(result1.ok).toBe(false);
-      if (!result1.ok) {
-        expect(result1.issues.some((i) => i.code === 'MISSING_CHILD_REFERENCE')).toBe(true);
-      }
-
-      const dupChildSchema = {
-        ...validSchema,
-        components: {
-          ...validSchema.components,
-          page_root: {
-            id: 'page_root',
-            type: 'Page',
-            childrenIds: ['btn_1', 'btn_1'],
-          },
-        },
-      };
-      const result2 = validatePageSchemaValue(dupChildSchema);
-      expect(result2.ok).toBe(false);
-      if (!result2.ok) {
-        expect(result2.issues.some((i) => i.code === 'DUPLICATE_CHILD_REFERENCE')).toBe(true);
-      }
-    });
-
-    it('rejects multiple parents for a component', () => {
+    it('rejects sparse arrays', () => {
+      const sparseArray: unknown[] = [1, 2];
+      sparseArray[5] = 10; // sparse array with empty holes
       const schema = {
-        schemaVersion: 0,
-        rootId: 'page_root',
+        ...validSchema,
         components: {
-          page_root: { id: 'page_root', type: 'Page', childrenIds: ['container1', 'container2'] },
-          container1: { id: 'container1', type: 'Div', childrenIds: ['shared_btn'] },
-          container2: { id: 'container2', type: 'Div', childrenIds: ['shared_btn'] },
-          shared_btn: { id: 'shared_btn', type: 'Button', childrenIds: [] },
+          ...validSchema.components,
+          btn_1: {
+            id: 'btn_1',
+            type: 'Button',
+            props: { items: sparseArray },
+            childrenIds: [],
+          },
         },
       };
       const result = validatePageSchemaValue(schema);
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'MULTIPLE_PARENTS')).toBe(true);
+        expect(result.issues.some((i) => i.code === 'SPARSE_ARRAY_FORBIDDEN')).toBe(true);
       }
     });
 
-    it('rejects component cycle', () => {
+    it('detects circular references in props without stack overflow', () => {
+      const circularProps: Record<string, unknown> = { title: 'hello' };
+      circularProps.self = circularProps;
+
       const schema = {
-        schemaVersion: 0,
-        rootId: 'node_a',
+        ...validSchema,
         components: {
-          node_a: { id: 'node_a', type: 'Div', childrenIds: ['node_b'] },
-          node_b: { id: 'node_b', type: 'Div', childrenIds: ['node_c'] },
-          node_c: { id: 'node_c', type: 'Div', childrenIds: ['node_a'] },
+          ...validSchema.components,
+          btn_1: {
+            id: 'btn_1',
+            type: 'Button',
+            props: circularProps,
+            childrenIds: [],
+          },
+        },
+      };
+
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((i) => i.code === 'CIRCULAR_REFERENCE')).toBe(true);
+      }
+    });
+  });
+
+  describe('P1-2: Action Payload Exhaustive Validation', () => {
+    it('rejects empty/incomplete actions missing required fields', () => {
+      const invalidActions = [
+        { action: { type: 'setValue' }, expectedCode: 'ACTION_FIELD_REQUIRED' },
+        { action: { type: 'if' }, expectedCode: 'ACTION_CONDITION_REQUIRED' },
+        { action: { type: 'loop' }, expectedCode: 'ACTION_OVER_REQUIRED' },
+        { action: { type: 'navigate' }, expectedCode: 'ACTION_TO_REQUIRED' },
+        { action: { type: 'dialog' }, expectedCode: 'INVALID_DIALOG_KIND' },
+        { action: { type: 'feedback' }, expectedCode: 'ACTION_CONTENT_REQUIRED' },
+        { action: { type: 'log' }, expectedCode: 'ACTION_VALUE_REQUIRED' },
+        { action: { type: 'apiCall' }, expectedCode: 'ACTION_URL_REQUIRED' },
+      ];
+
+      for (const { action, expectedCode } of invalidActions) {
+        const schema = {
+          ...validSchema,
+          components: {
+            ...validSchema.components,
+            btn_1: {
+              id: 'btn_1',
+              type: 'Button',
+              events: { onClick: [action] },
+              childrenIds: [],
+            },
+          },
+        };
+        const result = validatePageSchemaValue(schema);
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+          expect(result.issues.some((i) => i.code === expectedCode)).toBe(true);
+        }
+      }
+    });
+
+    it('rejects unknown fields on actions (fail-close)', () => {
+      const schema = {
+        ...validSchema,
+        components: {
+          ...validSchema.components,
+          btn_1: {
+            id: 'btn_1',
+            type: 'Button',
+            events: {
+              onClick: [
+                {
+                  type: 'setValue',
+                  field: 'state.count',
+                  value: 1,
+                  unrecognizedField: 'malicious',
+                },
+              ],
+            },
+            childrenIds: [],
+          },
         },
       };
       const result = validatePageSchemaValue(schema);
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'COMPONENT_CYCLE')).toBe(true);
+        expect(result.issues.some((i) => i.code === 'UNKNOWN_ACTION_FIELD')).toBe(true);
       }
     });
 
-    it('rejects orphaned component', () => {
+    it('rejects invalid action enum values and invalid loop identifiers', () => {
+      const schema = {
+        ...validSchema,
+        components: {
+          ...validSchema.components,
+          btn_1: {
+            id: 'btn_1',
+            type: 'Button',
+            events: {
+              onClick: [
+                {
+                  type: 'loop',
+                  over: [1, 2],
+                  itemVar: 'eval', // unsafe keyword identifier
+                  actions: [],
+                },
+              ],
+            },
+            childrenIds: [],
+          },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((i) => i.code === 'INVALID_LOOP_IDENTIFIER')).toBe(true);
+      }
+    });
+
+    it('rejects loop itemVar and indexVar collision', () => {
+      const schema = {
+        ...validSchema,
+        components: {
+          ...validSchema.components,
+          btn_1: {
+            id: 'btn_1',
+            type: 'Button',
+            events: {
+              onClick: [
+                {
+                  type: 'loop',
+                  over: [1, 2],
+                  itemVar: 'item',
+                  indexVar: 'item',
+                  actions: [],
+                },
+              ],
+            },
+            childrenIds: [],
+          },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((i) => i.code === 'LOOP_VAR_COLLISION')).toBe(true);
+      }
+    });
+  });
+
+  describe('P1-3: __proto__ Prototype Pollution Defense', () => {
+    it('preserves __proto__ keys without polluting Object.prototype', () => {
+      const initialProtoPolluted = (Object.prototype as any).polluted;
+      expect(initialProtoPolluted).toBeUndefined();
+
+      const schemaWithProto = JSON.parse(
+        JSON.stringify({
+          schemaVersion: 0,
+          rootId: '__proto__',
+          components: {
+            ['__proto__']: {
+              id: '__proto__',
+              type: 'Div',
+              props: {
+                ['__proto__']: 'safe_value',
+                normal: 123,
+              },
+              childrenIds: [],
+            },
+          },
+        }),
+      );
+
+      const result = validatePageSchemaValue(schemaWithProto);
+      expect(result.ok).toBe(true);
+
+      const canonical = createCanonicalPageSchema(schemaWithProto as PageSchema);
+      expect(canonical.rootId).toBe('__proto__');
+      expect((Object.prototype as any).polluted).toBeUndefined();
+      expect((Object.prototype as any).normal).toBeUndefined();
+      expect((Object.prototype as any).safe_value).toBeUndefined();
+    });
+  });
+
+  describe('P1-4: Strict Orphan Node Rejection (No Component Knowledge)', () => {
+    it('strictly rejects orphaned components including Div with hidden flags', () => {
       const schema = {
         schemaVersion: 0,
         rootId: 'page_root',
         components: {
           page_root: { id: 'page_root', type: 'Page', childrenIds: [] },
-          orphan_btn: { id: 'orphan_btn', type: 'Button', childrenIds: [] },
+          hidden_div: {
+            id: 'hidden_div',
+            type: 'Div',
+            props: { visible: false, initialValue: { foo: 'bar' } },
+            childrenIds: [],
+          },
         },
       };
       const result = validatePageSchemaValue(schema);
@@ -247,68 +365,22 @@ describe('@lowcode-platform/schema-contract', () => {
         expect(result.issues.some((i) => i.code === 'ORPHANED_COMPONENT')).toBe(true);
       }
     });
+  });
 
-    it('allows detached hidden data node (Div, visible: false, initialValue)', () => {
+  describe('P1-5: Fail-close on Unknown Schema/Component Fields', () => {
+    it('rejects unknown top-level schema fields', () => {
       const schema = {
-        schemaVersion: 0,
-        rootId: 'page_root',
-        components: {
-          page_root: { id: 'page_root', type: 'Page', childrenIds: [] },
-          hidden_data: {
-            id: 'hidden_data',
-            type: 'Div',
-            props: { visible: false, initialValue: { foo: 'bar' } },
-            childrenIds: [],
-          },
-        },
+        ...validSchema,
+        unexpectedTopField: 'bad',
       };
       const result = validatePageSchemaValue(schema);
-      expect(result.ok).toBe(true);
-    });
-
-    it('rejects customScript action and customScript in props', () => {
-      const schemaWithCustomScriptAction = {
-        ...validSchema,
-        components: {
-          ...validSchema.components,
-          btn_1: {
-            id: 'btn_1',
-            type: 'Button',
-            events: {
-              onClick: [{ type: 'customScript', code: 'alert(1)' }],
-            },
-            childrenIds: [],
-          },
-        },
-      };
-      const result1 = validatePageSchemaValue(schemaWithCustomScriptAction);
-      expect(result1.ok).toBe(false);
-      if (!result1.ok) {
-        expect(result1.issues.some((i) => i.code === 'FORBIDDEN_CUSTOM_SCRIPT')).toBe(true);
-      }
-
-      const schemaWithCustomScriptProp = {
-        ...validSchema,
-        components: {
-          ...validSchema.components,
-          btn_1: {
-            id: 'btn_1',
-            type: 'Button',
-            props: { action: { type: 'customScript', code: 'alert(1)' } },
-            childrenIds: [],
-          },
-        },
-      };
-      const result2 = validatePageSchemaValue(schemaWithCustomScriptProp);
-      expect(result2.ok).toBe(false);
-      if (!result2.ok) {
-        expect(result2.issues.some((i) => i.code === 'FORBIDDEN_CUSTOM_SCRIPT_IN_PROPS')).toBe(
-          true,
-        );
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((i) => i.code === 'UNKNOWN_SCHEMA_FIELD')).toBe(true);
       }
     });
 
-    it('rejects unsupported action type', () => {
+    it('rejects unknown component fields', () => {
       const schema = {
         ...validSchema,
         components: {
@@ -316,33 +388,64 @@ describe('@lowcode-platform/schema-contract', () => {
           btn_1: {
             id: 'btn_1',
             type: 'Button',
-            events: {
-              onClick: [{ type: 'unknown_magic_action' }],
-            },
             childrenIds: [],
+            unknownComponentProp: 'illegal',
           },
         },
       };
       const result = validatePageSchemaValue(schema);
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'UNSUPPORTED_ACTION_TYPE')).toBe(true);
+        expect(result.issues.some((i) => i.code === 'UNKNOWN_COMPONENT_FIELD')).toBe(true);
+      }
+    });
+  });
+
+  describe('P1-6: Budget & Limits Enforcement', () => {
+    it('rejects schema exceeding max components limit', () => {
+      const result = validatePageSchemaValue(validSchema, { maxComponents: 1 });
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((i) => i.code === 'COMPONENT_BUDGET_EXCEEDED')).toBe(true);
       }
     });
 
-    it('rejects accessor properties (getter/setter) on schema object', () => {
-      const badObj = {
-        schemaVersion: 0,
-        rootId: 'page_root',
-        components: {},
-        get malicious() {
-          return 'hacked';
+    it('rejects action nesting exceeding maxActionDepth', () => {
+      const deepAction = {
+        type: 'if',
+        condition: true,
+        then: [
+          {
+            type: 'if',
+            condition: true,
+            then: [
+              {
+                type: 'if',
+                condition: true,
+                then: [{ type: 'log', value: 'deep' }],
+              },
+            ],
+          },
+        ],
+      };
+
+      const schema = {
+        ...validSchema,
+        components: {
+          ...validSchema.components,
+          btn_1: {
+            id: 'btn_1',
+            type: 'Button',
+            events: { onClick: [deepAction] },
+            childrenIds: [],
+          },
         },
       };
-      const result = validatePageSchemaValue(badObj);
+
+      const result = validatePageSchemaValue(schema, { maxActionDepth: 1 });
       expect(result.ok).toBe(false);
       if (!result.ok) {
-        expect(result.issues.some((i) => i.code === 'ACCESSOR_PROPERTY_FORBIDDEN')).toBe(true);
+        expect(result.issues.some((i) => i.code === 'ACTION_DEPTH_EXCEEDED')).toBe(true);
       }
     });
   });

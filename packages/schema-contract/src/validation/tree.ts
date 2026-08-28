@@ -1,12 +1,18 @@
 import type { SchemaContractIssue } from './issues';
 
-interface ComponentGraphNode {
-  id?: string;
-  type?: string;
-  props?: Readonly<Record<string, unknown>>;
-  childrenIds?: readonly string[];
+export interface ComponentGraphNode {
+  readonly id?: string;
+  readonly type?: string;
+  readonly props?: Readonly<Record<string, unknown>>;
+  readonly childrenIds?: readonly string[];
 }
 
+/**
+ * 纯 DSL 组件拓扑图合法性校验
+ * 1. 多父节点检测 (不允许一个组件出现在多个节点的 childrenIds 中)
+ * 2. 拓扑成环检测 (Cycle Detection)
+ * 3. 严格孤儿节点检测 (从 rootId 无法遍历到达的节点严格拒绝，不硬编码任何组件库知识)
+ */
 export function validateComponentGraph(
   rootId: string,
   components: Record<string, ComponentGraphNode>,
@@ -72,7 +78,7 @@ export function validateComponentGraph(
     }
   }
 
-  // 3. 孤儿节点可达性检测 (Orphan Detection)
+  // 3. 严格孤儿节点检测 (Orphan Detection)
   if (components[rootId]) {
     const reachable = new Set<string>();
     const stack = [rootId];
@@ -90,24 +96,14 @@ export function validateComponentGraph(
       }
     }
 
-    for (const [componentId, component] of Object.entries(components)) {
-      if (!reachable.has(componentId) && !isDetachedHiddenDataNode(component)) {
+    for (const componentId of Object.keys(components)) {
+      if (!reachable.has(componentId)) {
         issues.push({
           code: 'ORPHANED_COMPONENT',
           path: ['components', componentId],
-          message: `Schema contains orphaned component: "${componentId}"`,
+          message: `Schema contains orphaned component: "${componentId}" (unreachable from rootId "${rootId}")`,
         });
       }
     }
   }
-}
-
-function isDetachedHiddenDataNode(component: ComponentGraphNode): boolean {
-  const props = component.props;
-  return (
-    component.type === 'Div' &&
-    props?.visible === false &&
-    Object.prototype.hasOwnProperty.call(props, 'initialValue') &&
-    (component.childrenIds?.length ?? 0) === 0
-  );
 }

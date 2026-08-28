@@ -1,22 +1,29 @@
 import { isSupportedSchemaVersion } from '../types/versions';
 import type { PageSchema } from '../types/schema';
 import type { ComponentNode } from '../types/node';
+import type { SchemaValidationLimits } from '../types/limits';
+import { DEFAULT_SCHEMA_LIMITS } from '../types/limits';
 import type { ParsePageSchemaResult, SchemaContractIssue } from './issues';
 import { validateComponentGraph } from './tree';
-import { validateActionList, hasCustomScriptInValue } from './actions';
+import { validateActionList } from './actions';
+import type { InspectionContext } from './inspector';
+import { inspectAndSanitizeJsonValue } from './inspector';
 
-export const MAX_SCHEMA_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components']);
+const ALLOWED_COMPONENT_KEYS = new Set(['id', 'type', 'props', 'childrenIds', 'events']);
 
 const hasOwn = (target: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(target, key);
 
 /**
- * 安全解析 JSON 字符串为 PageSchema，先行检查原始字节长度
+ * 安全解析 JSON 字符串为 PageSchema，先行检查 UTF-8 字节预算
  */
 export function parsePageSchemaJson(
   rawJson: string,
-  maxSizeBytes: number = MAX_SCHEMA_SIZE_BYTES,
+  customLimits?: Partial<SchemaValidationLimits>,
 ): ParsePageSchemaResult {
+  const limits: SchemaValidationLimits = { ...DEFAULT_SCHEMA_LIMITS, ...customLimits };
+
   if (typeof rawJson !== 'string') {
     return {
       ok: false,
@@ -32,14 +39,14 @@ export function parsePageSchemaJson(
 
   // 环境无关的 UTF-8 字节计算 (兼容浏览器与 Node.js，不依赖 Node Buffer)
   const byteLength = new TextEncoder().encode(rawJson).length;
-  if (byteLength > maxSizeBytes) {
+  if (byteLength > limits.maxBytes) {
     return {
       ok: false,
       issues: [
         {
           code: 'SCHEMA_SIZE_EXCEEDED',
           path: [],
-          message: `Schema size (${byteLength} bytes) exceeds limit of ${maxSizeBytes} bytes`,
+          message: `Schema size (${byteLength} bytes) exceeds limit of ${limits.maxBytes} bytes (1 MiB baseline)`,
         },
       ],
     };
@@ -61,13 +68,17 @@ export function parsePageSchemaJson(
     };
   }
 
-  return validatePageSchemaValue(parsed);
+  return validatePageSchemaValue(parsed, limits);
 }
 
 /**
- * 校验未知输入是否为合法的 PageSchema 数据结构
+ * 严格校验未知输入是否为合法、安全的 PageSchema 数据结构
  */
-export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
+export function validatePageSchemaValue(
+  input: unknown,
+  customLimits?: Partial<SchemaValidationLimits>,
+): ParsePageSchemaResult {
+  const limits: SchemaValidationLimits = { ...DEFAULT_SCHEMA_LIMITS, ...customLimits };
   const issues: SchemaContractIssue[] = [];
 
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -83,9 +94,9 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
     };
   }
 
-  // 属性描述符安全检查：拒绝 getter / setter
-  const descriptors = Object.getOwnPropertyDescriptors(input);
-  for (const [key, desc] of Object.entries(descriptors)) {
+  // 1. 属性描述符安全检查：拒绝 getter / setter
+  const schemaDescriptors = Object.getOwnPropertyDescriptors(input);
+  for (const [key, desc] of Object.entries(schemaDescriptors)) {
     if (desc.get || desc.set) {
       issues.push({
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
@@ -95,9 +106,24 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
     }
   }
 
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+
+  // 2. Fail-close 校验 Schema 顶层未知字段
+  for (const key of Object.keys(input)) {
+    if (!ALLOWED_SCHEMA_KEYS.has(key)) {
+      issues.push({
+        code: 'UNKNOWN_SCHEMA_FIELD',
+        path: [key],
+        message: `Unknown top-level field "${key}" on PageSchema (fail-close)`,
+      });
+    }
+  }
+
   const typedSchema = input as Record<string, unknown>;
 
-  // 1. schemaVersion 校验
+  // 3. schemaVersion 校验
   const schemaVersion = typedSchema.schemaVersion;
   if (schemaVersion === undefined) {
     issues.push({
@@ -113,7 +139,7 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
     });
   }
 
-  // 2. rootId 校验
+  // 4. rootId 校验
   const rootId = typedSchema.rootId;
   if (typeof rootId !== 'string' || !rootId.trim()) {
     issues.push({
@@ -123,7 +149,7 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
     });
   }
 
-  // 3. components 校验
+  // 5. components 校验
   const components = typedSchema.components;
   if (!components || typeof components !== 'object' || Array.isArray(components)) {
     issues.push({
@@ -134,7 +160,31 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
     return { ok: false, issues };
   }
 
+  const componentDescriptors = Object.getOwnPropertyDescriptors(components);
+  for (const [key, desc] of Object.entries(componentDescriptors)) {
+    if (desc.get || desc.set) {
+      issues.push({
+        code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+        path: ['components', key],
+        message: `components property "${key}" must not be an accessor (getter/setter)`,
+      });
+    }
+  }
+
+  if (issues.length > 0) {
+    return { ok: false, issues };
+  }
+
   const typedComponents = components as Record<string, unknown>;
+  const componentKeys = Object.keys(typedComponents);
+
+  if (componentKeys.length > limits.maxComponents) {
+    issues.push({
+      code: 'COMPONENT_BUDGET_EXCEEDED',
+      path: ['components'],
+      message: `Component count (${componentKeys.length}) exceeded limit of ${limits.maxComponents}`,
+    });
+  }
 
   if (typeof rootId === 'string' && rootId.trim() && !hasOwn(typedComponents, rootId)) {
     issues.push({
@@ -144,7 +194,21 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
     });
   }
 
-  const validComponentNodes: Record<string, ComponentNode> = {};
+  const inspectionContext: InspectionContext = {
+    issues,
+    seen: new Set<object>(),
+    maxDepth: limits.maxDepth,
+    maxNodes: limits.maxComponents * 50,
+    nodeCount: 0,
+  };
+
+  const actionValidationContext = {
+    issues,
+    inspectionContext,
+    maxActionNodes: limits.maxActionNodes,
+    maxActionDepth: limits.maxActionDepth,
+    actionCount: 0,
+  };
 
   for (const [componentId, component] of Object.entries(typedComponents)) {
     const compPath = ['components', componentId];
@@ -156,6 +220,31 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
         message: `Component "${componentId}" must be an object`,
       });
       continue;
+    }
+
+    const compDescriptors = Object.getOwnPropertyDescriptors(component);
+    let hasAccessor = false;
+    for (const [key, desc] of Object.entries(compDescriptors)) {
+      if (desc.get || desc.set) {
+        issues.push({
+          code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+          path: [...compPath, key],
+          message: `Component property "${key}" must not be an accessor (getter/setter)`,
+        });
+        hasAccessor = true;
+      }
+    }
+    if (hasAccessor) continue;
+
+    // Fail-close 校验 ComponentNode 未知字段
+    for (const key of Object.keys(component)) {
+      if (!ALLOWED_COMPONENT_KEYS.has(key)) {
+        issues.push({
+          code: 'UNKNOWN_COMPONENT_FIELD',
+          path: [...compPath, key],
+          message: `Unknown field "${key}" on ComponentNode "${componentId}" (fail-close)`,
+        });
+      }
     }
 
     const typedComp = component as Record<string, unknown>;
@@ -226,10 +315,24 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
           message: `Component "${componentId}" events must be an object`,
         });
       } else {
-        for (const [eventName, actions] of Object.entries(
-          typedComp.events as Record<string, unknown>,
-        )) {
-          validateActionList(actions, [...compPath, 'events', eventName], issues);
+        const eventDescriptors = Object.getOwnPropertyDescriptors(typedComp.events);
+        for (const [eventName, desc] of Object.entries(eventDescriptors)) {
+          if (desc.get || desc.set) {
+            issues.push({
+              code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+              path: [...compPath, 'events', eventName],
+              message: `Event "${eventName}" must not be an accessor`,
+            });
+            continue;
+          }
+          if ('value' in desc) {
+            validateActionList(
+              desc.value,
+              [...compPath, 'events', eventName],
+              0,
+              actionValidationContext,
+            );
+          }
         }
       }
     }
@@ -245,19 +348,13 @@ export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult {
           path: [...compPath, 'props'],
           message: `Component "${componentId}" props must be an object`,
         });
-      } else if (hasCustomScriptInValue(typedComp.props)) {
-        issues.push({
-          code: 'FORBIDDEN_CUSTOM_SCRIPT_IN_PROPS',
-          path: [...compPath, 'props'],
-          message: 'customScript is permanently forbidden in component props',
-        });
+      } else {
+        inspectAndSanitizeJsonValue(typedComp.props, [...compPath, 'props'], 0, inspectionContext);
       }
     }
-
-    validComponentNodes[componentId] = component as ComponentNode;
   }
 
-  // 4. 组件拓扑图合法性校验 (成环、多父、孤儿)
+  // 6. 组件拓扑图合法性校验 (成环、多父、严格孤儿节点)
   if (typeof rootId === 'string' && rootId.trim() && issues.length === 0) {
     validateComponentGraph(rootId, typedComponents as Record<string, ComponentNode>, issues);
   }
