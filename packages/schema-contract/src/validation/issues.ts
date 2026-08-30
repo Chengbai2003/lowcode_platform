@@ -1,4 +1,5 @@
 import type { PageSchema } from '../types/schema';
+import { describeValue } from './describe';
 
 export interface SchemaContractIssue {
   readonly code: string;
@@ -28,7 +29,7 @@ export class UnsupportedSchemaVersionError extends SchemaValidationError {
       {
         code: 'UNSUPPORTED_SCHEMA_VERSION',
         path: ['schemaVersion'],
-        message: `Unsupported schemaVersion: ${String(version)}`,
+        message: `Unsupported schemaVersion: ${describeValue(version)}`,
       },
     ]);
     this.name = 'UnsupportedSchemaVersionError';

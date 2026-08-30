@@ -8,6 +8,7 @@ import { validateComponentGraph } from './tree';
 import { validateActionList } from './actions';
 import type { InspectionContext } from './inspector';
 import { inspectAndSanitizeJsonValue } from './inspector';
+import { describeValue } from './describe';
 
 const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components']);
 const ALLOWED_COMPONENT_KEYS = new Set(['id', 'type', 'props', 'childrenIds', 'events']);
@@ -78,6 +79,19 @@ function safeGetValue(
   if (!desc) return { exists: false, isAccessor: false, value: undefined };
   if (desc.get || desc.set) return { exists: true, isAccessor: true, value: undefined };
   return { exists: true, isAccessor: false, value: (desc as PropertyDescriptor).value };
+}
+
+/**
+ * 经 data descriptor 读取数组 length；length 缺失或为访问器时返回 null（由调用方的
+ * per-item 检查负责报错，此时不会发生 O(len) 遍历）。
+ */
+function arrayLengthViaDescriptor(value: unknown): number | null {
+  if (!value || typeof value !== 'object') return null;
+  const desc = Object.getOwnPropertyDescriptor(value as object, 'length');
+  if (!desc || desc.get || desc.set || !('value' in desc) || typeof desc.value !== 'number') {
+    return null;
+  }
+  return desc.value;
 }
 
 function deepFreeze<T>(obj: T): T {
@@ -242,7 +256,7 @@ export function validatePageSchemaValue(
     issues.push({
       code: 'UNSUPPORTED_SCHEMA_VERSION',
       path: ['schemaVersion'],
-      message: `Unsupported schemaVersion: ${String(schemaVersion)}`,
+      message: `Unsupported schemaVersion: ${describeValue(schemaVersion)}`,
     });
   }
 
@@ -286,11 +300,13 @@ export function validatePageSchemaValue(
   const componentKeys = Object.getOwnPropertyNames(componentsObj);
 
   if (componentKeys.length > limits.maxComponents) {
+    // 预算前置检查：组件超限立即失败返回，绝不继续遍历组件
     issues.push({
       code: 'COMPONENT_BUDGET_EXCEEDED',
       path: ['components'],
       message: `Component count (${componentKeys.length}) exceeded limit of ${limits.maxComponents}`,
     });
+    return { ok: false, issues };
   }
 
   if (typeof rootId === 'string' && rootId.trim() && !hasOwn(componentsObj, rootId)) {
@@ -305,8 +321,11 @@ export function validatePageSchemaValue(
     issues,
     seen: new Set<object>(),
     maxDepth: limits.maxDepth,
-    maxNodes: limits.maxComponents * 50,
+    maxNodes: limits.maxJsonNodes,
+    maxIssues: limits.maxIssues,
     nodeCount: 0,
+    nodeBudgetReported: false,
+    aborted: false,
   };
 
   const actionValidationContext = {
@@ -315,10 +334,23 @@ export function validatePageSchemaValue(
     maxActionNodes: limits.maxActionNodes,
     maxActionDepth: limits.maxActionDepth,
     actionCount: 0,
+    actionBudgetReported: false,
+  };
+
+  // 热循环统一短路：预算 abort 或 issue 数量达到上限时立即终止遍历，
+  // 保证 issue 数量有界，不随恶意输入规模线性放大。
+  const budgetStop = (): boolean => {
+    if (inspectionContext.aborted) return true;
+    if (issues.length >= limits.maxIssues) {
+      inspectionContext.aborted = true;
+      return true;
+    }
+    return false;
   };
 
   // 逐个校验组件
   for (const componentId of componentKeys) {
+    if (budgetStop()) break;
     const compPath: readonly (string | number)[] = ['components', componentId];
 
     const compDesc = Object.getOwnPropertyDescriptor(componentsObj, componentId);
@@ -358,6 +390,7 @@ export function validatePageSchemaValue(
 
     // Fail-close 校验 ComponentNode 未知字段（覆盖不可枚举 + Symbol）
     for (const key of Object.getOwnPropertyNames(compObj)) {
+      if (budgetStop()) break;
       if (!ALLOWED_COMPONENT_KEYS.has(key)) {
         issues.push({
           code: 'UNKNOWN_COMPONENT_FIELD',
@@ -397,7 +430,7 @@ export function validatePageSchemaValue(
       issues.push({
         code: 'COMPONENT_ID_MISMATCH',
         path: [...compPath, 'id'],
-        message: `Component id "${String(idVal)}" must match its key "${componentId}"`,
+        message: `Component id "${describeValue(idVal)}" must match its key "${componentId}"`,
       });
     }
 
@@ -424,11 +457,19 @@ export function validatePageSchemaValue(
         const arrObj = childrenIdsVal as unknown[];
         // array prototype & Symbol & non-index check
         const arrProto = Object.getPrototypeOf(arrObj);
+        const childrenLen = arrayLengthViaDescriptor(childrenIdsVal);
         if (arrProto !== Array.prototype) {
           issues.push({
             code: 'INVALID_OBJECT_PROTOTYPE',
             path: [...compPath, 'childrenIds'],
             message: `Component "${componentId}" childrenIds must be a plain array`,
+          });
+        } else if (childrenLen !== null && childrenLen > limits.maxComponents) {
+          // 预算前置检查：childrenIds 长度不可能超过组件数上限，超限直接拒绝，绝不进行 O(len) 遍历
+          issues.push({
+            code: 'CHILDREN_IDS_BUDGET_EXCEEDED',
+            path: [...compPath, 'childrenIds'],
+            message: `childrenIds length (${childrenLen}) exceeded limit of ${limits.maxComponents}`,
           });
         } else {
           const arrSymbols = Object.getOwnPropertySymbols(arrObj);
@@ -467,6 +508,7 @@ export function validatePageSchemaValue(
               len = lenDesc.value;
             const seenChildIds = new Set<string>();
             for (let idx = 0; idx < len; idx++) {
+              if (budgetStop()) break;
               const itemDesc = Object.getOwnPropertyDescriptor(arrObj, String(idx));
               if (!itemDesc) {
                 issues.push({
@@ -490,7 +532,7 @@ export function validatePageSchemaValue(
                 issues.push({
                   code: 'MISSING_CHILD_REFERENCE',
                   path: [...compPath, 'childrenIds', idx],
-                  message: `Component "${componentId}" references missing child "${String(childId)}"`,
+                  message: `Component "${componentId}" references missing child "${describeValue(childId)}"`,
                 });
               }
               if (typeof childId === 'string') {
@@ -528,6 +570,7 @@ export function validatePageSchemaValue(
           pushSymbolIssue(eventsObj, [...compPath, 'events'], issues);
           const eventNames = Object.getOwnPropertyNames(eventsObj);
           for (const eventName of eventNames) {
+            if (budgetStop()) break;
             const evDesc = Object.getOwnPropertyDescriptor(eventsObj, eventName);
             if (!evDesc) continue;
             if (evDesc.get || evDesc.set) {
@@ -553,8 +596,13 @@ export function validatePageSchemaValue(
   }
 
   // 6. 组件拓扑图合法性校验 (成环、多父、严格孤儿节点)
-  // 只有在前面积累的 issues 为空时才进行拓扑校验，避免误报
-  if (typeof rootId === 'string' && rootId.trim() && issues.length === 0) {
+  // 只有在前面积累的 issues 为空且未触发预算 abort 时才进行拓扑校验，避免误报
+  if (
+    typeof rootId === 'string' &&
+    rootId.trim() &&
+    issues.length === 0 &&
+    !inspectionContext.aborted
+  ) {
     // 构建一个 descriptor-safe 的纯净 components 视图供 tree 校验，避免 tree 内部触发 getter
     const safeComponentsView: Record<string, ComponentNode> = Object.create(null);
     for (const cid of Object.getOwnPropertyNames(componentsObj)) {
@@ -611,7 +659,7 @@ export function validatePageSchemaValue(
     validateComponentGraph(rootId, safeComponentsView as Record<string, ComponentNode>, issues);
   }
 
-  if (issues.length > 0) {
+  if (issues.length > 0 || inspectionContext.aborted) {
     return { ok: false, issues };
   }
 
@@ -623,8 +671,11 @@ export function validatePageSchemaValue(
     issues,
     seen: new Set<object>(),
     maxDepth: limits.maxDepth,
-    maxNodes: limits.maxComponents * 50,
+    maxNodes: limits.maxJsonNodes,
+    maxIssues: limits.maxIssues,
     nodeCount: 0,
+    nodeBudgetReported: false,
+    aborted: false,
   };
   for (const cid of Object.getOwnPropertyNames(componentsObj)) {
     const cDesc = Object.getOwnPropertyDescriptor(componentsObj, cid);
@@ -656,12 +707,26 @@ export function validatePageSchemaValue(
     if (childrenIdsDesc && 'value' in childrenIdsDesc && childrenIdsDesc.value !== undefined) {
       const rawArr = childrenIdsDesc.value as unknown[];
       if (Array.isArray(rawArr)) {
-        const arrCopy: string[] = [];
         const lenDesc = Object.getOwnPropertyDescriptor(rawArr, 'length');
         const len =
           lenDesc && 'value' in lenDesc && typeof lenDesc.value === 'number'
             ? (lenDesc.value as number)
             : 0;
+        // 防御性预算检查：canonical 重建阶段的数组复制同样不做 O(len) 遍历
+        if (len > limits.maxComponents) {
+          return {
+            ok: false,
+            issues: [
+              ...issues,
+              {
+                code: 'CHILDREN_IDS_BUDGET_EXCEEDED',
+                path: ['components', cid, 'childrenIds'],
+                message: `childrenIds length (${len}) exceeded limit of ${limits.maxComponents}`,
+              },
+            ],
+          };
+        }
+        const arrCopy: string[] = [];
         for (let i = 0; i < len; i++) {
           const d = Object.getOwnPropertyDescriptor(rawArr, String(i));
           if (d && 'value' in d) arrCopy.push(d.value as string);

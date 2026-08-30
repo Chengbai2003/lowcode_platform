@@ -85,3 +85,28 @@ export function assertSupportedPageSchema(
     throw new SchemaValidationError(result.issues);
   }
 }
+
+/**
+ * 安全边界入口：校验并返回 canonical、深冻结的 PageSchema。
+ *
+ * 与 assertSupportedPageSchema 的语义区分：
+ * - `requireSupportedPageSchema` 用于 Compiler / Renderer / Repository / 持久化等
+ *   消费链路——必须使用本函数的返回值，不得继续使用原始输入对象；
+ * - `assertSupportedPageSchema` 仅用于同步类型断言（返回 void，不提供 canonical 数据）。
+ *
+ * 任何 issue 时 fail-close 抛出 SchemaValidationError。
+ */
+export function requireSupportedPageSchema(
+  input: unknown,
+  limits?: Partial<SchemaValidationLimits>,
+): PageSchema {
+  const result = validatePageSchemaValue(input, limits);
+  if (!result.ok) {
+    const unsupportedIssue = result.issues.find((i) => i.code === 'UNSUPPORTED_SCHEMA_VERSION');
+    if (unsupportedIssue) {
+      throw new UnsupportedSchemaVersionError(safeReadVersion(input));
+    }
+    throw new SchemaValidationError(result.issues);
+  }
+  return result.value;
+}

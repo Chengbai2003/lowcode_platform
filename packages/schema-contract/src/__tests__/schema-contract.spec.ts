@@ -5,6 +5,7 @@ import {
   parsePageSchemaJson,
   validatePageSchemaValue,
   createCanonicalPageSchema,
+  requireSupportedPageSchema,
   assertSupportedPageSchema,
   SchemaValidationError,
   UnsupportedSchemaVersionError,
@@ -881,6 +882,250 @@ describe('@lowcode-platform/schema-contract', () => {
     it('throws SchemaValidationError when schema structure is invalid', () => {
       const schema = { ...validSchema, rootId: '' };
       expect(() => assertSupportedPageSchema(schema)).toThrow(SchemaValidationError);
+    });
+  });
+
+  describe('requireSupportedPageSchema (canonical-returning boundary)', () => {
+    it('returns a rebuilt deep-frozen canonical object isolated from the input', () => {
+      const canonical = requireSupportedPageSchema(validSchema);
+      expect(canonical).not.toBe(validSchema);
+      expect(Object.isFrozen(canonical)).toBe(true);
+      expect(canonical.rootId).toBe('page_root');
+      expect(canonical.components.page_root).toBeDefined();
+    });
+
+    it('fails closed on unsupported version and invalid structure', () => {
+      expect(() => requireSupportedPageSchema({ ...validSchema, schemaVersion: 999 })).toThrow(
+        UnsupportedSchemaVersionError,
+      );
+      expect(() => requireSupportedPageSchema({ ...validSchema, rootId: '' })).toThrow(
+        SchemaValidationError,
+      );
+      expect(() => requireSupportedPageSchema(null)).toThrow(SchemaValidationError);
+    });
+  });
+
+  describe('Security Hardening R3: safe value formatting in error messages', () => {
+    interface HookFlags {
+      toString: number;
+      valueOf: number;
+      toPrimitive: number;
+      constructorGetter: number;
+    }
+
+    /** 构造一个带全部转换钩子的"毒"对象：任何 String()/模板插值/constructor 读取都会被记录 */
+    const createPoison = (): { poison: Record<string | symbol, unknown>; hooks: HookFlags } => {
+      const hooks: HookFlags = {
+        toString: 0,
+        valueOf: 0,
+        toPrimitive: 0,
+        constructorGetter: 0,
+      };
+      const poison: Record<string | symbol, unknown> = {};
+      Object.defineProperty(poison, 'toString', {
+        value() {
+          hooks.toString++;
+          return 'evil';
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      Object.defineProperty(poison, 'valueOf', {
+        value() {
+          hooks.valueOf++;
+          return 42;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      Object.defineProperty(poison, Symbol.toPrimitive, {
+        value() {
+          hooks.toPrimitive++;
+          return 'primitive';
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      Object.defineProperty(poison, 'constructor', {
+        get() {
+          hooks.constructorGetter++;
+          return Object;
+        },
+        enumerable: true,
+        configurable: true,
+      });
+      return { poison, hooks };
+    };
+
+    const expectHooksNeverRan = (hooks: HookFlags): void => {
+      expect(hooks).toEqual({ toString: 0, valueOf: 0, toPrimitive: 0, constructorGetter: 0 });
+    };
+
+    it('never invokes conversion hooks when schemaVersion is an untrusted object', () => {
+      const { poison, hooks } = createPoison();
+      const schema = {
+        schemaVersion: poison,
+        rootId: 'page_root',
+        components: { page_root: { id: 'page_root', type: 'Page' } },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.code === 'UNSUPPORTED_SCHEMA_VERSION')).toBe(true);
+      expectHooksNeverRan(hooks);
+    });
+
+    it('never invokes conversion hooks for invalid childrenIds elements', () => {
+      const { poison, hooks } = createPoison();
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: { id: 'page_root', type: 'Page', childrenIds: [poison] },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.code === 'MISSING_CHILD_REFERENCE')).toBe(true);
+      expectHooksNeverRan(hooks);
+    });
+
+    it('never invokes conversion hooks for invalid loop identifiers', () => {
+      const { poison, hooks } = createPoison();
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: {
+            id: 'page_root',
+            type: 'Page',
+            events: {
+              onClick: [{ type: 'loop', over: 'items', itemVar: poison, actions: [] }],
+            },
+          },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      expect(result.issues.some((i) => i.code === 'INVALID_LOOP_IDENTIFIER')).toBe(true);
+      expectHooksNeverRan(hooks);
+    });
+
+    it('never invokes conversion hooks from UnsupportedSchemaVersionError construction', () => {
+      const { poison, hooks } = createPoison();
+      const error = new UnsupportedSchemaVersionError(poison);
+      expect(error.message).toContain('Unsupported schemaVersion');
+      expectHooksNeverRan(hooks);
+    });
+
+    it('reports class instances via instanceof only, without reading constructor', () => {
+      let constructorGetterRan = false;
+      class EvilDate extends Date {}
+      const evil = new EvilDate();
+      Object.defineProperty(evil, 'constructor', {
+        get() {
+          constructorGetterRan = true;
+          return EvilDate;
+        },
+        configurable: true,
+      });
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: { id: 'page_root', type: 'Page', props: { when: evil } },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      const issue = result.issues.find((i) => i.code === 'CLASS_INSTANCE_FORBIDDEN');
+      expect(issue).toBeDefined();
+      expect(issue?.message).toContain('Date');
+      expect(constructorGetterRan).toBe(false);
+    });
+  });
+
+  describe('Security Hardening R3: budget short-circuit & issue cap', () => {
+    it('rejects oversized sparse props arrays with exactly one budget issue', () => {
+      const sparse: unknown[] = [];
+      sparse.length = 10_000;
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: { id: 'page_root', type: 'Page', props: { list: sparse } },
+        },
+      };
+      const result = validatePageSchemaValue(schema, { maxJsonNodes: 100 });
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].code).toBe('SCHEMA_BUDGET_EXCEEDED');
+    });
+
+    it('rejects 2^32-2 length childrenIds without O(len) traversal', () => {
+      const huge: string[] = [];
+      huge.length = 4_294_967_294;
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: { id: 'page_root', type: 'Page', childrenIds: huge },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].code).toBe('CHILDREN_IDS_BUDGET_EXCEEDED');
+    });
+
+    it('rejects 2^32-2 length ActionList without O(len) traversal', () => {
+      const huge: unknown[] = [];
+      huge.length = 4_294_967_294;
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: { id: 'page_root', type: 'Page', events: { onClick: huge } },
+        },
+      };
+      const result = validatePageSchemaValue(schema);
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].code).toBe('ACTION_BUDGET_EXCEEDED');
+    });
+
+    it('fails immediately on component-count overflow without traversing components', () => {
+      const components: Record<string, unknown> = {
+        c0: { id: 'c0', type: 'Page' },
+      };
+      for (let i = 1; i <= 2000; i++) {
+        components[`c${i}`] = {}; // 非法组件：若无短路会产生数千条额外 issue
+      }
+      const result = validatePageSchemaValue(
+        { schemaVersion: 0, rootId: 'c0', components },
+        { maxComponents: 10 },
+      );
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].code).toBe('COMPONENT_BUDGET_EXCEEDED');
+    });
+
+    it('caps issue collection at maxIssues and aborts traversal', () => {
+      const components: Record<string, unknown> = {};
+      for (let i = 0; i < 100; i++) {
+        components[`c${i}`] = { id: `c${i}`, type: 'Div', rogue: 1 }; // UNKNOWN_COMPONENT_FIELD × 100
+      }
+      const result = validatePageSchemaValue(
+        { schemaVersion: 0, rootId: 'c0', components },
+        { maxIssues: 50 },
+      );
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(50);
+      expect(result.issues.every((i) => i.code === 'UNKNOWN_COMPONENT_FIELD')).toBe(true);
+    });
+
+    it('keeps the explicit maxJsonNodes / maxIssues defaults', () => {
+      expect(DEFAULT_SCHEMA_LIMITS.maxJsonNodes).toBe(25_000);
+      expect(DEFAULT_SCHEMA_LIMITS.maxIssues).toBe(500);
     });
   });
 });

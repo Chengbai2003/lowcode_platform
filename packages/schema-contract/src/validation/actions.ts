@@ -1,6 +1,7 @@
 import type { SchemaContractIssue } from './issues';
 import type { InspectionContext } from './inspector';
 import { inspectAndSanitizeJsonValue } from './inspector';
+import { describeValue } from './describe';
 
 export interface ActionValidationContext {
   readonly issues: SchemaContractIssue[];
@@ -8,6 +9,21 @@ export interface ActionValidationContext {
   readonly maxActionNodes: number;
   readonly maxActionDepth: number;
   actionCount: number;
+  /** ACTION_BUDGET_EXCEEDED 只报告一次 */
+  actionBudgetReported: boolean;
+}
+
+/**
+ * 收录一条 action 校验 issue；与 JSON 校验共享 issue 预算与 abort 标记。
+ */
+function pushActionIssue(context: ActionValidationContext, issue: SchemaContractIssue): void {
+  const sink = context.inspectionContext;
+  if (sink.aborted) return;
+  if (context.issues.length >= sink.maxIssues) {
+    sink.aborted = true;
+    return;
+  }
+  context.issues.push(issue);
 }
 
 const FORBIDDEN_IDENTIFIERS = new Set([
@@ -50,15 +66,16 @@ function checkUnknownActionFields(
   actionObj: object,
   allowedFields: readonly string[],
   path: readonly (string | number)[],
-  issues: SchemaContractIssue[],
+  context: ActionValidationContext,
 ): void {
   const allowed = new Set(allowedFields);
   for (const key of Object.getOwnPropertyNames(actionObj)) {
+    if (context.inspectionContext.aborted) return;
     if (!allowed.has(key)) {
       // For error message, get type via descriptor safe
       const typeDesc = Object.getOwnPropertyDescriptor(actionObj, 'type');
-      const typeVal = typeDesc && 'value' in typeDesc ? String(typeDesc.value) : 'unknown';
-      issues.push({
+      const typeVal = typeDesc && 'value' in typeDesc ? describeValue(typeDesc.value) : 'unknown';
+      pushActionIssue(context, {
         code: 'UNKNOWN_ACTION_FIELD',
         path: [...path, key],
         message: `Unknown field "${key}" on action of type "${typeVal}"`,
@@ -67,9 +84,10 @@ function checkUnknownActionFields(
   }
   const symbols = Object.getOwnPropertySymbols(actionObj);
   for (const sym of symbols) {
+    if (context.inspectionContext.aborted) return;
     const typeDesc = Object.getOwnPropertyDescriptor(actionObj, 'type');
-    const typeVal = typeDesc && 'value' in typeDesc ? String(typeDesc.value) : 'unknown';
-    issues.push({
+    const typeVal = typeDesc && 'value' in typeDesc ? describeValue(typeDesc.value) : 'unknown';
+    pushActionIssue(context, {
       code: 'SYMBOL_PROPERTY_FORBIDDEN',
       path: [...path, String(sym)],
       message: `Symbol field "${String(sym)}" forbidden on action of type "${typeVal}"`,
@@ -83,8 +101,10 @@ export function validateActionList(
   depth: number,
   context: ActionValidationContext,
 ): void {
+  if (context.inspectionContext.aborted) return;
+
   if (!Array.isArray(actions)) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'INVALID_ACTION_LIST',
       path,
       message: 'Action list must be an array',
@@ -94,7 +114,7 @@ export function validateActionList(
 
   const arrObj = actions as unknown as object;
   if (Object.getPrototypeOf(arrObj) !== Array.prototype) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'INVALID_OBJECT_PROTOTYPE',
       path,
       message: 'Action list must be a plain array',
@@ -104,20 +124,21 @@ export function validateActionList(
 
   const arrSymbols = Object.getOwnPropertySymbols(arrObj);
   if (arrSymbols.length > 0) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'SYMBOL_PROPERTY_FORBIDDEN',
       path,
-      message: `Symbol property keys (${arrSymbols.map((s) => s.toString()).join(', ')}) are forbidden in action list`,
+      message: `Symbol property keys (${arrSymbols.map(String).join(', ')}) are forbidden in action list`,
     });
   }
 
   const arrNames = Object.getOwnPropertyNames(arrObj);
   for (const key of arrNames) {
+    if (context.inspectionContext.aborted) return;
     if (key === 'length') continue;
     const num = Number(key);
     const isIndex = String(num) === key && Number.isInteger(num) && num >= 0 && num < 4294967295;
     if (!isIndex) {
-      context.issues.push({
+      pushActionIssue(context, {
         code: 'UNKNOWN_ARRAY_FIELD',
         path: [...path, key],
         message: `Action list property "${key}" is forbidden (non-index)`,
@@ -127,7 +148,7 @@ export function validateActionList(
 
   const lenDesc = Object.getOwnPropertyDescriptor(arrObj, 'length');
   if (lenDesc && (lenDesc.get || lenDesc.set)) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'ACCESSOR_PROPERTY_FORBIDDEN',
       path: [...path, 'length'],
       message: 'Action list length must not be an accessor',
@@ -150,7 +171,7 @@ export function validateActionList(
   }
 
   if (depth > context.maxActionDepth) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'ACTION_DEPTH_EXCEEDED',
       path,
       message: `Action nesting depth exceeded limit of ${context.maxActionDepth}`,
@@ -158,10 +179,25 @@ export function validateActionList(
     return;
   }
 
+  // 预算前置检查：长度超过剩余 action 预算时直接拒绝，绝不进行 O(len) 遍历
+  if (len > context.maxActionNodes - context.actionCount) {
+    if (!context.actionBudgetReported) {
+      context.actionBudgetReported = true;
+      pushActionIssue(context, {
+        code: 'ACTION_BUDGET_EXCEEDED',
+        path,
+        message: `Action list length (${len}) exceeds remaining action budget (${context.maxActionNodes - context.actionCount} of ${context.maxActionNodes}); traversal aborted`,
+      });
+    }
+    context.inspectionContext.aborted = true;
+    return;
+  }
+
   for (let i = 0; i < len; i++) {
+    if (context.inspectionContext.aborted) return;
     const desc = Object.getOwnPropertyDescriptor(arrObj, String(i));
     if (!desc) {
-      context.issues.push({
+      pushActionIssue(context, {
         code: 'SPARSE_ARRAY_FORBIDDEN',
         path: [...path, i],
         message: 'Sparse arrays are forbidden in action list',
@@ -169,7 +205,7 @@ export function validateActionList(
       continue;
     }
     if (desc.get || desc.set) {
-      context.issues.push({
+      pushActionIssue(context, {
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
         path: [...path, i],
         message: `Action list index "${i}" must not be an accessor`,
@@ -188,18 +224,24 @@ export function validateActionItem(
   depth: number,
   context: ActionValidationContext,
 ): void {
+  if (context.inspectionContext.aborted) return;
+
   context.actionCount++;
   if (context.actionCount > context.maxActionNodes) {
-    context.issues.push({
-      code: 'ACTION_BUDGET_EXCEEDED',
-      path,
-      message: `Total action count exceeded limit of ${context.maxActionNodes}`,
-    });
+    if (!context.actionBudgetReported) {
+      context.actionBudgetReported = true;
+      pushActionIssue(context, {
+        code: 'ACTION_BUDGET_EXCEEDED',
+        path,
+        message: `Total action count exceeded limit of ${context.maxActionNodes}`,
+      });
+    }
+    context.inspectionContext.aborted = true;
     return;
   }
 
   if (!action || typeof action !== 'object' || Array.isArray(action)) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'INVALID_ACTION_OBJECT',
       path,
       message: 'Each action must be an object',
@@ -210,7 +252,7 @@ export function validateActionItem(
   const actionObj = action as object;
 
   if (!isPlainPrototype(actionObj)) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'INVALID_OBJECT_PROTOTYPE',
       path,
       message: 'Each action must be a plain object',
@@ -220,7 +262,7 @@ export function validateActionItem(
 
   const symbols = Object.getOwnPropertySymbols(actionObj);
   if (symbols.length > 0) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'SYMBOL_PROPERTY_FORBIDDEN',
       path,
       message: `Symbol property keys (${symbols.map((s) => s.toString()).join(', ')}) are forbidden in action`,
@@ -233,7 +275,7 @@ export function validateActionItem(
     const desc = Object.getOwnPropertyDescriptor(actionObj, key);
     if (!desc) continue;
     if (desc.get || desc.set) {
-      context.issues.push({
+      pushActionIssue(context, {
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
         path: [...path, key],
         message: `Action property "${key}" must not be an accessor (getter/setter)`,
@@ -244,7 +286,7 @@ export function validateActionItem(
   for (const sym of symbols) {
     const desc = Object.getOwnPropertyDescriptor(actionObj, sym);
     if (desc && (desc.get || desc.set)) {
-      context.issues.push({
+      pushActionIssue(context, {
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
         path: [...path, String(sym)],
         message: `Action symbol property "${String(sym)}" must not be an accessor`,
@@ -260,7 +302,7 @@ export function validateActionItem(
   const type = typeRes.exists ? typeRes.value : undefined;
 
   if (typeof type !== 'string' || !type.trim()) {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'ACTION_TYPE_REQUIRED',
       path: [...path, 'type'],
       message: 'Action type is required',
@@ -269,7 +311,7 @@ export function validateActionItem(
   }
 
   if (type === 'customScript') {
-    context.issues.push({
+    pushActionIssue(context, {
       code: 'FORBIDDEN_CUSTOM_SCRIPT',
       path: [...path, 'type'],
       message: 'customScript is permanently forbidden in PageSchema',
@@ -279,12 +321,7 @@ export function validateActionItem(
 
   switch (type) {
     case 'setValue': {
-      checkUnknownActionFields(
-        actionObj,
-        ['type', 'field', 'value', 'merge'],
-        path,
-        context.issues,
-      );
+      checkUnknownActionFields(actionObj, ['type', 'field', 'value', 'merge'], path, context);
       const fieldRes = safeGet(actionObj, 'field');
       const valueRes = safeGet(actionObj, 'value');
       const mergeRes = safeGet(actionObj, 'merge');
@@ -293,14 +330,14 @@ export function validateActionItem(
       const mergeVal = mergeRes.exists ? mergeRes.value : undefined;
 
       if (typeof fieldVal !== 'string' || !fieldVal.trim()) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_FIELD_REQUIRED',
           path: [...path, 'field'],
           message: 'setValue action requires a non-empty string "field"',
         });
       }
       if (!valueRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_VALUE_REQUIRED',
           path: [...path, 'value'],
           message: 'setValue action requires "value"',
@@ -309,7 +346,7 @@ export function validateActionItem(
         inspectAndSanitizeJsonValue(valueVal, [...path, 'value'], 0, context.inspectionContext);
       }
       if (mergeRes.exists && mergeVal !== undefined && typeof mergeVal !== 'boolean') {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'merge'],
           message: 'setValue "merge" must be a boolean if provided',
@@ -319,12 +356,7 @@ export function validateActionItem(
     }
 
     case 'if': {
-      checkUnknownActionFields(
-        actionObj,
-        ['type', 'condition', 'then', 'else'],
-        path,
-        context.issues,
-      );
+      checkUnknownActionFields(actionObj, ['type', 'condition', 'then', 'else'], path, context);
       const conditionRes = safeGet(actionObj, 'condition');
       const thenRes = safeGet(actionObj, 'then');
       const elseRes = safeGet(actionObj, 'else');
@@ -333,7 +365,7 @@ export function validateActionItem(
       const elseVal = elseRes.exists ? elseRes.value : undefined;
 
       if (!conditionRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_CONDITION_REQUIRED',
           path: [...path, 'condition'],
           message: 'if action requires "condition"',
@@ -347,7 +379,7 @@ export function validateActionItem(
         );
       }
       if (!thenRes.exists || !Array.isArray(thenVal)) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_THEN_REQUIRED',
           path: [...path, 'then'],
           message: 'if action requires "then" array of actions',
@@ -357,7 +389,7 @@ export function validateActionItem(
       }
       if (elseRes.exists) {
         if (!Array.isArray(elseVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'else'],
             message: 'if "else" must be an array of actions if provided',
@@ -374,7 +406,7 @@ export function validateActionItem(
         actionObj,
         ['type', 'over', 'itemVar', 'indexVar', 'actions'],
         path,
-        context.issues,
+        context,
       );
       const overRes = safeGet(actionObj, 'over');
       const itemVarRes = safeGet(actionObj, 'itemVar');
@@ -386,7 +418,7 @@ export function validateActionItem(
       const actionsVal = actionsRes.exists ? actionsRes.value : undefined;
 
       if (!overRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_OVER_REQUIRED',
           path: [...path, 'over'],
           message: 'loop action requires "over" target',
@@ -395,29 +427,29 @@ export function validateActionItem(
         inspectAndSanitizeJsonValue(overVal, [...path, 'over'], 0, context.inspectionContext);
       }
       if (!isSafeIdentifier(itemVarVal)) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_LOOP_IDENTIFIER',
           path: [...path, 'itemVar'],
-          message: `loop itemVar must be a valid, safe identifier, received: "${String(itemVarVal)}"`,
+          message: `loop itemVar must be a valid, safe identifier, received: ${describeValue(itemVarVal)}`,
         });
       }
       if (indexVarRes.exists && indexVarVal !== undefined) {
         if (!isSafeIdentifier(indexVarVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_LOOP_IDENTIFIER',
             path: [...path, 'indexVar'],
-            message: `loop indexVar must be a valid, safe identifier, received: "${String(indexVarVal)}"`,
+            message: `loop indexVar must be a valid, safe identifier, received: ${describeValue(indexVarVal)}`,
           });
         } else if (itemVarVal === indexVarVal) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'LOOP_VAR_COLLISION',
             path: [...path, 'indexVar'],
-            message: `loop indexVar cannot be identical to itemVar: "${String(itemVarVal)}"`,
+            message: `loop indexVar cannot be identical to itemVar: ${describeValue(itemVarVal)}`,
           });
         }
       }
       if (!actionsRes.exists || !Array.isArray(actionsVal)) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_ACTIONS_REQUIRED',
           path: [...path, 'actions'],
           message: 'loop action requires "actions" array',
@@ -429,12 +461,7 @@ export function validateActionItem(
     }
 
     case 'navigate': {
-      checkUnknownActionFields(
-        actionObj,
-        ['type', 'to', 'params', 'replace'],
-        path,
-        context.issues,
-      );
+      checkUnknownActionFields(actionObj, ['type', 'to', 'params', 'replace'], path, context);
       const toRes = safeGet(actionObj, 'to');
       const paramsRes = safeGet(actionObj, 'params');
       const replaceRes = safeGet(actionObj, 'replace');
@@ -443,7 +470,7 @@ export function validateActionItem(
       const replaceVal = replaceRes.exists ? replaceRes.value : undefined;
 
       if (!toRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_TO_REQUIRED',
           path: [...path, 'to'],
           message: 'navigate action requires "to" destination',
@@ -453,7 +480,7 @@ export function validateActionItem(
       }
       if (paramsRes.exists) {
         if (!paramsVal || typeof paramsVal !== 'object' || Array.isArray(paramsVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'params'],
             message: 'navigate "params" must be an object if provided',
@@ -463,7 +490,7 @@ export function validateActionItem(
         }
       }
       if (replaceRes.exists && replaceVal !== undefined && typeof replaceVal !== 'boolean') {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'replace'],
           message: 'navigate "replace" must be a boolean if provided',
@@ -473,12 +500,12 @@ export function validateActionItem(
     }
 
     case 'delay': {
-      checkUnknownActionFields(actionObj, ['type', 'ms'], path, context.issues);
+      checkUnknownActionFields(actionObj, ['type', 'ms'], path, context);
       const msRes = safeGet(actionObj, 'ms');
       const msVal = msRes.exists ? msRes.value : undefined;
       if (msRes.exists) {
         if (typeof msVal !== 'number' || !Number.isFinite(msVal) || msVal < 0) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_DELAY_MS',
             path: [...path, 'ms'],
             message: 'delay "ms" must be a non-negative finite number',
@@ -493,7 +520,7 @@ export function validateActionItem(
         actionObj,
         ['type', 'kind', 'content', 'title', 'level', 'placement', 'duration'],
         path,
-        context.issues,
+        context,
       );
       const kindRes = safeGet(actionObj, 'kind');
       const contentRes = safeGet(actionObj, 'content');
@@ -514,14 +541,14 @@ export function validateActionItem(
         kindVal !== 'message' &&
         kindVal !== 'notification'
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_FEEDBACK_KIND',
           path: [...path, 'kind'],
           message: 'feedback "kind" must be "message" or "notification"',
         });
       }
       if (!contentRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_CONTENT_REQUIRED',
           path: [...path, 'content'],
           message: 'feedback action requires "content"',
@@ -537,7 +564,7 @@ export function validateActionItem(
         levelVal !== undefined &&
         !['success', 'error', 'warning', 'info'].includes(levelVal as string)
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_FEEDBACK_LEVEL',
           path: [...path, 'level'],
           message: 'feedback "level" must be "success", "error", "warning", or "info"',
@@ -548,7 +575,7 @@ export function validateActionItem(
         placementVal !== undefined &&
         !['topLeft', 'topRight', 'bottomLeft', 'bottomRight'].includes(placementVal as string)
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_FEEDBACK_PLACEMENT',
           path: [...path, 'placement'],
           message:
@@ -560,7 +587,7 @@ export function validateActionItem(
         durationVal !== undefined &&
         (typeof durationVal !== 'number' || !Number.isFinite(durationVal) || durationVal < 0)
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'duration'],
           message: 'feedback "duration" must be a non-negative finite number',
@@ -574,7 +601,7 @@ export function validateActionItem(
         actionObj,
         ['type', 'kind', 'title', 'content', 'onOk', 'onCancel'],
         path,
-        context.issues,
+        context,
       );
       const kindRes = safeGet(actionObj, 'kind');
       const contentRes = safeGet(actionObj, 'content');
@@ -588,14 +615,14 @@ export function validateActionItem(
       const onCancelVal = onCancelRes.exists ? onCancelRes.value : undefined;
 
       if (kindVal !== 'modal' && kindVal !== 'confirm') {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_DIALOG_KIND',
           path: [...path, 'kind'],
           message: 'dialog "kind" is required and must be "modal" or "confirm"',
         });
       }
       if (!contentRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_CONTENT_REQUIRED',
           path: [...path, 'content'],
           message: 'dialog action requires "content"',
@@ -608,7 +635,7 @@ export function validateActionItem(
       }
       if (onOkRes.exists) {
         if (!Array.isArray(onOkVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onOk'],
             message: 'dialog "onOk" must be an array of actions if provided',
@@ -619,7 +646,7 @@ export function validateActionItem(
       }
       if (onCancelRes.exists) {
         if (!Array.isArray(onCancelVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onCancel'],
             message: 'dialog "onCancel" must be an array of actions if provided',
@@ -632,13 +659,13 @@ export function validateActionItem(
     }
 
     case 'log': {
-      checkUnknownActionFields(actionObj, ['type', 'value', 'level'], path, context.issues);
+      checkUnknownActionFields(actionObj, ['type', 'value', 'level'], path, context);
       const valueRes = safeGet(actionObj, 'value');
       const levelRes = safeGet(actionObj, 'level');
       const valueVal = valueRes.exists ? valueRes.value : undefined;
       const levelVal = levelRes.exists ? levelRes.value : undefined;
       if (!valueRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_VALUE_REQUIRED',
           path: [...path, 'value'],
           message: 'log action requires "value"',
@@ -651,7 +678,7 @@ export function validateActionItem(
         levelVal !== undefined &&
         !['log', 'info', 'warn', 'error'].includes(levelVal as string)
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_LOG_LEVEL',
           path: [...path, 'level'],
           message: 'log "level" must be "log", "info", "warn", or "error"',
@@ -676,7 +703,7 @@ export function validateActionItem(
           'showError',
         ],
         path,
-        context.issues,
+        context,
       );
       const urlRes = safeGet(actionObj, 'url');
       const methodRes = safeGet(actionObj, 'method');
@@ -699,7 +726,7 @@ export function validateActionItem(
       const showErrorVal = showErrorRes.exists ? showErrorRes.value : undefined;
 
       if (!urlRes.exists) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'ACTION_URL_REQUIRED',
           path: [...path, 'url'],
           message: 'apiCall action requires "url"',
@@ -712,7 +739,7 @@ export function validateActionItem(
         methodVal !== undefined &&
         !['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(methodVal as string)
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_HTTP_METHOD',
           path: [...path, 'method'],
           message: 'apiCall "method" must be GET, POST, PUT, DELETE, or PATCH',
@@ -723,7 +750,7 @@ export function validateActionItem(
       }
       if (headersRes.exists) {
         if (!headersVal || typeof headersVal !== 'object' || Array.isArray(headersVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'headers'],
             message: 'apiCall "headers" must be an object if provided',
@@ -739,7 +766,7 @@ export function validateActionItem(
       }
       if (paramsRes.exists) {
         if (!paramsVal || typeof paramsVal !== 'object' || Array.isArray(paramsVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'params'],
             message: 'apiCall "params" must be an object if provided',
@@ -753,7 +780,7 @@ export function validateActionItem(
         resultToVal !== undefined &&
         (typeof resultToVal !== 'string' || !resultToVal.trim())
       ) {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'resultTo'],
           message: 'apiCall "resultTo" must be a non-empty string if provided',
@@ -761,7 +788,7 @@ export function validateActionItem(
       }
       if (onSuccessRes.exists) {
         if (!Array.isArray(onSuccessVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onSuccess'],
             message: 'apiCall "onSuccess" must be an array of actions if provided',
@@ -772,7 +799,7 @@ export function validateActionItem(
       }
       if (onErrorRes.exists) {
         if (!Array.isArray(onErrorVal)) {
-          context.issues.push({
+          pushActionIssue(context, {
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onError'],
             message: 'apiCall "onError" must be an array of actions if provided',
@@ -782,7 +809,7 @@ export function validateActionItem(
         }
       }
       if (showErrorRes.exists && showErrorVal !== undefined && typeof showErrorVal !== 'boolean') {
-        context.issues.push({
+        pushActionIssue(context, {
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'showError'],
           message: 'apiCall "showError" must be a boolean if provided',
@@ -792,10 +819,10 @@ export function validateActionItem(
     }
 
     default: {
-      context.issues.push({
+      pushActionIssue(context, {
         code: 'UNSUPPORTED_ACTION_TYPE',
         path: [...path, 'type'],
-        message: `Unsupported action type: "${String(type)}"`,
+        message: `Unsupported action type: ${describeValue(type)}`,
       });
     }
   }
