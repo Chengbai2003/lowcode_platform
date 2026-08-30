@@ -63,6 +63,8 @@ describe('asyncActions', () => {
   function createFetchContext(overrides?: Partial<ExecutionContext>): ExecutionContext {
     const context = createMockContext(overrides);
     context.api = undefined as any;
+    // M0-4 Scope E：内置 fetch 回退需要显式授予 network 能力
+    context.hostCapabilities = { network: true } as never;
     return context;
   }
 

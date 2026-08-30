@@ -14,6 +14,7 @@ import { createComponentRuntimeBridge } from './bridge/createComponentRuntimeBri
 import { ComponentRuntimeBridgeContext } from './bridge/ComponentRuntimeBridgeContext';
 import { sanitizePropsByManifest } from './preset/sanitizePropsByManifest';
 import { createRuntimeSession } from './session/RuntimeSession';
+import { normalizeHostCapabilities } from './host/HostCapabilities';
 
 /**
  * 主渲染器组件
@@ -24,6 +25,7 @@ export function Renderer({
   preset,
   pageId,
   documentSessionId,
+  hostCapabilities: hostCapabilitiesProp,
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
@@ -186,11 +188,21 @@ export function Renderer({
 
   useEffect(() => {
     if (!session) return;
-    session.dispatcher.setContext('session', session);
+    session.dispatcher.setHostConfig('session', session);
     return () => {
       session.dispose();
     };
   }, [session]);
+
+  // M0-4 Scope E：宿主能力显式授予，默认全 deny；注入后运行时不可变。
+  const hostCapabilities = useMemo(
+    () => normalizeHostCapabilities(hostCapabilitiesProp),
+    [hostCapabilitiesProp],
+  );
+
+  useEffect(() => {
+    eventDispatcher.setHostConfig('hostCapabilities', hostCapabilities);
+  }, [eventDispatcher, hostCapabilities]);
 
   if (canonicalSchema && canonicalSchema.rootId && stableFlatComponents) {
     return (

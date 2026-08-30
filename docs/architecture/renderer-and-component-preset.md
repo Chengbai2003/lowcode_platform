@@ -211,4 +211,6 @@ Scope B ComponentPreset 已落地（M0-4b）：`@lowcode-platform/preset-antd`�
 
 Scope D RuntimeSession 已落地（M0-4d）：`RuntimeSession` 绑定 `pageId + documentSessionId`，独立持有 State/Computed（ReactiveRuntime）、执行栈（EventDispatcher）、AbortController、timers、tracked cleanups 与 generation；`createRuntimeSession`（每次挂载独立实例）与 `getOrCreateRuntimeSession`（页面 document 切换语义，`documentSessionId` 变化即销毁旧 Session）双入口；`dispose()` 清除全部 timer、abort in-flight 请求并执行 cleanups；`apiCall`/`delay` 感知 Session——请求携带 Session signal，dispose 后旧请求/timer/异步回调不再写回状态（结果静默丢弃并返回 `aborted`）。Renderer 在提供 `pageId` + `documentSessionId` 时按挂载创建 Session，`documentSessionId` 变化或卸载时 dispose。本文示例中的 `host`/`documentSessionId` 形态由 M0-4e HostCapabilities 收尾。
 
-尚未完成：Scope E HostCapabilities（全部能力默认 deny；桥的 `getResource` 已先行按 deny 实现）。
+Scope E HostCapabilities 已落地（M0-4e）：`HostCapabilities`（navigation / dialogs / network / dataResources）默认全 deny、`normalizeHostCapabilities` 归一化为冻结对象后经 `setHostConfig` 注入执行上下文（不触发响应式脏标记）；Renderer 内置回退逐项门控——导航的 `window` 回退与默认 `navigate`（宿主注入 `context.navigate` 不受限）、dialog 的原生 `confirm/alert` 回退（默认 UI modal 恒 false）、`apiCall` 的内置 `fetch` 回退（宿主注入 `context.api` 不受限）；表达式上下文剔除宿主命名空间（`ui`/`api`/`dispatch`/`getState`/`navigate`/`session`/`runtime` 等，函数本就被 sanitize 克隆剔除）。
+
+M0-4 五个 Scope 全部完成：Renderer 可被最小 React 宿主仅依赖 Contract + Renderer + 一个 Preset 渲染 JSON；Registry 与 canonical Schema 无法被运行时组件修改；非法 Props 在渲染前被拒绝；新增 Preset 无需修改 Renderer 源码。

@@ -145,6 +145,14 @@ export class EventDispatcher {
     this.runtime.set(componentId, value);
   }
 
+  /**
+   * 写入宿主级配置（session / hostCapabilities 等，M0-4 Scope D/E）：
+   * 仅进入执行上下文，不进入响应式数据、不触发 markAllDirty。
+   */
+  setHostConfig(key: string, value: unknown) {
+    this.executionContext = { ...this.executionContext, [key]: value };
+  }
+
   async execute(
     actions: ActionList,
     event?: Event | any,

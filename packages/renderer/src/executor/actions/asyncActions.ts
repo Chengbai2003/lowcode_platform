@@ -8,6 +8,7 @@ import type { ApiCallAction, DelayAction } from '../../dsl/actions/async';
 import type { Action } from '../../dsl/action-union';
 import type { ApiRequestConfig } from '../../dsl/context';
 import type { RuntimeSession } from '../../session/RuntimeSession';
+import { isCapabilityGranted, type HostCapabilities } from '../../host/HostCapabilities';
 import { resolveValue, resolveValues } from '../parser';
 
 /** 读取执行上下文中的 Session（M0-4 Scope D；存在时启用 abort/写回守卫） */
@@ -113,6 +114,15 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
   // 原型污染防护：验证 resultTo 路径安全性（在 try-catch 外部抛出）
   if (resultTo) {
     validateResultToPath(resultTo);
+  }
+
+  // M0-4 Scope E：内置 fetch 回退需要宿主授予 network 能力（默认 deny；
+  // 宿主注入 context.api 不受此限）。配置级拒绝在 try 外抛出（fail-close）。
+  const hostCaps = context.hostCapabilities as Readonly<HostCapabilities> | undefined;
+  if (!context.api && !isCapabilityGranted(hostCaps, 'network')) {
+    throw new Error(
+      'Host capability denied: "network" — provide context.api or grant it via hostCapabilities',
+    );
   }
 
   try {
