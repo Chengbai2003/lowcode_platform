@@ -108,3 +108,7 @@ jobs:
 
       - name: Compiler Template Regression
         run: pnpm --filter @lowcode-platform/backend compiler:regression
+
+      # Issue #18 / M0-3：确定性安全回归门禁（无网络、无模型凭据）
+      - name: Agent Deterministic Eval
+        run: pnpm eval:deterministic

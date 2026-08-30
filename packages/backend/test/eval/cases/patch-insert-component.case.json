@@ -1,0 +1,47 @@
+{
+  "id": "patch-insert-component",
+  "category": "patch",
+  "title": "局部 Patch：新增按钮组件",
+  "intent": "在页面里新增一个提交按钮",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["title1"]
+        },
+        "title1": {
+          "id": "title1",
+          "type": "Title",
+          "props": {
+            "children": "Hello"
+          }
+        }
+      }
+    },
+    "patch": [
+      {
+        "op": "insertComponent",
+        "parentId": "root",
+        "index": 1,
+        "component": {
+          "id": "btn1",
+          "type": "Button",
+          "props": {
+            "children": "提交"
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "submittedOps": 1,
+    "normalizedOps": 1,
+    "riskLevel": "low",
+    "schemaValid": true
+  },
+  "caseSchemaVersion": 1
+}

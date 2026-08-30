@@ -1,0 +1,24 @@
+{
+  "id": "validation-missing-root-id",
+  "category": "validation",
+  "title": "非法输入：Schema 缺失 rootId",
+  "intent": "回放一个缺失 rootId 的模型输出",
+  "fixtures": {
+    "schema": {
+      "schemaVersion": 0,
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": []
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": false,
+    "blocked": true,
+    "blockedReason": "rootId"
+  },
+  "caseSchemaVersion": 1
+}

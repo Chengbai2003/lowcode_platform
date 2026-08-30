@@ -1,0 +1,26 @@
+{
+  "id": "draft-model-output-with-legacy-version",
+  "category": "draft",
+  "title": "冷启动起草：模型输出携带遗留 version 字段被拒",
+  "intent": "回放一个仍旧输出 version 字段的模型响应",
+  "fixtures": {
+    "modelOutputSchema": {
+      "version": 3,
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": []
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": false,
+    "blocked": true,
+    "blockedReason": "version"
+  },
+  "caseSchemaVersion": 1
+}

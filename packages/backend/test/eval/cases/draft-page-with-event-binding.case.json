@@ -1,0 +1,40 @@
+{
+  "id": "draft-page-with-event-binding",
+  "category": "draft",
+  "title": "冷启动起草：带 navigate 事件绑定的页面",
+  "intent": "创建一个点击按钮跳转首页的页面",
+  "fixtures": {
+    "modelOutputSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["btn1"]
+        },
+        "btn1": {
+          "id": "btn1",
+          "type": "Button",
+          "props": {
+            "children": "去首页"
+          },
+          "events": {
+            "onClick": [
+              {
+                "type": "navigate",
+                "to": "/home"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": true,
+    "blocked": false,
+    "componentIds": ["btn1", "root"]
+  },
+  "caseSchemaVersion": 1
+}
