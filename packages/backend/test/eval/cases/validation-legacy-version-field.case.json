@@ -1,0 +1,26 @@
+{
+  "id": "validation-legacy-version-field",
+  "caseSchemaVersion": 1,
+  "category": "validation",
+  "title": "非法输入：Schema 携带遗留顶层 version 字段",
+  "intent": "回放一个携带旧版本字段的模型输出",
+  "fixtures": {
+    "schema": {
+      "version": 5,
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": []
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": false,
+    "blocked": true,
+    "blockedReason": "version"
+  }
+}

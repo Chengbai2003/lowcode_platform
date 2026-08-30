@@ -1,0 +1,26 @@
+{
+  "id": "conflict-cas-integrity",
+  "caseSchemaVersion": 1,
+  "category": "conflict",
+  "title": "版本冲突：CAS 递增、过期基线与缺失基线全部拒绝",
+  "intent": "并发保存场景下的页面版本完整性",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": []
+        }
+      }
+    },
+    "steps": ["save", "saveWithCurrentBase", "saveStaleBase", "saveMissingBase"]
+  },
+  "expected": {
+    "finalVersion": 2,
+    "staleBaseConflict": true,
+    "missingBaseConflict": true
+  }
+}
