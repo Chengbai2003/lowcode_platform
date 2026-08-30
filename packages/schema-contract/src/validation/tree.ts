@@ -1,4 +1,5 @@
-import type { SchemaContractIssue } from './issues';
+import type { IssueSink } from './inspector';
+import { pushIssue } from './inspector';
 
 export interface ComponentGraphNode {
   readonly id?: string;
@@ -52,13 +53,13 @@ function getChildrenIdsSafe(node: ComponentGraphNode | undefined): readonly stri
 export function validateComponentGraph(
   rootId: string,
   components: Record<string, ComponentGraphNode>,
-  issues: SchemaContractIssue[],
+  sink: IssueSink,
 ): void {
   // 防御：components 必须为普通对象
   const compProto = Object.getPrototypeOf(components);
   if (compProto !== Object.prototype && compProto !== null) {
     // 调用方已校验，此处仅防御
-    issues.push({
+    pushIssue(sink, {
       code: 'INVALID_OBJECT_PROTOTYPE',
       path: ['components'],
       message: 'components must be a plain object',
@@ -79,7 +80,7 @@ export function validateComponentGraph(
       if (!hasOwnComponent(components, childId)) continue;
       const count = (parentCounts.get(childId) ?? 0) + 1;
       if (count > 1) {
-        issues.push({
+        pushIssue(sink, {
           code: 'MULTIPLE_PARENTS',
           path: ['components', childId],
           message: `Component "${childId}" has multiple parents (referenced by "${parentId}")`,
@@ -117,7 +118,7 @@ export function validateComponentGraph(
       const childState = state.get(childId);
 
       if (childState === 'visiting') {
-        issues.push({
+        pushIssue(sink, {
           code: 'COMPONENT_CYCLE',
           path: ['components', childId],
           message: `Schema contains a component cycle at "${childId}"`,
@@ -151,7 +152,7 @@ export function validateComponentGraph(
 
     for (const componentId of componentIds) {
       if (!reachable.has(componentId)) {
-        issues.push({
+        pushIssue(sink, {
           code: 'ORPHANED_COMPONENT',
           path: ['components', componentId],
           message: `Schema contains orphaned component: "${componentId}" (unreachable from rootId "${rootId}")`,

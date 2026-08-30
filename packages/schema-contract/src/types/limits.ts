@@ -10,6 +10,8 @@ export interface SchemaValidationLimits {
   readonly maxDepth: number;
   /** props/events 值内 JSON 节点（标量、对象、数组元素）总数上限 (默认 25 000) */
   readonly maxJsonNodes: number;
+  /** 单个组件允许的最大事件绑定数量 (默认 200) */
+  readonly maxEventBindings: number;
   /** 最大 Action 节点总数 (默认 200) */
   readonly maxActionNodes: number;
   /** 最大 Action 嵌套深度 (默认 16) */
@@ -23,7 +25,51 @@ export const DEFAULT_SCHEMA_LIMITS: SchemaValidationLimits = {
   maxComponents: 500,
   maxDepth: 32,
   maxJsonNodes: 25_000,
+  maxEventBindings: 200,
   maxActionNodes: 200,
   maxActionDepth: 16,
   maxIssues: 500,
 };
+
+/**
+ * 各限制字段的合理硬上限（防止开发者配置出新的 DoS 向量）
+ */
+const LIMIT_HARD_CAPS: Record<keyof SchemaValidationLimits, number> = {
+  maxBytes: 16 * 1024 * 1024,
+  maxComponents: 10_000,
+  maxDepth: 128,
+  maxJsonNodes: 5_000_000,
+  maxEventBindings: 5_000,
+  maxActionNodes: 100_000,
+  maxActionDepth: 64,
+  maxIssues: 10_000,
+};
+
+/**
+ * 规范化并校验自定义 Limits：
+ * 与默认值合并后，要求每个字段都是有限整数且满足 1 ≤ value ≤ 硬上限。
+ * 任何字段非法（0、负数、NaN、Infinity、非整数、超硬上限）时抛出 TypeError，
+ * 绝不允许静默接受 —— 例如 maxIssues: 0 会产生空 issue 集合、
+ * maxJsonNodes: NaN 会使节点预算完全失效，二者都不可接受。
+ */
+export function normalizeValidationLimits(
+  custom?: Partial<SchemaValidationLimits>,
+): SchemaValidationLimits {
+  const merged = { ...DEFAULT_SCHEMA_LIMITS, ...(custom ?? {}) } as SchemaValidationLimits;
+  for (const key of Object.keys(LIMIT_HARD_CAPS) as Array<keyof SchemaValidationLimits>) {
+    const value: unknown = merged[key];
+    const max = LIMIT_HARD_CAPS[key];
+    if (
+      typeof value !== 'number' ||
+      !Number.isFinite(value) ||
+      !Number.isInteger(value) ||
+      value < 1 ||
+      value > max
+    ) {
+      throw new TypeError(
+        `Invalid SchemaValidationLimits.${key}: expected a finite integer between 1 and ${max}, received ${String(value)}`,
+      );
+    }
+  }
+  return merged;
+}

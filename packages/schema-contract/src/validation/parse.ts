@@ -2,12 +2,12 @@ import { isSupportedSchemaVersion } from '../types/versions';
 import type { PageSchema } from '../types/schema';
 import type { ComponentNode } from '../types/node';
 import type { SchemaValidationLimits } from '../types/limits';
-import { DEFAULT_SCHEMA_LIMITS } from '../types/limits';
+import { normalizeValidationLimits } from '../types/limits';
 import type { ParsePageSchemaResult, SchemaContractIssue } from './issues';
 import { validateComponentGraph } from './tree';
 import { validateActionList } from './actions';
-import type { InspectionContext } from './inspector';
-import { inspectAndSanitizeJsonValue } from './inspector';
+import type { InspectionContext, IssueSink } from './inspector';
+import { inspectAndSanitizeJsonValue, pushIssue } from './inspector';
 import { describeValue } from './describe';
 
 const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components']);
@@ -21,17 +21,13 @@ function isPlainPrototype(obj: object): boolean {
   return proto === Object.prototype || proto === null;
 }
 
-function pushSymbolIssue(
-  obj: object,
-  path: readonly (string | number)[],
-  issues: SchemaContractIssue[],
-): void {
+function pushSymbolIssue(obj: object, path: readonly (string | number)[], sink: IssueSink): void {
   const symbols = Object.getOwnPropertySymbols(obj);
   if (symbols.length > 0) {
-    issues.push({
+    pushIssue(sink, {
       code: 'SYMBOL_PROPERTY_FORBIDDEN',
       path: [...path],
-      message: `Symbol property keys (${symbols.map((s) => s.toString()).join(', ')}) are forbidden`,
+      message: `Symbol property keys (${symbols.map(String).join(', ')}) are forbidden`,
     });
   }
 }
@@ -39,7 +35,7 @@ function pushSymbolIssue(
 function pushAccessorIssues(
   obj: object,
   basePath: readonly (string | number)[],
-  issues: SchemaContractIssue[],
+  sink: IssueSink,
 ): boolean {
   let hasAccessor = false;
   const names = Object.getOwnPropertyNames(obj);
@@ -47,7 +43,7 @@ function pushAccessorIssues(
     const desc = Object.getOwnPropertyDescriptor(obj, key);
     if (!desc) continue;
     if (desc.get || desc.set) {
-      issues.push({
+      pushIssue(sink, {
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
         path: [...basePath, key],
         message: `Property "${key}" must not be an accessor (getter/setter)`,
@@ -60,7 +56,7 @@ function pushAccessorIssues(
   for (const sym of symbols) {
     const desc = Object.getOwnPropertyDescriptor(obj, sym);
     if (desc && (desc.get || desc.set)) {
-      issues.push({
+      pushIssue(sink, {
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
         path: [...basePath, String(sym)],
         message: `Symbol property "${String(sym)}" must not be an accessor`,
@@ -126,7 +122,7 @@ export function parsePageSchemaJson(
   rawJson: string,
   customLimits?: Partial<SchemaValidationLimits>,
 ): ParsePageSchemaResult {
-  const limits: SchemaValidationLimits = { ...DEFAULT_SCHEMA_LIMITS, ...customLimits };
+  const limits = normalizeValidationLimits(customLimits);
 
   if (typeof rawJson !== 'string') {
     return {
@@ -177,33 +173,57 @@ export function parsePageSchemaJson(
 
 /**
  * 严格校验未知输入是否为合法、安全的 PageSchema 数据结构
- * 全链路 descriptor-safe，绝不触发任何 getter
+ * 全链路 descriptor-safe，绝不触发任何 getter。
+ *
+ * 全局 IssueSink 从函数顶部创建：本函数内所有 issue 一律经 pushIssue(sink, ...)
+ * 收录（受 maxIssues 严格封顶并联动 abort 短路），禁止直接 issues.push()；
+ * 拓扑校验 (tree.ts) 与 Action 校验 (actions.ts) 共享同一 Sink。
  */
 export function validatePageSchemaValue(
   input: unknown,
   customLimits?: Partial<SchemaValidationLimits>,
 ): ParsePageSchemaResult {
-  const limits: SchemaValidationLimits = { ...DEFAULT_SCHEMA_LIMITS, ...customLimits };
+  const limits = normalizeValidationLimits(customLimits);
   const issues: SchemaContractIssue[] = [];
 
+  // 全局 Sink：覆盖顶层字段、组件、events、childrenIds、拓扑与 canonical 重建全部阶段
+  const inspectionContext: InspectionContext = {
+    issues,
+    seen: new Set<object>(),
+    maxDepth: limits.maxDepth,
+    maxNodes: limits.maxJsonNodes,
+    maxIssues: limits.maxIssues,
+    nodeCount: 0,
+    nodeBudgetReported: false,
+    aborted: false,
+  };
+
+  const actionValidationContext = {
+    issues,
+    inspectionContext,
+    maxActionNodes: limits.maxActionNodes,
+    maxActionDepth: limits.maxActionDepth,
+    actionCount: 0,
+    actionBudgetReported: false,
+  };
+
+  // 热循环统一短路：任一预算耗尽（含 issue 封顶触发）时立即终止遍历
+  const budgetStop = (): boolean => inspectionContext.aborted;
+
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return {
-      ok: false,
-      issues: [
-        {
-          code: 'INVALID_SCHEMA_OBJECT',
-          path: [],
-          message: 'PageSchema must be an object',
-        },
-      ],
-    };
+    pushIssue(inspectionContext, {
+      code: 'INVALID_SCHEMA_OBJECT',
+      path: [],
+      message: 'PageSchema must be an object',
+    });
+    return { ok: false, issues };
   }
 
   const schemaObj = input as object;
 
   // 0. 原型校验：必须是普通对象或 null 原型
   if (!isPlainPrototype(schemaObj)) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'INVALID_OBJECT_PROTOTYPE',
       path: [],
       message: 'PageSchema must be a plain object (Object.prototype or null)',
@@ -212,10 +232,10 @@ export function validatePageSchemaValue(
   }
 
   // Symbol 属性一律拒绝
-  pushSymbolIssue(schemaObj, [], issues);
+  pushSymbolIssue(schemaObj, [], inspectionContext);
 
   // 访问器检查
-  pushAccessorIssues(schemaObj, [], issues);
+  pushAccessorIssues(schemaObj, [], inspectionContext);
 
   if (issues.length > 0) {
     return { ok: false, issues };
@@ -223,8 +243,9 @@ export function validatePageSchemaValue(
 
   // 2. Fail-close 校验 Schema 顶层未知字段（使用 getOwnPropertyNames 覆盖不可枚举）
   for (const key of Object.getOwnPropertyNames(schemaObj)) {
+    if (budgetStop()) break;
     if (!ALLOWED_SCHEMA_KEYS.has(key)) {
-      issues.push({
+      pushIssue(inspectionContext, {
         code: 'UNKNOWN_SCHEMA_FIELD',
         path: [key],
         message: `Unknown top-level field "${key}" on PageSchema (fail-close)`,
@@ -247,13 +268,13 @@ export function validatePageSchemaValue(
 
   // schemaVersion 校验
   if (schemaVersion === undefined) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'SCHEMA_VERSION_REQUIRED',
       path: ['schemaVersion'],
       message: 'schemaVersion is required on PageSchema',
     });
   } else if (!isSupportedSchemaVersion(schemaVersion)) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'UNSUPPORTED_SCHEMA_VERSION',
       path: ['schemaVersion'],
       message: `Unsupported schemaVersion: ${describeValue(schemaVersion)}`,
@@ -262,7 +283,7 @@ export function validatePageSchemaValue(
 
   // rootId 校验（注意：rootId 可能是通过 descriptor 读取的，避免触发继承 getter）
   if (typeof rootId !== 'string' || !rootId.trim()) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'ROOT_ID_REQUIRED',
       path: ['rootId'],
       message: 'Schema rootId is required and must be a non-empty string',
@@ -271,7 +292,7 @@ export function validatePageSchemaValue(
 
   // components 校验
   if (!components || typeof components !== 'object' || Array.isArray(components)) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'COMPONENTS_OBJECT_REQUIRED',
       path: ['components'],
       message: 'Schema components must be an object',
@@ -282,7 +303,7 @@ export function validatePageSchemaValue(
   const componentsObj = components as object;
 
   if (!isPlainPrototype(componentsObj)) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'INVALID_OBJECT_PROTOTYPE',
       path: ['components'],
       message: 'Schema components must be a plain object',
@@ -290,8 +311,8 @@ export function validatePageSchemaValue(
     return { ok: false, issues };
   }
 
-  pushSymbolIssue(componentsObj, ['components'], issues);
-  pushAccessorIssues(componentsObj, ['components'], issues);
+  pushSymbolIssue(componentsObj, ['components'], inspectionContext);
+  pushAccessorIssues(componentsObj, ['components'], inspectionContext);
 
   if (issues.length > 0) {
     return { ok: false, issues };
@@ -301,7 +322,7 @@ export function validatePageSchemaValue(
 
   if (componentKeys.length > limits.maxComponents) {
     // 预算前置检查：组件超限立即失败返回，绝不继续遍历组件
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'COMPONENT_BUDGET_EXCEEDED',
       path: ['components'],
       message: `Component count (${componentKeys.length}) exceeded limit of ${limits.maxComponents}`,
@@ -310,43 +331,12 @@ export function validatePageSchemaValue(
   }
 
   if (typeof rootId === 'string' && rootId.trim() && !hasOwn(componentsObj, rootId)) {
-    issues.push({
+    pushIssue(inspectionContext, {
       code: 'ROOT_NODE_MISSING',
       path: ['components', rootId],
       message: `Schema rootId "${rootId}" does not exist in components`,
     });
   }
-
-  const inspectionContext: InspectionContext = {
-    issues,
-    seen: new Set<object>(),
-    maxDepth: limits.maxDepth,
-    maxNodes: limits.maxJsonNodes,
-    maxIssues: limits.maxIssues,
-    nodeCount: 0,
-    nodeBudgetReported: false,
-    aborted: false,
-  };
-
-  const actionValidationContext = {
-    issues,
-    inspectionContext,
-    maxActionNodes: limits.maxActionNodes,
-    maxActionDepth: limits.maxActionDepth,
-    actionCount: 0,
-    actionBudgetReported: false,
-  };
-
-  // 热循环统一短路：预算 abort 或 issue 数量达到上限时立即终止遍历，
-  // 保证 issue 数量有界，不随恶意输入规模线性放大。
-  const budgetStop = (): boolean => {
-    if (inspectionContext.aborted) return true;
-    if (issues.length >= limits.maxIssues) {
-      inspectionContext.aborted = true;
-      return true;
-    }
-    return false;
-  };
 
   // 逐个校验组件
   for (const componentId of componentKeys) {
@@ -365,7 +355,7 @@ export function validatePageSchemaValue(
     const component = compDesc.value;
 
     if (!component || typeof component !== 'object' || Array.isArray(component)) {
-      issues.push({
+      pushIssue(inspectionContext, {
         code: 'INVALID_COMPONENT_OBJECT',
         path: compPath,
         message: `Component "${componentId}" must be an object`,
@@ -376,7 +366,7 @@ export function validatePageSchemaValue(
     const compObj = component as object;
 
     if (!isPlainPrototype(compObj)) {
-      issues.push({
+      pushIssue(inspectionContext, {
         code: 'INVALID_OBJECT_PROTOTYPE',
         path: compPath,
         message: `Component "${componentId}" must be a plain object`,
@@ -384,15 +374,15 @@ export function validatePageSchemaValue(
       continue;
     }
 
-    pushSymbolIssue(compObj, compPath, issues);
-    const hasCompAccessor = pushAccessorIssues(compObj, compPath, issues);
+    pushSymbolIssue(compObj, compPath, inspectionContext);
+    const hasCompAccessor = pushAccessorIssues(compObj, compPath, inspectionContext);
     if (hasCompAccessor) continue;
 
     // Fail-close 校验 ComponentNode 未知字段（覆盖不可枚举 + Symbol）
     for (const key of Object.getOwnPropertyNames(compObj)) {
       if (budgetStop()) break;
       if (!ALLOWED_COMPONENT_KEYS.has(key)) {
-        issues.push({
+        pushIssue(inspectionContext, {
           code: 'UNKNOWN_COMPONENT_FIELD',
           path: [...compPath, key],
           message: `Unknown field "${key}" on ComponentNode "${componentId}" (fail-close)`,
@@ -413,7 +403,7 @@ export function validatePageSchemaValue(
     const eventsVal = eventsRes.exists ? eventsRes.value : undefined;
 
     if (typeof typeVal !== 'string' || !typeVal.trim()) {
-      issues.push({
+      pushIssue(inspectionContext, {
         code: 'COMPONENT_TYPE_REQUIRED',
         path: [...compPath, 'type'],
         message: `Component "${componentId}" type is required`,
@@ -421,13 +411,13 @@ export function validatePageSchemaValue(
     }
 
     if (typeof idVal !== 'string' || !idVal.trim()) {
-      issues.push({
+      pushIssue(inspectionContext, {
         code: 'COMPONENT_ID_REQUIRED',
         path: [...compPath, 'id'],
         message: `Component "${componentId}" id is required`,
       });
     } else if (idVal !== componentId) {
-      issues.push({
+      pushIssue(inspectionContext, {
         code: 'COMPONENT_ID_MISMATCH',
         path: [...compPath, 'id'],
         message: `Component id "${describeValue(idVal)}" must match its key "${componentId}"`,
@@ -436,7 +426,7 @@ export function validatePageSchemaValue(
 
     if (propsRes.exists && propsVal !== undefined) {
       if (!propsVal || typeof propsVal !== 'object' || Array.isArray(propsVal)) {
-        issues.push({
+        pushIssue(inspectionContext, {
           code: 'INVALID_PROPS_OBJECT',
           path: [...compPath, 'props'],
           message: `Component "${componentId}" props must be an object`,
@@ -448,7 +438,7 @@ export function validatePageSchemaValue(
 
     if (childrenIdsRes.exists && childrenIdsVal !== undefined) {
       if (!Array.isArray(childrenIdsVal)) {
-        issues.push({
+        pushIssue(inspectionContext, {
           code: 'INVALID_CHILDREN_IDS',
           path: [...compPath, 'childrenIds'],
           message: `Component "${componentId}" childrenIds must be an array`,
@@ -459,14 +449,14 @@ export function validatePageSchemaValue(
         const arrProto = Object.getPrototypeOf(arrObj);
         const childrenLen = arrayLengthViaDescriptor(childrenIdsVal);
         if (arrProto !== Array.prototype) {
-          issues.push({
+          pushIssue(inspectionContext, {
             code: 'INVALID_OBJECT_PROTOTYPE',
             path: [...compPath, 'childrenIds'],
             message: `Component "${componentId}" childrenIds must be a plain array`,
           });
         } else if (childrenLen !== null && childrenLen > limits.maxComponents) {
           // 预算前置检查：childrenIds 长度不可能超过组件数上限，超限直接拒绝，绝不进行 O(len) 遍历
-          issues.push({
+          pushIssue(inspectionContext, {
             code: 'CHILDREN_IDS_BUDGET_EXCEEDED',
             path: [...compPath, 'childrenIds'],
             message: `childrenIds length (${childrenLen}) exceeded limit of ${limits.maxComponents}`,
@@ -474,7 +464,7 @@ export function validatePageSchemaValue(
         } else {
           const arrSymbols = Object.getOwnPropertySymbols(arrObj);
           if (arrSymbols.length > 0) {
-            issues.push({
+            pushIssue(inspectionContext, {
               code: 'SYMBOL_PROPERTY_FORBIDDEN',
               path: [...compPath, 'childrenIds'],
               message: `Symbol property keys are forbidden in childrenIds`,
@@ -487,7 +477,7 @@ export function validatePageSchemaValue(
             const isIndex =
               String(num) === key && Number.isInteger(num) && num >= 0 && num < 4294967295;
             if (!isIndex) {
-              issues.push({
+              pushIssue(inspectionContext, {
                 code: 'UNKNOWN_ARRAY_FIELD',
                 path: [...compPath, 'childrenIds', key],
                 message: `childrenIds property "${key}" is forbidden (non-index)`,
@@ -497,7 +487,7 @@ export function validatePageSchemaValue(
           // length accessor check
           const lenDesc = Object.getOwnPropertyDescriptor(arrObj, 'length');
           if (lenDesc && (lenDesc.get || lenDesc.set)) {
-            issues.push({
+            pushIssue(inspectionContext, {
               code: 'ACCESSOR_PROPERTY_FORBIDDEN',
               path: [...compPath, 'childrenIds', 'length'],
               message: `childrenIds length must not be an accessor`,
@@ -511,7 +501,7 @@ export function validatePageSchemaValue(
               if (budgetStop()) break;
               const itemDesc = Object.getOwnPropertyDescriptor(arrObj, String(idx));
               if (!itemDesc) {
-                issues.push({
+                pushIssue(inspectionContext, {
                   code: 'SPARSE_ARRAY_FORBIDDEN',
                   path: [...compPath, 'childrenIds', idx],
                   message: 'Sparse arrays are forbidden in childrenIds',
@@ -519,7 +509,7 @@ export function validatePageSchemaValue(
                 continue;
               }
               if (itemDesc.get || itemDesc.set) {
-                issues.push({
+                pushIssue(inspectionContext, {
                   code: 'ACCESSOR_PROPERTY_FORBIDDEN',
                   path: [...compPath, 'childrenIds', idx],
                   message: `childrenIds index "${idx}" must not be an accessor`,
@@ -529,7 +519,7 @@ export function validatePageSchemaValue(
               if (!('value' in itemDesc)) continue;
               const childId = itemDesc.value;
               if (typeof childId !== 'string' || !hasOwn(componentsObj, childId)) {
-                issues.push({
+                pushIssue(inspectionContext, {
                   code: 'MISSING_CHILD_REFERENCE',
                   path: [...compPath, 'childrenIds', idx],
                   message: `Component "${componentId}" references missing child "${describeValue(childId)}"`,
@@ -537,7 +527,7 @@ export function validatePageSchemaValue(
               }
               if (typeof childId === 'string') {
                 if (seenChildIds.has(childId)) {
-                  issues.push({
+                  pushIssue(inspectionContext, {
                     code: 'DUPLICATE_CHILD_REFERENCE',
                     path: [...compPath, 'childrenIds', idx],
                     message: `Component "${componentId}" references child "${childId}" more than once`,
@@ -553,7 +543,7 @@ export function validatePageSchemaValue(
 
     if (eventsRes.exists && eventsVal !== undefined) {
       if (!eventsVal || typeof eventsVal !== 'object' || Array.isArray(eventsVal)) {
-        issues.push({
+        pushIssue(inspectionContext, {
           code: 'INVALID_EVENTS_OBJECT',
           path: [...compPath, 'events'],
           message: `Component "${componentId}" events must be an object`,
@@ -561,33 +551,43 @@ export function validatePageSchemaValue(
       } else {
         const eventsObj = eventsVal as object;
         if (!isPlainPrototype(eventsObj)) {
-          issues.push({
+          pushIssue(inspectionContext, {
             code: 'INVALID_OBJECT_PROTOTYPE',
             path: [...compPath, 'events'],
             message: `Component "${componentId}" events must be a plain object`,
           });
         } else {
-          pushSymbolIssue(eventsObj, [...compPath, 'events'], issues);
+          pushSymbolIssue(eventsObj, [...compPath, 'events'], inspectionContext);
           const eventNames = Object.getOwnPropertyNames(eventsObj);
-          for (const eventName of eventNames) {
-            if (budgetStop()) break;
-            const evDesc = Object.getOwnPropertyDescriptor(eventsObj, eventName);
-            if (!evDesc) continue;
-            if (evDesc.get || evDesc.set) {
-              issues.push({
-                code: 'ACCESSOR_PROPERTY_FORBIDDEN',
-                path: [...compPath, 'events', eventName],
-                message: `Event "${eventName}" must not be an accessor`,
-              });
-              continue;
-            }
-            if ('value' in evDesc) {
-              validateActionList(
-                evDesc.value,
-                [...compPath, 'events', eventName],
-                0,
-                actionValidationContext,
-              );
+          // 预算前置检查：事件绑定数量超过 maxEventBindings 时直接拒绝，
+          // 绝不进行 O(n) 遍历（空 ActionList 不消耗 action/JSON 节点预算，必须独立受限）
+          if (eventNames.length > limits.maxEventBindings) {
+            pushIssue(inspectionContext, {
+              code: 'EVENT_BINDINGS_BUDGET_EXCEEDED',
+              path: [...compPath, 'events'],
+              message: `Event bindings count (${eventNames.length}) exceeded limit of ${limits.maxEventBindings}`,
+            });
+          } else {
+            for (const eventName of eventNames) {
+              if (budgetStop()) break;
+              const evDesc = Object.getOwnPropertyDescriptor(eventsObj, eventName);
+              if (!evDesc) continue;
+              if (evDesc.get || evDesc.set) {
+                pushIssue(inspectionContext, {
+                  code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+                  path: [...compPath, 'events', eventName],
+                  message: `Event "${eventName}" must not be an accessor`,
+                });
+                continue;
+              }
+              if ('value' in evDesc) {
+                validateActionList(
+                  evDesc.value,
+                  [...compPath, 'events', eventName],
+                  0,
+                  actionValidationContext,
+                );
+              }
             }
           }
         }
@@ -656,7 +656,11 @@ export function validatePageSchemaValue(
         configurable: true,
       });
     }
-    validateComponentGraph(rootId, safeComponentsView as Record<string, ComponentNode>, issues);
+    validateComponentGraph(
+      rootId,
+      safeComponentsView as Record<string, ComponentNode>,
+      inspectionContext,
+    );
   }
 
   if (issues.length > 0 || inspectionContext.aborted) {
@@ -666,7 +670,8 @@ export function validatePageSchemaValue(
   // 成功分支：构建 canonical、深冻结 的新对象，彻底消除 TOCTOU
   // 使用 descriptor-safe 读取重新构建，避免直接使用原始可变对象
   const cleanComponents: Record<string, ComponentNode> = Object.create(null);
-  // 为 canonical 构建创建独立的 inspectionContext，若 sanitization 发现新问题则直接 fail-close
+  // 为 canonical 构建创建独立的 inspectionContext（同一 issues 数组），若 sanitization
+  // 发现新问题则经 pushIssue 收录并 fail-close
   const canonicalInspectionContext: InspectionContext = {
     issues,
     seen: new Set<object>(),
@@ -714,17 +719,12 @@ export function validatePageSchemaValue(
             : 0;
         // 防御性预算检查：canonical 重建阶段的数组复制同样不做 O(len) 遍历
         if (len > limits.maxComponents) {
-          return {
-            ok: false,
-            issues: [
-              ...issues,
-              {
-                code: 'CHILDREN_IDS_BUDGET_EXCEEDED',
-                path: ['components', cid, 'childrenIds'],
-                message: `childrenIds length (${len}) exceeded limit of ${limits.maxComponents}`,
-              },
-            ],
-          };
+          pushIssue(canonicalInspectionContext, {
+            code: 'CHILDREN_IDS_BUDGET_EXCEEDED',
+            path: ['components', cid, 'childrenIds'],
+            message: `childrenIds length (${len}) exceeded limit of ${limits.maxComponents}`,
+          });
+          return { ok: false, issues };
         }
         const arrCopy: string[] = [];
         for (let i = 0; i < len; i++) {

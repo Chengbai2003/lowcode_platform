@@ -1128,4 +1128,93 @@ describe('@lowcode-platform/schema-contract', () => {
       expect(DEFAULT_SCHEMA_LIMITS.maxIssues).toBe(500);
     });
   });
+
+  describe('Security Hardening R4: global issue sink, events budget & limits normalization', () => {
+    it('maxIssues is a strict global cap across every validation phase', () => {
+      // 单个多错误组件（5 类错误）在 maxIssues: 1 下只产生 1 条
+      const r1 = validatePageSchemaValue(
+        {
+          schemaVersion: 0,
+          rootId: 'page_root',
+          components: {
+            page_root: { id: '', type: '', props: 1, childrenIds: 1, events: 1 },
+          },
+        },
+        { maxIssues: 1 },
+      );
+      expect(r1.ok).toBe(false);
+      expect(r1.issues).toHaveLength(1);
+
+      // 顶层 100 个未知字段在 maxIssues: 5 下只产生 5 条
+      const schema: Record<string, unknown> = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: { page_root: { id: 'page_root', type: 'Page' } },
+      };
+      for (let i = 0; i < 100; i++) schema[`rogue${i}`] = 1;
+      const r2 = validatePageSchemaValue(schema, { maxIssues: 5 });
+      expect(r2.ok).toBe(false);
+      expect(r2.issues).toHaveLength(5);
+      expect(r2.issues.every((i) => i.code === 'UNKNOWN_SCHEMA_FIELD')).toBe(true);
+    });
+
+    it('caps topology (tree) issues through the same sink', () => {
+      const components: Record<string, unknown> = {
+        page_root: { id: 'page_root', type: 'Page', childrenIds: ['c1'] },
+        c2: { id: 'c2', type: 'Div', childrenIds: ['c1'] }, // c1 的第二个父 → MULTIPLE_PARENTS；c2 自身也是孤儿
+        c1: { id: 'c1', type: 'Div' },
+      };
+      for (let i = 0; i < 50; i++) {
+        components[`o${i}`] = { id: `o${i}`, type: 'Div' }; // 50 个孤儿节点
+      }
+      const result = validatePageSchemaValue(
+        { schemaVersion: 0, rootId: 'page_root', components },
+        { maxIssues: 10 },
+      );
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(10);
+      expect(result.issues.some((i) => i.code === 'MULTIPLE_PARENTS')).toBe(true);
+      expect(result.issues.some((i) => i.code === 'ORPHANED_COMPONENT')).toBe(true);
+    });
+
+    it('rejects oversized events maps before traversal (maxEventBindings)', () => {
+      const events: Record<string, unknown> = {};
+      for (let i = 0; i < 50_000; i++) events[`e${i}`] = []; // 空 ActionList：不消耗 action/JSON 节点预算
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'page_root',
+        components: {
+          page_root: { id: 'page_root', type: 'Page', events },
+        },
+      };
+      // 自定义预算与默认限制下都必须在 O(1) 预检阶段拒绝，绝不遍历 5 万个事件
+      const r1 = validatePageSchemaValue(schema, { maxJsonNodes: 10 });
+      expect(r1.ok).toBe(false);
+      expect(r1.issues).toHaveLength(1);
+      expect(r1.issues[0].code).toBe('EVENT_BINDINGS_BUDGET_EXCEEDED');
+
+      const r2 = validatePageSchemaValue(schema);
+      expect(r2.ok).toBe(false);
+      expect(r2.issues.some((i) => i.code === 'EVENT_BINDINGS_BUDGET_EXCEEDED')).toBe(true);
+    });
+
+    it('rejects invalid custom limits instead of silently accepting them', () => {
+      expect(() => validatePageSchemaValue(validSchema, { maxIssues: 0 })).toThrow(TypeError);
+      expect(() => validatePageSchemaValue(validSchema, { maxIssues: Infinity })).toThrow(
+        TypeError,
+      );
+      expect(() => validatePageSchemaValue(validSchema, { maxJsonNodes: NaN })).toThrow(TypeError);
+      expect(() => validatePageSchemaValue(validSchema, { maxActionNodes: -1 })).toThrow(TypeError);
+      expect(() => validatePageSchemaValue(validSchema, { maxComponents: 1.5 })).toThrow(TypeError);
+      expect(() => parsePageSchemaJson('{}', { maxBytes: 10 ** 12 })).toThrow(TypeError);
+
+      // 合法自定义限制仍然生效
+      expect(validatePageSchemaValue(validSchema, { maxComponents: 1 }).ok).toBe(false);
+      expect(validatePageSchemaValue(validSchema).ok).toBe(true);
+    });
+
+    it('keeps the explicit maxEventBindings default', () => {
+      expect(DEFAULT_SCHEMA_LIMITS.maxEventBindings).toBe(200);
+    });
+  });
 });
