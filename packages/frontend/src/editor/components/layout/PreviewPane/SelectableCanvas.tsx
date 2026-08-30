@@ -1,5 +1,5 @@
 import React, { useRef, useCallback, memo, useEffect } from 'react';
-import { Renderer, LowcodeProvider } from '../../../../renderer';
+import { Renderer, LowcodeProvider } from '@lowcode-platform/renderer';
 import type { PageSchema, ComponentRegistry, ComponentNode } from '../../../../types';
 import { useEditorStore, useSelectionStore } from '../../../store/editor-store';
 import { SelectionHighlight } from './SelectionHighlight';

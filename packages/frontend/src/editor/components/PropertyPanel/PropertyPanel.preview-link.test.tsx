@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { PageSchema } from '../../../types';
 import { PropertyPanel } from './PropertyPanel';
-import { LowcodeProvider, Renderer } from '@/renderer';
+import { LowcodeProvider, Renderer } from '@lowcode-platform/renderer';
 
 const createSchema = (): PageSchema => ({
   schemaVersion: 0,

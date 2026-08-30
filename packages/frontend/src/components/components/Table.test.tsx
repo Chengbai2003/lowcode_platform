@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '../../types';
-import { DSLExecutor } from '../../renderer/executor';
+import { DSLExecutor } from '@lowcode-platform/renderer';
 import { Table } from './Table';
 
 function createExecutionContext(overrides: Partial<ExecutionContext> = {}): ExecutionContext {

@@ -145,9 +145,9 @@ importers:
       '@ant-design/icons':
         specifier: ^5.2.6
         version: 5.6.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      '@jsep-plugin/new':
-        specifier: ^1.0.4
-        version: 1.0.4(jsep@1.4.0)
+      '@lowcode-platform/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@lowcode-platform/schema-contract':
         specifier: workspace:*
         version: link:../schema-contract
@@ -163,9 +163,6 @@ importers:
       idb-keyval:
         specifier: ^6.2.2
         version: 6.2.2
-      jsep:
-        specifier: ^1.4.0
-        version: 1.4.0
       lucide-react:
         specifier: ^0.469.0
         version: 0.469.0(react@18.3.1)
@@ -230,6 +227,55 @@ importers:
       vite-plugin-dts:
         specifier: ^3.7.0
         version: 3.9.1(@types/node@20.19.37)(rollup@4.59.0)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.37)(lightningcss@1.31.1)(sass@1.97.3))
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.37)(@vitest/ui@1.6.1)(jsdom@23.2.0)(lightningcss@1.31.1)(sass@1.97.3)
+
+  packages/renderer:
+    dependencies:
+      '@jsep-plugin/new':
+        specifier: ^1.0.4
+        version: 1.0.4(jsep@1.4.0)
+      '@lowcode-platform/schema-contract':
+        specifier: workspace:*
+        version: link:../schema-contract
+      antd:
+        specifier: ^5.0.0
+        version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      jsep:
+        specifier: ^1.4.0
+        version: 1.4.0
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^14.0.0
+        version: 14.3.1(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ^18.0.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.0.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.2.1
+        version: 4.7.0(vite@5.4.21(@types/node@20.19.37)(lightningcss@1.31.1)(sass@1.97.3))
+      jsdom:
+        specifier: ^23.0.0
+        version: 23.2.0
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.10
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.8
+        version: 5.4.21(@types/node@20.19.37)(lightningcss@1.31.1)(sass@1.97.3)
       vitest:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.37)(@vitest/ui@1.6.1)(jsdom@23.2.0)(lightningcss@1.31.1)(sass@1.97.3)

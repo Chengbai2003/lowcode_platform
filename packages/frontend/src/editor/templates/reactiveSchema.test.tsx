@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { componentRegistry } from '../../components';
-import { Renderer } from '../../renderer';
+import { Renderer } from '@lowcode-platform/renderer';
 import { getTemplateSchema } from './index';
 import { createDefaultReactiveSchema } from './reactiveSchema';
 import { formContactTemplate } from './templates/form-contact';

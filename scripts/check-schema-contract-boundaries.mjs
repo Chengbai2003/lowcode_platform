@@ -12,6 +12,8 @@
  *  5. 不允许 Backend → Frontend 反向依赖（package.json 与源码 import）
  *  6. 不允许消费面 import assertSupportedPageSchema —— 消费边界必须使用
  *     requireSupportedPageSchema（返回 canonical），仅 Contract 包内部可用
+ *  7. Renderer 包（Issue #19 / M0-4 Scope A）：不依赖 Frontend/Editor，
+ *     不把运行时对象挂到可变 window 全局
  *
  * 用法：node scripts/check-schema-contract-boundaries.mjs
  */
@@ -130,11 +132,11 @@ for (const file of allFiles) {
 // ---------- 7: 关键边界正向断言（必须真实调用 Contract） ----------
 const requiredUsages = [
   {
-    file: 'packages/frontend/src/renderer/Renderer.tsx',
+    file: 'packages/renderer/src/Renderer.tsx',
     reason: 'Renderer 挂载边界必须使用 requireSupportedPageSchema（fail-close）',
   },
   {
-    file: 'packages/frontend/src/renderer/index.tsx',
+    file: 'packages/renderer/src/index.tsx',
     reason: 'renderFromJSON 必须使用 requireSupportedPageSchema（fail-close）',
   },
   {
@@ -150,7 +152,7 @@ for (const req of requiredUsages) {
 }
 
 // ---------- 8: Renderer 渲染树禁用原始 Schema 引用 ----------
-const rendererFile = join(ROOT, 'packages/frontend/src/renderer/Renderer.tsx');
+const rendererFile = join(ROOT, 'packages/renderer/src/Renderer.tsx');
 const rendererContent = readFileSync(rendererFile, 'utf-8');
 const rendererRawPatterns = [
   {
@@ -166,6 +168,47 @@ const rendererRawPatterns = [
 for (const rule of rendererRawPatterns) {
   if (rule.regex.test(rendererContent)) {
     violations.push(`packages/frontend/src/renderer/Renderer.tsx: ${rule.name}`);
+  }
+}
+
+// ---------- 9: Renderer 包不依赖 Frontend/Editor（Issue #19 / M0-4 Scope A） ----------
+try {
+  const rendererPkg = JSON.parse(
+    readFileSync(join(PACKAGES_DIR, 'renderer', 'package.json'), 'utf-8'),
+  );
+  const rendererDeps = { ...rendererPkg.dependencies, ...rendererPkg.devDependencies };
+  if (rendererDeps['@lowcode-platform/frontend']) {
+    violations.push(
+      'packages/renderer/package.json: Renderer → Frontend 依赖（@lowcode-platform/frontend）',
+    );
+  }
+} catch {
+  violations.push('packages/renderer/package.json: 无法读取（Renderer 包边界检查失败）');
+}
+
+for (const file of allFiles) {
+  const relFile = rel(file);
+  if (!relFile.startsWith('packages/renderer/')) continue;
+  const content = readFileSync(file, 'utf-8');
+  if (
+    /from ['"]@lowcode-platform\/frontend['"]/.test(content) ||
+    /require\(['"]@lowcode-platform\/frontend['"]\)/.test(content) ||
+    /from ['"][^'"]*src\/(editor|components|schema)\//.test(content)
+  ) {
+    violations.push(`${relFile}: Renderer 包源码反向依赖 Frontend/Editor`);
+  }
+}
+
+// ---------- 10: Renderer 不把运行时对象挂到可变 window 全局 ----------
+for (const file of allFiles) {
+  const relFile = rel(file);
+  if (!relFile.startsWith('packages/renderer/')) continue;
+  if (relFile.includes('__tests__')) continue; // 测试可自由操作 window
+  const content = readFileSync(file, 'utf-8');
+  if (/window\.__[A-Za-z_$][\w$]*\s*=[^=]/.test(content)) {
+    violations.push(
+      `${relFile}: Renderer 不允许把运行时对象挂到可变 window 全局（window.__* 赋值）`,
+    );
   }
 }
 

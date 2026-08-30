@@ -1,17 +1,5 @@
-import React from 'react';
-import type { ComponentNode, PageSchema } from '@lowcode-platform/schema-contract';
-
 /**
- * 组件注册表类型
+ * M0-4 Scope A：RendererProps / ComponentRegistry 已迁至 @lowcode-platform/renderer。
+ * 保留 re-export 以维持前端 types barrel 的既有消费面；新代码请直接从 renderer 包导入。
  */
-export type ComponentRegistry = Record<string, React.ComponentType<any>>;
-
-/**
- * 渲染器组件的 Props 类型
- */
-export interface RendererProps {
-  schema: PageSchema; // JSON Schema (严格 A2UI)
-  components?: ComponentRegistry; // 自定义组件注册表
-  onComponentClick?: (node: ComponentNode) => void; // 组件点击回调
-  eventContext?: Record<string, any>; // 事件执行上下文
-}
+export type { ComponentRegistry, RendererProps } from '@lowcode-platform/renderer';

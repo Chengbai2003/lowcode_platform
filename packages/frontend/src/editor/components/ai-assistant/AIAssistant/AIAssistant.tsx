@@ -4,7 +4,7 @@ import { SendOutlined, BulbOutlined, SettingOutlined, DatabaseOutlined } from '@
 import type { PageSchema } from '../../../../types';
 import { validateAndAutoFixA2UISchema } from '../../../../schema/schemaValidation';
 import { componentRegistry } from '../../../../components';
-import { builtInComponents } from '../../../../renderer';
+import { builtInComponents } from '@lowcode-platform/renderer';
 import { AIConfig } from '../AIConfig/AIConfig';
 import type { AgentPatchApplyHandler, AgentResponseMode, AIModelConfig } from '../types/ai-types';
 import { useAIModels } from './useAIModels';
