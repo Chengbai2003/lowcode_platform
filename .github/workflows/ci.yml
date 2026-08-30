@@ -56,7 +56,7 @@ jobs:
           test -f packages/renderer/dist/host/createRendererHost.js
           test -f packages/renderer/dist/dsl/index.d.ts
           cd packages/renderer
-          node -e "const r = require('@lowcode-platform/renderer'); const h = require('@lowcode-platform/renderer/host'); if (typeof r.PageRenderer !== 'function' || typeof r.Renderer !== 'function' || typeof r.renderFromJSON !== 'function' || typeof r.builtInComponents.Page !== 'function' || typeof h.createRendererHost !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
+          node -e "const r = require('@lowcode-platform/renderer'); const h = require('@lowcode-platform/renderer/host'); if (typeof r.PageRenderer !== 'function' || typeof r.Renderer !== 'function' || typeof r.renderFromJSON !== 'function' || typeof r.createSealedPreset !== 'function' || typeof h.createRendererHost !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
           node --input-type=module -e "const r = await import('@lowcode-platform/renderer'); if (typeof r.PageRenderer !== 'function' || typeof r.renderFromJSON !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
 
       # Issue #19 / M0-4 Scope B：AntD Preset 包构建与消费冒烟
