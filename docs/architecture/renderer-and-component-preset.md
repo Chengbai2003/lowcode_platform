@@ -1,7 +1,7 @@
 # Renderer 与 ComponentPreset 架构
 
 > Status: Draft  
-> Last Updated: 2026-08-25  
+> Last Updated: 2026-08-30  
 > Target Milestone: M0-4
 
 ## 目标
@@ -189,3 +189,9 @@ createRoot(document.getElementById('root')!).render(
 - 页面卸载后请求、timer 和订阅全部停止。
 - Renderer 构建产物不包含 Editor、AI Assistant 和 PropertyPanel。
 - 新增测试 Preset 时不修改 Renderer 源码。
+
+## 实施状态（2026-08）
+
+M0-4 Scope A 已落地（Issue #19 / M0-4a）：`@lowcode-platform/renderer` 独立包（`packages/renderer`）承接原 `packages/frontend/src/renderer` 的全部渲染实现与测试；React/ReactDOM 为 peerDependencies；运行态执行类型（`ActionHandler`/`ExecutionContext`/`ActionResult`/`DSLExecutor` 等）随包内 `dsl` 子路径（`@lowcode-platform/renderer/dsl`）导出；公开入口导出 `PageRenderer`，`createRendererHost`（`@lowcode-platform/renderer/host`）提供最小 React Host；渲染入口保持 `requireSupportedPageSchema` fail-close；`pnpm check:architecture` 强制 Renderer 包不依赖 Frontend/Editor、不把运行时对象挂到可变 `window` 全局；前端消费面全部改从包导入，CI 增加 `build:packages` 守护 workspace 包 dist 的 rollup 可消费性。
+
+尚未完成：Scope B `preset-antd`（`builtInComponents` 仍在 Renderer 包内临时依赖 antd Typography）、Scope C ComponentRuntimeBridge（Table 等组件仍直接导入 `DSLExecutor`/`resolveValue`）、Scope D RuntimeSession（`createRuntimeSession`/`dispose`，本文示例中的 `host`/`documentSessionId` 形态）、Scope E HostCapabilities。

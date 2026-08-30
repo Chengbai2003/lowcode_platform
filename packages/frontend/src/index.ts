@@ -94,9 +94,9 @@ export {
   validateSchemaWithWhitelist,
   validateAndAutoFix,
   autoFixSchema,
-} from './renderer';
+} from '@lowcode-platform/renderer';
 
-export type { RendererProps, ComponentNode } from './renderer';
+export type { RendererProps, ComponentNode } from '@lowcode-platform/renderer';
 
 // ============================================
 // Editor

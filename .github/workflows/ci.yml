@@ -45,6 +45,25 @@ jobs:
           node -e "const c = require('@lowcode-platform/schema-contract'); if (typeof c.createCanonicalPageSchema !== 'function' || typeof c.validatePageSchemaValue !== 'function' || typeof c.requireSupportedPageSchema !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
           node --input-type=module -e "const m = await import('@lowcode-platform/schema-contract'); if (typeof m.createCanonicalPageSchema !== 'function' || typeof m.requireSupportedPageSchema !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
 
+      # Issue #19 / M0-4 Scope A：Renderer 独立包构建与消费冒烟
+      - name: Build Renderer Package
+        run: pnpm --filter @lowcode-platform/renderer build
+
+      - name: Renderer Package consumption smoke test
+        run: |
+          test -f packages/renderer/dist/index.js
+          test -f packages/renderer/dist/index.d.ts
+          test -f packages/renderer/dist/host/createRendererHost.js
+          test -f packages/renderer/dist/dsl/index.d.ts
+          cd packages/renderer
+          node -e "const r = require('@lowcode-platform/renderer'); const h = require('@lowcode-platform/renderer/host'); if (typeof r.PageRenderer !== 'function' || typeof r.Renderer !== 'function' || typeof r.renderFromJSON !== 'function' || typeof r.builtInComponents.Page !== 'function' || typeof h.createRendererHost !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
+          node --input-type=module -e "const r = await import('@lowcode-platform/renderer'); if (typeof r.PageRenderer !== 'function' || typeof r.renderFromJSON !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
+
+      # 前端 vite build：守护 workspace 包 dist 的 CJS 命名导出可被 rollup 静态解析
+      # （renderer 的 dist 已成为前端运行时依赖，vite build 不在 CI 会漏掉这一类回归）
+      - name: Build Packages
+        run: pnpm build:packages
+
       - name: Type Check
         run: pnpm type-check
 
@@ -59,6 +78,9 @@ jobs:
 
       - name: Schema Contract Tests
         run: pnpm --filter @lowcode-platform/schema-contract test
+
+      - name: Renderer Package Tests
+        run: pnpm test:renderer
 
       - name: Frontend Tests
         run: pnpm test:frontend

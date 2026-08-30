@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo } from 'react';
 import { Button as AntButton, Space, Table as AntTable } from 'antd';
-import type { EventDispatcher } from '../../renderer/EventDispatcher';
-import { DSLExecutor } from '../../renderer/executor';
-import { resolveValue } from '../../renderer/executor/parser/valueResolver';
+import type { EventDispatcher } from '@lowcode-platform/renderer';
+import { DSLExecutor } from '@lowcode-platform/renderer';
+import { resolveValue } from '@lowcode-platform/renderer';
 import type { ActionList, ExecutionContext } from '../../types';
 import {
   isTableActionColumn,

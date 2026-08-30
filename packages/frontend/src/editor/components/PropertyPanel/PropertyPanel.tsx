@@ -22,7 +22,7 @@ import {
   sanitizeSlotValue,
   sanitizeTableColumnsValue,
 } from './editors/complexValueUtils';
-import { isExpression } from '../../../renderer/executor/parser/expressionParser';
+import { isExpression } from '@lowcode-platform/renderer';
 import styles from './PropertyPanel.module.scss';
 
 interface PropertyPanelProps {

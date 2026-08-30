@@ -23,6 +23,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // workspace 包（schema-contract / renderer）通过 symlink 指向 packages/<pkg>/dist，
+    // 不在默认的 /node_modules/ 路径下；不加入 include 会让 rollup 把 CJS 产物
+    // 当成未转换的 ESM 解析，报 "X is not exported by"。
+    commonjsOptions: {
+      include: [/node_modules/, /packages\/[^/]+\/dist/],
+    },
     rollupOptions: {
       output: {
         manualChunks: {

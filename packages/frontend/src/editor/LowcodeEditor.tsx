@@ -10,7 +10,7 @@ import type {
 } from './types';
 import type { PageSchema, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
-import { builtInComponents } from '../renderer';
+import { builtInComponents } from '@lowcode-platform/renderer';
 import {
   EditorHeader,
   PreviewPane,

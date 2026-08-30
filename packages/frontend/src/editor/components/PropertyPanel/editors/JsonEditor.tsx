@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import styles from '../PropertyPanel.module.scss';
 import { sanitizeJsonValue } from './complexValueUtils';
-import { isExpression } from '../../../../renderer/executor/parser/expressionParser';
+import { isExpression } from '@lowcode-platform/renderer';
 
 interface JsonEditorProps {
   label: string;
