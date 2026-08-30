@@ -20,7 +20,9 @@
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",
     "format:check": "prettier --check \"packages/**/*.{ts,tsx,json}\"",
     "prepare": "husky",
-    "check:architecture": "node scripts/check-schema-contract-boundaries.mjs"
+    "check:architecture": "node scripts/check-schema-contract-boundaries.mjs",
+    "eval:deterministic": "pnpm --filter @lowcode-platform/schema-contract build && pnpm --filter @lowcode-platform/backend eval:deterministic",
+    "eval:live": "pnpm --filter @lowcode-platform/backend eval:live"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

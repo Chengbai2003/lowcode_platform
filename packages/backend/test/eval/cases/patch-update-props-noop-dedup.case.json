@@ -1,0 +1,49 @@
+{
+  "id": "patch-update-props-noop-dedup",
+  "caseSchemaVersion": 1,
+  "category": "patch",
+  "title": "局部 Patch：updateProps no-op 被归一化剔除",
+  "intent": "把标题文案改成 Updated",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["title1"]
+        },
+        "title1": {
+          "id": "title1",
+          "type": "Title",
+          "props": {
+            "children": "Hello"
+          }
+        }
+      }
+    },
+    "patch": [
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "Hello"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "Updated"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "submittedOps": 2,
+    "normalizedOps": 1,
+    "riskLevel": "low",
+    "schemaValid": true
+  }
+}

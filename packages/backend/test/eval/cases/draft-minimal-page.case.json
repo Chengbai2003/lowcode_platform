@@ -1,0 +1,32 @@
+{
+  "id": "draft-minimal-page",
+  "caseSchemaVersion": 1,
+  "category": "draft",
+  "title": "冷启动起草：最小合法页面",
+  "intent": "创建一个包含标题和按钮的简单页面",
+  "fixtures": {
+    "modelOutputSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["title1"]
+        },
+        "title1": {
+          "id": "title1",
+          "type": "Title",
+          "props": {
+            "children": "Hello"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": true,
+    "blocked": false,
+    "componentIds": ["root", "title1"]
+  }
+}
