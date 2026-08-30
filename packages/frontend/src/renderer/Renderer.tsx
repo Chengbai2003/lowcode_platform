@@ -4,6 +4,8 @@
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
+import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { RendererProps } from './types';
 import { flattenSchemaValues } from './utils/schema';
 import { EventDispatcher } from './EventDispatcher';
@@ -19,14 +21,21 @@ export function Renderer({
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
-  const lastRootIdRef = useRef<string | null>(schema?.rootId ?? null);
+  // Contract 边界（fail-close）：渲染入口只接受 Contract 校验通过的 canonical Schema；
+  // 不支持的 schemaVersion、getter、畸形结构在此直接抛错，绝不进入渲染树。
+  const canonicalSchema: PageSchema | null = useMemo(
+    () => (schema ? structuredClone(requireSupportedPageSchema(schema)) : null),
+    [schema],
+  );
+
+  const lastRootIdRef = useRef<string | null>(canonicalSchema?.rootId ?? null);
 
   const flattenedData = useMemo(() => {
-    if (!schema?.components) {
+    if (!canonicalSchema?.components) {
       return {};
     }
-    return flattenSchemaValues(schema);
-  }, [schema]);
+    return flattenSchemaValues(canonicalSchema);
+  }, [canonicalSchema]);
 
   const eventContextData = useMemo(() => {
     if (!eventContext.data || typeof eventContext.data !== 'object') {
@@ -102,7 +111,13 @@ export function Renderer({
 
       eventDispatcher.setContext('data', mergedData);
     }
-  }, [eventDispatcher, eventContextData, flattenedData, runtimeInitialData, schema?.rootId]);
+  }, [
+    eventDispatcher,
+    eventContextData,
+    flattenedData,
+    runtimeInitialData,
+    canonicalSchema?.rootId,
+  ]);
 
   useEffect(() => {
     if (stableFlatComponents && eventDispatcher) {
@@ -112,10 +127,10 @@ export function Renderer({
 
   const allComponents = { ...builtInComponents, ...components };
 
-  if (schema && schema.rootId && stableFlatComponents) {
+  if (canonicalSchema && canonicalSchema.rootId && stableFlatComponents) {
     return (
       <ComponentRenderer
-        nodeId={schema.rootId}
+        nodeId={canonicalSchema.rootId}
         flatComponents={stableFlatComponents}
         components={allComponents}
         eventDispatcher={eventDispatcher}

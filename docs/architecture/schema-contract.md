@@ -146,4 +146,4 @@ Contract fixture 必须被以下消费面共同使用：
 
 ## 实施状态（2026-08）
 
-M0-1 已完成：Contract 为唯一 Schema 类型与校验来源（PR #20/#22/#23/#24，Issue #16）。消费面（Editor、Renderer、Compiler、Agent、SchemaContext、Repository）直接导入 Contract；Renderer/Compiler/Repository 边界统一使用 `requireSupportedPageSchema` 获取 canonical 深冻结对象；`pnpm check:architecture` 强制架构边界。
+M0-1 已完成：Contract 为唯一 Schema 类型与校验来源（PR #20/#22/#23/#24，Issue #16）。消费面（Editor、Renderer、Compiler、Agent、SchemaContext、Repository）直接导入 Contract；Renderer 挂载边界、Repository 磁盘/写入边界与 Compiler 入口使用 `requireSupportedPageSchema` 做 fail-close 校验并只消费返回值；渲染树内部使用 canonical 的工作副本（reactive 运行时可写，深冻结语义由 M0-4 RuntimeSession 承接），持久化对象保持深冻结；`pnpm check:architecture` 强制架构边界。

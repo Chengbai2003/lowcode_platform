@@ -127,6 +127,28 @@ for (const file of allFiles) {
   }
 }
 
+// ---------- 7: 关键边界正向断言（必须真实调用 Contract） ----------
+const requiredUsages = [
+  {
+    file: 'packages/frontend/src/renderer/Renderer.tsx',
+    reason: 'Renderer 挂载边界必须使用 requireSupportedPageSchema（fail-close）',
+  },
+  {
+    file: 'packages/frontend/src/renderer/index.tsx',
+    reason: 'renderFromJSON 必须使用 requireSupportedPageSchema（fail-close）',
+  },
+  {
+    file: 'packages/backend/src/modules/page-schema/repositories/page-schema.repository.ts',
+    reason: 'Repository 磁盘/写入边界必须使用 requireSupportedPageSchema（重新校验）',
+  },
+];
+for (const req of requiredUsages) {
+  const content = readFileSync(join(ROOT, req.file), 'utf-8');
+  if (!/requireSupportedPageSchema/.test(content)) {
+    violations.push(`${rel(join(ROOT, req.file))}: ${req.reason}`);
+  }
+}
+
 // ---------- 结果 ----------
 if (violations.length > 0) {
   console.error('✗ Schema Contract 架构边界检查失败：\n');

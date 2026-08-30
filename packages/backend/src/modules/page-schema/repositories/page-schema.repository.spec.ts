@@ -234,6 +234,58 @@ describe('PageSchemaRepository', () => {
     await expect(repo.onModuleInit()).rejects.toThrow();
   });
 
+  it('磁盘快照 Schema 损坏时启动 fail-close', async () => {
+    const bad = JSON.stringify({
+      pages: [
+        {
+          pageId: 'p1',
+          currentPageVersion: 1,
+          latestSnapshotId: 's1',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
+      snapshots: [
+        {
+          snapshotId: 's1',
+          pageId: 'p1',
+          pageVersion: 1,
+          schema: { schemaVersion: 999, rootId: 'root', components: {} },
+          runtimeCompatibility,
+          createdAt: '',
+        },
+      ],
+    });
+    await fs.promises.writeFile(storePath, bad, 'utf-8');
+    const repo = createRepo();
+    await expect(repo.onModuleInit()).rejects.toThrow(/corrupted.*schema invalid/is);
+  });
+
+  it('saveSchema 对非法 Schema fail-close（Repository 自身边界）', async () => {
+    const repo = createRepo();
+    await repo.onModuleInit();
+    await expect(
+      repo.saveSchema({
+        pageId: 'p-invalid',
+        schema: { rootId: 'root', components: {} } as never,
+        runtimeCompatibility,
+      }),
+    ).rejects.toThrow();
+    await expect(repo.getPage('p-invalid')).toBeUndefined();
+  });
+
+  it('runtimeCompatibility 缺失字段时 fail-close', async () => {
+    const repo = createRepo();
+    await repo.onModuleInit();
+    await expect(
+      repo.saveSchema({
+        pageId: 'p-bad-compat',
+        schema: createSchema('v1'),
+        runtimeCompatibility: { componentPresetId: 'builtin-antd' } as never,
+      }),
+    ).rejects.toThrow(/runtimeCompatibility/);
+  });
+
   it('旧格式 store（扁平 id 字段）给出明确清理指引，不做静默迁移', async () => {
     const legacy = JSON.stringify({
       pages: [

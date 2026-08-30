@@ -1,5 +1,10 @@
 import { ConflictException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
+import {
+  requireSupportedPageSchema,
+  SchemaValidationError,
+  type PageSchema,
+  type RuntimeCompatibility,
+} from '@lowcode-platform/schema-contract';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -96,6 +101,11 @@ export class PageSchemaRepository implements OnModuleInit {
     runtimeCompatibility: RuntimeCompatibility;
   }): Promise<{ page: StoredPageRecord; snapshot: PageSnapshotRecord }> {
     return this.enqueue(async () => {
+      // Repository 自身边界：磁盘数据视为不可信输入，保存前重新校验并取 canonical；
+      // Service 层传入 canonical 并不能替代 Repository 自身防线。
+      const canonicalSchema = this.canonicalizeOrCorrupt(params.schema, `page ${params.pageId}`);
+      this.assertRuntimeCompatibility(params.runtimeCompatibility, `page ${params.pageId}`);
+
       // 重读磁盘最新 store，保证锁内闭环
       const disk = await this.loadStoreFromDisk();
       const existing = disk.pages.get(params.pageId);
@@ -128,8 +138,8 @@ export class PageSchemaRepository implements OnModuleInit {
         snapshotId,
         pageId: params.pageId,
         pageVersion: nextPageVersion,
-        schema: params.schema,
-        runtimeCompatibility: params.runtimeCompatibility,
+        schema: canonicalSchema,
+        runtimeCompatibility: Object.freeze({ ...params.runtimeCompatibility }),
         createdAt: savedAt,
       };
 
@@ -222,10 +232,63 @@ export class PageSchemaRepository implements OnModuleInit {
         throw new Error(`Page ${p.pageId} latestSnapshotId ${p.latestSnapshotId} is dangling`);
       }
     }
+
+    // 磁盘数据是不可信输入：快照 Schema 重新过 Contract 校验并取 canonical；
+    // runtimeCompatibility 逐字段校验。任一快照损坏即整体 fail-close。
+    const validatedSnapshots: PageSnapshotRecord[] = (parsed.snapshots as PageSnapshotRecord[]).map(
+      (snapshot) => {
+        const canonicalSchema = this.canonicalizeOrCorrupt(
+          snapshot.schema,
+          `snapshot ${snapshot.snapshotId}`,
+        );
+        this.assertRuntimeCompatibility(
+          snapshot.runtimeCompatibility,
+          `snapshot ${snapshot.snapshotId}`,
+        );
+        return {
+          ...snapshot,
+          schema: canonicalSchema,
+          runtimeCompatibility: Object.freeze({ ...snapshot.runtimeCompatibility }),
+        };
+      },
+    );
+
     return {
       pages: new Map((parsed.pages as StoredPageRecord[]).map((p) => [p.pageId, p])),
-      snapshots: parsed.snapshots as PageSnapshotRecord[],
+      snapshots: validatedSnapshots,
     };
+  }
+
+  /**
+   * Contract 边界：校验并取 canonical 深冻结对象；
+   * 校验失败按磁盘损坏语义 fail-close。
+   */
+  private canonicalizeOrCorrupt(input: unknown, context: string): PageSchema {
+    try {
+      return requireSupportedPageSchema(input);
+    } catch (error) {
+      const detail =
+        error instanceof SchemaValidationError
+          ? error.issues.map((i) => `[${i.path.join('.')}] ${i.message}`).join('; ')
+          : String(error);
+      throw new Error(`Page schema store is corrupted: ${context} schema invalid. ${detail}`);
+    }
+  }
+
+  private assertRuntimeCompatibility(value: unknown, context: string): void {
+    const compat = value as Partial<RuntimeCompatibility> | undefined;
+    const fields: Array<keyof RuntimeCompatibility> = [
+      'componentPresetId',
+      'componentPresetVersion',
+      'rendererVersion',
+    ];
+    for (const field of fields) {
+      if (typeof compat?.[field] !== 'string' || !compat[field]) {
+        throw new Error(
+          `Page schema store is corrupted: ${context} runtimeCompatibility.${field} must be a non-empty string`,
+        );
+      }
+    }
   }
 
   private async persistStore(store: PageSchemaStore): Promise<void> {

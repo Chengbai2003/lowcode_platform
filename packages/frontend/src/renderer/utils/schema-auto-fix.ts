@@ -76,18 +76,13 @@ export function autoFixSchema(
   const fixes: string[] = [];
 
   // 1. 深度拷贝，避免污染原始对象
-  const schema = JSON.parse(JSON.stringify(rawSchema)) as LooseSchema;
+  // structuredClone 不触发 toJSON / toString 等用户代码钩子（JSON.stringify 会）；
+  // 带 getter 或不可克隆成员的输入在克隆阶段直接抛错（fail-close）
+  const schema = structuredClone(rawSchema) as LooseSchema;
 
-  // 2. 基础结构校验与初始化：DSL 格式版本固定为 0（schemaVersion）；
-  // 页面修订版本不再进入 Schema（遗留 version 字段直接移除）
-  if (schema.schemaVersion !== 0) {
-    schema.schemaVersion = 0;
-    fixes.push('规范化 schemaVersion 为 0');
-  }
-  if ('version' in schema) {
-    delete (schema as Record<string, unknown>)['version'];
-    fixes.push('移除 Schema 内遗留的 version 字段');
-  }
+  // 2. schemaVersion / 遗留 version 不做任何迁移或修正：
+  //    非法版本（含缺失、999 等）必须被 Contract 校验拒绝，而不是被静默改成合法值；
+  //    历史数据迁移属于独立的显式离线工具，不属于运行时 AutoFix。
 
   if (!schema.components || typeof schema.components !== 'object') {
     schema.components = {};
