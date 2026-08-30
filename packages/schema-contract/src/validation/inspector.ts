@@ -117,9 +117,74 @@ export function inspectAndSanitizeJsonValue(
 
     try {
       if (Array.isArray(obj)) {
+        const arrayProto = Object.getPrototypeOf(obj);
+        if (arrayProto !== Array.prototype) {
+          context.issues.push({
+            code: 'INVALID_OBJECT_PROTOTYPE',
+            path,
+            message: 'Arrays in Schema JSON must have Array.prototype',
+          });
+          return undefined;
+        }
+
+        const arraySymbols = Object.getOwnPropertySymbols(obj);
+        if (arraySymbols.length > 0) {
+          context.issues.push({
+            code: 'SYMBOL_PROPERTY_FORBIDDEN',
+            path,
+            message: `Symbol property keys (${arraySymbols.map((s) => s.toString()).join(', ')}) are forbidden in Schema JSON`,
+          });
+        }
+
+        const arrayOwnNames = Object.getOwnPropertyNames(obj);
+        for (const key of arrayOwnNames) {
+          if (key === 'length') continue;
+          // Array index is canonical numeric string 0 <= n < 2^32-1
+          const num = Number(key);
+          const isIndex =
+            String(num) === key && Number.isInteger(num) && num >= 0 && num < 4294967295;
+          if (!isIndex) {
+            context.issues.push({
+              code: 'UNKNOWN_ARRAY_FIELD',
+              path: [...path, key],
+              message: `Array property "${key}" is forbidden in Schema JSON (non-index)`,
+            });
+          }
+        }
+
         const cleanArray: JsonValue[] = [];
-        for (let i = 0; i < obj.length; i++) {
-          if (!Object.prototype.hasOwnProperty.call(obj, i)) {
+        let len = 0;
+        const lenDesc = Object.getOwnPropertyDescriptor(obj, 'length');
+        if (!lenDesc) {
+          context.issues.push({
+            code: 'INVALID_ARRAY_LENGTH',
+            path,
+            message: 'Array length descriptor is missing',
+          });
+        } else if (lenDesc.get || lenDesc.set) {
+          context.issues.push({
+            code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+            path: [...path, 'length'],
+            message: 'Array "length" must not be an accessor',
+          });
+        } else if (
+          'value' in lenDesc &&
+          typeof lenDesc.value === 'number' &&
+          Number.isInteger(lenDesc.value) &&
+          lenDesc.value >= 0 &&
+          lenDesc.value < 4294967295
+        ) {
+          len = lenDesc.value;
+        } else {
+          context.issues.push({
+            code: 'INVALID_ARRAY_LENGTH',
+            path,
+            message: 'Array length must be a non-negative integer',
+          });
+        }
+        for (let i = 0; i < len; i++) {
+          const desc = Object.getOwnPropertyDescriptor(obj, String(i));
+          if (!desc) {
             context.issues.push({
               code: 'SPARSE_ARRAY_FORBIDDEN',
               path: [...path, i],
@@ -127,9 +192,19 @@ export function inspectAndSanitizeJsonValue(
             });
             continue;
           }
-          const item = inspectAndSanitizeJsonValue(obj[i], [...path, i], depth + 1, context);
-          if (item !== undefined) {
-            cleanArray.push(item);
+          if (desc.get || desc.set) {
+            context.issues.push({
+              code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+              path: [...path, i],
+              message: `Array index "${i}" must not be an accessor (getter/setter)`,
+            });
+            continue;
+          }
+          if ('value' in desc) {
+            const item = inspectAndSanitizeJsonValue(desc.value, [...path, i], depth + 1, context);
+            if (item !== undefined) {
+              cleanArray.push(item);
+            }
           }
         }
         return cleanArray as JsonArray;

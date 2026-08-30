@@ -33,6 +33,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build Schema Contract
+        run: pnpm --filter @lowcode-platform/schema-contract build
+
+      # 真实消费链路冒烟：通过 exports map 自引用解析，验证 CJS require / ESM import / 类型声明
+      - name: Schema Contract consumption smoke test
+        run: |
+          test -f packages/schema-contract/dist/index.js
+          test -f packages/schema-contract/dist/index.d.ts
+          cd packages/schema-contract
+          node -e "const c = require('@lowcode-platform/schema-contract'); if (typeof c.createCanonicalPageSchema !== 'function' || typeof c.validatePageSchemaValue !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
+          node --input-type=module -e "const m = await import('@lowcode-platform/schema-contract'); if (typeof m.createCanonicalPageSchema !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
+
       - name: Type Check
         run: pnpm type-check
 

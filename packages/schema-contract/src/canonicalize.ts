@@ -1,12 +1,7 @@
 import type { PageSchema } from './types/schema';
-import type { ComponentNode } from './types/node';
-import type { ActionList } from './actions/action-union';
-import type { JsonObject, JsonValue } from './types/json';
 import type { SchemaValidationLimits } from './types/limits';
 import { validatePageSchemaValue } from './validation/parse';
 import { SchemaValidationError, UnsupportedSchemaVersionError } from './validation/issues';
-import type { InspectionContext } from './validation/inspector';
-import { inspectAndSanitizeJsonValue } from './validation/inspector';
 
 /**
  * 递归深冻结任意对象与数组
@@ -32,64 +27,45 @@ export function deepFreeze<T>(obj: T): T {
       }
     }
   }
+  const symbols = Object.getOwnPropertySymbols(obj);
+  for (const sym of symbols) {
+    const desc = Object.getOwnPropertyDescriptor(obj, sym);
+    if (desc && 'value' in desc && desc.value !== null && typeof desc.value === 'object') {
+      deepFreeze(desc.value);
+    }
+  }
 
   return obj;
 }
 
+function safeReadVersion(input: unknown): unknown {
+  if (!input || typeof input !== 'object') return undefined;
+  const desc = Object.getOwnPropertyDescriptor(input as object, 'schemaVersion');
+  if (!desc || desc.get || desc.set || !('value' in desc)) return undefined;
+  return desc.value;
+}
+
 /**
- * 创建标准化、安全剥离原型链且深冻结的 PageSchema 纯对象
- * 杜绝 __proto__ 原型污染，安全保留任意合规 JSON key
+ * 创建标准化、安全剥离原型链且深冻结的 PageSchema 纯对象。
+ *
+ * 校验与重建是同一条链路：内部完整重跑 descriptor-safe 校验
+ * （结构校验 + Action 结构校验 + 拓扑校验 + 预算检查），
+ * 成功时返回由 validatePageSchemaValue 重建的 canonical、深冻结新对象；
+ * 存在任何 issue 时 fail-close 抛出 SchemaValidationError，绝不静默清洗。
+ *
+ * 入参为 unknown：即使消费方传入未校验或被 TOCTOU 变异过的对象，
+ * 也无法绕过校验链拿到 canonical 结果。
  */
-export function createCanonicalPageSchema(validated: PageSchema): PageSchema {
-  const cleanComponents: Record<string, ComponentNode> = Object.create(null);
-
-  const inspectionContext: InspectionContext = {
-    issues: [],
-    seen: new Set<object>(),
-    maxDepth: 64,
-    maxNodes: 50000,
-    nodeCount: 0,
-  };
-
-  for (const id of Object.getOwnPropertyNames(validated.components)) {
-    const compDesc = Object.getOwnPropertyDescriptor(validated.components, id);
-    if (!compDesc || !('value' in compDesc) || !compDesc.value) continue;
-
-    const comp = compDesc.value as ComponentNode;
-
-    const cleanComp: ComponentNode = {
-      id: comp.id,
-      type: comp.type,
-      props: comp.props
-        ? (inspectAndSanitizeJsonValue(comp.props, ['props'], 0, inspectionContext) as JsonObject)
-        : undefined,
-      childrenIds: comp.childrenIds ? [...comp.childrenIds] : undefined,
-      events: comp.events
-        ? (inspectAndSanitizeJsonValue(
-            comp.events,
-            ['events'],
-            0,
-            inspectionContext,
-          ) as unknown as Record<string, ActionList>)
-        : undefined,
-    };
-
-    // 使用 Object.defineProperty 避免 id 为 '__proto__' 时触发原型修改
-    Object.defineProperty(cleanComponents, id, {
-      value: cleanComp,
-      enumerable: true,
-      writable: true,
-      configurable: true,
-    });
+export function createCanonicalPageSchema(input: unknown): PageSchema {
+  const result = validatePageSchemaValue(input);
+  if (!result.ok) {
+    const unsupportedIssue = result.issues.find((i) => i.code === 'UNSUPPORTED_SCHEMA_VERSION');
+    if (unsupportedIssue) {
+      throw new UnsupportedSchemaVersionError(safeReadVersion(input));
+    }
+    throw new SchemaValidationError(result.issues);
   }
-
-  const canonicalSchema: PageSchema = {
-    schemaVersion: validated.schemaVersion,
-    rootId: validated.rootId,
-    components: cleanComponents,
-  };
-
-  return deepFreeze(canonicalSchema);
+  return result.value;
 }
 
 /**
@@ -104,8 +80,7 @@ export function assertSupportedPageSchema(
   if (!result.ok) {
     const unsupportedIssue = result.issues.find((i) => i.code === 'UNSUPPORTED_SCHEMA_VERSION');
     if (unsupportedIssue) {
-      const version = (schema as Record<string, unknown>)?.schemaVersion;
-      throw new UnsupportedSchemaVersionError(version);
+      throw new UnsupportedSchemaVersionError(safeReadVersion(schema));
     }
     throw new SchemaValidationError(result.issues);
   }

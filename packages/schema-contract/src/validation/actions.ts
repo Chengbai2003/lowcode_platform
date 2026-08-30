@@ -31,21 +31,49 @@ export function isSafeIdentifier(name: unknown): boolean {
   );
 }
 
+function isPlainPrototype(obj: object): boolean {
+  const proto = Object.getPrototypeOf(obj);
+  return proto === Object.prototype || proto === null;
+}
+
+function safeGet(
+  obj: object,
+  key: string,
+): { exists: boolean; isAccessor: boolean; value: unknown } {
+  const desc = Object.getOwnPropertyDescriptor(obj, key);
+  if (!desc) return { exists: false, isAccessor: false, value: undefined };
+  if (desc.get || desc.set) return { exists: true, isAccessor: true, value: undefined };
+  return { exists: true, isAccessor: false, value: (desc as PropertyDescriptor).value };
+}
+
 function checkUnknownActionFields(
-  typedAction: Record<string, unknown>,
+  actionObj: object,
   allowedFields: readonly string[],
   path: readonly (string | number)[],
   issues: SchemaContractIssue[],
 ): void {
   const allowed = new Set(allowedFields);
-  for (const key of Object.keys(typedAction)) {
+  for (const key of Object.getOwnPropertyNames(actionObj)) {
     if (!allowed.has(key)) {
+      // For error message, get type via descriptor safe
+      const typeDesc = Object.getOwnPropertyDescriptor(actionObj, 'type');
+      const typeVal = typeDesc && 'value' in typeDesc ? String(typeDesc.value) : 'unknown';
       issues.push({
         code: 'UNKNOWN_ACTION_FIELD',
         path: [...path, key],
-        message: `Unknown field "${key}" on action of type "${String(typedAction.type)}"`,
+        message: `Unknown field "${key}" on action of type "${typeVal}"`,
       });
     }
+  }
+  const symbols = Object.getOwnPropertySymbols(actionObj);
+  for (const sym of symbols) {
+    const typeDesc = Object.getOwnPropertyDescriptor(actionObj, 'type');
+    const typeVal = typeDesc && 'value' in typeDesc ? String(typeDesc.value) : 'unknown';
+    issues.push({
+      code: 'SYMBOL_PROPERTY_FORBIDDEN',
+      path: [...path, String(sym)],
+      message: `Symbol field "${String(sym)}" forbidden on action of type "${typeVal}"`,
+    });
   }
 }
 
@@ -64,6 +92,63 @@ export function validateActionList(
     return;
   }
 
+  const arrObj = actions as unknown as object;
+  if (Object.getPrototypeOf(arrObj) !== Array.prototype) {
+    context.issues.push({
+      code: 'INVALID_OBJECT_PROTOTYPE',
+      path,
+      message: 'Action list must be a plain array',
+    });
+    return;
+  }
+
+  const arrSymbols = Object.getOwnPropertySymbols(arrObj);
+  if (arrSymbols.length > 0) {
+    context.issues.push({
+      code: 'SYMBOL_PROPERTY_FORBIDDEN',
+      path,
+      message: `Symbol property keys (${arrSymbols.map((s) => s.toString()).join(', ')}) are forbidden in action list`,
+    });
+  }
+
+  const arrNames = Object.getOwnPropertyNames(arrObj);
+  for (const key of arrNames) {
+    if (key === 'length') continue;
+    const num = Number(key);
+    const isIndex = String(num) === key && Number.isInteger(num) && num >= 0 && num < 4294967295;
+    if (!isIndex) {
+      context.issues.push({
+        code: 'UNKNOWN_ARRAY_FIELD',
+        path: [...path, key],
+        message: `Action list property "${key}" is forbidden (non-index)`,
+      });
+    }
+  }
+
+  const lenDesc = Object.getOwnPropertyDescriptor(arrObj, 'length');
+  if (lenDesc && (lenDesc.get || lenDesc.set)) {
+    context.issues.push({
+      code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+      path: [...path, 'length'],
+      message: 'Action list length must not be an accessor',
+    });
+    return;
+  }
+
+  let len = 0;
+  if (
+    lenDesc &&
+    'value' in lenDesc &&
+    typeof lenDesc.value === 'number' &&
+    Number.isInteger(lenDesc.value) &&
+    lenDesc.value >= 0
+  ) {
+    len = lenDesc.value;
+  } else if (Array.isArray(actions)) {
+    // fallback using safe length via descriptor already handled, but if descriptor missing, use 0 and flag?
+    len = (actions as unknown[]).length;
+  }
+
   if (depth > context.maxActionDepth) {
     context.issues.push({
       code: 'ACTION_DEPTH_EXCEEDED',
@@ -73,8 +158,27 @@ export function validateActionList(
     return;
   }
 
-  for (let i = 0; i < actions.length; i++) {
-    validateActionItem(actions[i], [...path, i], depth, context);
+  for (let i = 0; i < len; i++) {
+    const desc = Object.getOwnPropertyDescriptor(arrObj, String(i));
+    if (!desc) {
+      context.issues.push({
+        code: 'SPARSE_ARRAY_FORBIDDEN',
+        path: [...path, i],
+        message: 'Sparse arrays are forbidden in action list',
+      });
+      continue;
+    }
+    if (desc.get || desc.set) {
+      context.issues.push({
+        code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+        path: [...path, i],
+        message: `Action list index "${i}" must not be an accessor`,
+      });
+      continue;
+    }
+    if ('value' in desc) {
+      validateActionItem(desc.value, [...path, i], depth, context);
+    }
   }
 }
 
@@ -103,20 +207,57 @@ export function validateActionItem(
     return;
   }
 
-  const descriptors = Object.getOwnPropertyDescriptors(action);
-  for (const [key, desc] of Object.entries(descriptors)) {
+  const actionObj = action as object;
+
+  if (!isPlainPrototype(actionObj)) {
+    context.issues.push({
+      code: 'INVALID_OBJECT_PROTOTYPE',
+      path,
+      message: 'Each action must be a plain object',
+    });
+    return;
+  }
+
+  const symbols = Object.getOwnPropertySymbols(actionObj);
+  if (symbols.length > 0) {
+    context.issues.push({
+      code: 'SYMBOL_PROPERTY_FORBIDDEN',
+      path,
+      message: `Symbol property keys (${symbols.map((s) => s.toString()).join(', ')}) are forbidden in action`,
+    });
+    // continue to also check accessors, but we will not return yet? we should still reject but continue to avoid executing getter
+  }
+
+  let hasAccessor = false;
+  for (const key of Object.getOwnPropertyNames(actionObj)) {
+    const desc = Object.getOwnPropertyDescriptor(actionObj, key);
+    if (!desc) continue;
     if (desc.get || desc.set) {
       context.issues.push({
         code: 'ACCESSOR_PROPERTY_FORBIDDEN',
         path: [...path, key],
         message: `Action property "${key}" must not be an accessor (getter/setter)`,
       });
-      return;
+      hasAccessor = true;
     }
   }
+  for (const sym of symbols) {
+    const desc = Object.getOwnPropertyDescriptor(actionObj, sym);
+    if (desc && (desc.get || desc.set)) {
+      context.issues.push({
+        code: 'ACCESSOR_PROPERTY_FORBIDDEN',
+        path: [...path, String(sym)],
+        message: `Action symbol property "${String(sym)}" must not be an accessor`,
+      });
+      hasAccessor = true;
+    }
+  }
+  if (hasAccessor || symbols.length > 0) {
+    return;
+  }
 
-  const typedAction = action as Record<string, unknown>;
-  const type = typedAction.type;
+  const typeRes = safeGet(actionObj, 'type');
+  const type = typeRes.exists ? typeRes.value : undefined;
 
   if (typeof type !== 'string' || !type.trim()) {
     context.issues.push({
@@ -139,33 +280,35 @@ export function validateActionItem(
   switch (type) {
     case 'setValue': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         ['type', 'field', 'value', 'merge'],
         path,
         context.issues,
       );
-      if (typeof typedAction.field !== 'string' || !typedAction.field.trim()) {
+      const fieldRes = safeGet(actionObj, 'field');
+      const valueRes = safeGet(actionObj, 'value');
+      const mergeRes = safeGet(actionObj, 'merge');
+      const fieldVal = fieldRes.exists ? fieldRes.value : undefined;
+      const valueVal = valueRes.exists ? valueRes.value : undefined;
+      const mergeVal = mergeRes.exists ? mergeRes.value : undefined;
+
+      if (typeof fieldVal !== 'string' || !fieldVal.trim()) {
         context.issues.push({
           code: 'ACTION_FIELD_REQUIRED',
           path: [...path, 'field'],
           message: 'setValue action requires a non-empty string "field"',
         });
       }
-      if (typedAction.value === undefined) {
+      if (!valueRes.exists) {
         context.issues.push({
           code: 'ACTION_VALUE_REQUIRED',
           path: [...path, 'value'],
           message: 'setValue action requires "value"',
         });
       } else {
-        inspectAndSanitizeJsonValue(
-          typedAction.value,
-          [...path, 'value'],
-          0,
-          context.inspectionContext,
-        );
+        inspectAndSanitizeJsonValue(valueVal, [...path, 'value'], 0, context.inspectionContext);
       }
-      if (typedAction.merge !== undefined && typeof typedAction.merge !== 'boolean') {
+      if (mergeRes.exists && mergeVal !== undefined && typeof mergeVal !== 'boolean') {
         context.issues.push({
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'merge'],
@@ -177,12 +320,19 @@ export function validateActionItem(
 
     case 'if': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         ['type', 'condition', 'then', 'else'],
         path,
         context.issues,
       );
-      if (typedAction.condition === undefined) {
+      const conditionRes = safeGet(actionObj, 'condition');
+      const thenRes = safeGet(actionObj, 'then');
+      const elseRes = safeGet(actionObj, 'else');
+      const conditionVal = conditionRes.exists ? conditionRes.value : undefined;
+      const thenVal = thenRes.exists ? thenRes.value : undefined;
+      const elseVal = elseRes.exists ? elseRes.value : undefined;
+
+      if (!conditionRes.exists) {
         context.issues.push({
           code: 'ACTION_CONDITION_REQUIRED',
           path: [...path, 'condition'],
@@ -190,30 +340,30 @@ export function validateActionItem(
         });
       } else {
         inspectAndSanitizeJsonValue(
-          typedAction.condition,
+          conditionVal,
           [...path, 'condition'],
           0,
           context.inspectionContext,
         );
       }
-      if (typedAction.then === undefined || !Array.isArray(typedAction.then)) {
+      if (!thenRes.exists || !Array.isArray(thenVal)) {
         context.issues.push({
           code: 'ACTION_THEN_REQUIRED',
           path: [...path, 'then'],
           message: 'if action requires "then" array of actions',
         });
       } else {
-        validateActionList(typedAction.then, [...path, 'then'], depth + 1, context);
+        validateActionList(thenVal, [...path, 'then'], depth + 1, context);
       }
-      if (typedAction.else !== undefined) {
-        if (!Array.isArray(typedAction.else)) {
+      if (elseRes.exists) {
+        if (!Array.isArray(elseVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'else'],
             message: 'if "else" must be an array of actions if provided',
           });
         } else {
-          validateActionList(typedAction.else, [...path, 'else'], depth + 1, context);
+          validateActionList(elseVal, [...path, 'else'], depth + 1, context);
         }
       }
       break;
@@ -221,96 +371,98 @@ export function validateActionItem(
 
     case 'loop': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         ['type', 'over', 'itemVar', 'indexVar', 'actions'],
         path,
         context.issues,
       );
-      if (typedAction.over === undefined) {
+      const overRes = safeGet(actionObj, 'over');
+      const itemVarRes = safeGet(actionObj, 'itemVar');
+      const indexVarRes = safeGet(actionObj, 'indexVar');
+      const actionsRes = safeGet(actionObj, 'actions');
+      const overVal = overRes.exists ? overRes.value : undefined;
+      const itemVarVal = itemVarRes.exists ? itemVarRes.value : undefined;
+      const indexVarVal = indexVarRes.exists ? indexVarRes.value : undefined;
+      const actionsVal = actionsRes.exists ? actionsRes.value : undefined;
+
+      if (!overRes.exists) {
         context.issues.push({
           code: 'ACTION_OVER_REQUIRED',
           path: [...path, 'over'],
           message: 'loop action requires "over" target',
         });
       } else {
-        inspectAndSanitizeJsonValue(
-          typedAction.over,
-          [...path, 'over'],
-          0,
-          context.inspectionContext,
-        );
+        inspectAndSanitizeJsonValue(overVal, [...path, 'over'], 0, context.inspectionContext);
       }
-      if (!isSafeIdentifier(typedAction.itemVar)) {
+      if (!isSafeIdentifier(itemVarVal)) {
         context.issues.push({
           code: 'INVALID_LOOP_IDENTIFIER',
           path: [...path, 'itemVar'],
-          message: `loop itemVar must be a valid, safe identifier, received: "${String(typedAction.itemVar)}"`,
+          message: `loop itemVar must be a valid, safe identifier, received: "${String(itemVarVal)}"`,
         });
       }
-      if (typedAction.indexVar !== undefined) {
-        if (!isSafeIdentifier(typedAction.indexVar)) {
+      if (indexVarRes.exists && indexVarVal !== undefined) {
+        if (!isSafeIdentifier(indexVarVal)) {
           context.issues.push({
             code: 'INVALID_LOOP_IDENTIFIER',
             path: [...path, 'indexVar'],
-            message: `loop indexVar must be a valid, safe identifier, received: "${String(typedAction.indexVar)}"`,
+            message: `loop indexVar must be a valid, safe identifier, received: "${String(indexVarVal)}"`,
           });
-        } else if (typedAction.itemVar === typedAction.indexVar) {
+        } else if (itemVarVal === indexVarVal) {
           context.issues.push({
             code: 'LOOP_VAR_COLLISION',
             path: [...path, 'indexVar'],
-            message: `loop indexVar cannot be identical to itemVar: "${String(typedAction.itemVar)}"`,
+            message: `loop indexVar cannot be identical to itemVar: "${String(itemVarVal)}"`,
           });
         }
       }
-      if (typedAction.actions === undefined || !Array.isArray(typedAction.actions)) {
+      if (!actionsRes.exists || !Array.isArray(actionsVal)) {
         context.issues.push({
           code: 'ACTION_ACTIONS_REQUIRED',
           path: [...path, 'actions'],
           message: 'loop action requires "actions" array',
         });
       } else {
-        validateActionList(typedAction.actions, [...path, 'actions'], depth + 1, context);
+        validateActionList(actionsVal, [...path, 'actions'], depth + 1, context);
       }
       break;
     }
 
     case 'navigate': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         ['type', 'to', 'params', 'replace'],
         path,
         context.issues,
       );
-      if (typedAction.to === undefined) {
+      const toRes = safeGet(actionObj, 'to');
+      const paramsRes = safeGet(actionObj, 'params');
+      const replaceRes = safeGet(actionObj, 'replace');
+      const toVal = toRes.exists ? toRes.value : undefined;
+      const paramsVal = paramsRes.exists ? paramsRes.value : undefined;
+      const replaceVal = replaceRes.exists ? replaceRes.value : undefined;
+
+      if (!toRes.exists) {
         context.issues.push({
           code: 'ACTION_TO_REQUIRED',
           path: [...path, 'to'],
           message: 'navigate action requires "to" destination',
         });
       } else {
-        inspectAndSanitizeJsonValue(typedAction.to, [...path, 'to'], 0, context.inspectionContext);
+        inspectAndSanitizeJsonValue(toVal, [...path, 'to'], 0, context.inspectionContext);
       }
-      if (typedAction.params !== undefined) {
-        if (
-          !typedAction.params ||
-          typeof typedAction.params !== 'object' ||
-          Array.isArray(typedAction.params)
-        ) {
+      if (paramsRes.exists) {
+        if (!paramsVal || typeof paramsVal !== 'object' || Array.isArray(paramsVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'params'],
             message: 'navigate "params" must be an object if provided',
           });
         } else {
-          inspectAndSanitizeJsonValue(
-            typedAction.params,
-            [...path, 'params'],
-            0,
-            context.inspectionContext,
-          );
+          inspectAndSanitizeJsonValue(paramsVal, [...path, 'params'], 0, context.inspectionContext);
         }
       }
-      if (typedAction.replace !== undefined && typeof typedAction.replace !== 'boolean') {
+      if (replaceRes.exists && replaceVal !== undefined && typeof replaceVal !== 'boolean') {
         context.issues.push({
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'replace'],
@@ -321,13 +473,11 @@ export function validateActionItem(
     }
 
     case 'delay': {
-      checkUnknownActionFields(typedAction, ['type', 'ms'], path, context.issues);
-      if (typedAction.ms !== undefined) {
-        if (
-          typeof typedAction.ms !== 'number' ||
-          !Number.isFinite(typedAction.ms) ||
-          typedAction.ms < 0
-        ) {
+      checkUnknownActionFields(actionObj, ['type', 'ms'], path, context.issues);
+      const msRes = safeGet(actionObj, 'ms');
+      const msVal = msRes.exists ? msRes.value : undefined;
+      if (msRes.exists) {
+        if (typeof msVal !== 'number' || !Number.isFinite(msVal) || msVal < 0) {
           context.issues.push({
             code: 'INVALID_DELAY_MS',
             path: [...path, 'ms'],
@@ -340,15 +490,29 @@ export function validateActionItem(
 
     case 'feedback': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         ['type', 'kind', 'content', 'title', 'level', 'placement', 'duration'],
         path,
         context.issues,
       );
+      const kindRes = safeGet(actionObj, 'kind');
+      const contentRes = safeGet(actionObj, 'content');
+      const titleRes = safeGet(actionObj, 'title');
+      const levelRes = safeGet(actionObj, 'level');
+      const placementRes = safeGet(actionObj, 'placement');
+      const durationRes = safeGet(actionObj, 'duration');
+      const kindVal = kindRes.exists ? kindRes.value : undefined;
+      const contentVal = contentRes.exists ? contentRes.value : undefined;
+      const titleVal = titleRes.exists ? titleRes.value : undefined;
+      const levelVal = levelRes.exists ? levelRes.value : undefined;
+      const placementVal = placementRes.exists ? placementRes.value : undefined;
+      const durationVal = durationRes.exists ? durationRes.value : undefined;
+
       if (
-        typedAction.kind !== undefined &&
-        typedAction.kind !== 'message' &&
-        typedAction.kind !== 'notification'
+        kindRes.exists &&
+        kindVal !== undefined &&
+        kindVal !== 'message' &&
+        kindVal !== 'notification'
       ) {
         context.issues.push({
           code: 'INVALID_FEEDBACK_KIND',
@@ -356,31 +520,22 @@ export function validateActionItem(
           message: 'feedback "kind" must be "message" or "notification"',
         });
       }
-      if (typedAction.content === undefined) {
+      if (!contentRes.exists) {
         context.issues.push({
           code: 'ACTION_CONTENT_REQUIRED',
           path: [...path, 'content'],
           message: 'feedback action requires "content"',
         });
       } else {
-        inspectAndSanitizeJsonValue(
-          typedAction.content,
-          [...path, 'content'],
-          0,
-          context.inspectionContext,
-        );
+        inspectAndSanitizeJsonValue(contentVal, [...path, 'content'], 0, context.inspectionContext);
       }
-      if (typedAction.title !== undefined) {
-        inspectAndSanitizeJsonValue(
-          typedAction.title,
-          [...path, 'title'],
-          0,
-          context.inspectionContext,
-        );
+      if (titleRes.exists) {
+        inspectAndSanitizeJsonValue(titleVal, [...path, 'title'], 0, context.inspectionContext);
       }
       if (
-        typedAction.level !== undefined &&
-        !['success', 'error', 'warning', 'info'].includes(typedAction.level as string)
+        levelRes.exists &&
+        levelVal !== undefined &&
+        !['success', 'error', 'warning', 'info'].includes(levelVal as string)
       ) {
         context.issues.push({
           code: 'INVALID_FEEDBACK_LEVEL',
@@ -389,10 +544,9 @@ export function validateActionItem(
         });
       }
       if (
-        typedAction.placement !== undefined &&
-        !['topLeft', 'topRight', 'bottomLeft', 'bottomRight'].includes(
-          typedAction.placement as string,
-        )
+        placementRes.exists &&
+        placementVal !== undefined &&
+        !['topLeft', 'topRight', 'bottomLeft', 'bottomRight'].includes(placementVal as string)
       ) {
         context.issues.push({
           code: 'INVALID_FEEDBACK_PLACEMENT',
@@ -402,10 +556,9 @@ export function validateActionItem(
         });
       }
       if (
-        typedAction.duration !== undefined &&
-        (typeof typedAction.duration !== 'number' ||
-          !Number.isFinite(typedAction.duration) ||
-          typedAction.duration < 0)
+        durationRes.exists &&
+        durationVal !== undefined &&
+        (typeof durationVal !== 'number' || !Number.isFinite(durationVal) || durationVal < 0)
       ) {
         context.issues.push({
           code: 'INVALID_ACTION_FIELD_TYPE',
@@ -418,84 +571,85 @@ export function validateActionItem(
 
     case 'dialog': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         ['type', 'kind', 'title', 'content', 'onOk', 'onCancel'],
         path,
         context.issues,
       );
-      if (typedAction.kind !== 'modal' && typedAction.kind !== 'confirm') {
+      const kindRes = safeGet(actionObj, 'kind');
+      const contentRes = safeGet(actionObj, 'content');
+      const titleRes = safeGet(actionObj, 'title');
+      const onOkRes = safeGet(actionObj, 'onOk');
+      const onCancelRes = safeGet(actionObj, 'onCancel');
+      const kindVal = kindRes.exists ? kindRes.value : undefined;
+      const contentVal = contentRes.exists ? contentRes.value : undefined;
+      const titleVal = titleRes.exists ? titleRes.value : undefined;
+      const onOkVal = onOkRes.exists ? onOkRes.value : undefined;
+      const onCancelVal = onCancelRes.exists ? onCancelRes.value : undefined;
+
+      if (kindVal !== 'modal' && kindVal !== 'confirm') {
         context.issues.push({
           code: 'INVALID_DIALOG_KIND',
           path: [...path, 'kind'],
           message: 'dialog "kind" is required and must be "modal" or "confirm"',
         });
       }
-      if (typedAction.content === undefined) {
+      if (!contentRes.exists) {
         context.issues.push({
           code: 'ACTION_CONTENT_REQUIRED',
           path: [...path, 'content'],
           message: 'dialog action requires "content"',
         });
       } else {
-        inspectAndSanitizeJsonValue(
-          typedAction.content,
-          [...path, 'content'],
-          0,
-          context.inspectionContext,
-        );
+        inspectAndSanitizeJsonValue(contentVal, [...path, 'content'], 0, context.inspectionContext);
       }
-      if (typedAction.title !== undefined) {
-        inspectAndSanitizeJsonValue(
-          typedAction.title,
-          [...path, 'title'],
-          0,
-          context.inspectionContext,
-        );
+      if (titleRes.exists) {
+        inspectAndSanitizeJsonValue(titleVal, [...path, 'title'], 0, context.inspectionContext);
       }
-      if (typedAction.onOk !== undefined) {
-        if (!Array.isArray(typedAction.onOk)) {
+      if (onOkRes.exists) {
+        if (!Array.isArray(onOkVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onOk'],
             message: 'dialog "onOk" must be an array of actions if provided',
           });
         } else {
-          validateActionList(typedAction.onOk, [...path, 'onOk'], depth + 1, context);
+          validateActionList(onOkVal, [...path, 'onOk'], depth + 1, context);
         }
       }
-      if (typedAction.onCancel !== undefined) {
-        if (!Array.isArray(typedAction.onCancel)) {
+      if (onCancelRes.exists) {
+        if (!Array.isArray(onCancelVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onCancel'],
             message: 'dialog "onCancel" must be an array of actions if provided',
           });
         } else {
-          validateActionList(typedAction.onCancel, [...path, 'onCancel'], depth + 1, context);
+          validateActionList(onCancelVal, [...path, 'onCancel'], depth + 1, context);
         }
       }
       break;
     }
 
     case 'log': {
-      checkUnknownActionFields(typedAction, ['type', 'value', 'level'], path, context.issues);
-      if (typedAction.value === undefined) {
+      checkUnknownActionFields(actionObj, ['type', 'value', 'level'], path, context.issues);
+      const valueRes = safeGet(actionObj, 'value');
+      const levelRes = safeGet(actionObj, 'level');
+      const valueVal = valueRes.exists ? valueRes.value : undefined;
+      const levelVal = levelRes.exists ? levelRes.value : undefined;
+      if (!valueRes.exists) {
         context.issues.push({
           code: 'ACTION_VALUE_REQUIRED',
           path: [...path, 'value'],
           message: 'log action requires "value"',
         });
       } else {
-        inspectAndSanitizeJsonValue(
-          typedAction.value,
-          [...path, 'value'],
-          0,
-          context.inspectionContext,
-        );
+        inspectAndSanitizeJsonValue(valueVal, [...path, 'value'], 0, context.inspectionContext);
       }
       if (
-        typedAction.level !== undefined &&
-        !['log', 'info', 'warn', 'error'].includes(typedAction.level as string)
+        levelRes.exists &&
+        levelVal !== undefined &&
+        !['log', 'info', 'warn', 'error'].includes(levelVal as string)
       ) {
         context.issues.push({
           code: 'INVALID_LOG_LEVEL',
@@ -508,7 +662,7 @@ export function validateActionItem(
 
     case 'apiCall': {
       checkUnknownActionFields(
-        typedAction,
+        actionObj,
         [
           'type',
           'url',
@@ -524,23 +678,39 @@ export function validateActionItem(
         path,
         context.issues,
       );
-      if (typedAction.url === undefined) {
+      const urlRes = safeGet(actionObj, 'url');
+      const methodRes = safeGet(actionObj, 'method');
+      const bodyRes = safeGet(actionObj, 'body');
+      const headersRes = safeGet(actionObj, 'headers');
+      const paramsRes = safeGet(actionObj, 'params');
+      const resultToRes = safeGet(actionObj, 'resultTo');
+      const onSuccessRes = safeGet(actionObj, 'onSuccess');
+      const onErrorRes = safeGet(actionObj, 'onError');
+      const showErrorRes = safeGet(actionObj, 'showError');
+
+      const urlVal = urlRes.exists ? urlRes.value : undefined;
+      const methodVal = methodRes.exists ? methodRes.value : undefined;
+      const bodyVal = bodyRes.exists ? bodyRes.value : undefined;
+      const headersVal = headersRes.exists ? headersRes.value : undefined;
+      const paramsVal = paramsRes.exists ? paramsRes.value : undefined;
+      const resultToVal = resultToRes.exists ? resultToRes.value : undefined;
+      const onSuccessVal = onSuccessRes.exists ? onSuccessRes.value : undefined;
+      const onErrorVal = onErrorRes.exists ? onErrorRes.value : undefined;
+      const showErrorVal = showErrorRes.exists ? showErrorRes.value : undefined;
+
+      if (!urlRes.exists) {
         context.issues.push({
           code: 'ACTION_URL_REQUIRED',
           path: [...path, 'url'],
           message: 'apiCall action requires "url"',
         });
       } else {
-        inspectAndSanitizeJsonValue(
-          typedAction.url,
-          [...path, 'url'],
-          0,
-          context.inspectionContext,
-        );
+        inspectAndSanitizeJsonValue(urlVal, [...path, 'url'], 0, context.inspectionContext);
       }
       if (
-        typedAction.method !== undefined &&
-        !['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(typedAction.method as string)
+        methodRes.exists &&
+        methodVal !== undefined &&
+        !['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(methodVal as string)
       ) {
         context.issues.push({
           code: 'INVALID_HTTP_METHOD',
@@ -548,20 +718,11 @@ export function validateActionItem(
           message: 'apiCall "method" must be GET, POST, PUT, DELETE, or PATCH',
         });
       }
-      if (typedAction.body !== undefined) {
-        inspectAndSanitizeJsonValue(
-          typedAction.body,
-          [...path, 'body'],
-          0,
-          context.inspectionContext,
-        );
+      if (bodyRes.exists) {
+        inspectAndSanitizeJsonValue(bodyVal, [...path, 'body'], 0, context.inspectionContext);
       }
-      if (typedAction.headers !== undefined) {
-        if (
-          !typedAction.headers ||
-          typeof typedAction.headers !== 'object' ||
-          Array.isArray(typedAction.headers)
-        ) {
+      if (headersRes.exists) {
+        if (!headersVal || typeof headersVal !== 'object' || Array.isArray(headersVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'headers'],
@@ -569,36 +730,28 @@ export function validateActionItem(
           });
         } else {
           inspectAndSanitizeJsonValue(
-            typedAction.headers,
+            headersVal,
             [...path, 'headers'],
             0,
             context.inspectionContext,
           );
         }
       }
-      if (typedAction.params !== undefined) {
-        if (
-          !typedAction.params ||
-          typeof typedAction.params !== 'object' ||
-          Array.isArray(typedAction.params)
-        ) {
+      if (paramsRes.exists) {
+        if (!paramsVal || typeof paramsVal !== 'object' || Array.isArray(paramsVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'params'],
             message: 'apiCall "params" must be an object if provided',
           });
         } else {
-          inspectAndSanitizeJsonValue(
-            typedAction.params,
-            [...path, 'params'],
-            0,
-            context.inspectionContext,
-          );
+          inspectAndSanitizeJsonValue(paramsVal, [...path, 'params'], 0, context.inspectionContext);
         }
       }
       if (
-        typedAction.resultTo !== undefined &&
-        (typeof typedAction.resultTo !== 'string' || !typedAction.resultTo.trim())
+        resultToRes.exists &&
+        resultToVal !== undefined &&
+        (typeof resultToVal !== 'string' || !resultToVal.trim())
       ) {
         context.issues.push({
           code: 'INVALID_ACTION_FIELD_TYPE',
@@ -606,29 +759,29 @@ export function validateActionItem(
           message: 'apiCall "resultTo" must be a non-empty string if provided',
         });
       }
-      if (typedAction.onSuccess !== undefined) {
-        if (!Array.isArray(typedAction.onSuccess)) {
+      if (onSuccessRes.exists) {
+        if (!Array.isArray(onSuccessVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onSuccess'],
             message: 'apiCall "onSuccess" must be an array of actions if provided',
           });
         } else {
-          validateActionList(typedAction.onSuccess, [...path, 'onSuccess'], depth + 1, context);
+          validateActionList(onSuccessVal, [...path, 'onSuccess'], depth + 1, context);
         }
       }
-      if (typedAction.onError !== undefined) {
-        if (!Array.isArray(typedAction.onError)) {
+      if (onErrorRes.exists) {
+        if (!Array.isArray(onErrorVal)) {
           context.issues.push({
             code: 'INVALID_ACTION_FIELD_TYPE',
             path: [...path, 'onError'],
             message: 'apiCall "onError" must be an array of actions if provided',
           });
         } else {
-          validateActionList(typedAction.onError, [...path, 'onError'], depth + 1, context);
+          validateActionList(onErrorVal, [...path, 'onError'], depth + 1, context);
         }
       }
-      if (typedAction.showError !== undefined && typeof typedAction.showError !== 'boolean') {
+      if (showErrorRes.exists && showErrorVal !== undefined && typeof showErrorVal !== 'boolean') {
         context.issues.push({
           code: 'INVALID_ACTION_FIELD_TYPE',
           path: [...path, 'showError'],
