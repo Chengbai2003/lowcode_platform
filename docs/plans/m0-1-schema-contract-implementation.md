@@ -157,6 +157,7 @@ export function parsePageSchemaJson(rawJson: string): ParsePageSchemaResult;
 export function validatePageSchemaValue(input: unknown): ParsePageSchemaResult;
 export function createCanonicalPageSchema(validated: PageSchema): PageSchema;
 export function assertSupportedPageSchema(schema: unknown): asserts schema is PageSchema;
+export function requireSupportedPageSchema(input: unknown): PageSchema;
 ```
 
 ---
@@ -184,7 +185,7 @@ PR 2：Schema 结构、存储分层重命名与 Validator 薄适配器改造
   ↓
 PR 3：API/DTO/Agent/前端服务版本命名垂直迁移 (version -> pageVersion / basePageVersion)
   ↓
-PR 4：消费面导入清理、assertSupported 统一与 check:architecture 门禁
+PR 4：消费面导入清理、requireSupported 统一与 check:architecture 门禁
 ```
 
 ---
@@ -216,7 +217,8 @@ PR 4：消费面导入清理、assertSupported 统一与 check:architecture 门�
    - `actions.ts`：纯 Action 数据类型校验（`customScript` 校验失败）；
 5. **新建 `packages/schema-contract/src/canonicalize.ts`**：
    - `createCanonicalPageSchema`：安全属性描述符读取，丢弃原型链，全新普通对象重建并递归 `deepFreeze`；
-   - `assertSupportedPageSchema`：用于各消费面快速断言；
+   - `requireSupportedPageSchema`：用于 Compiler、Renderer、Repository 与持久化边界；消费面必须使用其返回的 canonical、深冻结对象；
+   - `assertSupportedPageSchema`：仅用于无需 canonical 返回值的同步类型断言；
 6. **单元测试 `packages/schema-contract/src/__tests__/*`**：
    - 覆盖 JSON 预算、结构校验、拓扑图错误检测、Action 校验、deepFreeze 深度防篡改。
 
@@ -295,9 +297,9 @@ PR 4：消费面导入清理、assertSupported 统一与 check:architecture 门�
 
 ---
 
-### 📦 PR 4：消费面导入清理、assertSupported 统一与 check:architecture 门禁
+### 📦 PR 4：消费面导入清理、requireSupported 统一与 check:architecture 门禁
 
-**核心范围**：彻底移除所有旧别名与重复 interface，全链路接入 `assertSupportedPageSchema`，加入自动化架构门禁脚本。
+**核心范围**：彻底移除所有旧别名与重复 interface，全链路接入 `requireSupportedPageSchema` 并消费其 canonical 返回值，加入自动化架构门禁脚本。
 
 1. **消费面全量直接导入 Contract**：
    - 前端 Editor、Renderer、Backend Compiler、Agent、SchemaContext 全部直接 `import { PageSchema, ComponentNode, ActionList } from '@lowcode-platform/schema-contract'`；
@@ -306,9 +308,11 @@ PR 4：消费面导入清理、assertSupported 统一与 check:architecture 门�
    - 删除 `packages/backend/src/modules/compiler/schema.types.ts`；
    - 清理 `packages/frontend/src/types/schema.ts` 中的临时别名；
    - 检查并移除 `packages/backend/package.json` 对 `@lowcode-platform/frontend` 的无用依赖；
-3. **全链路统一 Fail-Close 断言**：
-   - Compiler、Renderer、Repository 统一调用 `assertSupportedPageSchema(schema)`；
+3. **全链路统一 Fail-Close 安全边界**：
+   - Compiler、Renderer、Repository 统一使用 `const canonicalSchema = requireSupportedPageSchema(schema)`；
+   - 校验通过后只消费 `canonicalSchema`，不得继续读取原始 `schema` 输入；
 4. **新增自动化架构检查脚本 `scripts/check-schema-contract-boundaries.mjs`**：
+
    ```js
    // 检查 5 项架构不变式：
    // 1. schema.version 读写残留
@@ -354,7 +358,7 @@ pnpm --filter @lowcode-platform/backend compiler:regression
 - [ ] **全仓无残留**：`pnpm check:architecture` 执行通过，输出零警告零报错；
 - [ ] **Schema JSON 纯净性**：持久化与导出的 `PageSchema` JSON 仅含 `schemaVersion`（固定为 `0`），绝无 `pageVersion`；
 - [ ] **单向依赖建立**：`backend` 与 `frontend` 均单向依赖 `@lowcode-platform/schema-contract`，`backend` 零引用 `frontend`；
-- [ ] **Fail-Close 统一生效**：向 Compiler、Renderer 或 Repository 传入 `{ schemaVersion: 999 }` 时，由 `assertSupportedPageSchema` 统一抛出 `UnsupportedSchemaVersionError` 并阻断流程。
+- [ ] **Fail-Close 统一生效**：向 Compiler、Renderer 或 Repository 传入 `{ schemaVersion: 999 }` 时，由 `requireSupportedPageSchema` 统一抛出 `UnsupportedSchemaVersionError` 并阻断流程；合法输入仅通过其 canonical 返回值进入后续处理。
 
 ---
 

@@ -42,8 +42,8 @@ jobs:
           test -f packages/schema-contract/dist/index.js
           test -f packages/schema-contract/dist/index.d.ts
           cd packages/schema-contract
-          node -e "const c = require('@lowcode-platform/schema-contract'); if (typeof c.createCanonicalPageSchema !== 'function' || typeof c.validatePageSchemaValue !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
-          node --input-type=module -e "const m = await import('@lowcode-platform/schema-contract'); if (typeof m.createCanonicalPageSchema !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
+          node -e "const c = require('@lowcode-platform/schema-contract'); if (typeof c.createCanonicalPageSchema !== 'function' || typeof c.validatePageSchemaValue !== 'function' || typeof c.requireSupportedPageSchema !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
+          node --input-type=module -e "const m = await import('@lowcode-platform/schema-contract'); if (typeof m.createCanonicalPageSchema !== 'function' || typeof m.requireSupportedPageSchema !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
 
       - name: Type Check
         run: pnpm type-check
