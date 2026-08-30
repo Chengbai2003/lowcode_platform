@@ -34,7 +34,6 @@
   "dependencies": {
     "@jsep-plugin/new": "^1.0.4",
     "@lowcode-platform/schema-contract": "workspace:*",
-    "antd": "^5.0.0",
     "jsep": "^1.4.0"
   },
   "peerDependencies": {

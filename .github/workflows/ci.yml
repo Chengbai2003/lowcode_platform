@@ -56,8 +56,23 @@ jobs:
           test -f packages/renderer/dist/host/createRendererHost.js
           test -f packages/renderer/dist/dsl/index.d.ts
           cd packages/renderer
-          node -e "const r = require('@lowcode-platform/renderer'); const h = require('@lowcode-platform/renderer/host'); if (typeof r.PageRenderer !== 'function' || typeof r.Renderer !== 'function' || typeof r.renderFromJSON !== 'function' || typeof r.builtInComponents.Page !== 'function' || typeof h.createRendererHost !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
+          node -e "const r = require('@lowcode-platform/renderer'); const h = require('@lowcode-platform/renderer/host'); if (typeof r.PageRenderer !== 'function' || typeof r.Renderer !== 'function' || typeof r.renderFromJSON !== 'function' || typeof r.createSealedPreset !== 'function' || typeof h.createRendererHost !== 'function') { throw new Error('CJS consumption via exports map failed'); }"
           node --input-type=module -e "const r = await import('@lowcode-platform/renderer'); if (typeof r.PageRenderer !== 'function' || typeof r.renderFromJSON !== 'function') { throw new Error('ESM consumption via exports map failed'); }"
+
+      # Issue #19 / M0-4 Scope B：AntD Preset 包构建与消费冒烟
+      - name: Build Preset Antd Package
+        run: pnpm --filter @lowcode-platform/preset-antd build
+
+      - name: Preset Antd Package consumption smoke test
+        run: |
+          test -f packages/preset-antd/dist/index.js
+          test -f packages/preset-antd/dist/runtime.js
+          test -f packages/preset-antd/dist/manifest.js
+          test -f packages/preset-antd/dist/validation.js
+          test -f packages/preset-antd/dist/compiler.js
+          cd packages/preset-antd
+          node -e "const p = require('@lowcode-platform/preset-antd'); const r = require('@lowcode-platform/preset-antd/runtime'); const m = require('@lowcode-platform/preset-antd/manifest'); const c = require('@lowcode-platform/preset-antd/compiler'); if (typeof p.createAntdPreset !== 'function' || !Object.isFrozen(p.antdPreset) || !r.antdRuntime.Page || !m.antdManifest.Div || !c.antdCompilerBindings.componentSources.Text) { throw new Error('CJS consumption via exports map failed'); }"
+          node --input-type=module -e "const p = await import('@lowcode-platform/preset-antd'); if (typeof p.createAntdPreset !== 'function' || !Object.isFrozen(p.antdPreset)) { throw new Error('ESM consumption via exports map failed'); }"
 
       # 前端 vite build：守护 workspace 包 dist 的 CJS 命名导出可被 rollup 静态解析
       # （renderer 的 dist 已成为前端运行时依赖，vite build 不在 CI 会漏掉这一类回归）
@@ -81,6 +96,9 @@ jobs:
 
       - name: Renderer Package Tests
         run: pnpm test:renderer
+
+      - name: Preset Antd Package Tests
+        run: pnpm test:preset-antd
 
       - name: Frontend Tests
         run: pnpm test:frontend

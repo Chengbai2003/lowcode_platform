@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ComponentNode, PageSchema } from '@lowcode-platform/schema-contract';
+import type { ComponentPreset } from './preset/types';
 
 export type { ComponentNode, PageSchema } from '@lowcode-platform/schema-contract';
 
@@ -13,7 +14,8 @@ export type ComponentRegistry = Record<string, React.ComponentType<any>>;
  */
 export interface RendererProps {
   schema: PageSchema; // JSON Schema (严格 A2UI)
-  components?: ComponentRegistry; // 自定义组件注册表
+  components?: ComponentRegistry; // 宿主自定义组件注册表（可覆盖 Preset 组件）
+  preset?: ComponentPreset; // 单一 ComponentPreset（M0-4 Scope B：一个 Host 只绑定一个）
   onComponentClick?: (node: ComponentNode) => void; // 组件点击回调
   eventContext?: Record<string, any>; // 事件执行上下文
 }

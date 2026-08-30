@@ -10,7 +10,7 @@ A2UI 低代码平台运行时渲染器（[Issue #19](https://github.com/Chengbai
 - **不依赖编辑器**：本包不依赖 Editor / AI Assistant / PropertyPanel（由 `pnpm check:architecture` 门禁强制）。
 - **React / ReactDOM 是 peerDependencies**：宿主应用自行提供 React 18/19。
 - **不污染全局**：Renderer 不把任何运行时对象挂到可变 `window` 全局。
-- **内置组件是临时态**：`builtInComponents`（含 antd Typography）将在 Scope B（M0-4b）迁往 `@lowcode-platform/preset-antd`，Renderer 本体不出现组件库条件分支。
+- **组件库零依赖**：Renderer 本体不含任何内置组件与组件库（antd 等）。基础组件由 Preset 层提供（Scope B / M0-4b 起为 `@lowcode-platform/preset-antd`），宿主经 `preset` prop 绑定单一 Preset，宿主自有组件经 `components` prop 注入并可覆盖 Preset 组件。
 
 ## 安装与消费
 

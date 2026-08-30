@@ -87,7 +87,6 @@ export {
   EventDispatcher,
   LowcodeProvider,
   renderFromJSON,
-  builtInComponents,
   // Validation exports
   validateSchema,
   safeValidateSchema,
@@ -95,6 +94,8 @@ export {
   validateAndAutoFix,
   autoFixSchema,
 } from '@lowcode-platform/renderer';
+export { antdPreset, antdRuntime as builtInComponents } from '@lowcode-platform/preset-antd';
+export type { ComponentPreset } from '@lowcode-platform/renderer';
 
 export type { RendererProps, ComponentNode } from '@lowcode-platform/renderer';
 

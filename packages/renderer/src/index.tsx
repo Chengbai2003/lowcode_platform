@@ -21,7 +21,6 @@ import { Renderer } from './Renderer';
 // "X is not exported by"。
 export * from './Renderer';
 export * from './EventDispatcher';
-export * from './builtInComponents';
 export * from './executor';
 export * from './executor/parser/expressionParser';
 export * from './executor/parser/valueResolver';
@@ -30,7 +29,18 @@ export * from './utils/schema-auto-fix';
 export * from './schemaValidation';
 export * from './bridge/ComponentRuntimeBridgeContext';
 export * from './bridge/createComponentRuntimeBridge';
+export * from './preset/createSealedPreset';
+export * from './preset/sanitizePropsByManifest';
 export type { ComponentRuntimeBridge, DataResourceState } from './bridge/ComponentRuntimeBridge';
+export type {
+  ComponentPreset,
+  ComponentManifestEntry,
+  ComponentManifestRegistry,
+  ComponentPropsValidator,
+  ComponentValidationRegistry,
+  CompilerBindings,
+  ComponentCompilerRegistry,
+} from './preset/types';
 export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from './types';
 
 // 稳定公开别名：宿主只应依赖 PageRenderer 这个名字。
@@ -52,9 +62,10 @@ export const LowcodeProvider = ({ children }: { children: React.ReactNode }) => 
 export function renderFromJSON(
   jsonString: string,
   components?: Record<string, React.ComponentType<any>>,
+  options?: { preset?: import('./preset/types').ComponentPreset },
 ): React.ReactElement {
   const raw = JSON.parse(jsonString);
   // Contract 边界：只渲染 Contract 返回的 canonical Schema（不支持版本/畸形结构 fail-close）
   const schema = requireSupportedPageSchema(raw);
-  return React.createElement(Renderer, { schema, components });
+  return React.createElement(Renderer, { schema, components, preset: options?.preset });
 }

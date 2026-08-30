@@ -4,7 +4,7 @@ import { SendOutlined, BulbOutlined, SettingOutlined, DatabaseOutlined } from '@
 import type { PageSchema } from '../../../../types';
 import { validateAndAutoFixA2UISchema } from '../../../../schema/schemaValidation';
 import { componentRegistry } from '../../../../components';
-import { builtInComponents } from '@lowcode-platform/renderer';
+import { antdPreset } from '@lowcode-platform/preset-antd';
 import { AIConfig } from '../AIConfig/AIConfig';
 import type { AgentPatchApplyHandler, AgentResponseMode, AIModelConfig } from '../types/ai-types';
 import { useAIModels } from './useAIModels';
@@ -76,7 +76,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   const applySchema = useCallback(
     (schema: PageSchema) => {
       const whitelist = Array.from(
-        new Set([...Object.keys(builtInComponents), ...Object.keys(componentRegistry)]),
+        new Set([...Object.keys(antdPreset.runtime), ...Object.keys(componentRegistry)]),
       );
       const result = validateAndAutoFixA2UISchema(schema, whitelist);
 

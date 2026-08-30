@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { PageSchema } from '../../../types';
 import { PropertyPanel } from './PropertyPanel';
 import { LowcodeProvider, Renderer } from '@lowcode-platform/renderer';
+import { antdPreset } from '@lowcode-platform/preset-antd';
 
 const createSchema = (): PageSchema => ({
   schemaVersion: 0,
@@ -54,7 +55,12 @@ const TestHarness: React.FC<TestHarnessProps> = ({
     <div>
       <PropertyPanel schema={schema} selectedId="root" onSchemaChange={setSchema} />
       <LowcodeProvider>
-        <Renderer schema={schema} eventContext={eventContext} onComponentClick={() => {}} />
+        <Renderer
+          preset={antdPreset}
+          schema={schema}
+          eventContext={eventContext}
+          onComponentClick={() => {}}
+        />
       </LowcodeProvider>
     </div>
   );

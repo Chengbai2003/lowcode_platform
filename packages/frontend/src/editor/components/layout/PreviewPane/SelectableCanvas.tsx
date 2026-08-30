@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, memo, useEffect } from 'react';
 import { Renderer, LowcodeProvider } from '@lowcode-platform/renderer';
+import { antdPreset } from '@lowcode-platform/preset-antd';
 import type { PageSchema, ComponentRegistry, ComponentNode } from '../../../../types';
 import { useEditorStore, useSelectionStore } from '../../../store/editor-store';
 import { SelectionHighlight } from './SelectionHighlight';
@@ -158,6 +159,7 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
           {schema ? (
             <LowcodeProvider>
               <Renderer
+                preset={antdPreset}
                 schema={schema}
                 components={allComponents}
                 eventContext={eventContext}

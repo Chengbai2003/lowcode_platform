@@ -205,4 +205,8 @@ createRoot(document.getElementById('root')!).render(
 
 M0-4 Scope A 已落地（Issue #19 / M0-4a）：`@lowcode-platform/renderer` 独立包（`packages/renderer`）承接原 `packages/frontend/src/renderer` 的全部渲染实现与测试；React/ReactDOM 为 peerDependencies；运行态执行类型（`ActionHandler`/`ExecutionContext`/`ActionResult`/`DSLExecutor` 等）随包内 `dsl` 子路径（`@lowcode-platform/renderer/dsl`）导出；公开入口导出 `PageRenderer`，`createRendererHost`（`@lowcode-platform/renderer/host`）提供最小 React Host；渲染入口保持 `requireSupportedPageSchema` fail-close；`pnpm check:architecture` 强制 Renderer 包不依赖 Frontend/Editor、不把运行时对象挂到可变 `window` 全局；前端消费面全部改从包导入，CI 增加 `build:packages` 守护 workspace 包 dist 的 rollup 可消费性。
 
-尚未完成：Scope B `preset-antd`（`builtInComponents` 仍在 Renderer 包内临时依赖 antd Typography）、Scope D RuntimeSession（`createRuntimeSession`/`dispose`，本文示例中的 `host`/`documentSessionId` 形态）、Scope E HostCapabilities。Scope C ComponentRuntimeBridge 已落地（M0-4c）：Table 已改经 `useComponentRuntimeBridge` 消费受控能力，架构门禁禁止组件库 import 执行器并正向断言 Table 走桥。
+Scope C ComponentRuntimeBridge 已落地（M0-4c）：Table 已改经 `useComponentRuntimeBridge` 消费受控能力，架构门禁禁止组件库 import 执行器并正向断言 Table 走桥。
+
+Scope B ComponentPreset 已落地（M0-4b）：`@lowcode-platform/preset-antd`（`packages/preset-antd`）以 `/runtime`、`/manifest`、`/validation`、`/compiler` 子路径提供运行时组件、Props 白名单 Manifest、Validation 钩子（Link/Image 危险 scheme 检查）与 Compiler 绑定；`builtInComponents` 自 Renderer 包迁出，Renderer 本体零组件库依赖（门禁强制 Renderer 不得 import antd / 任何 Preset 包）；`createSealedPreset` 在 Bootstrap 阶段构建即校验并深冻结 Registry，无 `register()` 出口；渲染前经 `sanitizePropsByManifest` 做白名单净化（未知 Props、函数 Props、`dangerouslySetInnerHTML` 一律移除），未知组件类型 fail-close 拒绝渲染并给出占位标记；宿主覆盖的组件不受 Preset Manifest 约束；前端 `compilerApi` 默认携带 Preset Compiler 绑定（Preview 与 Compiler 消费同一份来源声明）。
+
+尚未完成：Scope D RuntimeSession（`createRuntimeSession`/`dispose`，本文示例中的 `host`/`documentSessionId` 形态）、Scope E HostCapabilities（全部能力默认 deny，桥的 `getResource` 已先行按 deny 实现）。

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { LowcodeProvider, Renderer } from '../';
+import { testPreset } from './fixtures/testPreset';
 
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
@@ -32,7 +33,7 @@ describe('Renderer visibility', () => {
     await act(async () => {
       const renderResult = render(
         <LowcodeProvider>
-          <Renderer schema={buildSchema('{{ true }}')} />
+          <Renderer preset={testPreset} schema={buildSchema('{{ true }}')} />
         </LowcodeProvider>,
       );
       rerender = renderResult.rerender;
@@ -44,7 +45,7 @@ describe('Renderer visibility', () => {
     await act(async () => {
       rerender(
         <LowcodeProvider>
-          <Renderer schema={buildSchema('{{ false }}')} />
+          <Renderer preset={testPreset} schema={buildSchema('{{ false }}')} />
         </LowcodeProvider>,
       );
       await flushMicrotasks();
@@ -68,7 +69,7 @@ describe('Renderer visibility', () => {
       },
     };
 
-    render(<Renderer schema={schema} />);
+    render(<Renderer preset={testPreset} schema={schema} />);
 
     expect(screen.getByDisplayValue('standalone')).toBeTruthy();
   });
@@ -96,7 +97,7 @@ describe('Renderer visibility', () => {
       },
     });
 
-    render(<Renderer schema={schema} eventContext={{ getState }} />);
+    render(<Renderer preset={testPreset} schema={schema} eventContext={{ getState }} />);
 
     expect(screen.getByDisplayValue('schema-value')).toBeTruthy();
   });
