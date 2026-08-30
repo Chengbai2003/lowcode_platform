@@ -66,6 +66,93 @@ type LooseSchema = {
  * @param registeredTypes 已注册的组件类型列表（白名单）
  * @returns 修复后的 Schema 和修复记录
  */
+
+/**
+ * descriptor-safe JSON 重建：只读取 own data descriptor，绝不执行 getter/setter，
+ * 也不触发 toJSON / toString 等用户代码钩子（structuredClone 会执行 enumerable getter）。
+ * 遇到访问器、函数、稀疏数组、类实例等非 JSON 输入时抛出 UnsafeSchemaInputError，
+ * 由调用方转换为结构化失败（fail-close）。
+ */
+export class UnsafeSchemaInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnsafeSchemaInputError';
+  }
+}
+
+function isPlainObjectProto(value: object): boolean {
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
+function clonePlainJson(value: unknown, path: string, depth = 0): unknown {
+  if (depth > 64) {
+    throw new UnsafeSchemaInputError(`Schema 嵌套过深: ${path}`);
+  }
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (
+    typeof value === 'function' ||
+    typeof value === 'symbol' ||
+    typeof value === 'bigint' ||
+    value === undefined
+  ) {
+    throw new UnsafeSchemaInputError(`Schema 包含非 JSON 值 (${typeof value}): ${path}`);
+  }
+
+  if (Array.isArray(value)) {
+    if (Object.getPrototypeOf(value) !== Array.prototype) {
+      throw new UnsafeSchemaInputError(`非普通数组: ${path}`);
+    }
+    const lenDesc = Object.getOwnPropertyDescriptor(value, 'length');
+    const len =
+      lenDesc &&
+      !lenDesc.get &&
+      !lenDesc.set &&
+      'value' in lenDesc &&
+      typeof lenDesc.value === 'number'
+        ? lenDesc.value
+        : 0;
+    const out: unknown[] = [];
+    for (let i = 0; i < len; i++) {
+      const desc = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!desc) throw new UnsafeSchemaInputError(`稀疏数组: ${path}[${i}]`);
+      if (desc.get || desc.set) throw new UnsafeSchemaInputError(`数组下标访问器: ${path}[${i}]`);
+      if (!('value' in desc)) throw new UnsafeSchemaInputError(`无值描述符: ${path}[${i}]`);
+      out.push(clonePlainJson(desc.value, `${path}[${i}]`, depth + 1));
+    }
+    return out;
+  }
+
+  if (typeof value !== 'object' || !isPlainObjectProto(value)) {
+    throw new UnsafeSchemaInputError(`类实例或非普通对象: ${path}`);
+  }
+
+  const out: Record<string, unknown> = {};
+  for (const key of Object.getOwnPropertyNames(value)) {
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc) continue;
+    if (desc.get || desc.set) {
+      throw new UnsafeSchemaInputError(`属性访问器 (getter/setter): ${path}.${key}`);
+    }
+    if (!('value' in desc)) continue;
+    // defineProperty 避免 __proto__ 等键触发原型修改
+    Object.defineProperty(out, key, {
+      value: clonePlainJson(desc.value, `${path}.${key}`, depth + 1),
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return out;
+}
+
 export function autoFixSchema(
   rawSchema: any,
   registeredTypes: string[] = [],
@@ -75,10 +162,9 @@ export function autoFixSchema(
 } {
   const fixes: string[] = [];
 
-  // 1. 深度拷贝，避免污染原始对象
-  // structuredClone 不触发 toJSON / toString 等用户代码钩子（JSON.stringify 会）；
-  // 带 getter 或不可克隆成员的输入在克隆阶段直接抛错（fail-close）
-  const schema = structuredClone(rawSchema) as LooseSchema;
+  // 1. descriptor-safe 深度拷贝：绝不执行 getter/setter 或 toJSON 等用户代码；
+  //    访问器、函数、稀疏数组、类实例直接抛 UnsafeSchemaInputError（fail-close）
+  const schema = clonePlainJson(rawSchema, 'schema') as LooseSchema;
 
   // 2. schemaVersion / 遗留 version 不做任何迁移或修正：
   //    非法版本（含缺失、999 等）必须被 Contract 校验拒绝，而不是被静默改成合法值；

@@ -49,10 +49,14 @@ export function Renderer({
     [flattenedData, eventContextData],
   );
 
-  // 稳定 flatComponents 引用：仅在内容实际变化时更新
-  const flatComponentsRef = useRef(schema?.components);
+  // 稳定 flatComponents 引用：仅在内容实际变化时更新。
+  // 注意：这里必须使用 canonicalSchema（而非原始 schema prop），
+  // 否则同引用原地变异可绕过 Contract 边界进入渲染树。
+  const flatComponentsRef = useRef<PageSchema['components'] | undefined>(
+    canonicalSchema?.components,
+  );
   const stableFlatComponents = useMemo(() => {
-    const next = schema?.components;
+    const next = canonicalSchema?.components;
     if (next && flatComponentsRef.current && next !== flatComponentsRef.current) {
       // 浅比较：key 集合相同且每个 value 引用相同则复用旧引用
       const prevKeys = Object.keys(flatComponentsRef.current);
@@ -66,7 +70,7 @@ export function Renderer({
     }
     flatComponentsRef.current = next;
     return next;
-  }, [schema?.components]);
+  }, [canonicalSchema?.components]);
 
   const eventDispatcher = useMemo(() => {
     return new EventDispatcher(
@@ -93,7 +97,7 @@ export function Renderer({
 
   useEffect(() => {
     if (eventDispatcher) {
-      const nextRootId = schema?.rootId ?? null;
+      const nextRootId = canonicalSchema?.rootId ?? null;
       const rootChanged = lastRootIdRef.current !== nextRootId;
 
       if (rootChanged) {

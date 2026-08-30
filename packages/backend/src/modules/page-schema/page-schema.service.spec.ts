@@ -60,6 +60,7 @@ describe('PageSchemaService', () => {
           pageId: string;
           schema: PageSnapshotRecord['schema'];
           basePageVersion?: number;
+          systemId: string;
           runtimeCompatibility: typeof runtimeCompatibility;
         }) => {
           const currentPageVersion = pageStore?.currentPageVersion ?? 0;
@@ -95,6 +96,7 @@ describe('PageSchemaService', () => {
           };
           const page: StoredPageRecord = {
             pageId: params.pageId,
+            systemId: params.systemId,
             currentPageVersion: nextPageVersion,
             latestSnapshotId: snapshotId,
             createdAt: pageStore?.createdAt || new Date().toISOString(),
@@ -132,6 +134,7 @@ describe('PageSchemaService', () => {
       expect.objectContaining({
         pageId: 'page-1',
         basePageVersion: undefined,
+        systemId: 'default',
         runtimeCompatibility,
       }),
     );
