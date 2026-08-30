@@ -18,6 +18,8 @@
  *     受控能力一律经 ComponentRuntimeBridge 注入
  *  9. Preset 分层（Issue #19 / M0-4 Scope B）：Renderer 本体不得依赖 antd 或
  *     任何 Preset 包；Preset 必须经 createSealedPreset 构建
+ * 10. RuntimeSession（Issue #19 / M0-4 Scope D）：Renderer 挂载必须创建
+ *     Session 并在卸载/换页时 dispose
  *
  * 用法：node scripts/check-schema-contract-boundaries.mjs
  */
@@ -257,6 +259,17 @@ for (const file of allFiles) {
   }
   if (/['"]@lowcode-platform\/preset-/.test(content)) {
     violations.push(`${relFile}: Renderer 本体不得依赖任何 Preset 包（依赖方向必须反向）`);
+  }
+}
+
+// Scope D：Renderer 挂载必须接 RuntimeSession（pageId + documentSessionId 生命周期）
+{
+  const rendererFile = join(ROOT, 'packages/renderer/src/Renderer.tsx');
+  const content = readFileSync(rendererFile, 'utf-8');
+  if (!/createRuntimeSession/.test(content) || !/session\.dispose\(\)/.test(content)) {
+    violations.push(
+      'packages/renderer/src/Renderer.tsx: 页面挂载必须创建 RuntimeSession 并在卸载/换页时 dispose',
+    );
   }
 }
 

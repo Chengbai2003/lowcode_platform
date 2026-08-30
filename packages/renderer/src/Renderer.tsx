@@ -13,6 +13,7 @@ import { ComponentRenderer } from './ComponentRenderer';
 import { createComponentRuntimeBridge } from './bridge/createComponentRuntimeBridge';
 import { ComponentRuntimeBridgeContext } from './bridge/ComponentRuntimeBridgeContext';
 import { sanitizePropsByManifest } from './preset/sanitizePropsByManifest';
+import { createRuntimeSession } from './session/RuntimeSession';
 
 /**
  * 主渲染器组件
@@ -21,6 +22,8 @@ export function Renderer({
   schema,
   components = {},
   preset,
+  pageId,
+  documentSessionId,
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
@@ -173,6 +176,21 @@ export function Renderer({
     () => createComponentRuntimeBridge(eventDispatcher),
     [eventDispatcher],
   );
+
+  // M0-4 Scope D：提供 pageId + documentSessionId 时，每次挂载创建独立
+  // RuntimeSession；documentSessionId 变化或卸载时销毁旧 Session。
+  const session = useMemo(() => {
+    if (!pageId || !documentSessionId) return null;
+    return createRuntimeSession({ pageId, documentSessionId, dispatcher: eventDispatcher });
+  }, [pageId, documentSessionId, eventDispatcher]);
+
+  useEffect(() => {
+    if (!session) return;
+    session.dispatcher.setContext('session', session);
+    return () => {
+      session.dispose();
+    };
+  }, [session]);
 
   if (canonicalSchema && canonicalSchema.rootId && stableFlatComponents) {
     return (

@@ -30,6 +30,7 @@ export * from './schemaValidation';
 export * from './bridge/ComponentRuntimeBridgeContext';
 export * from './bridge/createComponentRuntimeBridge';
 export * from './preset/createSealedPreset';
+export * from './session/RuntimeSession';
 export * from './preset/sanitizePropsByManifest';
 export type { ComponentRuntimeBridge, DataResourceState } from './bridge/ComponentRuntimeBridge';
 export type {
