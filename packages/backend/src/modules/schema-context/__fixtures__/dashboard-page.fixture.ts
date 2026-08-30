@@ -1,6 +1,6 @@
-import { A2UISchema } from '../types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
-export const DASHBOARD_PAGE_FIXTURE: A2UISchema = {
+export const DASHBOARD_PAGE_FIXTURE: PageSchema = {
   schemaVersion: 0,
   rootId: 'page_dashboard',
   components: {

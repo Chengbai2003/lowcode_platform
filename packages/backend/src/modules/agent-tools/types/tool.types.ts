@@ -1,6 +1,6 @@
 import { BackendComponentMeta } from '../../schema-context/component-metadata/component-meta.types';
 import { FocusContextResult } from '../../schema-context/types/focus-context.types';
-import { A2UISchema } from '../../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './editor-patch.types';
 
 export type ToolVisibility = 'agent' | 'internal';
@@ -18,8 +18,8 @@ export interface ToolExecutionContext {
   /** 上下文解析基准：页面内容修订版本 */
   basePageVersion?: number;
   resolvedPageVersion?: number;
-  draftSchema?: A2UISchema;
-  workingSchema: A2UISchema;
+  draftSchema?: PageSchema;
+  workingSchema: PageSchema;
   accumulatedPatch: EditorPatchOperation[];
   warnings: string[];
   traceId: string;
@@ -28,7 +28,7 @@ export interface ToolExecutionContext {
 export interface ToolExecutionResult {
   data?: unknown;
   patchDelta?: EditorPatchOperation[];
-  updatedWorkingSchema?: A2UISchema;
+  updatedWorkingSchema?: PageSchema;
   warnings?: string[];
 }
 
@@ -38,7 +38,7 @@ export interface ComponentMetaResult {
 }
 
 export type ToolDataResult =
-  | A2UISchema
+  | PageSchema
   | FocusContextResult
   | ComponentMetaResult
   | { valid: true }

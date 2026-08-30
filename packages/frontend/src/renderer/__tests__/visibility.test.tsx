@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { LowcodeProvider, Renderer } from '../';
 
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
 
 describe('Renderer visibility', () => {
   it('does not crash when visible toggles to false', async () => {
-    const buildSchema = (visible: boolean | string): A2UISchema => ({
+    const buildSchema = (visible: boolean | string): PageSchema => ({
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -54,7 +54,7 @@ describe('Renderer visibility', () => {
   });
 
   it('renders without LowcodeProvider', () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -74,7 +74,7 @@ describe('Renderer visibility', () => {
   });
 
   it('does not use host getState as the renderer read chain', () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {

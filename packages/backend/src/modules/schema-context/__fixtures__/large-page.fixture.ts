@@ -1,7 +1,7 @@
-import { A2UIComponent, A2UISchema } from '../types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
-function buildLargePageFixture(): A2UISchema {
-  const components: Record<string, A2UIComponent> = {};
+function buildLargePageFixture(): PageSchema {
+  const components: Record<string, ComponentNode> = {};
   const cardIds: string[] = [];
 
   for (let c = 0; c < 10; c++) {
@@ -56,4 +56,4 @@ function buildLargePageFixture(): A2UISchema {
   return { schemaVersion: 0 as const, rootId: 'page_root', components };
 }
 
-export const LARGE_PAGE_FIXTURE: A2UISchema = buildLargePageFixture();
+export const LARGE_PAGE_FIXTURE: PageSchema = buildLargePageFixture();

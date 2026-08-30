@@ -1,11 +1,11 @@
-import type { A2UISchema, A2UIComponent } from '../../../types';
+import type { PageSchema, ComponentNode } from '../../../types';
 import type { TreeNodeData } from './treeTypes';
 
 /**
  * 获取组件的显示标签
  * 优先使用 props.children 或 props.label，否则使用 type
  */
-function getComponentLabel(component: A2UIComponent): string {
+function getComponentLabel(component: ComponentNode): string {
   if (component.props?.children && typeof component.props.children === 'string') {
     // 截断过长的文本
     const text = component.props.children.trim();
@@ -23,7 +23,7 @@ function getComponentLabel(component: A2UIComponent): string {
  * @param _expandedKeys - 预留参数，用于未来过滤展开节点
  */
 export function schemaToTree(
-  schema: A2UISchema | null,
+  schema: PageSchema | null,
   _expandedKeys?: Set<string>,
 ): TreeNodeData[] {
   if (!schema || !schema.rootId || !schema.components) {
@@ -68,8 +68,8 @@ export function schemaToTree(
 /**
  * 从 Schema 中查找组件的父节点
  */
-export function findParentId(schema: A2UISchema, targetId: string): string | null {
-  for (const [id, component] of Object.entries(schema.components) as [string, A2UIComponent][]) {
+export function findParentId(schema: PageSchema, targetId: string): string | null {
+  for (const [id, component] of Object.entries(schema.components) as [string, ComponentNode][]) {
     if (component.childrenIds?.includes(targetId)) {
       return id;
     }
@@ -80,7 +80,7 @@ export function findParentId(schema: A2UISchema, targetId: string): string | nul
 /**
  * 从 Schema 中删除组件及其所有子组件
  */
-export function deleteComponent(schema: A2UISchema, targetId: string): A2UISchema {
+export function deleteComponent(schema: PageSchema, targetId: string): PageSchema {
   const components = { ...schema.components };
   const toDelete = new Set<string>();
 
@@ -123,7 +123,7 @@ export function deleteComponent(schema: A2UISchema, targetId: string): A2UISchem
 /**
  * 复制组件（生成新 ID）
  */
-export function copyComponent(schema: A2UISchema, targetId: string): A2UISchema | null {
+export function copyComponent(schema: PageSchema, targetId: string): PageSchema | null {
   const components = { ...schema.components };
   const target = components[targetId];
   if (!target) return null;
@@ -157,7 +157,7 @@ export function copyComponent(schema: A2UISchema, targetId: string): A2UISchema 
       return idMap.get(childId)!;
     });
 
-    const newComp: A2UIComponent = {
+    const newComp: ComponentNode = {
       ...comp,
       id: newCompId,
       childrenIds: newChildrenIds,
@@ -191,10 +191,10 @@ export function copyComponent(schema: A2UISchema, targetId: string): A2UISchema 
  * 移动组件（上移/下移）
  */
 export function moveComponent(
-  schema: A2UISchema,
+  schema: PageSchema,
   targetId: string,
   direction: 'up' | 'down',
-): A2UISchema | null {
+): PageSchema | null {
   const components = schema.components;
   const parentId = findParentId(schema, targetId);
   if (!parentId) return null;
@@ -230,10 +230,10 @@ export function moveComponent(
  * 移动组件到新的父节点下
  */
 export function moveComponentTo(
-  schema: A2UISchema,
+  schema: PageSchema,
   targetId: string,
   newParentId: string,
-): A2UISchema | null {
+): PageSchema | null {
   if (targetId === newParentId) return null;
 
   const components = { ...schema.components };
@@ -277,7 +277,7 @@ export function moveComponentTo(
  */
 function generateNewId(
   originalId: string,
-  existingComponents: Record<string, A2UIComponent>,
+  existingComponents: Record<string, ComponentNode>,
 ): string {
   const match = originalId.match(/^(.+?)(-copy-\d+)?$/);
   const baseId = match ? match[1] : originalId;
@@ -296,7 +296,7 @@ function generateNewId(
 /**
  * 获取组件在父节点中的索引
  */
-export function getComponentIndex(schema: A2UISchema, targetId: string): number {
+export function getComponentIndex(schema: PageSchema, targetId: string): number {
   const parentId = findParentId(schema, targetId);
   if (!parentId) return -1;
 
@@ -307,7 +307,7 @@ export function getComponentIndex(schema: A2UISchema, targetId: string): number 
 /**
  * 检查组件是否可以上移/下移
  */
-export function canMove(schema: A2UISchema, targetId: string): { up: boolean; down: boolean } {
+export function canMove(schema: PageSchema, targetId: string): { up: boolean; down: boolean } {
   const parentId = findParentId(schema, targetId);
   if (!parentId) return { up: false, down: false };
 

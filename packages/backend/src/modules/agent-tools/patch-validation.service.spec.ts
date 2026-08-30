@@ -1,11 +1,11 @@
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
 import { PatchValidationService } from './patch-validation.service';
 import { EditorPatchOperation } from './types/editor-patch.types';
 
-function createSchema(): A2UISchema {
+function createSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',
@@ -29,7 +29,7 @@ function createSchema(): A2UISchema {
   };
 }
 
-function createSchemaWithDetachedHiddenDataNodes(): A2UISchema {
+function createSchemaWithDetachedHiddenDataNodes(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',
@@ -237,7 +237,7 @@ describe('PatchValidationService', () => {
   });
 
   it('still rejects actual orphan components after applying a patch', async () => {
-    const schemaWithOrphan: A2UISchema = {
+    const schemaWithOrphan: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -273,7 +273,7 @@ describe('PatchValidationService', () => {
   });
 
   it('rejects moveComponent cycles', async () => {
-    const nestedSchema: A2UISchema = {
+    const nestedSchema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {

@@ -96,7 +96,7 @@ export {
   autoFixSchema,
 } from './renderer';
 
-export type { RendererProps, A2UIComponent } from './renderer';
+export type { RendererProps, ComponentNode } from './renderer';
 
 // ============================================
 // Editor

@@ -1,4 +1,4 @@
-import { A2UISchema } from '../../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from '../types/editor-patch.types';
 
 export interface PatchPreviewResponseDto {
@@ -6,7 +6,7 @@ export interface PatchPreviewResponseDto {
   basePageVersion?: number;
   resolvedPageVersion?: number;
   patch: EditorPatchOperation[];
-  schema: A2UISchema;
+  schema: PageSchema;
   warnings: string[];
   traceId: string;
 }

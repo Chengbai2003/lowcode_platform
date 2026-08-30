@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useState } from 'react';
-import type { A2UISchema } from '../../../types';
+import type { PageSchema } from '../../../types';
 import { useSchemaHistoryStore } from '../useSchemaHistoryStore';
 import { useHistoryStore } from '../../store/history';
 
-const createSchema = (text: string): A2UISchema => ({
+const createSchema = (text: string): PageSchema => ({
   schemaVersion: 0,
   rootId: 'root',
   components: {

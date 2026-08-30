@@ -6,7 +6,7 @@ import { ToolExecutionContext } from '../agent-tools/types/tool.types';
 import { ModelConfigService } from '../ai/model-config.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ComponentMetaRegistry, FocusContextResult } from '../schema-context';
-import type { A2UISchema } from '../schema-context';
+import type { PageSchema } from '../schema-context';
 import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 import { AgentAnswerService } from './agent-answer.service';
 import { AgentIdempotencyService } from './agent-idempotency.service';
@@ -86,7 +86,7 @@ function createFocusedResult(componentId = 'button'): FocusContextResult {
   };
 }
 
-function createClarificationSchema(): A2UISchema {
+function createClarificationSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',
@@ -110,7 +110,7 @@ function createClarificationSchema(): A2UISchema {
   };
 }
 
-function createBatchSchema(): A2UISchema {
+function createBatchSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',
@@ -149,7 +149,7 @@ function createBatchContext(): ToolExecutionContext {
   };
 }
 
-function createMixedCollectionSchema(): A2UISchema {
+function createMixedCollectionSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',
@@ -399,7 +399,7 @@ describe('AgentRunnerService', () => {
                 },
               },
             },
-          };
+          } as unknown as PageSchema;
           return {
             data: { ok: true },
             patchDelta: [patch],
@@ -424,12 +424,12 @@ describe('AgentRunnerService', () => {
                   props: {
                     ...(acc[operation.componentId]?.props ?? {}),
                     ...operation.props,
-                  },
+                  } as unknown as PageSchema['components'][string]['props'],
                 },
               }),
               { ...context.workingSchema.components },
             ),
-          };
+          } as unknown as PageSchema;
           return {
             data: { ok: true },
             patchDelta: patch,
@@ -466,13 +466,13 @@ describe('AgentRunnerService', () => {
                     props: {
                       ...(acc[operation.componentId]?.props ?? {}),
                       ...operation.props,
-                    },
+                    } as unknown as PageSchema['components'][string]['props'],
                   },
                 };
               },
               { ...context.workingSchema.components },
             ),
-          };
+          } as unknown as PageSchema;
           return {
             data: { patch: input.patch },
             updatedWorkingSchema: context.workingSchema,

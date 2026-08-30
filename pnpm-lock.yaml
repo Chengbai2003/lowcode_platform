@@ -60,9 +60,6 @@ importers:
       '@ai-sdk/vue':
         specifier: ^3.0.101
         version: 3.0.116(vue@3.5.29(typescript@5.9.3))(zod@4.3.6)
-      '@lowcode-platform/frontend':
-        specifier: workspace:*
-        version: link:../frontend
       '@lowcode-platform/schema-contract':
         specifier: workspace:*
         version: link:../schema-contract

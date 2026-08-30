@@ -1,6 +1,6 @@
-import { A2UISchema } from '../types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
-export const LIST_PAGE_FIXTURE: A2UISchema = {
+export const LIST_PAGE_FIXTURE: PageSchema = {
   schemaVersion: 0,
   rootId: 'page_root',
   components: {

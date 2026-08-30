@@ -1,7 +1,7 @@
 import { ContextAssemblerService } from '../schema-context';
 import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { PageSchemaService } from '../page-schema/page-schema.service';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
@@ -11,7 +11,7 @@ import { ToolExecutionService } from './tool-execution.service';
 import { ToolRegistryService } from './tool-registry.service';
 import { ToolExecutionContext } from './types/tool.types';
 
-function createSchema(): A2UISchema {
+function createSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',
@@ -281,7 +281,7 @@ describe('ToolExecutionService', () => {
   });
 
   it('rejects move_component cycles', async () => {
-    const nestedSchema: A2UISchema = {
+    const nestedSchema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {

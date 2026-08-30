@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
 import { useEditorStore, useSelectionStore } from './store/editor-store';
-import type { A2UISchema } from '../types';
+import type { PageSchema } from '../types';
 import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
 
 // hoisted mocks
@@ -109,7 +109,7 @@ vi.mock('./commands/schemaCommands', () => ({
 import { LowcodeEditor } from './LowcodeEditor';
 
 describe('LowcodeEditor handleAIPatchApply payload guard', () => {
-  const baseSchema: A2UISchema = {
+  const baseSchema: PageSchema = {
     schemaVersion: 0,
     rootId: 'root',
     components: {
@@ -118,7 +118,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
     },
   };
 
-  const nextSchema: A2UISchema = {
+  const nextSchema: PageSchema = {
     ...baseSchema,
     components: {
       ...baseSchema.components,
@@ -189,7 +189,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
     expect(captured.current).not.toBeNull();
     const handleAIPatchApply = captured.current.onPatchApply as (
       payload: AgentPatchApplyPayload,
-    ) => Promise<A2UISchema | null>;
+    ) => Promise<PageSchema | null>;
     expect(typeof handleAIPatchApply).toBe('function');
 
     const editorState = useEditorStore.getState();
@@ -210,7 +210,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
 
     const mismatchedPayload = { ...basePayload, ...override };
 
-    let result: A2UISchema | null | undefined;
+    let result: PageSchema | null | undefined;
     await act(async () => {
       result = await handleAIPatchApply(mismatchedPayload);
     });
@@ -241,7 +241,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
 
     const handleAIPatchApply = captured.current.onPatchApply as (
       payload: AgentPatchApplyPayload,
-    ) => Promise<A2UISchema | null>;
+    ) => Promise<PageSchema | null>;
 
     const editorState = useEditorStore.getState();
     const validPayload: AgentPatchApplyPayload = {
@@ -257,7 +257,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
       schemaRevision: editorState.schemaRevision,
     };
 
-    let result: A2UISchema | null | undefined;
+    let result: PageSchema | null | undefined;
     await act(async () => {
       result = await handleAIPatchApply(validPayload);
     });
@@ -282,7 +282,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
 
     const handleAIPatchApply = captured.current.onPatchApply as (
       payload: AgentPatchApplyPayload,
-    ) => Promise<A2UISchema | null>;
+    ) => Promise<PageSchema | null>;
 
     const editorState = useEditorStore.getState();
     const payloadWithNullVersion: AgentPatchApplyPayload = {
@@ -297,7 +297,7 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
       schemaRevision: editorState.schemaRevision,
     };
 
-    let result: A2UISchema | null | undefined;
+    let result: PageSchema | null | undefined;
     await act(async () => {
       result = await handleAIPatchApply(payloadWithNullVersion);
     });

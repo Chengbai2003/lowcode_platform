@@ -83,7 +83,7 @@ describe('PageSchemaRepository', () => {
     expect(winner.value.page.currentPageVersion).toBe(1);
   });
 
-  it('并发基于已存在版本：一成功一 Conflict（baseVersion）', async () => {
+  it('并发基于已存在版本：一成功一 Conflict（basePageVersion）', async () => {
     const repoA = createRepo();
     await repoA.onModuleInit();
     await repoA.saveSchema({

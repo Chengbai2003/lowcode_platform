@@ -1,10 +1,10 @@
 import { LowcodeEditor } from './editor';
-import type { A2UISchema, Action } from './types';
+import type { PageSchema, Action } from './types';
 
 /**
  * 登录注册页面的初始 Schema (A2UI Flat Structure)
  */
-const loginPageSchema: A2UISchema = {
+const loginPageSchema: PageSchema = {
   schemaVersion: 0,
   rootId: 'root',
   components: {
@@ -165,7 +165,7 @@ const loginPageSchema: A2UISchema = {
  * 开发环境 Demo
  */
 function App() {
-  const handleSchemaChange = (_schema: A2UISchema) => {};
+  const handleSchemaChange = (_schema: PageSchema) => {};
 
   const handleError = (_error: string) => {};
 

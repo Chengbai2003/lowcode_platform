@@ -3,7 +3,7 @@
  * 调用后端编译 API
  */
 
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 
 /**
  * 编译选项
@@ -52,7 +52,7 @@ function getAuthToken(): string | null {
 /**
  * 编译 Schema 为 React 代码
  */
-export async function compileSchema(schema: A2UISchema, options?: CompileOptions): Promise<string> {
+export async function compileSchema(schema: PageSchema, options?: CompileOptions): Promise<string> {
   const baseUrl = getApiBaseUrl();
   const token = getAuthToken();
 

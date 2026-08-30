@@ -2,7 +2,7 @@ import React from 'react';
 import { Layout } from 'antd';
 import Editor from '@monaco-editor/react';
 import { ComponentTree } from '../TreeView/ComponentTree';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import styles from './EditorPane.module.scss';
 
 const { Sider } = Layout;
@@ -11,13 +11,13 @@ interface EditorPaneProps {
   activeTab: 'json' | 'visual' | 'code';
   width: number | string;
   json: string;
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   compiledCode?: string;
   editorTheme: string;
   showLineNumbers: boolean;
   wordWrap: boolean;
   selectedId: string | null;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
   onSelectComponent: (id: string) => void;
   handleEditorChange: (value: string | undefined) => void;
 }

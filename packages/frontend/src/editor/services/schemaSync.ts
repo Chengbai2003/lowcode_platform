@@ -8,14 +8,14 @@
  * 因此 resolveSchemaVersion / schemaVersionRef 已删除。
  */
 
-import type { A2UIComponent, A2UISchema, AIMessageActionResult } from '../../types';
+import type { ComponentNode, PageSchema, AIMessageActionResult } from '../../types';
 
-export function isA2UISchema(value: unknown): value is A2UISchema {
+export function isA2UISchema(value: unknown): value is PageSchema {
   if (!value || typeof value !== 'object') return false;
   return 'rootId' in value && 'components' in value;
 }
 
-export function extractSchemaSnapshot(value: unknown): A2UISchema | null {
+export function extractSchemaSnapshot(value: unknown): PageSchema | null {
   if (isA2UISchema(value)) return value;
   if (!value || typeof value !== 'object') return null;
   const actionResult = value as Partial<AIMessageActionResult>;
@@ -25,10 +25,10 @@ export function extractSchemaSnapshot(value: unknown): A2UISchema | null {
   return null;
 }
 
-export function buildSubtreeSchema(source: A2UISchema, rootId: string): A2UISchema | null {
+export function buildSubtreeSchema(source: PageSchema, rootId: string): PageSchema | null {
   const root = source.components[rootId];
   if (!root) return null;
-  const components: Record<string, A2UIComponent> = {};
+  const components: Record<string, ComponentNode> = {};
   const stack = [rootId];
   while (stack.length > 0) {
     const id = stack.pop()!;
@@ -46,10 +46,10 @@ export function buildSubtreeSchema(source: A2UISchema, rootId: string): A2UISche
 }
 
 export function applyComponentSnapshot(
-  baseSchema: A2UISchema,
-  snapshot: A2UISchema,
+  baseSchema: PageSchema,
+  snapshot: PageSchema,
   componentId: string,
-): A2UISchema | null {
+): PageSchema | null {
   if (!baseSchema.components[componentId]) return null;
   const subtree =
     snapshot.rootId === componentId ? snapshot : buildSubtreeSchema(snapshot, componentId);

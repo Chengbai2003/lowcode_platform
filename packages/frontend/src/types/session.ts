@@ -1,4 +1,4 @@
-import type { A2UISchema } from './schema';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 
 // AI 角色类型
 export type AIRole = 'user' | 'assistant' | 'system';
@@ -25,7 +25,7 @@ export interface AIMessageActionResult {
   props?: Record<string, unknown>;
   previousProps?: Record<string, unknown>;
   // Optional schema snapshot for rollback/apply actions
-  schemaSnapshot?: A2UISchema;
+  schemaSnapshot?: PageSchema;
 }
 
 // AI 会话消息

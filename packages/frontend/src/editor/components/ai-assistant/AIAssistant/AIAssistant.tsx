@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Button, Input, Divider, Tooltip, message, Popover } from 'antd';
 import { SendOutlined, BulbOutlined, SettingOutlined, DatabaseOutlined } from '@ant-design/icons';
-import type { A2UISchema } from '../../../../types';
+import type { PageSchema } from '../../../../types';
 import { validateAndAutoFixA2UISchema } from '../../../../schema/schemaValidation';
 import { componentRegistry } from '../../../../components';
 import { builtInComponents } from '../../../../renderer';
@@ -13,11 +13,11 @@ import { AIAssistantMessageList } from './AIAssistantMessageList';
 import styles from './AIAssistant.module.scss';
 
 interface AIAssistantProps {
-  currentSchema: A2UISchema | null;
+  currentSchema: PageSchema | null;
   pageId?: string;
   pageVersion?: number | null;
   selectedId?: string | null;
-  onSchemaUpdate?: (schema: A2UISchema) => void;
+  onSchemaUpdate?: (schema: PageSchema) => void;
   onPatchApply?: AgentPatchApplyHandler;
   onError?: (error: string) => void;
 }
@@ -74,7 +74,7 @@ export const AIAssistant: React.FC<AIAssistantProps> = ({
   });
 
   const applySchema = useCallback(
-    (schema: A2UISchema) => {
+    (schema: PageSchema) => {
       const whitelist = Array.from(
         new Set([...Object.keys(builtInComponents), ...Object.keys(componentRegistry)]),
       );

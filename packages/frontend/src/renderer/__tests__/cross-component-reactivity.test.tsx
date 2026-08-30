@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, act, fireEvent } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { LowcodeProvider, Renderer, EventDispatcher } from '../';
 import { ComponentRenderer } from '../ComponentRenderer';
 import * as valueResolver from '../executor/parser/valueResolver';
@@ -239,7 +239,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
       useReactiveRuntime: true,
     };
 
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -275,7 +275,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
   });
 
   it('A.visible reacts to data.B change via eventDispatcher: hidden → visible', async () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -322,7 +322,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
   });
 
   it('A.visible reacts to data.B change: visible → hidden', async () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -368,7 +368,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
   });
 
   it('static visible=false hides component', async () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -399,7 +399,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
   });
 
   it('A.disabled reacts to data.B change via eventDispatcher', async () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -458,7 +458,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
         ([values]) => (values as Record<string, unknown>).children === 'Depends on inputB',
       ).length;
 
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {

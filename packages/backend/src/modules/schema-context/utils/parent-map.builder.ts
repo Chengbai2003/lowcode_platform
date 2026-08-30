@@ -1,9 +1,9 @@
-import { A2UIComponent } from '../types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { AncestorEntry } from '../types/focus-context.types';
 
 // Scan all childrenIds to build childId → parentId mapping. Single O(N) pass.
 export function buildParentMap(
-  components: Readonly<Record<string, A2UIComponent>>,
+  components: Readonly<Record<string, ComponentNode>>,
 ): ReadonlyMap<string, string> {
   const map = new Map<string, string>();
   for (const [parentId, component] of Object.entries(components)) {
@@ -20,7 +20,7 @@ export function buildParentMap(
 export function buildAncestorChain(
   nodeId: string,
   parentMap: ReadonlyMap<string, string>,
-  components: Readonly<Record<string, A2UIComponent>>,
+  components: Readonly<Record<string, ComponentNode>>,
 ): AncestorEntry[] {
   const ancestors: AncestorEntry[] = [];
   const seen = new Set<string>();

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useAIContext } from '../useAIContext';
 import { useSelectionStore } from '../../store/editor-store';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 
 describe('useAIContext', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('useAIContext', () => {
   });
 
   it('should return empty context when no component selected', () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -49,7 +49,7 @@ describe('useAIContext', () => {
   });
 
   it('should return context when component is selected', () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {

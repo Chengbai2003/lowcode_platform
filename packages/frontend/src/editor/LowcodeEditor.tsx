@@ -8,7 +8,7 @@ import type {
   LowcodeEditorProps,
   NotificationOptions,
 } from './types';
-import type { A2UISchema, AIMessageActionResult } from '../types';
+import type { PageSchema, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
 import { builtInComponents } from '../renderer';
 import {
@@ -47,7 +47,7 @@ function LowcodeEditorInner({
   eventContext = {},
 }: LowcodeEditorProps) {
   // 初始化 Schema
-  const defaultSchema: A2UISchema = useMemo(() => createDefaultReactiveSchema(), []);
+  const defaultSchema: PageSchema = useMemo(() => createDefaultReactiveSchema(), []);
 
   const initialSchemaObj = useMemo(() => {
     if (typeof initialSchema === 'string') {
@@ -60,7 +60,7 @@ function LowcodeEditorInner({
     return initialSchema || defaultSchema;
   }, [initialSchema, defaultSchema]);
 
-  const [schema, setSchema] = useState<A2UISchema>(initialSchemaObj);
+  const [schema, setSchema] = useState<PageSchema>(initialSchemaObj);
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light');
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
@@ -198,7 +198,7 @@ function LowcodeEditorInner({
   );
 
   const handleSchemaUpdate = useCallback(
-    (newSchema: A2UISchema) => {
+    (newSchema: PageSchema) => {
       setSchema(newSchema);
       useEditorStore.getState().bumpSchemaRevision();
       onChange?.(newSchema);
@@ -222,7 +222,7 @@ function LowcodeEditorInner({
 
   // 处理 Schema 变化（记录历史）
   const handleSchemaChange = useCallback(
-    (newSchema: A2UISchema) => {
+    (newSchema: PageSchema) => {
       useEditorStore.getState().bumpSchemaRevision();
       updateSchema(newSchema, '更新 Schema');
     },
@@ -230,7 +230,7 @@ function LowcodeEditorInner({
   );
 
   const handleSchemaCommit = useCallback(
-    (newSchema: A2UISchema) => {
+    (newSchema: PageSchema) => {
       useEditorStore.getState().bumpSchemaRevision();
       forceUpdateSchema(newSchema, '保存 Schema');
     },
@@ -258,7 +258,7 @@ function LowcodeEditorInner({
   });
   // 处理模板应用
   const handleApplyTemplate = useCallback(
-    (templateSchema: A2UISchema) => {
+    (templateSchema: PageSchema) => {
       forceUpdateSchema(templateSchema, '应用模板');
       message.success('模板已应用！');
     },
@@ -292,7 +292,7 @@ function LowcodeEditorInner({
 
   // Helpers moved to services/schemaSync.ts — isA2UISchema / extractSchemaSnapshot / buildSubtreeSchema / applyComponentSnapshotPure
   const applyComponentSnapshot = useCallback(
-    (snapshot: A2UISchema, componentId: string) =>
+    (snapshot: PageSchema, componentId: string) =>
       applyComponentSnapshotPure(schema, snapshot, componentId),
     [schema],
   );

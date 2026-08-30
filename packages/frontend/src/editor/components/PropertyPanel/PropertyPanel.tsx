@@ -1,6 +1,6 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { Collapse } from 'antd';
-import type { A2UISchema, PropertyMeta } from '../../../types';
+import type { PageSchema, PropertyMeta } from '../../../types';
 import { getComponentMeta } from '../../../components';
 import { StringEditor } from './editors/StringEditor';
 import { NumberEditor } from './editors/NumberEditor';
@@ -26,9 +26,9 @@ import { isExpression } from '../../../renderer/executor/parser/expressionParser
 import styles from './PropertyPanel.module.scss';
 
 interface PropertyPanelProps {
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   selectedId: string | null;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
 }
 
 const EXPRESSION_HINT_KEYS = new Set([
@@ -177,7 +177,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
         nextProps[key] = normalizedValue as import('@lowcode-platform/schema-contract').JsonValue;
       }
 
-      const newSchema: A2UISchema = {
+      const newSchema: PageSchema = {
         ...schema,
         components: {
           ...schema.components,

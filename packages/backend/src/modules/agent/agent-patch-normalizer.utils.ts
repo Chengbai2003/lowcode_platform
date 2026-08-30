@@ -5,11 +5,11 @@
  */
 
 import { buildParentMap } from '../schema-context/utils/parent-map.builder';
-import type { A2UISchema } from '../schema-context';
+import type { PageSchema } from '../schema-context';
 import type { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
 
 export function normalizeFinalPatch(
-  baseSchema: A2UISchema,
+  baseSchema: PageSchema,
   patch: readonly EditorPatchOperation[],
 ): EditorPatchOperation[] {
   const parentMap = buildParentMap(baseSchema.components);

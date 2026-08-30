@@ -5,7 +5,7 @@
  */
 
 import { buildAncestorChain, buildParentMap } from '../schema-context/utils/parent-map.builder';
-import type { A2UIComponent, A2UISchema, NodeCandidate } from '../schema-context';
+import type { ComponentNode, PageSchema, NodeCandidate } from '../schema-context';
 import type { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import type { AgentClarificationCandidate } from './types/agent-edit.types';
 
@@ -26,7 +26,7 @@ const MAX_PATH_SEGMENT_CHARS = 18;
 
 export function buildClarificationCandidates(
   candidates: readonly NodeCandidate[],
-  schema: A2UISchema,
+  schema: PageSchema,
   componentMetaRegistry: ComponentMetaRegistry,
 ): AgentClarificationCandidate[] {
   const parentMap = buildParentMap(schema.components);
@@ -58,7 +58,7 @@ export function buildClarificationSummary(candidate: AgentClarificationCandidate
 }
 
 function extractComponentLabel(
-  component: A2UIComponent | undefined,
+  component: ComponentNode | undefined,
   componentMetaRegistry: ComponentMetaRegistry,
 ): string | undefined {
   if (!component?.props) return undefined;
@@ -74,7 +74,7 @@ function extractComponentLabel(
 
 function buildFallbackDisplayLabel(
   candidate: NodeCandidate,
-  schema: A2UISchema,
+  schema: PageSchema,
   parentMap: ReadonlyMap<string, string>,
   secondaryLabel: string,
 ): string {
@@ -93,7 +93,7 @@ function buildFallbackDisplayLabel(
 
 function buildCandidatePathLabel(
   componentId: string,
-  schema: A2UISchema,
+  schema: PageSchema,
   parentMap: ReadonlyMap<string, string>,
   componentMetaRegistry: ComponentMetaRegistry,
 ): string | undefined {
@@ -109,7 +109,7 @@ function buildCandidatePathLabel(
 }
 
 function buildPathSegmentLabel(
-  component: A2UIComponent | undefined,
+  component: ComponentNode | undefined,
   type: string,
   componentMetaRegistry: ComponentMetaRegistry,
 ): string {

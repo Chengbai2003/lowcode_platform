@@ -1,4 +1,4 @@
-import type { A2UISchema, A2UIComponent } from './schema.types';
+import type { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { compileStyle } from './styleCompiler';
 import {
   type CompileOptions,
@@ -108,18 +108,18 @@ interface ResolvedComponentNode {
   componentType: string;
   props: PropNode[];
   events: EventBindingNode[];
-  children: ComponentNode[];
+  children: ParseTreeNode[];
   codegenNode?: JSXNode;
 }
 
-type ComponentNode = MissingComponentNode | CycleComponentNode | ResolvedComponentNode;
+type ParseTreeNode = MissingComponentNode | CycleComponentNode | ResolvedComponentNode;
 
 interface RootNode {
   type: 'root';
-  schema: A2UISchema;
+  schema: PageSchema;
   options: Required<CompileOptions>;
   flatComponents: FlatComponentNode[];
-  children: ComponentNode[];
+  children: ParseTreeNode[];
   imports: Map<string, Set<string>>;
   fields: FieldInfo[];
   handlers: HandlerDeclaration[];
@@ -248,7 +248,7 @@ function createCompileOptions(options?: CompileOptions): Required<CompileOptions
   };
 }
 
-function parseProps(props: A2UIComponent['props']): PropNode[] {
+function parseProps(props: ComponentNode['props']): PropNode[] {
   return Object.entries(props ?? {}).map(([name, value]) => ({
     name,
     value: normalizeValue(value),
@@ -310,14 +310,14 @@ function parseAction(action: unknown): ActionNode {
   };
 }
 
-function parseEvents(events: A2UIComponent['events']): EventBindingNode[] {
+function parseEvents(events: ComponentNode['events']): EventBindingNode[] {
   return Object.entries(events ?? {}).map(([eventName, actions]) => ({
     eventName,
     actions: Array.isArray(actions) ? actions.map((action) => parseAction(action)) : [],
   }));
 }
 
-function parseFlatComponent(componentId: string, component: A2UIComponent): FlatComponentNode {
+function parseFlatComponent(componentId: string, component: ComponentNode): FlatComponentNode {
   return {
     id: componentId,
     componentType: component.type,
@@ -346,7 +346,7 @@ function buildComponentTree(
   componentId: string,
   componentMap: Map<string, FlatComponentNode>,
   path: Set<string>,
-): ComponentNode {
+): ParseTreeNode {
   if (path.has(componentId)) {
     return { kind: 'cycle', id: componentId };
   }
@@ -374,7 +374,7 @@ function buildComponentTree(
   };
 }
 
-export function parseSchema(schema: A2UISchema, options?: CompileOptions): RootNode {
+export function parseSchema(schema: PageSchema, options?: CompileOptions): RootNode {
   const optionsConfig = createCompileOptions(options);
   const flatComponents = Object.entries(schema.components ?? {}).map(([componentId, component]) =>
     parseFlatComponent(componentId, component),
@@ -1059,7 +1059,7 @@ function createMissingNode(componentId: string): JSXElementNode {
   };
 }
 
-function buildComponentNode(node: ComponentNode, ctx: TransformContext): JSXNode {
+function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode {
   if (node.kind === 'missing') {
     return createMissingNode(node.id);
   }
@@ -1758,10 +1758,10 @@ export function generate(root: RootNode): string {
   return lines.filter(Boolean).join('\n');
 }
 
-export function compileSchemaToCode(schema: A2UISchema, options?: CompileOptions): string {
+export function compileSchemaToCode(schema: PageSchema, options?: CompileOptions): string {
   // 只消费 Contract 返回的 canonical 对象，绝不使用原始输入
   const canonicalSchema = requireValidPageSchema(schema as unknown);
-  const ast = parseSchema(canonicalSchema as unknown as A2UISchema, options);
+  const ast = parseSchema(canonicalSchema as unknown as PageSchema, options);
   transform(ast);
   return generate(ast);
 }

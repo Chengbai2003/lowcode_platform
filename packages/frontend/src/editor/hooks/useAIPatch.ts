@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { message } from 'antd';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { validateAndAutoFixA2UISchema } from '../../schema/schemaValidation';
 import { createPatchCommand } from '../commands/schemaCommands';
 import { useEditorStore } from '../store/editor-store';
@@ -8,10 +8,10 @@ import type { AgentPatchApplyPayload } from '../components/ai-assistant/types/ai
 
 interface Params {
   allComponents: Record<string, React.ComponentType<Record<string, unknown>>>;
-  handleSchemaUpdate: (s: A2UISchema) => void;
-  forceUpdateSchema: (s: A2UISchema, desc: string) => void;
+  handleSchemaUpdate: (s: PageSchema) => void;
+  forceUpdateSchema: (s: PageSchema, desc: string) => void;
   executeSchemaCommand: (c: ReturnType<typeof createPatchCommand>) => void;
-  schemaRef: React.MutableRefObject<A2UISchema>;
+  schemaRef: React.MutableRefObject<PageSchema>;
   pageVersionRef: React.MutableRefObject<number | null>;
   mountedRef: React.MutableRefObject<boolean>;
   selectComponent: (id: string) => void;
@@ -30,7 +30,7 @@ export function useAIPatch({
   onError,
 }: Params) {
   const handleAISchemaUpdate = useCallback(
-    (newSchema: A2UISchema) => {
+    (newSchema: PageSchema) => {
       const whitelist = Object.keys(allComponents);
       const result = validateAndAutoFixA2UISchema(newSchema, whitelist);
       if (!result.success) {
@@ -67,7 +67,7 @@ export function useAIPatch({
       sourceGeneration,
       documentSessionId,
       schemaRevision,
-    }: AgentPatchApplyPayload): Promise<A2UISchema | null> => {
+    }: AgentPatchApplyPayload): Promise<PageSchema | null> => {
       const editorState = useEditorStore.getState();
       if (
         !mountedRef.current ||

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { PropertyPanel } from './PropertyPanel';
-import type { A2UISchema } from '../../../types';
+import type { PageSchema } from '../../../types';
 
-function createSchema(id: string, type: string, props: Record<string, unknown> = {}): A2UISchema {
+function createSchema(id: string, type: string, props: Record<string, unknown> = {}): PageSchema {
   return {
     schemaVersion: 0,
     rootId: id,
@@ -20,9 +20,9 @@ function createSchema(id: string, type: string, props: Record<string, unknown> =
 }
 
 interface StatefulPanelProps {
-  initialSchema: A2UISchema;
+  initialSchema: PageSchema;
   selectedId: string;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
 }
 
 const StatefulPanel: React.FC<StatefulPanelProps> = ({
@@ -57,7 +57,7 @@ describe('PropertyPanel complex editors', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '新增列' }));
 
-    const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
+    const latestSchema = onSchemaChange.mock.lastCall?.[0] as PageSchema;
     const columns = latestSchema.components['table-1']?.props?.columns as Array<unknown>;
     expect(columns).toHaveLength(2);
   });
@@ -87,7 +87,7 @@ describe('PropertyPanel complex editors', () => {
     });
     fireEvent.click(screen.getByLabelText('列1按钮1危险样式'));
 
-    const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
+    const latestSchema = onSchemaChange.mock.lastCall?.[0] as PageSchema;
     const columns = latestSchema.components['table-1']?.props?.columns as Array<
       Record<string, unknown>
     >;
@@ -128,7 +128,7 @@ describe('PropertyPanel complex editors', () => {
       target: { value: 'onBlur' },
     });
 
-    const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
+    const latestSchema = onSchemaChange.mock.lastCall?.[0] as PageSchema;
     const rules = latestSchema.components['form-item-1']?.props?.rules as Array<
       Record<string, unknown>
     >;
@@ -193,13 +193,13 @@ describe('PropertyPanel complex editors', () => {
     const textarea = screen.getByPlaceholderText('输入默认插槽内容（组件树子节点会附加在后）');
     fireEvent.change(textarea, { target: { value: '立即提交' } });
 
-    const latestSchema = onSchemaChange.mock.lastCall?.[0] as A2UISchema;
+    const latestSchema = onSchemaChange.mock.lastCall?.[0] as PageSchema;
     expect(latestSchema.components['button-1']?.props?.children).toBe('立即提交');
   });
 
   it('shows conflict hint when slot text and childrenIds both exist', () => {
     const onSchemaChange = vi.fn();
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'button-1',
       components: {

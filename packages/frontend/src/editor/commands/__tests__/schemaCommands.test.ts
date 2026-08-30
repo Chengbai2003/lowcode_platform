@@ -7,11 +7,11 @@ import {
   createUpdatePropsCommand,
   createMacroCommand,
 } from '../schemaCommands';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import type { Command } from '../../store/history';
 
 // Mock schema for testing
-const createMockSchema = (): A2UISchema => ({
+const createMockSchema = (): PageSchema => ({
   schemaVersion: 0,
   rootId: 'root',
   components: {
@@ -32,8 +32,8 @@ const createMockSchema = (): A2UISchema => ({
 
 describe('UpdateSchemaCommand', () => {
   let mockOnChange: ReturnType<typeof vi.fn>;
-  let oldSchema: A2UISchema;
-  let newSchema: A2UISchema;
+  let oldSchema: PageSchema;
+  let newSchema: PageSchema;
 
   beforeEach(() => {
     mockOnChange = vi.fn();
@@ -128,14 +128,14 @@ describe('createPatchCommand', () => {
 });
 
 describe('ComponentCommand', () => {
-  let mockGetSchema: Mock<[], A2UISchema>;
-  let mockSetSchema: Mock<[A2UISchema], void>;
-  let schema: A2UISchema;
+  let mockGetSchema: Mock<[], PageSchema>;
+  let mockSetSchema: Mock<[PageSchema], void>;
+  let schema: PageSchema;
 
   beforeEach(() => {
     schema = createMockSchema();
     mockGetSchema = vi.fn(() => schema);
-    mockSetSchema = vi.fn((newSchema: A2UISchema) => {
+    mockSetSchema = vi.fn((newSchema: PageSchema) => {
       schema = newSchema;
     });
   });
@@ -231,7 +231,7 @@ describe('ComponentCommand', () => {
       command.execute();
 
       expect(mockSetSchema).toHaveBeenCalled();
-      const updatedSchema = mockSetSchema.mock.calls[0][0] as A2UISchema;
+      const updatedSchema = mockSetSchema.mock.calls[0][0] as PageSchema;
       expect(updatedSchema.components.child1?.props?.text).toBe('New text');
       expect(updatedSchema.components.child1?.props?.disabled).toBe(true);
     });
@@ -249,7 +249,7 @@ describe('ComponentCommand', () => {
       mockGetSchema.mockReturnValue(schema);
       command.undo();
 
-      const updatedSchema = mockSetSchema.mock.calls[1][0] as A2UISchema;
+      const updatedSchema = mockSetSchema.mock.calls[1][0] as PageSchema;
       expect(updatedSchema.components.child1?.props?.text).toBe('Click me');
     });
   });

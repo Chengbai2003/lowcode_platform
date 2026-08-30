@@ -2,9 +2,9 @@
  * 用户个人中心模板
  */
 import type { Template } from '../types';
-import type { A2UISchema } from '../../../types/schema';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 
-const schema: A2UISchema = {
+const schema: PageSchema = {
   schemaVersion: 0,
   rootId: 'page-profile',
   components: {

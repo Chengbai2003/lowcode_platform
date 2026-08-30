@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import type { A2UISchema, Action, ActionList } from '../../../types';
+import type { PageSchema, Action, ActionList } from '../../../types';
 import { EventFlowEditor } from './EventFlowEditor';
 import { ActionSelectorModal } from './ActionSelectorModal';
 import { TriggerSelectorModal } from './TriggerSelectorModal';
@@ -12,9 +12,9 @@ interface EventTriggerItem {
 }
 
 interface EventConfigPanelProps {
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   selectedId: string | null;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
 }
 
 /**
@@ -50,7 +50,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
         return;
       }
 
-      const newSchema: A2UISchema = {
+      const newSchema: PageSchema = {
         ...schema,
         components: {
           ...schema.components,
@@ -77,7 +77,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       const newEvents = { ...events };
       delete newEvents[trigger];
 
-      const newSchema: A2UISchema = {
+      const newSchema: PageSchema = {
         ...schema,
         components: {
           ...schema.components,
@@ -148,7 +148,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
 
       const currentActions = events[activeTrigger] || [];
 
-      const newSchema: A2UISchema = {
+      const newSchema: PageSchema = {
         ...schema,
         components: {
           ...schema.components,
@@ -175,7 +175,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       const currentActions = events[trigger] || [];
       const newActions = currentActions.filter((_, idx) => idx !== actionIndex);
 
-      const newSchema: A2UISchema = {
+      const newSchema: PageSchema = {
         ...schema,
         components: {
           ...schema.components,
@@ -202,7 +202,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
         idx === actionIndex ? nextAction : action,
       );
 
-      const newSchema: A2UISchema = {
+      const newSchema: PageSchema = {
         ...schema,
         components: {
           ...schema.components,

@@ -1,9 +1,9 @@
-import { A2UIComponent } from '../types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
 /** BFS collect subtree node IDs, limited by maxDepth and maxNodes */
 export function getSubtreeIds(
   nodeId: string,
-  components: Readonly<Record<string, A2UIComponent>>,
+  components: Readonly<Record<string, ComponentNode>>,
   maxDepth: number,
   maxNodes: number,
 ): string[] {
@@ -33,12 +33,12 @@ export function getSubtreeIds(
 /** Extract subtree as independent components map */
 export function extractSubtree(
   nodeId: string,
-  components: Readonly<Record<string, A2UIComponent>>,
+  components: Readonly<Record<string, ComponentNode>>,
   maxDepth: number,
   maxNodes: number,
-): Record<string, A2UIComponent> {
+): Record<string, ComponentNode> {
   const ids = getSubtreeIds(nodeId, components, maxDepth, maxNodes);
-  const result: Record<string, A2UIComponent> = {};
+  const result: Record<string, ComponentNode> = {};
   for (const id of ids) {
     const comp = components[id];
     if (comp) {
@@ -51,7 +51,7 @@ export function extractSubtree(
 /** Compute max depth from rootId using BFS */
 export function computeMaxDepth(
   rootId: string,
-  components: Readonly<Record<string, A2UIComponent>>,
+  components: Readonly<Record<string, ComponentNode>>,
 ): number {
   let maxDepth = 0;
   const visited = new Set<string>();

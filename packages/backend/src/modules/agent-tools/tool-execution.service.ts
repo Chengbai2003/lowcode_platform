@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ContextAssemblerService } from '../schema-context';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { PageSchemaService } from '../page-schema/page-schema.service';
 import { requireValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
@@ -97,7 +97,7 @@ export class ToolExecutionService {
   ): Promise<ToolExecutionContext> {
     let pageId = input.pageId;
     let resolvedPageVersion = input.basePageVersion;
-    let workingSchema: A2UISchema | undefined;
+    let workingSchema: PageSchema | undefined;
 
     if (pageId) {
       try {
@@ -121,7 +121,7 @@ export class ToolExecutionService {
         }
 
         if (!input.draftSchema) {
-          workingSchema = latestPage.schema as unknown as A2UISchema;
+          workingSchema = latestPage.schema as unknown as PageSchema;
         }
       } catch (error) {
         if (error instanceof AgentToolException) {
@@ -142,7 +142,7 @@ export class ToolExecutionService {
     if (input.draftSchema) {
       try {
         // 只消费 Contract 返回的 canonical 对象；页面版本不写入 Schema
-        workingSchema = requireValidPageSchema(input.draftSchema) as unknown as A2UISchema;
+        workingSchema = requireValidPageSchema(input.draftSchema) as unknown as PageSchema;
       } catch (error) {
         throw new AgentToolException({
           code: 'SCHEMA_INVALID',

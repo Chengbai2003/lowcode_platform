@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, Tag } from 'antd';
 import { LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons';
-import type { A2UISchema } from '../../../../types';
+import type { PageSchema } from '../../../../types';
 import type { AgentClarificationCandidate } from '../types/ai-types';
 import type { AIMessage } from './AIAssistant.types';
 import { MarkdownContent } from './MarkdownContent';
@@ -9,7 +9,7 @@ import styles from './AIAssistant.module.scss';
 
 interface AIAssistantMessageListProps {
   messages: AIMessage[];
-  onApplySchema: (schema: A2UISchema) => void;
+  onApplySchema: (schema: PageSchema) => void;
   onApplyPatchPreview: (messageId: string) => Promise<boolean>;
   onResolveClarification: (
     messageId: string,

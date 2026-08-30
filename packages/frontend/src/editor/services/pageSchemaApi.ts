@@ -1,4 +1,4 @@
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { type ApiEnvelope, unwrapApiEnvelope } from '../lib/apiResponse';
 import { fetchApp } from '../lib/httpClient';
 
@@ -7,7 +7,7 @@ export interface PageSchemaResponse {
   pageVersion: number;
   snapshotId: string;
   savedAt: string;
-  schema: A2UISchema;
+  schema: PageSchema;
 }
 
 export interface SavePageSchemaResponse {
@@ -28,7 +28,7 @@ export const pageSchemaApi = {
 
   async savePageSchema(
     pageId: string,
-    schema: A2UISchema,
+    schema: PageSchema,
     basePageVersion?: number,
   ): Promise<SavePageSchemaResponse> {
     const response = await fetchApp.put<

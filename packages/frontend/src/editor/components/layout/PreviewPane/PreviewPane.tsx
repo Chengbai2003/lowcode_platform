@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
-import type { ComponentRegistry, A2UISchema } from '../../../../types';
+import type { ComponentRegistry, PageSchema } from '../../../../types';
 import { validateA2UISchemaWithWhitelist } from '../../../../schema/schemaValidation';
 import { SelectableCanvas } from './SelectableCanvas';
 import { NoSchemaEmptyState } from '../../EmptyState';
@@ -17,9 +17,9 @@ class SchemaValidationError extends Error {
 }
 
 /**
- * 校验并转换 JSON 字符串为 A2UISchema
+ * 校验并转换 JSON 字符串为 PageSchema
  */
-function parseAndValidateSchema(jsonString: string, whitelist: string[]): A2UISchema {
+function parseAndValidateSchema(jsonString: string, whitelist: string[]): PageSchema {
   const parsed = JSON.parse(jsonString);
   const result = validateA2UISchemaWithWhitelist(parsed, whitelist);
 
@@ -31,15 +31,15 @@ function parseAndValidateSchema(jsonString: string, whitelist: string[]): A2UISc
 }
 
 interface PreviewPaneProps {
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   allComponents: ComponentRegistry;
   eventContext: Record<string, unknown>;
   previewTheme: 'light' | 'dark';
   selectedId?: string | null;
   isPreviewMode?: boolean;
   compiledCode?: string | null;
-  onSchemaChange?: (schema: A2UISchema) => void;
-  onSchemaCommit?: (schema: A2UISchema) => void;
+  onSchemaChange?: (schema: PageSchema) => void;
+  onSchemaCommit?: (schema: PageSchema) => void;
 }
 
 type ActiveTab = 'preview' | 'json' | 'compiled';

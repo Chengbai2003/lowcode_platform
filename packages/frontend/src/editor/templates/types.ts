@@ -1,7 +1,7 @@
 /**
  * 模板类型定义
  */
-import type { A2UISchema } from '../../types/schema';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 
 /**
  * 模板元数据
@@ -37,7 +37,7 @@ export type TemplateCategory =
  * 完整模板定义
  */
 export interface Template extends TemplateMeta {
-  schema: A2UISchema;
+  schema: PageSchema;
   /**
    * 示例 Prompt（可选）
    * 展示"如何描述才能生成类似效果"，帮助用户学习 AI 交互方式

@@ -1,4 +1,4 @@
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 
 /**
  * 常见 AI 幻觉的组件类型映射表
@@ -70,7 +70,7 @@ export function autoFixSchema(
   rawSchema: any,
   registeredTypes: string[] = [],
 ): {
-  fixed: A2UISchema;
+  fixed: PageSchema;
   fixes: string[];
 } {
   const fixes: string[] = [];
@@ -85,7 +85,7 @@ export function autoFixSchema(
     fixes.push('规范化 schemaVersion 为 0');
   }
   if ('version' in schema) {
-    delete schema.version;
+    delete (schema as Record<string, unknown>)['version'];
     fixes.push('移除 Schema 内遗留的 version 字段');
   }
 
@@ -196,5 +196,5 @@ export function autoFixSchema(
     fixes.push(`修正 rootId (${oldRootId || 'null'} -> ${newRootId})`);
   }
 
-  return { fixed: schema as A2UISchema, fixes };
+  return { fixed: schema as PageSchema, fixes };
 }

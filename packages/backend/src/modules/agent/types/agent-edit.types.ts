@@ -1,5 +1,5 @@
 import { EditorPatchOperation } from '../../agent-tools/types/editor-patch.types';
-import { A2UISchema } from '../../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { FocusContextResult } from '../../schema-context/types/focus-context.types';
 
 export type AgentResponseMode = 'auto' | 'answer' | 'schema' | 'patch';
@@ -137,7 +137,7 @@ export interface AgentEditPatchResponse {
   resolvedPageVersion?: number;
   resolvedSelectedId?: string;
   patch: EditorPatchOperation[];
-  previewSchema: A2UISchema;
+  previewSchema: PageSchema;
   previewSummary: string;
   changeGroups: AgentPatchChangeGroup[];
   risk: AgentPatchRiskAssessment;

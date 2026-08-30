@@ -1,6 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { A2UISchema, AISession } from '../../../../types';
+import type { PageSchema, AISession } from '../../../../types';
 import { useEditorStore } from '../../../store/editor-store';
 import { useAIAssistantChat } from './useAIAssistantChat';
 
@@ -43,7 +43,7 @@ vi.mock('../../../hooks', () => ({
 }));
 
 describe('useAIAssistantChat', () => {
-  const baseSchema: A2UISchema = {
+  const baseSchema: PageSchema = {
     schemaVersion: 0,
     rootId: 'root',
     components: {
@@ -106,7 +106,7 @@ describe('useAIAssistantChat', () => {
   });
 
   it('uses streamed auto mode and keeps patch results in preview state until confirmed', async () => {
-    const nextSchema: A2UISchema = {
+    const nextSchema: PageSchema = {
       ...baseSchema,
       components: {
         ...baseSchema.components,
@@ -454,7 +454,7 @@ describe('useAIAssistantChat', () => {
   });
 
   it('stores scope confirmation highlights and confirms batch patch generation in-place', async () => {
-    const batchSchema: A2UISchema = {
+    const batchSchema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -657,7 +657,7 @@ describe('useAIAssistantChat', () => {
   });
 
   it('confirms ambiguous intent in-place before entering scope confirmation', async () => {
-    const batchSchema: A2UISchema = {
+    const batchSchema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -1065,7 +1065,7 @@ describe('useAIAssistantChat', () => {
   });
 
   it('applies pending patch fails if pageId changes during confirm dialog', async () => {
-    const nextSchema: A2UISchema = {
+    const nextSchema: PageSchema = {
       ...baseSchema,
       components: {
         ...baseSchema.components,
@@ -1208,7 +1208,7 @@ describe('useAIAssistantChat', () => {
   });
 
   it('applies pending patch fails if schemaRevision increments during confirm', async () => {
-    const nextSchema: A2UISchema = {
+    const nextSchema: PageSchema = {
       ...baseSchema,
       components: {
         ...baseSchema.components,

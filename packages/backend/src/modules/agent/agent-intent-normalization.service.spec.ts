@@ -1,9 +1,9 @@
 import { ComponentMetaRegistry } from '../schema-context';
 import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
-import type { A2UISchema } from '../schema-context';
+import type { PageSchema } from '../schema-context';
 import { AgentIntentNormalizationService } from './agent-intent-normalization.service';
 
-function createBatchSchema(): A2UISchema {
+function createBatchSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',

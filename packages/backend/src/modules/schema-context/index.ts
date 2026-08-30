@@ -5,7 +5,7 @@ export { SchemaSlicerService } from './schema-slicer.service';
 export { NodeLocatorService } from './node-locator.service';
 export { CollectionTargetResolverService } from './collection-target-resolver.service';
 export { ComponentMetaRegistry } from './component-metadata/component-meta.registry';
-export type { A2UISchema, A2UIComponent } from './types/schema.types';
+export type { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 export type {
   FocusContext,
   FocusContextResult,

@@ -1,15 +1,12 @@
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import {
-  A2UISchemaValidator,
   safeValidateA2UISchema,
   validateA2UISchema,
   validateA2UISchemaWithWhitelist,
   validateAndAutoFixA2UISchema,
 } from '../../schema/schemaValidation';
 
-export { A2UISchemaValidator };
-
-export function validateSchema(input: unknown): A2UISchema {
+export function validateSchema(input: unknown): PageSchema {
   return validateA2UISchema(input);
 }
 

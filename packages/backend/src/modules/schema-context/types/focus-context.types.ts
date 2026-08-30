@@ -1,4 +1,4 @@
-import { A2UIComponent, A2UISchema } from './schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
 export interface AncestorEntry {
   readonly id: string;
@@ -32,7 +32,7 @@ export interface FocusContext {
   readonly ancestors: readonly AncestorEntry[];
   readonly children: readonly NodeSummary[];
   readonly siblings: readonly SiblingInfo[];
-  readonly subtree: Readonly<Record<string, A2UIComponent>>;
+  readonly subtree: Readonly<Record<string, ComponentNode>>;
   readonly schemaStats: SchemaStats;
   readonly estimatedTokens: number;
 }
@@ -49,6 +49,6 @@ export interface FocusContextResult {
   readonly mode: 'focused' | 'candidates';
   readonly context?: FocusContext;
   readonly candidates?: readonly NodeCandidate[];
-  readonly schema: A2UISchema;
+  readonly schema: PageSchema;
   readonly componentList: readonly string[];
 }

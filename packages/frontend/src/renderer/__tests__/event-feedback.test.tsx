@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { LowcodeProvider, Renderer } from '../';
 
 describe('Renderer feedback action', () => {
   it('dispatches message feedback on click', async () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
