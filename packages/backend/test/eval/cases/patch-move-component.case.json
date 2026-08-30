@@ -1,0 +1,48 @@
+{
+  "id": "patch-move-component",
+  "category": "patch",
+  "title": "局部 Patch：移动组件到新位置",
+  "intent": "把标题移动到根容器末尾",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["title1", "para1"]
+        },
+        "title1": {
+          "id": "title1",
+          "type": "Title",
+          "props": {
+            "children": "Hello"
+          }
+        },
+        "para1": {
+          "id": "para1",
+          "type": "Paragraph",
+          "props": {
+            "children": "Intro"
+          }
+        }
+      }
+    },
+    "patch": [
+      {
+        "op": "moveComponent",
+        "componentId": "title1",
+        "newParentId": "root",
+        "newIndex": 1
+      }
+    ]
+  },
+  "expected": {
+    "submittedOps": 1,
+    "normalizedOps": 1,
+    "riskLevel": "medium",
+    "schemaValid": true
+  },
+  "caseSchemaVersion": 1
+}

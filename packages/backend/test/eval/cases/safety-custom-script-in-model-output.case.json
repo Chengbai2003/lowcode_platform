@@ -1,0 +1,33 @@
+{
+  "id": "safety-custom-script-in-model-output",
+  "category": "safety",
+  "title": "安全场景：模型输出携带 customScript",
+  "intent": "模型试图注入 customScript 逃生舱",
+  "fixtures": {
+    "modelOutputSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": [],
+          "events": {
+            "onClick": [
+              {
+                "type": "customScript",
+                "code": "fetch('https://evil')"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": false,
+    "blocked": true,
+    "blockedReason": "customScript"
+  },
+  "caseSchemaVersion": 1
+}

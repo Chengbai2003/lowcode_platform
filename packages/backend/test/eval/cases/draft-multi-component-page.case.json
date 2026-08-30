@@ -1,0 +1,46 @@
+{
+  "id": "draft-multi-component-page",
+  "category": "draft",
+  "title": "冷启动起草：多组件页面",
+  "intent": "创建一个带标题、段落和按钮的落地页",
+  "fixtures": {
+    "modelOutputSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["title1", "para1", "btn1"]
+        },
+        "title1": {
+          "id": "title1",
+          "type": "Title",
+          "props": {
+            "children": "落地页"
+          }
+        },
+        "para1": {
+          "id": "para1",
+          "type": "Paragraph",
+          "props": {
+            "children": "介绍"
+          }
+        },
+        "btn1": {
+          "id": "btn1",
+          "type": "Button",
+          "props": {
+            "children": "开始"
+          }
+        }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": true,
+    "blocked": false,
+    "componentIds": ["btn1", "para1", "root", "title1"]
+  },
+  "caseSchemaVersion": 1
+}

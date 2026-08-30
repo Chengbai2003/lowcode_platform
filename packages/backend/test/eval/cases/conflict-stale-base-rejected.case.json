@@ -1,0 +1,25 @@
+{
+  "id": "conflict-stale-base-rejected",
+  "category": "conflict",
+  "title": "版本冲突：过期 basePageVersion 被 CAS 拒绝",
+  "intent": "并发保存场景：保存后再用过期基线提交",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": []
+        }
+      }
+    },
+    "steps": ["save", "saveStaleBase"]
+  },
+  "expected": {
+    "finalVersion": 1,
+    "staleBaseConflict": true
+  },
+  "caseSchemaVersion": 1
+}

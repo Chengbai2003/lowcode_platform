@@ -1,0 +1,47 @@
+{
+  "id": "patch-table-config-update",
+  "category": "patch",
+  "title": "局部 Patch：表格分页配置修改",
+  "intent": "把表格分页大小改为 20",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["table1"]
+        },
+        "table1": {
+          "id": "table1",
+          "type": "Table",
+          "props": {
+            "columns": [],
+            "pagination": {
+              "pageSize": 10
+            }
+          }
+        }
+      }
+    },
+    "patch": [
+      {
+        "op": "updateProps",
+        "componentId": "table1",
+        "props": {
+          "pagination": {
+            "pageSize": 20
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "submittedOps": 1,
+    "normalizedOps": 1,
+    "riskLevel": "low",
+    "schemaValid": true
+  },
+  "caseSchemaVersion": 1
+}

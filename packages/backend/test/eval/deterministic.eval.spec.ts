@@ -15,6 +15,7 @@ import { runEvalCase, serializeResult } from './pipeline';
 import { computeMetrics } from './metrics';
 import { writeReports } from './report';
 import {
+  BASELINE_CASE_QUOTAS,
   EVAL_CASE_SCHEMA_VERSION,
   EVAL_HARNESS_VERSION,
   type EvalCase,
@@ -74,6 +75,15 @@ describe('Agent deterministic eval (M0-3)', () => {
     expect(cases.length).toBeGreaterThan(0);
     firstRun = await runAll(cases);
     secondRun = await runAll(cases);
+  });
+
+  it('基线用例覆盖 M0 配额：draft 4 / patch 6 / validation 4 / conflict 3 / safety 3', () => {
+    const counts = new Map<string, number>();
+    for (const kase of cases) {
+      counts.set(kase.category, (counts.get(kase.category) ?? 0) + 1);
+    }
+    expect(Object.fromEntries(counts)).toEqual(BASELINE_CASE_QUOTAS);
+    expect(cases.length).toBe(20);
   });
 
   it('每个用例的 ExpectedOutcome 与实际结果一致', () => {

@@ -1,0 +1,89 @@
+{
+  "id": "validation-patch-over-policy-limit",
+  "category": "validation",
+  "title": "非法输入：Patch 操作数超过策略上限",
+  "intent": "一次提交 8 个 patch 操作",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["title1"]
+        },
+        "title1": {
+          "id": "title1",
+          "type": "Title",
+          "props": {
+            "children": "Hello"
+          }
+        }
+      }
+    },
+    "patch": [
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "A"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "B"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "C"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "D"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "E"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "F"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "G"
+        }
+      },
+      {
+        "op": "updateProps",
+        "componentId": "title1",
+        "props": {
+          "children": "H"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "blocked": true,
+    "blockedReason": "exceed policy limit"
+  },
+  "caseSchemaVersion": 1
+}
