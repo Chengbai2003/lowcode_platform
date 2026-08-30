@@ -535,7 +535,9 @@ describe('AgentRunnerService', () => {
     );
     const componentMetaRegistry = new ComponentMetaRegistry();
     const collectionTargetResolver = new CollectionTargetResolverService(componentMetaRegistry);
-    const intentNormalizationService = new AgentIntentNormalizationService(collectionTargetResolver);
+    const intentNormalizationService = new AgentIntentNormalizationService(
+      collectionTargetResolver,
+    );
     const intentConfirmationService = new AgentIntentConfirmationService();
     const scopeConfirmationService = new AgentScopeConfirmationService();
     const traceService = options?.traceService ?? new AgentTraceService();
@@ -579,11 +581,7 @@ describe('AgentRunnerService', () => {
       resolve: jest.fn(async (dto: any, traceId: string) => ({
         traceId,
         route: {
-          requestedMode: (dto.responseMode ?? 'patch') as
-            | 'auto'
-            | 'answer'
-            | 'schema'
-            | 'patch',
+          requestedMode: (dto.responseMode ?? 'patch') as 'auto' | 'answer' | 'schema' | 'patch',
           resolvedMode: 'patch' as const,
           reason: (dto.selectedId ? 'selected_target' : 'default_edit_with_page_context') as
             | 'selected_target'
@@ -971,7 +969,9 @@ describe('AgentRunnerService', () => {
       throw new Error('expected intent confirmation responses');
     }
 
-    const firstConfirmedOption = firstIntentResult.options.find((option) => option.label === '表单项');
+    const firstConfirmedOption = firstIntentResult.options.find(
+      (option) => option.label === '表单项',
+    );
     expect(firstConfirmedOption).toBeDefined();
 
     const result = await runner.runEdit(
@@ -1074,26 +1074,26 @@ describe('AgentRunnerService', () => {
       focusContextResult: createFormFocusedResult(),
     });
     aiService.runToolCalling.mockImplementationOnce(async (input) => {
-        await input.executeTool('update_components_props', {
-          componentIds: ['form-item-a', 'form-item-b'],
-          props: { labelWidth: 200 },
-        });
-        return {
-          text: 'patch planned',
-          finishReason: 'stop',
-          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-          totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
-          warnings: [],
-          steps: [
-            {
-              stepNumber: 0,
-              finishReason: 'stop',
-              toolCalls: [{ toolName: 'update_components_props' }],
-            },
-          ],
-          toolCallCount: 1,
-        };
+      await input.executeTool('update_components_props', {
+        componentIds: ['form-item-a', 'form-item-b'],
+        props: { labelWidth: 200 },
       });
+      return {
+        text: 'patch planned',
+        finishReason: 'stop',
+        usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        totalUsage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+        warnings: [],
+        steps: [
+          {
+            stepNumber: 0,
+            finishReason: 'stop',
+            toolCalls: [{ toolName: 'update_components_props' }],
+          },
+        ],
+        toolCallCount: 1,
+      };
+    });
 
     const scopeResult = await runner.runEdit(
       {
@@ -1323,7 +1323,9 @@ describe('AgentRunnerService', () => {
     const buildScenarioReport = (name: string, steps: SampleStep[]) => {
       const traces = steps.map((step) => step.trace);
       const lastTrace = traces[traces.length - 1];
-      const stageSequence = traces.flatMap((trace) => trace.statusEvents.map((event) => event.stage));
+      const stageSequence = traces.flatMap((trace) =>
+        trace.statusEvents.map((event) => event.stage),
+      );
       const toolCallCount = traces.reduce((sum, trace) => sum + trace.toolCalls.length, 0);
       const durationMs = traces.reduce(
         (sum, trace) => sum + ((trace.finishedAt ?? trace.startedAt) - trace.startedAt),
@@ -1431,7 +1433,9 @@ describe('AgentRunnerService', () => {
         throw new Error('expected intent confirmation response');
       }
 
-      const confirmedOption = intentStep.response.options.find((option) => option.label === '表单项');
+      const confirmedOption = intentStep.response.options.find(
+        (option) => option.label === '表单项',
+      );
       expect(confirmedOption).toBeDefined();
 
       const scopeStep = await runStep(harness, 'eval-intent-scope-2', {
@@ -1621,7 +1625,9 @@ describe('AgentRunnerService', () => {
         responseMode: 'patch',
       });
       expect(guardStep.error).toBeInstanceOf(AgentToolException);
-      reports.push(buildScenarioReport('guard_blocked_visibility_conflict', [scopeStep, guardStep]));
+      reports.push(
+        buildScenarioReport('guard_blocked_visibility_conflict', [scopeStep, guardStep]),
+      );
     }
 
     {
@@ -1676,14 +1682,14 @@ describe('AgentRunnerService', () => {
         reports.reduce((sum, report) => sum + report.durationMs, 0) / reports.length,
       ),
       averageToolCallCount: Number(
-        (
-          reports.reduce((sum, report) => sum + report.toolCallCount, 0) / reports.length
-        ).toFixed(2),
+        (reports.reduce((sum, report) => sum + report.toolCallCount, 0) / reports.length).toFixed(
+          2,
+        ),
       ),
       successRate: Number(
-        (
-          reports.filter((report) => report.outcome === 'success').length / reports.length
-        ).toFixed(2),
+        (reports.filter((report) => report.outcome === 'success').length / reports.length).toFixed(
+          2,
+        ),
       ),
     };
 

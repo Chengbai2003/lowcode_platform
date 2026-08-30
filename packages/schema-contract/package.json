@@ -1,0 +1,30 @@
+{
+  "name": "@lowcode-platform/schema-contract",
+  "version": "1.0.0",
+  "description": "Environment-agnostic single source of truth for PageSchema, ComponentNode, Action types, and core validation",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "type-check": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "devDependencies": {
+    "rimraf": "^5.0.5",
+    "typescript": "^5.3.3",
+    "vitest": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "private": true
+}

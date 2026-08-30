@@ -114,7 +114,8 @@ export class AgentIntentNormalizationService {
     const matches = INTENT_ALIAS_REGISTRY.filter((definition) =>
       resolvedMatches.some(
         (match) =>
-          match.semanticKey === definition.semanticKey && match.targetType === definition.targetType,
+          match.semanticKey === definition.semanticKey &&
+          match.targetType === definition.targetType,
       ),
     )
       .filter((definition) => {
@@ -138,7 +139,8 @@ export class AgentIntentNormalizationService {
       (option, index, options) =>
         options.findIndex(
           (candidate) =>
-            candidate.semanticKey === option.semanticKey && candidate.targetType === option.targetType,
+            candidate.semanticKey === option.semanticKey &&
+            candidate.targetType === option.targetType,
         ) === index,
     );
 

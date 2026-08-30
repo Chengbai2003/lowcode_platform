@@ -25,4 +25,3 @@ describe('compiler generator snapshots', () => {
     expect(formatted).toMatchSnapshot();
   });
 });
-

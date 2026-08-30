@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AgentEditRequestDto } from './dto/agent-edit-request.dto';
-import {
-  AgentEditResponse,
-  AgentResponseMode,
-  AgentRouteInfo,
-} from './types/agent-edit.types';
+import { AgentEditResponse, AgentResponseMode, AgentRouteInfo } from './types/agent-edit.types';
 import {
   AgentErrorEventPayload,
   AgentProgressReporter,
@@ -109,7 +105,8 @@ function buildResultSummary(result: AgentEditResponse): AgentTraceResultSummary 
     mode: result.mode,
     warningsCount: Array.isArray(result.warnings) ? result.warnings.length : 0,
     resolvedSelectedId: 'resolvedSelectedId' in result ? result.resolvedSelectedId : undefined,
-    requiresConfirmation: 'requiresConfirmation' in result ? result.requiresConfirmation : undefined,
+    requiresConfirmation:
+      'requiresConfirmation' in result ? result.requiresConfirmation : undefined,
   };
 }
 
@@ -310,11 +307,7 @@ export class AgentTraceService {
     }
   }
 
-  private logStructuredEvent(
-    eventType: string,
-    traceId: string,
-    payload: Record<string, unknown>,
-  ) {
+  private logStructuredEvent(eventType: string, traceId: string, payload: Record<string, unknown>) {
     try {
       this.logger.verbose(
         JSON.stringify({

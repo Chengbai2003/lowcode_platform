@@ -231,6 +231,18 @@ importers:
         specifier: ^1.0.0
         version: 1.6.1(@types/node@20.19.37)(@vitest/ui@1.6.1)(jsdom@23.2.0)(lightningcss@1.31.1)(sass@1.97.3)
 
+  packages/schema-contract:
+    devDependencies:
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.10
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.37)(@vitest/ui@1.6.1)(jsdom@23.2.0)(lightningcss@1.31.1)(sass@1.97.3)
+
 packages:
 
   '@adobe/css-tools@4.4.4':

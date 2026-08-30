@@ -36,14 +36,19 @@ describe('AgentIntentConfirmationService', () => {
     });
 
     const firstResolved = service.getConfirmedOption('session-1', firstPending.options[0].intentId);
-    const secondResolved = service.getConfirmedOption('session-1', secondPending.options[0].intentId);
+    const secondResolved = service.getConfirmedOption(
+      'session-1',
+      secondPending.options[0].intentId,
+    );
 
     expect(firstResolved?.pending.intentConfirmationId).toBe(firstPending.intentConfirmationId);
     expect(secondResolved?.pending.intentConfirmationId).toBe(secondPending.intentConfirmationId);
 
     service.clear('session-1', firstPending.intentConfirmationId);
 
-    expect(service.getConfirmedOption('session-1', firstPending.options[0].intentId)).toBeUndefined();
+    expect(
+      service.getConfirmedOption('session-1', firstPending.options[0].intentId),
+    ).toBeUndefined();
     expect(
       service.getConfirmedOption('session-1', secondPending.options[0].intentId)?.pending
         .intentConfirmationId,
