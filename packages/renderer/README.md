@@ -58,6 +58,31 @@ host.unmount();
 页面级 RuntimeSession 隔离（`pageId + documentSessionId`、`dispose()`、异步回调失效）属于
 Scope D（M0-4d），落地前宿主通过 `createRendererHost` 自行管理挂载生命周期。
 
+## ComponentRuntimeBridge（M0-4 Scope C）
+
+渲染树中的组件（如 Table）不得反向导入 Renderer 内部执行器（DSLExecutor / valueResolver /
+EventDispatcher 实现），受控能力一律经桥消费：
+
+```tsx
+import { useComponentRuntimeBridge } from '@lowcode-platform/renderer';
+
+function RowActions({ actions }: { actions: ActionList }) {
+  const bridge = useComponentRuntimeBridge();
+  if (!bridge) {
+    // Renderer 之外直接渲染组件：桥为 null，组件自行降级
+    return <button disabled>执行</button>;
+  }
+  return <button onClick={() => bridge.executeActions(actions)}>执行</button>;
+}
+```
+
+- `resolveValue(value, scope?)`：解析表达式/模板值，scope 合并进行级上下文。
+- `executeActions(actions, event?, extraContext?)`：执行 Schema ActionList。
+- `getResource(resourceId)`：M1b 前默认 deny（冻结的 error 态，fail-close）。
+
+桥由 Renderer 挂载时创建并经 Context 注入；组件测试可用
+`ComponentRuntimeBridgeContext.Provider` 注入桩实现。
+
 ## 契约校验 API
 
 - `validateA2UISchema(input)`：严格校验并返回 canonical 深冻结对象，失败抛 `SchemaValidationError`。

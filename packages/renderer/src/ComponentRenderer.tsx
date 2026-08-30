@@ -198,8 +198,9 @@ export const ComponentRenderer = memo(
           .join(' ');
       }
 
+      // M0-4 Scope C：Table 通过 ComponentRuntimeBridgeContext 获取受控能力，
+      // 这里只保留纯字符串的组件标识（无执行器对象经 props 外泄）。
       if (componentName === 'Table') {
-        p.__eventDispatcher = eventDispatcher;
         p.__componentId = id;
       }
 

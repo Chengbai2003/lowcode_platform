@@ -14,6 +14,8 @@
  *     requireSupportedPageSchema（返回 canonical），仅 Contract 包内部可用
  *  7. Renderer 包（Issue #19 / M0-4 Scope A）：不依赖 Frontend/Editor，
  *     不把运行时对象挂到可变 window 全局
+ *  8. 组件库（Issue #19 / M0-4 Scope C）：不得反向导入 Renderer 内部执行器，
+ *     受控能力一律经 ComponentRuntimeBridge 注入
  *
  * 用法：node scripts/check-schema-contract-boundaries.mjs
  */
@@ -208,6 +210,37 @@ for (const file of allFiles) {
   if (/window\.__[A-Za-z_$][\w$]*\s*=[^=]/.test(content)) {
     violations.push(
       `${relFile}: Renderer 不允许把运行时对象挂到可变 window 全局（window.__* 赋值）`,
+    );
+  }
+}
+
+// ---------- 11: 组件库不得反向导入 Renderer 内部执行器（Issue #19 / M0-4 Scope C） ----------
+// 禁止：import { DSLExecutor / resolveValue / EventDispatcher } from '@lowcode-platform/renderer'
+// 允许：bridge.resolveValue(...) 等桥接口的属性访问
+const EXECUTOR_IMPORT_RULE =
+  /import\s[^;]*\b(DSLExecutor|resolveValue|EventDispatcher)\b[^;]*from\s+['"]@lowcode-platform\/renderer['"]/;
+const EXECUTOR_CLASS_RULE = /\bDSLExecutor\b/;
+for (const file of allFiles) {
+  const relFile = rel(file);
+  if (!relFile.startsWith('packages/frontend/src/components/')) continue;
+  const content = readFileSync(file, 'utf-8');
+  if (EXECUTOR_IMPORT_RULE.test(content)) {
+    violations.push(
+      `${relFile}: 组件库 import Renderer 内部执行器（应改用 ComponentRuntimeBridge）`,
+    );
+  } else if (EXECUTOR_CLASS_RULE.test(content)) {
+    violations.push(
+      `${relFile}: 组件库引用执行器类 DSLExecutor（应改用 ComponentRuntimeBridge）`,
+    );
+  }
+}
+
+{
+  const tableFile = join(ROOT, 'packages/frontend/src/components/components/Table.tsx');
+  const tableContent = readFileSync(tableFile, 'utf-8');
+  if (!/useComponentRuntimeBridge/.test(tableContent)) {
+    violations.push(
+      'packages/frontend/src/components/components/Table.tsx: 应通过 useComponentRuntimeBridge 消费受控运行时能力',
     );
   }
 }

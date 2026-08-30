@@ -11,6 +11,8 @@ import { flattenSchemaValues } from './utils/schema';
 import { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';
 import { ComponentRenderer } from './ComponentRenderer';
+import { createComponentRuntimeBridge } from './bridge/createComponentRuntimeBridge';
+import { ComponentRuntimeBridgeContext } from './bridge/ComponentRuntimeBridgeContext';
 
 /**
  * 主渲染器组件
@@ -131,15 +133,24 @@ export function Renderer({
 
   const allComponents = { ...builtInComponents, ...components };
 
+  // M0-4 Scope C：组件（Table 等）通过桥消费受控运行时能力，
+  // 不再反向导入执行器内部实现。
+  const runtimeBridge = useMemo(
+    () => createComponentRuntimeBridge(eventDispatcher),
+    [eventDispatcher],
+  );
+
   if (canonicalSchema && canonicalSchema.rootId && stableFlatComponents) {
     return (
-      <ComponentRenderer
-        nodeId={canonicalSchema.rootId}
-        flatComponents={stableFlatComponents}
-        components={allComponents}
-        eventDispatcher={eventDispatcher}
-        onComponentClick={onComponentClick}
-      />
+      <ComponentRuntimeBridgeContext.Provider value={runtimeBridge}>
+        <ComponentRenderer
+          nodeId={canonicalSchema.rootId}
+          flatComponents={stableFlatComponents}
+          components={allComponents}
+          eventDispatcher={eventDispatcher}
+          onComponentClick={onComponentClick}
+        />
+      </ComponentRuntimeBridgeContext.Provider>
     );
   }
 

@@ -1,9 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Button as AntButton, Space, Table as AntTable } from 'antd';
-import type { EventDispatcher } from '@lowcode-platform/renderer';
-import { DSLExecutor } from '@lowcode-platform/renderer';
-import { resolveValue } from '@lowcode-platform/renderer';
-import type { ActionList, ExecutionContext } from '../../types';
+import { useComponentRuntimeBridge } from '@lowcode-platform/renderer';
+import type { ActionList } from '../../types';
 import {
   isTableActionColumn,
   isTableLinkColumn,
@@ -14,23 +12,15 @@ import {
 
 /**
  * 表格组件
+ *
+ * 通过 ComponentRuntimeBridge 消费渲染器受控能力（M0-4 Scope C），
+ * 不再直接依赖渲染器内部执行器实现。
  */
 export interface TableProps extends React.ComponentProps<typeof AntTable> {
-  __eventDispatcher?: EventDispatcher;
   __componentId?: string;
 }
 
 const ACTION_BUTTON_TYPES: TableActionButtonType[] = ['text', 'link', 'primary', 'default'];
-
-function createTableExecutionContext(
-  eventDispatcher: EventDispatcher | undefined,
-  extraContext: Record<string, unknown>,
-): ExecutionContext {
-  return DSLExecutor.createContext({
-    ...(eventDispatcher?.getExecutionContext() ?? {}),
-    ...extraContext,
-  });
-}
 
 function stringifyCellValue(value: unknown): string {
   if (value === null || value === undefined) {
@@ -39,12 +29,8 @@ function stringifyCellValue(value: unknown): string {
   return String(value);
 }
 
-export const Table: React.FC<TableProps> = ({
-  columns,
-  __eventDispatcher,
-  __componentId,
-  ...props
-}) => {
+export const Table: React.FC<TableProps> = ({ columns, __componentId, ...props }) => {
+  const bridge = useComponentRuntimeBridge();
   const normalizedColumns = useMemo(() => sanitizeTableColumnsValue(columns), [columns]);
 
   const executeActions = useCallback(
@@ -58,18 +44,18 @@ export const Table: React.FC<TableProps> = ({
       event.preventDefault();
       event.stopPropagation();
 
-      if (!__eventDispatcher || actions.length === 0) {
+      if (!bridge || actions.length === 0) {
         return;
       }
 
-      await __eventDispatcher.execute(actions, event.nativeEvent, {
+      await bridge.executeActions(actions, event.nativeEvent, {
         componentId: __componentId,
         record,
         rowIndex,
         value,
       });
     },
-    [__componentId, __eventDispatcher],
+    [__componentId, bridge],
   );
 
   const resolvedColumns = useMemo(() => {
@@ -80,15 +66,16 @@ export const Table: React.FC<TableProps> = ({
           render: (value: unknown, record: unknown, rowIndex: number) => {
             const rowRecord =
               record && typeof record === 'object' ? (record as Record<string, unknown>) : {};
-            const rowContext = createTableExecutionContext(__eventDispatcher, {
-              componentId: __componentId,
-              record: rowRecord,
-              rowIndex,
-              value,
-            });
             const text =
               column.textMode === 'template'
-                ? stringifyCellValue(resolveValue(column.textTemplate ?? '{{value}}', rowContext))
+                ? stringifyCellValue(
+                    bridge?.resolveValue(column.textTemplate ?? '{{value}}', {
+                      componentId: __componentId,
+                      record: rowRecord,
+                      rowIndex,
+                      value,
+                    }),
+                  )
                 : stringifyCellValue(value);
 
             return (
@@ -98,7 +85,7 @@ export const Table: React.FC<TableProps> = ({
                 onClick={(event) =>
                   executeActions(column.actions, event, rowRecord, value, rowIndex)
                 }
-                disabled={!__eventDispatcher || column.actions.length === 0}
+                disabled={!bridge || column.actions.length === 0}
                 style={{ paddingInline: 0 }}
               >
                 {text || '-'}
@@ -131,7 +118,7 @@ export const Table: React.FC<TableProps> = ({
                       onClick={(event) =>
                         executeActions(button.actions, event, rowRecord, undefined, rowIndex)
                       }
-                      disabled={!__eventDispatcher || button.actions.length === 0}
+                      disabled={!bridge || button.actions.length === 0}
                     >
                       {button.label}
                     </AntButton>
@@ -149,7 +136,7 @@ export const Table: React.FC<TableProps> = ({
         kind: 'data',
       };
     });
-  }, [__componentId, __eventDispatcher, executeActions, normalizedColumns]);
+  }, [__componentId, bridge, executeActions, normalizedColumns]);
 
   return (
     <AntTable
