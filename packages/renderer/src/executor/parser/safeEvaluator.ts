@@ -203,10 +203,32 @@ function isPlainObject(o: unknown): boolean {
 function cloneSanitized(value: unknown, seen = new WeakMap<object, unknown>()): unknown {
   return cloneSanitizedSafe(value, seen, SANITIZE_SKIP, { isTrackingProxy });
 }
+/**
+ * 宿主命名空间黑名单：表达式上下文不可见（Issue #19 / M0-4 Scope E）。
+ * 业务数据命名空间（data/state/formData/user/route）与 renderer 内部
+ * 纯 utils 保留。
+ */
+const HOST_EXPRESSION_KEYS: ReadonlyArray<string> = Object.freeze([
+  'ui',
+  'api',
+  'dispatch',
+  'getState',
+  'navigate',
+  'back',
+  'session',
+  'runtime',
+  'hostCapabilities',
+]);
+
 function sanitizeContext(context: Record<string, any> | undefined): Record<string, any> {
   if (!context || typeof context !== 'object') return {};
   const cloned = cloneSanitized(context) as Record<string, any>;
   const out = (cloned as Record<string, any>) ?? {};
+  // M0-4 Scope E：宿主对象/钩子不得进入表达式上下文（函数已被克隆剔除，
+  // 这里连同宿主命名空间的对象外壳一并移除）
+  for (const hostKey of HOST_EXPRESSION_KEYS) {
+    delete out[hostKey];
+  }
   // P0-3: reconstruct pure utils with internal implementations, not accepting context override
   const filtered: Record<string, any> = {};
   for (const kk of PURE_UTILS_KEYS_INTERNAL) {

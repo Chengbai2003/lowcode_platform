@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ComponentNode, PageSchema } from '@lowcode-platform/schema-contract';
 import type { ComponentPreset } from './preset/types';
+import type { HostCapabilities } from './host/HostCapabilities';
 
 export type { ComponentNode, PageSchema } from '@lowcode-platform/schema-contract';
 
@@ -18,6 +19,7 @@ export interface RendererProps {
   preset?: ComponentPreset; // 单一 ComponentPreset（M0-4 Scope B：一个 Host 只绑定一个）
   pageId?: string; // M0-4 Scope D：提供 pageId + documentSessionId 时按挂载创建 RuntimeSession
   documentSessionId?: string; // 变化或卸载时销毁旧 Session（异步回调不得写回新页面）
+  hostCapabilities?: Partial<HostCapabilities> | null; // M0-4 Scope E：宿主能力显式授予（默认全 deny）
   onComponentClick?: (node: ComponentNode) => void; // 组件点击回调
   eventContext?: Record<string, any>; // 事件执行上下文
 }

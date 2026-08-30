@@ -372,7 +372,15 @@ export class DSLExecutor {
     const rawNavigate = navigate as unknown as
       | ((path: string, params?: Record<string, unknown>) => void)
       | undefined;
-    const baseNavigate = rawNavigate ?? (() => {});
+    // M0-4 Scope E：宿主未注入 navigate 时默认 deny（fail-close），
+    // 内置 window 回退另行受 hostCapabilities.navigation 门控
+    const baseNavigate =
+      rawNavigate ??
+      (() => {
+        throw new Error(
+          'Host capability denied: "navigation" — inject context.navigate to enable navigation',
+        );
+      });
     const safeNavigate = (path: unknown, params?: Record<string, unknown>) =>
       (baseNavigate as (p: string) => void)(buildNavigationTarget(path, params));
 

@@ -20,6 +20,8 @@
  *     任何 Preset 包；Preset 必须经 createSealedPreset 构建
  * 10. RuntimeSession（Issue #19 / M0-4 Scope D）：Renderer 挂载必须创建
  *     Session 并在卸载/换页时 dispose
+ * 11. HostCapabilities（Issue #19 / M0-4 Scope E）：Renderer 必须接入
+ *     normalizeHostCapabilities；所有能力默认 deny
  *
  * 用法：node scripts/check-schema-contract-boundaries.mjs
  */
@@ -259,6 +261,17 @@ for (const file of allFiles) {
   }
   if (/['"]@lowcode-platform\/preset-/.test(content)) {
     violations.push(`${relFile}: Renderer 本体不得依赖任何 Preset 包（依赖方向必须反向）`);
+  }
+}
+
+// Scope E：Renderer 必须接入 HostCapabilities（默认全 deny，显式授予）
+{
+  const rendererFile = join(ROOT, 'packages/renderer/src/Renderer.tsx');
+  const content = readFileSync(rendererFile, 'utf-8');
+  if (!/normalizeHostCapabilities/.test(content)) {
+    violations.push(
+      'packages/renderer/src/Renderer.tsx: 必须经 normalizeHostCapabilities 注入宿主能力（默认全 deny）',
+    );
   }
 }
 

@@ -96,6 +96,24 @@ function RowActions({ actions }: { actions: ActionList }) {
 桥由 Renderer 挂载时创建并经 Context 注入；组件测试可用
 `ComponentRuntimeBridgeContext.Provider` 注入桩实现。
 
+## HostCapabilities（M0-4 Scope E）
+
+Renderer 默认不拥有任何宿主权限：导航（内置 `window` 回退）、弹窗（原生
+`confirm/alert` 回退）、网络（内置 `fetch` 回退）、数据资源读取全部默认 **deny**。
+宿主经 `hostCapabilities` prop 显式授予（注入后为冻结对象）：
+
+```tsx
+<Renderer
+  preset={antdPreset}
+  hostCapabilities={{ navigation: true, dialogs: true }}
+  schema={schema}
+/>
+```
+
+宿主经执行上下文注入的自有实现（`context.navigate` / `context.ui` / `context.api`）
+属于显式注入，不受内置门控约束。表达式上下文不可见宿主命名空间
+（`ui` / `api` / `dispatch` / `getState` / `session` / `runtime` 等）。
+
 ## 契约校验 API
 
 - `validateA2UISchema(input)`：严格校验并返回 canonical 深冻结对象，失败抛 `SchemaValidationError`。

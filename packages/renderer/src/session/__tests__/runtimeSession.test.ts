@@ -72,7 +72,7 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
     // 只提供 request：apiCall 在无 get/post 方法时回落到 api.request
     const dispatcher = new EventDispatcher({ api: { request } });
     const session = createRuntimeSession({ pageId: 'p4', documentSessionId: 'd1', dispatcher });
-    session.dispatcher.setContext('session', session);
+    session.dispatcher.setHostConfig('session', session);
     session.dispose();
 
     const batch = await dispatcher.execute([
@@ -107,7 +107,7 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
     // 1) 请求配置携带 Session signal
     await apiCall(
       { type: 'apiCall', url: 'https://example.test/api', resultTo: 'data.result' },
-      { runtime: session.runtime, session } as never,
+      { runtime: session.runtime, session, hostCapabilities: { network: true } } as never,
       undefined,
     );
     expect((globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0]?.[1]).toMatchObject({
@@ -126,7 +126,7 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
     vi.stubGlobal('fetch', hangUntilAbort);
     const inFlight = apiCall(
       { type: 'apiCall', url: 'https://example.test/api', resultTo: 'data.result2' },
-      { runtime: session.runtime, session } as never,
+      { runtime: session.runtime, session, hostCapabilities: { network: true } } as never,
       undefined,
     );
     await sleep(5);
@@ -139,7 +139,7 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
 
   it('delay 正常完成后 resolve；dispose 中途取消返回 aborted（经 execute）', async () => {
     const session = createRuntimeSession({ pageId: 'p6', documentSessionId: 'd1' });
-    session.dispatcher.setContext('session', session);
+    session.dispatcher.setHostConfig('session', session);
 
     const unwrap = (batch: unknown) =>
       (batch as { results: Array<{ value: unknown }> }).results[0].value;

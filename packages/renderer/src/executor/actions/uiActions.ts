@@ -4,6 +4,7 @@
  */
 
 import type { ActionHandler } from '../../dsl';
+import { isCapabilityGranted, type HostCapabilities } from '../../host/HostCapabilities';
 import type { FeedbackAction, DialogAction } from '../../dsl/actions/ui';
 import { resolveValue } from '../parser';
 
@@ -101,8 +102,18 @@ export const dialog: ActionHandler = async (action, context, executor) => {
       confirmed = true;
     }
   } else {
-    // 降级到原生
-    if (kind === 'confirm') {
+    // 降级到原生：M0-4 Scope E —— 需要宿主授予 dialogs 能力（默认 deny）
+    if (
+      !isCapabilityGranted(
+        context.hostCapabilities as Readonly<HostCapabilities> | undefined,
+        'dialogs',
+      )
+    ) {
+      console.warn(
+        '[Renderer] Host capability denied: "dialogs" — native confirm/alert suppressed (fail-close)',
+      );
+      confirmed = false;
+    } else if (kind === 'confirm') {
       confirmed = window.confirm(`${resolvedTitle}\n\n${resolvedContent}`);
     } else {
       window.alert(`${resolvedTitle}\n\n${resolvedContent}`);
