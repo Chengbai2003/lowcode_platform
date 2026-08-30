@@ -72,9 +72,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
 
 export function toCamelCase(str: string): string {
   if (!str) return '';
-  return str.replace(/([-_.\s][a-zA-Z])/g, (group) =>
-    group.toUpperCase().replace(/[-_.\s]/g, ''),
-  );
+  return str.replace(/([-_.\s][a-zA-Z])/g, (group) => group.toUpperCase().replace(/[-_.\s]/g, ''));
 }
 
 export function isValidIdentifier(name: string): boolean {
