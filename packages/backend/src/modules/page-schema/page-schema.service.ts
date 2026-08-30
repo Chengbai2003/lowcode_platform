@@ -38,7 +38,8 @@ export class PageSchemaService {
       pageId: params.pageId,
       schema: canonicalSchema,
       basePageVersion: params.basePageVersion,
-      runtimeCompatibility: this.runtimeMetadataProvider.getDraftRuntimeCompatibility(),
+      runtimeCompatibility:
+        this.runtimeMetadataProvider.getDraftPageRuntimeMetadata().runtimeCompatibility,
     });
 
     return {

@@ -93,10 +93,12 @@ describe('autoFixSchema', () => {
 
     const { fixed, fixes } = autoFixSchema(raw, whitelist);
 
-    expect(fixed.schemaVersion).toBe(0);
-    expect(fixes).toContain('规范化 schemaVersion 为 0');
-    expect(fixes).toContain('移除 Schema 内遗留的 version 字段');
-    expect('version' in fixed).toBe(false);
+    // fail-close：AutoFix 不迁移版本——遗留 version 与缺失 schemaVersion
+    // 原样保留，交由 Contract 校验拒绝（迁移属于独立离线工具）
+    expect((fixed as unknown as Record<string, unknown>).version).toBe('5');
+    expect('schemaVersion' in fixed).toBe(false);
+    expect(fixes).not.toContain('规范化 schemaVersion 为 0');
+    expect(fixes).not.toContain('移除 Schema 内遗留的 version 字段');
   });
 
   it('should migrate text-like content props to children', () => {

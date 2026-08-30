@@ -53,5 +53,5 @@ M0-1 已完成（Issue #16，PR #20/#22/#23/#24）：
 
 - `@lowcode-platform/schema-contract` 为 PageSchema / ComponentNode / Action / 版本常量与校验的唯一来源。
 - 存储采用「页面指针（StoredPageRecord.currentPageVersion）+ 不可变快照（PageSnapshotRecord.pageVersion + runtimeCompatibility + canonical Schema）」模型，页面版本不再写入 Schema 对象。
-- API 协议字段统一为 `pageVersion` / `basePageVersion` / `resolvedPageVersion`。
-- 架构边界由 `pnpm check:architecture` 门禁强制（禁止 A2UISchema/A2UIComponent 别名、baseVersion、schema.version、重复类型声明与 Backend→Frontend 反向依赖）。
+- API 协议字段统一为 `pageVersion` / `basePageVersion` / `resolvedPageVersion`；Renderer 挂载、Repository 磁盘/写入与 Compiler 入口经 `requireSupportedPageSchema` fail-close 校验（渲染树内部使用 canonical 工作副本，快照保持深冻结）；运行时 AutoFix 不做版本迁移，历史数据迁移留给独立离线工具。
+- 架构边界由 `pnpm check:architecture` 门禁强制（禁止 A2UISchema/A2UIComponent 别名、baseVersion、schema.version、重复类型声明与 Backend→Frontend 反向依赖，并正向断言 Renderer/Repository 边界真实调用 Contract）。

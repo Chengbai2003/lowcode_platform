@@ -51,6 +51,12 @@ jobs:
       - name: Architecture Boundaries Check
         run: pnpm check:architecture
 
+      - name: Lint
+        run: pnpm lint --max-warnings 500
+
+      - name: Format Check
+        run: pnpm format:check
+
       - name: Schema Contract Tests
         run: pnpm --filter @lowcode-platform/schema-contract test
 

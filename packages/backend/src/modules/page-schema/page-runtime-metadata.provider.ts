@@ -1,9 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { RuntimeCompatibility } from '@lowcode-platform/schema-contract';
 
-export interface PageRuntimeMetadata extends RuntimeCompatibility {
-  /** 页面所属系统（M0 固定 default） */
+export interface PageRuntimeMetadata {
+  /** 页面所属系统（M0 固定 default）；不属于 RuntimeCompatibility，不进入快照元数据 */
   systemId: string;
+  /** 严格符合 Contract RuntimeCompatibility 的快照元数据 */
+  runtimeCompatibility: RuntimeCompatibility;
 }
 
 /**
@@ -14,12 +16,14 @@ export interface PageRuntimeMetadata extends RuntimeCompatibility {
  */
 @Injectable()
 export class PageRuntimeMetadataProvider {
-  getDraftRuntimeCompatibility(): PageRuntimeMetadata {
+  getDraftPageRuntimeMetadata(): PageRuntimeMetadata {
     return {
       systemId: 'default',
-      componentPresetId: 'builtin-antd',
-      componentPresetVersion: '0.0.0-draft',
-      rendererVersion: '0.0.0-draft',
+      runtimeCompatibility: {
+        componentPresetId: 'builtin-antd',
+        componentPresetVersion: '0.0.0-draft',
+        rendererVersion: '0.0.0-draft',
+      },
     };
   }
 }

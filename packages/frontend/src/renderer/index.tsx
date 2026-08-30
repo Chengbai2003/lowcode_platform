@@ -5,6 +5,7 @@
  * 将 JSON Schema 渲染为 React 组件
  */
 
+import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
 import React from 'react';
 import { Renderer } from './Renderer';
 
@@ -37,6 +38,8 @@ export function renderFromJSON(
   jsonString: string,
   components?: Record<string, React.ComponentType<any>>,
 ): React.ReactElement {
-  const schema = JSON.parse(jsonString);
+  const raw = JSON.parse(jsonString);
+  // Contract 边界：只渲染 Contract 返回的 canonical Schema（不支持版本/畸形结构 fail-close）
+  const schema = requireSupportedPageSchema(raw);
   return React.createElement(Renderer, { schema, components });
 }
