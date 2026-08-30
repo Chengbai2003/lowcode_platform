@@ -1,4 +1,4 @@
-import type { A2UIComponent, A2UISchema, ActionList } from '../../types';
+import type { ComponentNode, PageSchema, ActionList } from '../../types';
 
 export const PATCH_OPERATION_TYPES = [
   'insertComponent',
@@ -14,7 +14,7 @@ export interface EditorPatchInsertComponentOperation {
   op: 'insertComponent';
   parentId: string;
   index?: number;
-  component: A2UIComponent;
+  component: ComponentNode;
 }
 
 export interface EditorPatchUpdatePropsOperation {
@@ -52,7 +52,7 @@ export type EditorPatchOperation =
 export interface PatchPreviewRequest {
   pageId?: string;
   basePageVersion?: number;
-  draftSchema?: A2UISchema;
+  draftSchema?: PageSchema;
   patch: EditorPatchOperation[];
   autoFix?: boolean;
 }
@@ -62,7 +62,7 @@ export interface PatchPreviewResponse {
   basePageVersion?: number;
   resolvedPageVersion?: number;
   patch: EditorPatchOperation[];
-  schema: A2UISchema;
+  schema: PageSchema;
   warnings: string[];
   traceId: string;
 }

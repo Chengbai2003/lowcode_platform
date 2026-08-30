@@ -1,5 +1,5 @@
 import { useCallback, useRef, useEffect } from 'react';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { useHistoryStore } from '../store/history';
 import { UpdateSchemaCommand, createUpdateSchemaCommand } from '../commands/schemaCommands';
 
@@ -20,20 +20,20 @@ export interface SchemaHistoryOptions {
  * 提供基于命令模式的 Schema 历史记录管理
  */
 export function useSchemaHistoryStore(
-  schema: A2UISchema | null,
-  onChange: (schema: A2UISchema) => void,
+  schema: PageSchema | null,
+  onChange: (schema: PageSchema) => void,
   options: SchemaHistoryOptions = {},
 ) {
   const { maxHistorySize = 50, enableMerge = true, mergeWindow = 500 } = options;
 
   // 当前已应用到 UI 的 schema，避免在同一渲染周期内读到旧闭包值。
-  const currentSchemaRef = useRef<A2UISchema | null>(schema);
+  const currentSchemaRef = useRef<PageSchema | null>(schema);
   // 用于合并连续操作的计时器
   const mergeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 暂存的合并命令
   const pendingCommandRef = useRef<UpdateSchemaCommand | null>(null);
   // 记录连续输入开始前的 schema，供撤销回退使用
-  const pendingStartSchemaRef = useRef<A2UISchema | null>(null);
+  const pendingStartSchemaRef = useRef<PageSchema | null>(null);
 
   const {
     executeCommand,
@@ -89,7 +89,7 @@ export function useSchemaHistoryStore(
    * 支持自动合并连续的快速操作
    */
   const updateSchema = useCallback(
-    (newSchema: A2UISchema, description: string = '更新 Schema') => {
+    (newSchema: PageSchema, description: string = '更新 Schema') => {
       const currentSchema = currentSchemaRef.current;
       if (!currentSchema) return;
 
@@ -129,7 +129,7 @@ export function useSchemaHistoryStore(
    * 强制立即更新（跳过合并）
    */
   const forceUpdateSchema = useCallback(
-    (newSchema: A2UISchema, description: string = '更新 Schema') => {
+    (newSchema: PageSchema, description: string = '更新 Schema') => {
       const currentSchema = currentSchemaRef.current;
       if (!currentSchema) return;
 
@@ -221,8 +221,8 @@ export function useSchemaHistoryStore(
  * useSchemaCommands - 提供创建 Schema 命令的便捷方法
  */
 export function useSchemaCommands(
-  _getSchema: () => A2UISchema | null,
-  setSchema: (schema: A2UISchema) => void,
+  _getSchema: () => PageSchema | null,
+  setSchema: (schema: PageSchema) => void,
 ) {
   const { executeCommand } = useHistoryStore();
 
@@ -230,7 +230,7 @@ export function useSchemaCommands(
    * 执行 Schema 更新命令
    */
   const executeSchemaUpdate = useCallback(
-    (oldSchema: A2UISchema, newSchema: A2UISchema, description?: string) => {
+    (oldSchema: PageSchema, newSchema: PageSchema, description?: string) => {
       const command = createUpdateSchemaCommand(oldSchema, newSchema, setSchema, description);
       executeCommand(command);
     },

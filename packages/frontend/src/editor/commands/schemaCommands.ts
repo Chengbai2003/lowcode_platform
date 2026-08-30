@@ -1,5 +1,5 @@
 import type { JsonObject } from '@lowcode-platform/schema-contract';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import type { Command, CommandOptions } from '../store/history';
 import type { EditorPatchOperation } from '../types/patch';
 import { applyPatchToSchema } from '../services/patchAdapter';
@@ -11,7 +11,7 @@ import { applyPatchToSchema } from '../services/patchAdapter';
 /**
  * Schema 变更回调类型
  */
-export type SchemaChangeCallback = (schema: A2UISchema) => void;
+export type SchemaChangeCallback = (schema: PageSchema) => void;
 
 /**
  * UpdateSchemaCommand - Schema 更新命令
@@ -22,14 +22,14 @@ export class UpdateSchemaCommand implements Command {
   readonly timestamp: number;
   readonly description: string;
 
-  private oldSchema: A2UISchema;
-  private newSchema: A2UISchema;
+  private oldSchema: PageSchema;
+  private newSchema: PageSchema;
   private onChange: SchemaChangeCallback;
   private applyOnExecute: boolean;
 
   constructor(
-    oldSchema: A2UISchema,
-    newSchema: A2UISchema,
+    oldSchema: PageSchema,
+    newSchema: PageSchema,
     onChange: SchemaChangeCallback,
     options: CommandOptions & { timestamp: number; id: string; applyOnExecute?: boolean },
   ) {
@@ -59,11 +59,11 @@ export class UpdateSchemaCommand implements Command {
     this.onChange(this.newSchema);
   }
 
-  getOldSchema(): A2UISchema {
+  getOldSchema(): PageSchema {
     return this.oldSchema;
   }
 
-  getNewSchema(): A2UISchema {
+  getNewSchema(): PageSchema {
     return this.newSchema;
   }
 }
@@ -72,8 +72,8 @@ export class UpdateSchemaCommand implements Command {
  * 创建 UpdateSchemaCommand 的工厂函数
  */
 export function createUpdateSchemaCommand(
-  oldSchema: A2UISchema,
-  newSchema: A2UISchema,
+  oldSchema: PageSchema,
+  newSchema: PageSchema,
   onChange: SchemaChangeCallback,
   description: string = '更新 Schema',
   config: { applyOnExecute?: boolean } = {},
@@ -88,7 +88,7 @@ export function createUpdateSchemaCommand(
 }
 
 export function createPatchCommand(
-  oldSchema: A2UISchema,
+  oldSchema: PageSchema,
   patch: readonly EditorPatchOperation[],
   onChange: SchemaChangeCallback,
   description: string = '应用 Patch',
@@ -107,13 +107,13 @@ export function createPatchCommand(
 export type ComponentOperation =
   | {
       type: 'add';
-      component: A2UISchema['components'][string];
+      component: PageSchema['components'][string];
       parentId: string;
     }
   | {
       type: 'delete';
       componentId: string;
-      component: A2UISchema['components'][string];
+      component: PageSchema['components'][string];
       parentId: string;
       index: number;
     }
@@ -142,12 +142,12 @@ export class ComponentCommand implements Command {
   readonly description: string;
 
   private operation: ComponentOperation;
-  private getSchema: () => A2UISchema;
+  private getSchema: () => PageSchema;
   private setSchema: SchemaChangeCallback;
 
   constructor(
     operation: ComponentOperation,
-    getSchema: () => A2UISchema,
+    getSchema: () => PageSchema,
     setSchema: SchemaChangeCallback,
     options: CommandOptions & { timestamp: number; id: string },
   ) {
@@ -175,7 +175,7 @@ export class ComponentCommand implements Command {
     this.execute();
   }
 
-  private applyOperation(schema: A2UISchema): A2UISchema {
+  private applyOperation(schema: PageSchema): PageSchema {
     const components = { ...schema.components };
 
     switch (this.operation.type) {
@@ -238,7 +238,7 @@ export class ComponentCommand implements Command {
     return { ...schema, components };
   }
 
-  private reverseOperation(schema: A2UISchema): A2UISchema {
+  private reverseOperation(schema: PageSchema): PageSchema {
     const components = { ...schema.components };
 
     switch (this.operation.type) {
@@ -316,9 +316,9 @@ export class ComponentCommand implements Command {
  * 创建添加组件命令
  */
 export function createAddComponentCommand(
-  component: A2UISchema['components'][string],
+  component: PageSchema['components'][string],
   parentId: string,
-  getSchema: () => A2UISchema,
+  getSchema: () => PageSchema,
   setSchema: SchemaChangeCallback,
   description?: string,
 ): ComponentCommand {
@@ -334,10 +334,10 @@ export function createAddComponentCommand(
  */
 export function createDeleteComponentCommand(
   componentId: string,
-  component: A2UISchema['components'][string],
+  component: PageSchema['components'][string],
   parentId: string,
   index: number,
-  getSchema: () => A2UISchema,
+  getSchema: () => PageSchema,
   setSchema: SchemaChangeCallback,
   description?: string,
 ): ComponentCommand {
@@ -362,7 +362,7 @@ export function createMoveComponentCommand(
   newParentId: string,
   oldIndex: number,
   newIndex: number,
-  getSchema: () => A2UISchema,
+  getSchema: () => PageSchema,
   setSchema: SchemaChangeCallback,
   description?: string,
 ): ComponentCommand {
@@ -385,7 +385,7 @@ export function createUpdatePropsCommand(
   componentId: string,
   oldProps: Record<string, unknown>,
   newProps: Record<string, unknown>,
-  getSchema: () => A2UISchema,
+  getSchema: () => PageSchema,
   setSchema: SchemaChangeCallback,
   description?: string,
 ): ComponentCommand {

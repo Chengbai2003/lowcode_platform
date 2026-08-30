@@ -48,6 +48,9 @@ jobs:
       - name: Type Check
         run: pnpm type-check
 
+      - name: Architecture Boundaries Check
+        run: pnpm check:architecture
+
       - name: Schema Contract Tests
         run: pnpm --filter @lowcode-platform/schema-contract test
 

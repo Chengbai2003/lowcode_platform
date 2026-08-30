@@ -12,8 +12,8 @@ import {
   ComponentMetaRegistry,
 } from '../schema-context';
 import type {
-  A2UIComponent,
-  A2UISchema,
+  ComponentNode,
+  PageSchema,
   FocusContextResult,
   NodeCandidate,
 } from '../schema-context';
@@ -1073,7 +1073,7 @@ export class AgentRunnerService {
 
   private assertBatchPatchConsistency(
     traceId: string,
-    baseSchema: A2UISchema,
+    baseSchema: PageSchema,
     patch: readonly EditorPatchOperation[],
     scope: AgentCollectionScope,
   ): number {

@@ -3,7 +3,7 @@
  * 校验 AI 返回的内容，防止幻觉和无效数据
  */
 
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import type {
   AIOutputValidationResult,
   ValidationError,
@@ -285,12 +285,12 @@ export function validateAIOutput(
 export function extractAndValidateSchema(
   content: string,
   options?: Partial<ValidationOptions>,
-): { schema: A2UISchema | null; result: AIOutputValidationResult } {
+): { schema: PageSchema | null; result: AIOutputValidationResult } {
   const validator = new AIOutputValidator(options);
   const result = validator.validateOutput(content);
 
   return {
-    schema: result.sanitizedData as A2UISchema | null,
+    schema: result.sanitizedData as PageSchema | null,
     result,
   };
 }

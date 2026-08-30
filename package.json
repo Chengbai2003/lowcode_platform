@@ -17,7 +17,8 @@
     "lint": "oxlint packages/",
     "format": "prettier --write \"packages/**/*.{ts,tsx,json}\"",
     "format:check": "prettier --check \"packages/**/*.{ts,tsx,json}\"",
-    "prepare": "husky"
+    "prepare": "husky",
+    "check:architecture": "node scripts/check-schema-contract-boundaries.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

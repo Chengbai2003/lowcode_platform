@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { A2UIComponent, A2UISchema } from './types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import {
   AncestorEntry,
   FocusContext,
@@ -19,7 +19,7 @@ interface SliceState {
   fullChildren: readonly NodeSummary[];
   siblingEntries: readonly SiblingInfo[];
   currentSiblings: readonly SiblingInfo[];
-  subtree: Readonly<Record<string, A2UIComponent>>;
+  subtree: Readonly<Record<string, ComponentNode>>;
 }
 
 interface BudgetEvaluation {
@@ -29,7 +29,7 @@ interface BudgetEvaluation {
 
 function toNodeSummary(
   id: string,
-  comp: A2UIComponent,
+  comp: ComponentNode,
   options?: {
     includeProps?: boolean;
     includeEvents?: boolean;
@@ -56,27 +56,27 @@ function toCompactSummary(summary: NodeSummary): NodeSummary {
   };
 }
 
-function stripProps(subtree: Record<string, A2UIComponent>): Record<string, A2UIComponent> {
-  const result: Record<string, A2UIComponent> = {};
+function stripProps(subtree: Record<string, ComponentNode>): Record<string, ComponentNode> {
+  const result: Record<string, ComponentNode> = {};
   for (const [id, comp] of Object.entries(subtree)) {
-    result[id] = { id: comp.id, type: comp.type, childrenIds: comp.childrenIds } as A2UIComponent;
+    result[id] = { id: comp.id, type: comp.type, childrenIds: comp.childrenIds } as ComponentNode;
   }
   return result;
 }
 
-function stripEvents(subtree: Record<string, A2UIComponent>): Record<string, A2UIComponent> {
-  const result: Record<string, A2UIComponent> = {};
+function stripEvents(subtree: Record<string, ComponentNode>): Record<string, ComponentNode> {
+  const result: Record<string, ComponentNode> = {};
   for (const [id, comp] of Object.entries(subtree)) {
     const { events: _, ...rest } = comp;
-    result[id] = rest as A2UIComponent;
+    result[id] = rest as ComponentNode;
   }
   return result;
 }
 
 function applySubtreeOptions(
-  subtree: Record<string, A2UIComponent>,
+  subtree: Record<string, ComponentNode>,
   options: SliceOptions,
-): Record<string, A2UIComponent> {
+): Record<string, ComponentNode> {
   let result = subtree;
   if (!options.includeEvents) {
     result = stripEvents(result);
@@ -95,7 +95,7 @@ function uniqueLimits(currentLength: number, limits: readonly number[]): number[
 
 @Injectable()
 export class SchemaSlicerService {
-  slice(schema: A2UISchema, targetId: string, options?: Partial<SliceOptions>): FocusContext {
+  slice(schema: PageSchema, targetId: string, options?: Partial<SliceOptions>): FocusContext {
     const opts: SliceOptions = { ...DEFAULT_SLICE_OPTIONS, ...options };
     const { components } = schema;
     const targetComp = this.getTargetComponent(targetId, components);
@@ -113,8 +113,8 @@ export class SchemaSlicerService {
 
   private getTargetComponent(
     targetId: string,
-    components: A2UISchema['components'],
-  ): A2UIComponent {
+    components: PageSchema['components'],
+  ): ComponentNode {
     const targetComp = components[targetId];
     if (!targetComp) {
       throw new NotFoundException(`Component "${targetId}" not found in schema`);
@@ -122,7 +122,7 @@ export class SchemaSlicerService {
     return targetComp;
   }
 
-  private buildSchemaStats(schema: A2UISchema, components: A2UISchema['components']): SchemaStats {
+  private buildSchemaStats(schema: PageSchema, components: PageSchema['components']): SchemaStats {
     return {
       totalComponents: Object.keys(components).length,
       maxDepth: computeMaxDepth(schema.rootId, components),
@@ -132,8 +132,8 @@ export class SchemaSlicerService {
 
   private buildInitialState(
     targetId: string,
-    targetComp: A2UIComponent,
-    components: A2UISchema['components'],
+    targetComp: ComponentNode,
+    components: PageSchema['components'],
     parentMap: ReadonlyMap<string, string>,
     options: SliceOptions,
   ): SliceState {
@@ -168,8 +168,8 @@ export class SchemaSlicerService {
 
   private buildSiblingEntries(
     targetId: string,
-    parentComp: A2UIComponent | undefined,
-    components: A2UISchema['components'],
+    parentComp: ComponentNode | undefined,
+    components: PageSchema['components'],
     options: SliceOptions,
   ): SiblingInfo[] {
     return (parentComp?.childrenIds ?? [])
@@ -179,8 +179,8 @@ export class SchemaSlicerService {
   }
 
   private buildChildSummaries(
-    targetComp: A2UIComponent,
-    components: A2UISchema['components'],
+    targetComp: ComponentNode,
+    components: PageSchema['components'],
     options: SliceOptions,
   ): NodeSummary[] {
     return (targetComp.childrenIds ?? [])
@@ -197,7 +197,7 @@ export class SchemaSlicerService {
   private resolveWithinBudget(
     state: SliceState,
     input: {
-      components: A2UISchema['components'];
+      components: PageSchema['components'];
       targetId: string;
       options: SliceOptions;
       schemaStats: SchemaStats;
@@ -213,7 +213,7 @@ export class SchemaSlicerService {
   private trySubtreeDepthFallbacks(
     state: SliceState,
     input: {
-      components: A2UISchema['components'];
+      components: PageSchema['components'];
       targetId: string;
       options: SliceOptions;
       schemaStats: SchemaStats;

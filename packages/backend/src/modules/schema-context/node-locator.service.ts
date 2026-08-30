@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { A2UISchema } from './types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { NodeCandidate } from './types/focus-context.types';
 import { ComponentMetaRegistry } from './component-metadata/component-meta.registry';
 
@@ -98,7 +98,7 @@ function extractKeywords(instruction: string): string[] {
 export class NodeLocatorService {
   constructor(private readonly metaRegistry: ComponentMetaRegistry) {}
 
-  locate(schema: A2UISchema, selectedId?: string, instruction?: string): NodeLocatorResult {
+  locate(schema: PageSchema, selectedId?: string, instruction?: string): NodeLocatorResult {
     // Case 1: selectedId is valid
     if (selectedId && schema.components[selectedId]) {
       return { mode: 'exact', targetId: selectedId };
@@ -120,7 +120,7 @@ export class NodeLocatorService {
     };
   }
 
-  private findCandidates(schema: A2UISchema, keywords: readonly string[]): NodeCandidate[] {
+  private findCandidates(schema: PageSchema, keywords: readonly string[]): NodeCandidate[] {
     return Object.entries(schema.components)
       .map(([id, comp]) => this.scoreCandidate(id, comp, keywords))
       .filter((candidate): candidate is NodeCandidate => candidate !== undefined)
@@ -130,7 +130,7 @@ export class NodeLocatorService {
 
   private scoreCandidate(
     id: string,
-    comp: A2UISchema['components'][string],
+    comp: PageSchema['components'][string],
     keywords: readonly string[],
   ): NodeCandidate | undefined {
     const typeMatch = this.scoreTypeMatch(comp.type, keywords);

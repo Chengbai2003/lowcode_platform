@@ -2,7 +2,7 @@
  * 模板加载和管理工具
  */
 import type { Template, TemplateMeta, TemplateCategory } from './types';
-import type { A2UISchema } from '../../types/schema';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { cloneSchema } from './reactiveSchema';
 
 // 导入内置模板
@@ -68,7 +68,7 @@ export function getTemplate(id: string): Template | undefined {
 /**
  * 获取模板 Schema
  */
-export function getTemplateSchema(id: string): A2UISchema | undefined {
+export function getTemplateSchema(id: string): PageSchema | undefined {
   const template = builtinTemplates.get(id);
   return template ? cloneSchema(template.schema) : undefined;
 }
@@ -80,7 +80,7 @@ export function createProjectFromTemplate(
   templateId: string,
 
   _projectName: string,
-): A2UISchema | null {
+): PageSchema | null {
   const schema = getTemplateSchema(templateId);
   if (!schema) {
     return null;

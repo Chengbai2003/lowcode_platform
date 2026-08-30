@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ComponentMetaRegistry } from './component-metadata/component-meta.registry';
-import { A2UISchema } from './types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
 const MIN_BATCH_TARGETS = 2;
 const MAX_BATCH_TARGETS = 10;
@@ -42,7 +42,7 @@ export class CollectionTargetResolverService {
   resolve(input: {
     rootId: string;
     instruction?: string;
-    schema: A2UISchema;
+    schema: PageSchema;
     targetType?: string;
   }): CollectionTargetResolution {
     const rootNode = input.schema.components[input.rootId];
@@ -174,7 +174,7 @@ export class CollectionTargetResolverService {
     };
   }
 
-  private collectDescendants(schema: A2UISchema, rootId: string) {
+  private collectDescendants(schema: PageSchema, rootId: string) {
     const descendants: Array<{ id: string; type: string }> = [];
     const stack = [...(schema.components[rootId]?.childrenIds ?? [])].reverse();
     const visited = new Set<string>([rootId]);

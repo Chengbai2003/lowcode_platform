@@ -1,3 +1,4 @@
+export type { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 export * from './schema';
 export * from './registry';
 export * from './dsl';

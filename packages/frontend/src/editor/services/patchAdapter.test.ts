@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import type { EditorPatchOperation } from '../types/patch';
 import { applyPatchToSchema } from './patchAdapter';
 
-function createSchema(): A2UISchema {
+function createSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',

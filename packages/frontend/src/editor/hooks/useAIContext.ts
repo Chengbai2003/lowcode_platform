@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { A2UIComponent, A2UISchema } from '../../types';
+import type { ComponentNode, PageSchema } from '../../types';
 import { useSelectionStore } from '../store';
 
 export interface AIContext {
@@ -10,7 +10,7 @@ export interface AIContext {
 }
 
 export interface UseAIContextProps {
-  currentSchema: A2UISchema | null;
+  currentSchema: PageSchema | null;
 }
 
 /**
@@ -80,7 +80,7 @@ export const useAIContext = ({ currentSchema }: UseAIContextProps): AIContext =>
 /**
  * 获取单个选中组件的 Hook
  */
-export const useSelectedComponent = (schema: A2UISchema | null): A2UIComponent | null => {
+export const useSelectedComponent = (schema: PageSchema | null): ComponentNode | null => {
   const selectedId = useSelectionStore((state) => state.selectedId);
 
   return useMemo(() => {

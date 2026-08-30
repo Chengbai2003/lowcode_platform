@@ -1,5 +1,5 @@
 import type { JsonObject } from '@lowcode-platform/schema-contract';
-import type { A2UIComponent, A2UISchema, ActionList } from '../../types';
+import type { ComponentNode, PageSchema, ActionList } from '../../types';
 import type { EditorPatchOperation } from '../types/patch';
 
 interface MutableComponent {
@@ -7,7 +7,7 @@ interface MutableComponent {
   type: string;
   props?: Record<string, unknown>;
   childrenIds?: string[];
-  events?: A2UIComponent['events'];
+  events?: ComponentNode['events'];
 }
 
 type MutableSchema = {
@@ -17,9 +17,9 @@ type MutableSchema = {
 };
 
 export function applyPatchToSchema(
-  schema: A2UISchema,
+  schema: PageSchema,
   patch: readonly EditorPatchOperation[],
-): A2UISchema {
+): PageSchema {
   const nextSchema = cloneSchema(schema);
 
   for (const operation of patch) {
@@ -48,7 +48,7 @@ export function applyPatchToSchema(
 function insertComponent(
   schema: MutableSchema,
   parentId: string,
-  component: A2UIComponent,
+  component: ComponentNode,
   index?: number,
 ) {
   const parent = schema.components[parentId];
@@ -138,7 +138,7 @@ function findParent(schema: MutableSchema, componentId: string): MutableComponen
   );
 }
 
-function cloneSchema(schema: A2UISchema): MutableSchema {
+function cloneSchema(schema: PageSchema): MutableSchema {
   const components = Object.entries(schema.components).reduce<Record<string, MutableComponent>>(
     (accumulator, [id, component]) => {
       accumulator[id] = {
@@ -160,8 +160,8 @@ function cloneSchema(schema: A2UISchema): MutableSchema {
   };
 }
 
-function freezeSchema(schema: MutableSchema): A2UISchema {
-  const components = Object.entries(schema.components).reduce<Record<string, A2UIComponent>>(
+function freezeSchema(schema: MutableSchema): PageSchema {
+  const components = Object.entries(schema.components).reduce<Record<string, ComponentNode>>(
     (accumulator, [id, component]) => {
       accumulator[id] = {
         id: component.id,

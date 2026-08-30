@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import type { A2UISchema } from '../../../types';
+import type { PageSchema } from '../../../types';
 import { PropertyPanel } from './PropertyPanel';
 import { LowcodeProvider, Renderer } from '@/renderer';
 
-const createSchema = (): A2UISchema => ({
+const createSchema = (): PageSchema => ({
   schemaVersion: 0,
   rootId: 'root',
   components: {
@@ -34,9 +34,9 @@ const renderWithFlush = async (ui: React.ReactElement) => {
 };
 
 interface TestHarnessProps {
-  initialSchema: A2UISchema;
+  initialSchema: PageSchema;
   eventContext: Record<string, unknown>;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
 }
 
 const TestHarness: React.FC<TestHarnessProps> = ({
@@ -44,7 +44,7 @@ const TestHarness: React.FC<TestHarnessProps> = ({
   eventContext,
   onSchemaChange,
 }) => {
-  const [schema, setSchema] = useState<A2UISchema>(initialSchema);
+  const [schema, setSchema] = useState<PageSchema>(initialSchema);
 
   useEffect(() => {
     onSchemaChange(schema);

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { message } from 'antd';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { useEditorStore } from '../store/editor-store';
 import { pageSchemaApi } from '../services/pageSchemaApi';
 
@@ -14,8 +14,8 @@ import { pageSchemaApi } from '../services/pageSchemaApi';
  */
 interface Params {
   pageId: string | undefined;
-  initialSchemaObj: A2UISchema;
-  setSchema: React.Dispatch<React.SetStateAction<A2UISchema>>;
+  initialSchemaObj: PageSchema;
+  setSchema: React.Dispatch<React.SetStateAction<PageSchema>>;
   setPageVersion: (v: number | null) => void;
   onErrorRef: React.MutableRefObject<((msg: string) => void) | undefined>;
 }

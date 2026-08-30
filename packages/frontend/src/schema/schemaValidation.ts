@@ -1,35 +1,9 @@
-import { z } from 'zod';
-import type { A2UISchema } from '../types';
+import {
+  requireSupportedPageSchema,
+  SchemaValidationError,
+} from '@lowcode-platform/schema-contract';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { autoFixSchema } from '../renderer/utils/schema-auto-fix';
-
-const A2UIComponentSchema = z.object({
-  id: z.string().min(1),
-  type: z.string().min(1),
-  props: z.record(z.string(), z.any()).optional(),
-  childrenIds: z.array(z.string()).optional(),
-  events: z.record(z.string(), z.array(z.any())).optional(),
-});
-
-export const A2UISchemaValidator = z
-  .object({
-    schemaVersion: z.literal(0),
-    rootId: z.string().min(1),
-    components: z.record(z.string(), A2UIComponentSchema),
-  })
-  .refine(
-    (schema) => {
-      if (!schema.components[schema.rootId]) return false;
-
-      for (const comp of Object.values(schema.components)) {
-        for (const childId of comp.childrenIds ?? []) {
-          if (!schema.components[childId]) return false;
-        }
-      }
-
-      return true;
-    },
-    { message: 'Schema validation failed: rootId or childrenIds are dangling' },
-  );
 
 type ValidationIssueLike = {
   message: string;
@@ -42,7 +16,7 @@ export type SharedSchemaError = {
 
 export type SharedSchemaSuccess = {
   success: true;
-  data: A2UISchema;
+  data: PageSchema;
 };
 
 export type SharedSchemaFailure = {
@@ -55,29 +29,18 @@ type SharedSchemaAutoFixSuccess = SharedSchemaSuccess & {
 };
 
 type SharedSchemaAutoFixFailure = SharedSchemaFailure & {
-  data: A2UISchema | null;
+  data: PageSchema | null;
   fixes: string[];
 };
 
 function toSharedError(error: unknown): SharedSchemaError {
-  if (error instanceof z.ZodError) {
+  if (error instanceof SchemaValidationError) {
     return {
       issues: error.issues.map((issue) => ({
-        message: issue.message,
-        path: issue.path.filter(
-          (segment): segment is string | number =>
-            typeof segment === 'string' || typeof segment === 'number',
-        ),
+        message: `[${issue.path.join('.')}] ${issue.message}`,
+        path: [...issue.path],
       })),
     };
-  }
-
-  if (
-    error &&
-    typeof error === 'object' &&
-    Array.isArray((error as { issues?: unknown[] }).issues)
-  ) {
-    return error as SharedSchemaError;
   }
 
   return {
@@ -89,7 +52,7 @@ function toSharedError(error: unknown): SharedSchemaError {
   };
 }
 
-function validateWhitelist(schema: A2UISchema, whitelist: string[]): SharedSchemaFailure | null {
+function validateWhitelist(schema: PageSchema, whitelist: string[]): SharedSchemaFailure | null {
   if (whitelist.length === 0) {
     return null;
   }
@@ -118,24 +81,25 @@ function validateWhitelist(schema: A2UISchema, whitelist: string[]): SharedSchem
   };
 }
 
-export function validateA2UISchema(input: unknown): A2UISchema {
-  return A2UISchemaValidator.parse(input) as unknown as A2UISchema;
+/**
+ * 渲染器边界校验：Contract 单一真相源（fail-close），返回 canonical 深冻结对象。
+ */
+export function validateA2UISchema(input: unknown): PageSchema {
+  return requireSupportedPageSchema(input);
 }
 
 export function safeValidateA2UISchema(input: unknown): SharedSchemaSuccess | SharedSchemaFailure {
-  const result = A2UISchemaValidator.safeParse(input);
-
-  if (!result.success) {
+  try {
+    return {
+      success: true,
+      data: requireSupportedPageSchema(input),
+    };
+  } catch (error) {
     return {
       success: false,
-      error: toSharedError(result.error),
+      error: toSharedError(error),
     };
   }
-
-  return {
-    success: true,
-    data: result.data as unknown as A2UISchema,
-  };
 }
 
 export function validateA2UISchemaWithWhitelist(
@@ -159,20 +123,14 @@ export function validateAndAutoFixA2UISchema(
   input: unknown,
   whitelist: string[] = [],
 ): SharedSchemaAutoFixSuccess | SharedSchemaAutoFixFailure {
-  const baseResult = z
-    .object({
-      version: z.union([z.number(), z.string()]).optional(),
-      rootId: z.string().optional(),
-      components: z.record(z.string(), z.any()).optional(),
-    })
-    .safeParse(input);
+  const inputLooksLikeObject = input !== null && typeof input === 'object' && !Array.isArray(input);
 
-  if (!baseResult.success) {
+  if (!inputLooksLikeObject) {
     return {
       success: false,
       data: null,
       fixes: [],
-      error: toSharedError(baseResult.error),
+      error: { issues: [{ message: 'Schema must be an object' }] },
     };
   }
 
@@ -182,7 +140,7 @@ export function validateAndAutoFixA2UISchema(
   if (!finalResult.success) {
     return {
       success: false,
-      data: fixed as A2UISchema,
+      data: fixed as PageSchema,
       fixes,
       error: finalResult.error,
     };

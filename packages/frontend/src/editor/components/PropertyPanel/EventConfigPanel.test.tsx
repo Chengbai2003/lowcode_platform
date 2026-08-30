@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { describe, it, expect } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import type { A2UISchema, FeedbackAction } from '../../../types';
+import type { PageSchema, FeedbackAction } from '../../../types';
 import { EventConfigPanel } from './EventConfigPanel';
 
-const createSchema = (): A2UISchema => ({
+const createSchema = (): PageSchema => ({
   schemaVersion: 0,
   rootId: 'button-1',
   components: {
@@ -21,9 +21,9 @@ const createSchema = (): A2UISchema => ({
 });
 
 interface StatefulPanelProps {
-  initialSchema: A2UISchema;
+  initialSchema: PageSchema;
   selectedId: string;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
 }
 
 const StatefulPanel: React.FC<StatefulPanelProps> = ({

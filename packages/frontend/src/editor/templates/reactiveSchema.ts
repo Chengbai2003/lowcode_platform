@@ -1,10 +1,10 @@
-import type { A2UIComponent, A2UISchema } from '../../types/schema';
+import type { ComponentNode, PageSchema } from '@lowcode-platform/schema-contract';
 
-export function cloneSchema<T extends A2UISchema>(schema: T): T {
+export function cloneSchema<T extends PageSchema>(schema: T): T {
   return JSON.parse(JSON.stringify(schema)) as T;
 }
 
-export function createHiddenDataNode(id: string, initialValue: unknown): A2UIComponent {
+export function createHiddenDataNode(id: string, initialValue: unknown): ComponentNode {
   return {
     id,
     type: 'Div',
@@ -16,7 +16,7 @@ export function createHiddenDataNode(id: string, initialValue: unknown): A2UICom
   };
 }
 
-export function createDefaultReactiveSchema(): A2UISchema {
+export function createDefaultReactiveSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'defaultPage',

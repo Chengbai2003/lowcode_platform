@@ -1,4 +1,4 @@
-import type { A2UISchema } from '../../../types';
+import type { PageSchema } from '../../../types';
 
 /**
  * 树节点数据结构（用于 TreeView 渲染）
@@ -39,10 +39,10 @@ export interface ContextMenuPosition {
  * 组件树 Props
  */
 export interface ComponentTreeProps {
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   selectedId: string | null;
   onSelect: (id: string) => void;
-  onSchemaChange: (schema: A2UISchema) => void;
+  onSchemaChange: (schema: PageSchema) => void;
 }
 
 /**
@@ -64,7 +64,7 @@ export interface ContextMenuProps {
   visible: boolean;
   position: ContextMenuPosition;
   node: TreeNodeData | null;
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   onClose: () => void;
   onAction: (action: ContextMenuAction, node: TreeNodeData) => void;
 }
@@ -74,7 +74,7 @@ export interface ContextMenuProps {
  */
 export interface MoveTargetSelectorProps {
   visible: boolean;
-  schema: A2UISchema;
+  schema: PageSchema;
   sourceId: string;
   onConfirm: (targetParentId: string) => void;
   onCancel: () => void;

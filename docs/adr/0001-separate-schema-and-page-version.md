@@ -44,3 +44,14 @@ interface PageRecord {
 - 需要一次性更新类型、DTO、Repository、fixtures、examples 和测试。
 - 正式发布后，破坏性 Schema 变化必须增加 schemaVersion 和明确 migration。
 - pageVersion 不再污染可移植的 PageSchema JSON。
+
+---
+
+## 实施状态（2026-08）
+
+M0-1 已完成（Issue #16，PR #20/#22/#23/#24）：
+
+- `@lowcode-platform/schema-contract` 为 PageSchema / ComponentNode / Action / 版本常量与校验的唯一来源。
+- 存储采用「页面指针（StoredPageRecord.currentPageVersion）+ 不可变快照（PageSnapshotRecord.pageVersion + runtimeCompatibility + canonical Schema）」模型，页面版本不再写入 Schema 对象。
+- API 协议字段统一为 `pageVersion` / `basePageVersion` / `resolvedPageVersion`。
+- 架构边界由 `pnpm check:architecture` 门禁强制（禁止 A2UISchema/A2UIComponent 别名、baseVersion、schema.version、重复类型声明与 Backend→Frontend 反向依赖）。

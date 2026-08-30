@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './types/editor-patch.types';
 import { EditorAction } from './types/editor-action.types';
 
@@ -11,14 +11,14 @@ export class PatchAutoFixService {
   };
   autoFix(
     patch: readonly EditorPatchOperation[],
-    schema: A2UISchema,
+    schema: PageSchema,
   ): {
     patch: EditorPatchOperation[];
     warnings: string[];
   };
   autoFix(
     patch: readonly EditorPatchOperation[],
-    schema?: A2UISchema,
+    schema?: PageSchema,
   ): {
     patch: EditorPatchOperation[];
     warnings: string[];
@@ -278,9 +278,9 @@ export class PatchAutoFixService {
   }
 
   private appendInsertedComponent(
-    schema: A2UISchema | undefined,
+    schema: PageSchema | undefined,
     component: Record<string, unknown>,
-  ): A2UISchema | undefined {
+  ): PageSchema | undefined {
     if (!schema) {
       return schema;
     }
@@ -303,14 +303,14 @@ export class PatchAutoFixService {
           events: this.ensureRecord(component.events),
         },
       },
-    };
+    } as unknown as PageSchema;
   }
 
   private mergeUpdatedProps(
-    schema: A2UISchema | undefined,
+    schema: PageSchema | undefined,
     componentId: string,
     props: Record<string, unknown>,
-  ): A2UISchema | undefined {
+  ): PageSchema | undefined {
     if (!schema) {
       return schema;
     }
@@ -332,11 +332,11 @@ export class PatchAutoFixService {
           },
         },
       },
-    };
+    } as unknown as PageSchema;
   }
 
-  private cloneSchema(schema: A2UISchema): A2UISchema {
-    return JSON.parse(JSON.stringify(schema)) as A2UISchema;
+  private cloneSchema(schema: PageSchema): PageSchema {
+    return JSON.parse(JSON.stringify(schema)) as PageSchema;
   }
 
   private firstDefined(...values: unknown[]): unknown {

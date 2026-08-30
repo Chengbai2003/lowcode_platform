@@ -1,4 +1,4 @@
-import type { A2UISchema } from './schema';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { AISession, AISessionMeta, SessionListOptions } from './session';
 
 /**
@@ -31,7 +31,7 @@ export interface ChatMessage {
   content: string;
   timestamp: string;
   /** 该消息生成或对应的 Schema 快照 */
-  schemaSnapshot?: A2UISchema;
+  schemaSnapshot?: PageSchema;
 }
 
 /**
@@ -40,7 +40,7 @@ export interface ChatMessage {
  */
 export interface Project {
   meta: ProjectMeta;
-  schema: A2UISchema;
+  schema: PageSchema;
   chatHistory?: ChatMessage[];
 }
 

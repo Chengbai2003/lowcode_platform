@@ -1,16 +1,16 @@
 import { useCallback, useState } from 'react';
 import { message } from 'antd';
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import { compileSchema } from '../services/compilerApi';
 import { pageSchemaApi } from '../services/pageSchemaApi';
 import { useEditorStore } from '../store/editor-store';
 
 interface Params {
   pageId?: string;
-  schema: A2UISchema;
+  schema: PageSchema;
   pageVersion: number | null;
   setPageVersion: (v: number | null) => void;
-  setSchema: (s: React.SetStateAction<A2UISchema>) => void;
+  setSchema: (s: React.SetStateAction<PageSchema>) => void;
   setCompiledCode: (c: string | null) => void;
   onError?: (msg: string) => void;
 }
@@ -43,7 +43,7 @@ export function useEditorActions({
       if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) return;
       setPageVersion(result.pageVersion);
       // 页面版本保存在独立状态，不再写回 Schema
-      setSchema((current) => current as A2UISchema);
+      setSchema((current) => current as PageSchema);
       message.success(`页面已保存，当前版本 v${result.pageVersion}`);
     } catch (error) {
       const currentGeneration = useEditorStore.getState().generation;

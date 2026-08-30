@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { A2UISchema } from '../schema-context';
+import type { PageSchema } from '../schema-context';
 import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 
 interface IntentAliasDefinition {
@@ -105,7 +105,7 @@ export class AgentIntentNormalizationService {
   normalize(input: {
     instruction: string;
     rootId: string;
-    schema: A2UISchema;
+    schema: PageSchema;
   }): IntentNormalizationResult {
     const normalizedInstruction = input.instruction.trim().toLowerCase();
     const resolvedMatches = collectAliasMatches(normalizedInstruction).filter(

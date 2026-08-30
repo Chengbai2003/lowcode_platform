@@ -1,5 +1,5 @@
 import { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import {
   AgentPatchChangeEntry,
   AgentPatchChangeGroup,
@@ -15,8 +15,8 @@ const CHANGE_GROUP_LABELS: Record<AgentPatchChangeKind, string> = {
 };
 
 export function buildPatchPresentation(
-  baseSchema: A2UISchema,
-  previewSchema: A2UISchema,
+  baseSchema: PageSchema,
+  previewSchema: PageSchema,
   patch: readonly EditorPatchOperation[],
 ): {
   changeGroups: AgentPatchChangeGroup[];
@@ -50,7 +50,7 @@ export function buildPatchPresentation(
 }
 
 export function assessPatchRisk(
-  baseSchema: A2UISchema,
+  baseSchema: PageSchema,
   patch: readonly EditorPatchOperation[],
 ): AgentPatchRiskAssessment {
   const patchOps = patch.length;
@@ -140,8 +140,8 @@ function classifyPatchOperation(operation: EditorPatchOperation): AgentPatchChan
 
 function buildPatchChangeEntry(
   operation: EditorPatchOperation,
-  baseSchema: A2UISchema,
-  previewSchema: A2UISchema,
+  baseSchema: PageSchema,
+  previewSchema: PageSchema,
 ): AgentPatchChangeEntry {
   switch (operation.op) {
     case 'insertComponent': {
@@ -238,7 +238,7 @@ function countDistinctTargets(patch: readonly EditorPatchOperation[]): number {
   return targets.size;
 }
 
-function countSubtreeNodes(schema: A2UISchema, rootId: string): number {
+function countSubtreeNodes(schema: PageSchema, rootId: string): number {
   if (!schema.components[rootId]) {
     return 0;
   }

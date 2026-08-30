@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { getActionValidationError, hasCustomScriptInValue } from '../page-schema/action-validation';
 import { requireValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
@@ -74,19 +74,19 @@ export class PatchValidationService {
   }
 
   validatePatchAgainstSchema(
-    baseSchema: A2UISchema,
+    baseSchema: PageSchema,
     patch: readonly EditorPatchOperation[],
-    _resultingSchema: A2UISchema,
+    _resultingSchema: PageSchema,
     traceId: string,
   ) {
     this.previewValidatedSchema(baseSchema, patch, traceId);
   }
 
   previewValidatedSchema(
-    baseSchema: A2UISchema,
+    baseSchema: PageSchema,
     patch: readonly EditorPatchOperation[],
     traceId: string,
-  ): A2UISchema {
+  ): PageSchema {
     let currentSchema = baseSchema;
 
     for (const operation of patch) {
@@ -124,9 +124,9 @@ export class PatchValidationService {
       currentSchema = this.patchApplyService.applyPatch(currentSchema, [operation]);
     }
 
-    let canonicalSchema: A2UISchema;
+    let canonicalSchema: PageSchema;
     try {
-      canonicalSchema = requireValidPageSchema(currentSchema) as unknown as A2UISchema;
+      canonicalSchema = requireValidPageSchema(currentSchema) as unknown as PageSchema;
     } catch (error) {
       throw new AgentToolException({
         code: 'SCHEMA_INVALID',
@@ -140,7 +140,7 @@ export class PatchValidationService {
   }
 
   private assertInsertValid(
-    schema: A2UISchema,
+    schema: PageSchema,
     operation: Extract<EditorPatchOperation, { op: 'insertComponent' }>,
     traceId: string,
   ) {
@@ -208,7 +208,7 @@ export class PatchValidationService {
   }
 
   private assertMoveValid(
-    schema: A2UISchema,
+    schema: PageSchema,
     componentId: string,
     newParentId: string,
     traceId: string,
@@ -233,7 +233,7 @@ export class PatchValidationService {
     }
   }
 
-  private assertComponentExists(schema: A2UISchema, componentId: string, traceId: string) {
+  private assertComponentExists(schema: PageSchema, componentId: string, traceId: string) {
     if (!schema.components[componentId]) {
       throw new AgentToolException({
         code: 'NODE_NOT_FOUND',
@@ -257,7 +257,7 @@ export class PatchValidationService {
     throw new AgentToolException({ code: 'PATCH_INVALID', message: error, traceId });
   }
 
-  private assertReachable(schema: A2UISchema, traceId: string) {
+  private assertReachable(schema: PageSchema, traceId: string) {
     const visited = new Set<string>();
     const stack = [schema.rootId];
 
@@ -294,7 +294,7 @@ export class PatchValidationService {
   }
 
   private isDetachedHiddenDataNode(
-    component: A2UISchema['components'][string] | undefined,
+    component: PageSchema['components'][string] | undefined,
   ): boolean {
     if (!component || component.type !== 'Div') {
       return false;
@@ -312,7 +312,7 @@ export class PatchValidationService {
     return (component.childrenIds?.length ?? 0) === 0;
   }
 
-  private isDescendant(schema: A2UISchema, candidateId: string, ancestorId: string): boolean {
+  private isDescendant(schema: PageSchema, candidateId: string, ancestorId: string): boolean {
     const stack = [...(schema.components[ancestorId]?.childrenIds ?? [])];
     const visited = new Set<string>();
     while (stack.length > 0) {

@@ -1,8 +1,8 @@
 import { PatchApplyService } from './patch-apply.service';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './types/editor-patch.types';
 
-function createSchema(): A2UISchema {
+function createSchema(): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'root',

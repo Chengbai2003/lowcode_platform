@@ -1,7 +1,7 @@
 import type {
-  A2UISchema,
+  PageSchema,
   ComponentRegistry,
-  A2UIComponent,
+  ComponentNode,
   PropertyMeta,
   NotificationOptions,
   ModalOptions,
@@ -9,9 +9,9 @@ import type {
 
 // Re-export types for convenience
 export type {
-  A2UISchema,
+  PageSchema,
   ComponentRegistry,
-  A2UIComponent,
+  ComponentNode,
   PropertyMeta,
   NotificationOptions,
   ModalOptions,
@@ -31,7 +31,7 @@ export interface LowcodeEditorProps {
   /**
    * 初始 JSON Schema (A2UI Format)
    */
-  initialSchema?: A2UISchema | string;
+  initialSchema?: PageSchema | string;
 
   /**
    * 自定义组件映射
@@ -41,7 +41,7 @@ export interface LowcodeEditorProps {
   /**
    * Schema 变更回调
    */
-  onChange?: (schema: A2UISchema) => void;
+  onChange?: (schema: PageSchema) => void;
 
   /**
    * 错误回调

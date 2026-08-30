@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PageSchemaService } from '../page-schema/page-schema.service';
-import { A2UISchema } from './types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
 @Injectable()
 export class SchemaResolverService {
@@ -10,7 +10,7 @@ export class SchemaResolverService {
     pageId?: string;
     pageVersion?: number;
     draftSchema?: Record<string, unknown>;
-  }): Promise<A2UISchema> {
+  }): Promise<PageSchema> {
     let raw: Record<string, unknown>;
 
     if (input.draftSchema) {
@@ -25,7 +25,7 @@ export class SchemaResolverService {
     return this.assertAndCast(raw);
   }
 
-  private assertAndCast(raw: Record<string, unknown>): A2UISchema {
+  private assertAndCast(raw: Record<string, unknown>): PageSchema {
     const rootId = raw.rootId;
     if (typeof rootId !== 'string' || !rootId.trim()) {
       throw new BadRequestException('Schema rootId is required and must be a non-empty string');
@@ -45,7 +45,7 @@ export class SchemaResolverService {
       this.assertComponent(id, entry);
     }
 
-    const cloned = structuredClone(raw) as unknown as A2UISchema;
+    const cloned = structuredClone(raw) as unknown as PageSchema;
     return cloned;
   }
 

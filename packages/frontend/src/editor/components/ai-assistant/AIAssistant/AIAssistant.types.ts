@@ -1,4 +1,4 @@
-import type { A2UISchema } from '../../../../types';
+import type { PageSchema } from '../../../../types';
 import type { EditorPatchOperation } from '../../../types/patch';
 import type {
   AgentCollectionScope,
@@ -16,7 +16,7 @@ export interface AIPatchPreviewState {
   instruction: string;
   patch: EditorPatchOperation[];
   resolvedSelectedId?: string;
-  previewSchema: A2UISchema;
+  previewSchema: PageSchema;
   previewSummary: string;
   changeGroups: AgentPatchChangeGroup[];
   warnings: string[];
@@ -59,7 +59,7 @@ export interface AIMessage {
   type: 'user' | 'ai' | 'system';
   content: string;
   timestamp: Date;
-  schema?: A2UISchema;
+  schema?: PageSchema;
   suggestions?: string[];
   status?: 'loading' | 'success' | 'error';
   modelUsed?: string;

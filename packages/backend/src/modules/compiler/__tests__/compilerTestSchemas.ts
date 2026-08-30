@@ -1,6 +1,15 @@
-import type { A2UISchema } from '../schema.types';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 
-function createSchema(components: A2UISchema['components'], rootId = 'page_root'): A2UISchema {
+function createSchema(components: PageSchema['components'], rootId = 'page_root'): PageSchema {
+  return {
+    schemaVersion: 0,
+    rootId,
+    components,
+  };
+}
+
+/** 故意非法的历史 fixture（customScript 等）：仅用于验证校验层 fail-close */
+function createSchemaUnsafe(components: Record<string, unknown>, rootId = 'page_root'): unknown {
   return {
     schemaVersion: 0,
     rootId,
@@ -350,7 +359,7 @@ export const behaviorSchemas = {
       childrenIds: [],
     },
   }),
-  customScriptSchema: createSchema({
+  customScriptSchema: createSchemaUnsafe({
     page_root: {
       id: 'page_root',
       type: 'Page',
@@ -386,7 +395,7 @@ export const behaviorSchemas = {
     page_root: { id: 'page_root', type: 'Page', childrenIds: ['missing_child'] },
   }),
   // deprecated combined aliases (kept for backward compat, do not use in new tests)
-  customScriptAndUnsafeNavigate: createSchema({
+  customScriptAndUnsafeNavigate: createSchemaUnsafe({
     page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn_legacy'] },
     btn_legacy: {
       id: 'btn_legacy',

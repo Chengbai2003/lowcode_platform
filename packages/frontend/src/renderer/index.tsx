@@ -10,7 +10,7 @@ import { Renderer } from './Renderer';
 
 export { Renderer } from './Renderer';
 export { EventDispatcher } from './EventDispatcher';
-export type { RendererProps, ComponentRegistry, A2UIComponent, A2UISchema } from './types';
+export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from './types';
 export { builtInComponents } from './builtInComponents';
 
 // 导出表单验证相关

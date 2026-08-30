@@ -1,5 +1,6 @@
+import type { JsonObject } from '@lowcode-platform/schema-contract';
 import { Injectable } from '@nestjs/common';
-import { A2UIComponent, A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './types/editor-patch.types';
 
 interface MutableComponent {
@@ -11,14 +12,14 @@ interface MutableComponent {
 }
 
 type MutableSchema = {
-  schemaVersion: number;
+  schemaVersion: 0;
   rootId: string;
   components: Record<string, MutableComponent>;
 };
 
 @Injectable()
 export class PatchApplyService {
-  applyPatch(schema: A2UISchema, patch: readonly EditorPatchOperation[]): A2UISchema {
+  applyPatch(schema: PageSchema, patch: readonly EditorPatchOperation[]): PageSchema {
     const nextSchema = this.cloneSchema(schema);
 
     for (const operation of patch) {
@@ -153,7 +154,7 @@ export class PatchApplyService {
     );
   }
 
-  private cloneSchema(schema: A2UISchema): MutableSchema {
+  private cloneSchema(schema: PageSchema): MutableSchema {
     const components = Object.entries(schema.components).reduce<Record<string, MutableComponent>>(
       (accumulator, [id, component]) => {
         accumulator[id] = {
@@ -175,15 +176,17 @@ export class PatchApplyService {
     };
   }
 
-  private freezeSchema(schema: MutableSchema): A2UISchema {
-    const components = Object.entries(schema.components).reduce<Record<string, A2UIComponent>>(
+  private freezeSchema(schema: MutableSchema): PageSchema {
+    const components = Object.entries(schema.components).reduce<Record<string, ComponentNode>>(
       (accumulator, [id, component]) => {
         accumulator[id] = {
           id: component.id,
           type: component.type,
-          props: component.props ? { ...component.props } : undefined,
+          props: component.props ? ({ ...component.props } as JsonObject) : undefined,
           childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
-          events: component.events ? { ...component.events } : undefined,
+          events: component.events
+            ? ({ ...component.events } as unknown as ComponentNode['events'])
+            : undefined,
         };
         return accumulator;
       },

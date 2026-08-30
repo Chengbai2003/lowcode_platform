@@ -5,7 +5,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo, memo } from 'react';
-import type { ComponentRegistry, A2UIComponent } from './types';
+import type { ComponentRegistry, ComponentNode } from './types';
 import type { EventDispatcher } from './EventDispatcher';
 import { builtInComponents } from './builtInComponents';
 import { useNodeValue, useResolvedSchemaProps } from './ComponentRenderer.runtime';
@@ -25,10 +25,10 @@ import {
  */
 export interface ComponentRendererProps {
   nodeId: string;
-  flatComponents: Record<string, A2UIComponent>;
+  flatComponents: Record<string, ComponentNode>;
   components: ComponentRegistry;
   eventDispatcher?: EventDispatcher;
-  onComponentClick?: (node: A2UIComponent) => void;
+  onComponentClick?: (node: ComponentNode) => void;
   ancestors?: Set<string>;
   [key: string]: any;
 }

@@ -3,7 +3,7 @@ import { Modal, Tree, message } from 'antd';
 import type { TreeDataNode } from 'antd';
 import { Copy, ArrowUp, ArrowDown, FolderOpen, Trash2 } from 'lucide-react';
 import type { ContextMenuProps, ContextMenuAction, TreeNodeData } from './treeTypes';
-import type { A2UISchema } from '../../../types';
+import type { PageSchema } from '../../../types';
 import { deleteComponent, copyComponent, moveComponent, canMove } from './schemaToTree';
 import styles from './ComponentTree.module.scss';
 
@@ -127,7 +127,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
  */
 export const MoveTargetSelector: React.FC<{
   visible: boolean;
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   sourceId: string;
   onConfirm: (targetParentId: string) => void;
   onCancel: () => void;
@@ -135,7 +135,7 @@ export const MoveTargetSelector: React.FC<{
   const [selectedKey, setSelectedKey] = React.useState<string | null>(null);
 
   // 构建树形数据用于选择
-  const buildTreeData = (schema: A2UISchema): TreeDataNode[] => {
+  const buildTreeData = (schema: PageSchema): TreeDataNode[] => {
     if (!schema || !schema.rootId || !schema.components) return [];
 
     const components = schema.components;
@@ -199,8 +199,8 @@ export const MoveTargetSelector: React.FC<{
 export function handleContextMenuAction(
   action: ContextMenuAction,
   node: TreeNodeData,
-  schema: A2UISchema,
-  onSchemaChange: (schema: A2UISchema) => void,
+  schema: PageSchema,
+  onSchemaChange: (schema: PageSchema) => void,
   onShowMoveTarget: () => void,
 ): void {
   switch (action) {

@@ -1,7 +1,7 @@
-import type { A2UISchema } from '../schema.types';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { compileSchemaToCode } from '../pipeline';
 
-function makeSchema(components: A2UISchema['components']): A2UISchema {
+function makeSchema(components: PageSchema['components']): PageSchema {
   return {
     schemaVersion: 0,
     rootId: 'page_root',

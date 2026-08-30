@@ -3,7 +3,7 @@
  * 提供降级策略、错误修复建议和失败记录
  */
 
-import type { A2UISchema, A2UIComponent } from '../../types';
+import type { PageSchema, ComponentNode } from '../../types';
 import type {
   ValidationError,
   ValidationWarning,
@@ -26,7 +26,7 @@ export interface ValidationFailureRecord {
   warnings: ValidationWarning[];
   attemptedFixes: string[];
   recoveryStrategy: RecoveryStrategy;
-  recoveredSchema?: A2UISchema;
+  recoveredSchema?: PageSchema;
   success: boolean;
 }
 
@@ -45,7 +45,7 @@ export type RecoveryStrategy =
  */
 export interface RecoveryResult {
   success: boolean;
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   strategy: RecoveryStrategy;
   fixes: string[];
   warnings: string[];
@@ -72,11 +72,11 @@ const MAX_RECORDS = 100;
  * 错误恢复管理器
  */
 export class ErrorRecoveryManager {
-  private defaultSchema: A2UISchema;
+  private defaultSchema: PageSchema;
   private onRecovery?: (record: ValidationFailureRecord) => void;
 
   constructor(options?: {
-    defaultSchema?: A2UISchema;
+    defaultSchema?: PageSchema;
     onRecovery?: (record: ValidationFailureRecord) => void;
   }) {
     this.defaultSchema = options?.defaultSchema || this.createDefaultSchema();
@@ -226,7 +226,7 @@ export class ErrorRecoveryManager {
 
     // 如果已经有修复后的数据
     if (result.sanitizedData && result.fixed) {
-      const schema = result.sanitizedData as A2UISchema;
+      const schema = result.sanitizedData as PageSchema;
 
       // 再次验证修复后的数据
       const revalidateResult = validateSchema(schema);
@@ -289,9 +289,9 @@ export class ErrorRecoveryManager {
    * 应用部分修复
    */
   private applyPartialFix(
-    schema: A2UISchema,
+    schema: PageSchema,
     errors: ValidationError[],
-  ): { schema: A2UISchema | null; fixes: string[]; warnings: string[] } {
+  ): { schema: PageSchema | null; fixes: string[]; warnings: string[] } {
     const fixes: string[] = [];
     const warnings: string[] = [];
 
@@ -309,7 +309,7 @@ export class ErrorRecoveryManager {
     }
 
     // 创建新的 Schema，移除有问题的组件
-    const newComponents: Record<string, A2UIComponent> = {};
+    const newComponents: Record<string, ComponentNode> = {};
     for (const [id, component] of Object.entries(schema.components)) {
       if (!problematicComponents.has(id)) {
         newComponents[id] = component;
@@ -344,7 +344,7 @@ export class ErrorRecoveryManager {
       }
     }
 
-    const newSchema: A2UISchema = {
+    const newSchema: PageSchema = {
       ...schema,
       rootId: newRootId,
       components: newComponents,
@@ -365,7 +365,7 @@ export class ErrorRecoveryManager {
   /**
    * 创建默认 Schema
    */
-  private createDefaultSchema(): A2UISchema {
+  private createDefaultSchema(): PageSchema {
     return createDefaultReactiveSchema();
   }
 
@@ -542,7 +542,7 @@ export function validateAndRecover(
   content: string,
   options?: {
     onRecovery?: (record: ValidationFailureRecord) => void;
-    defaultSchema?: A2UISchema;
+    defaultSchema?: PageSchema;
   },
 ): RecoveryResult {
   const result = validateAIOutput(content);
@@ -550,7 +550,7 @@ export function validateAndRecover(
   if (result.valid) {
     return {
       success: true,
-      schema: result.sanitizedData as A2UISchema,
+      schema: result.sanitizedData as PageSchema,
       strategy: 'auto_fix',
       fixes: result.fixes || [],
       warnings: result.warnings?.map((w) => w.message) || [],

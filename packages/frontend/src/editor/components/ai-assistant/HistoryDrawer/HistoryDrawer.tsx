@@ -12,13 +12,13 @@ import {
 } from '@ant-design/icons';
 import { message, Popconfirm } from 'antd';
 import { motion } from 'framer-motion';
-import type { AISessionMeta, AISessionMessage, A2UISchema } from '../../../../types';
+import type { AISessionMeta, AISessionMessage, PageSchema } from '../../../../types';
 import { useEditorStore } from '../../../store';
 import { useSessionManager } from '../../../hooks';
 import styles from './HistoryDrawer.module.scss';
 
 interface HistoryDrawerProps {
-  onRollback?: (schema: A2UISchema | unknown) => boolean;
+  onRollback?: (schema: PageSchema | unknown) => boolean;
 }
 
 // 日期分组

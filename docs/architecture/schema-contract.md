@@ -141,3 +141,9 @@ Contract fixture 必须被以下消费面共同使用：
 - 不保留双 Schema、双 Renderer 或长期兼容分支。
 - 修改 Contract 时同步更新全部 fixtures、examples 和测试。
 - M1b 完成后冻结 Schema V1；冻结后破坏性变化必须通过新 schemaVersion 和明确 migration 处理。
+
+---
+
+## 实施状态（2026-08）
+
+M0-1 已完成：Contract 为唯一 Schema 类型与校验来源（PR #20/#22/#23/#24，Issue #16）。消费面（Editor、Renderer、Compiler、Agent、SchemaContext、Repository）直接导入 Contract；Renderer/Compiler/Repository 边界统一使用 `requireSupportedPageSchema` 获取 canonical 深冻结对象；`pnpm check:architecture` 强制架构边界。

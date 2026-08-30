@@ -2,10 +2,10 @@
  * 列表表格模板
  */
 import type { Template } from '../types';
-import type { A2UISchema } from '../../../types/schema';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { createHiddenDataNode } from '../reactiveSchema';
 
-const schema: A2UISchema = {
+const schema: PageSchema = {
   schemaVersion: 0,
   rootId: 'page-list',
   components: {

@@ -173,7 +173,7 @@ describe('PageSchemaService', () => {
     expect(pageStore?.currentPageVersion).toBe(2);
   });
 
-  it('throws conflict when baseVersion is stale', async () => {
+  it('throws conflict when basePageVersion is stale', async () => {
     await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
 
     await expect(

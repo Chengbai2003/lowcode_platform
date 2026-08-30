@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { message, Modal } from 'antd';
 import {
   generateMessageId,
-  type A2UISchema,
+  type PageSchema,
   type AISession,
   type AISessionMessage,
   type AIMessageActionResult,
@@ -23,7 +23,7 @@ import { useSessionManager } from '../../../hooks';
 import type { AIMessage } from './AIAssistant.types';
 
 interface UseAIAssistantChatProps {
-  currentSchema: A2UISchema | null;
+  currentSchema: PageSchema | null;
   currentModel: string;
   pageId?: string;
   pageVersion?: number | null;
@@ -411,7 +411,7 @@ export const useAIAssistantChat = ({
       response: AgentEditResponse;
     }) => {
       let fullContent = '';
-      let aiSchema: A2UISchema | undefined;
+      let aiSchema: PageSchema | undefined;
       let actionResult: AIMessageActionResult | undefined;
 
       switch (response.mode) {

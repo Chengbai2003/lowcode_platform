@@ -4,7 +4,7 @@
  */
 
 import { parseExpression } from '../executor/parser/expressionParser';
-import type { A2UIComponent } from '../../types';
+import type { ComponentNode } from '../../types';
 
 export interface ComponentDeps {
   /** 该组件的表达式依赖了哪些 data key */
@@ -143,7 +143,7 @@ export function analyzeComponentDeps(props: Record<string, any>): ComponentDeps 
  * 分析整个 schema 的依赖图
  */
 export function analyzeSchemaDepGraph(
-  components: Record<string, A2UIComponent>,
+  components: Record<string, ComponentNode>,
 ): Map<string, ComponentDeps> {
   const depGraph = new Map<string, ComponentDeps>();
 

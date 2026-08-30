@@ -1,4 +1,4 @@
-import type { A2UISchema } from '../../../../types';
+import type { PageSchema } from '../../../../types';
 import type { EditorPatchOperation } from '../../../types/patch';
 
 // AI模型配置接口
@@ -115,7 +115,7 @@ export interface AgentEditAnswerResponse {
 export interface AgentEditSchemaResponse {
   mode: 'schema';
   content: string;
-  schema?: A2UISchema;
+  schema?: PageSchema;
   warnings?: string[];
   suggestions?: string[];
   traceId: string;
@@ -159,7 +159,7 @@ export interface AgentEditPatchResponse {
   resolvedPageVersion?: number;
   resolvedSelectedId?: string;
   patch: EditorPatchOperation[];
-  previewSchema: A2UISchema;
+  previewSchema: PageSchema;
   previewSummary: string;
   changeGroups: AgentPatchChangeGroup[];
   risk: AgentPatchRiskAssessment;
@@ -250,7 +250,7 @@ export interface AgentPatchApplyPayload {
 
 export type AgentPatchApplyHandler = (
   payload: AgentPatchApplyPayload,
-) => Promise<A2UISchema | null> | A2UISchema | null;
+) => Promise<PageSchema | null> | PageSchema | null;
 
 // Agent 编辑请求接口
 export interface AgentEditRequest {
@@ -260,7 +260,7 @@ export interface AgentEditRequest {
   pageId?: string;
   pageVersion?: number;
   selectedId?: string;
-  draftSchema?: A2UISchema;
+  draftSchema?: PageSchema;
   conversationHistory?: AgentConversationMessage[];
   sessionId?: string;
   confirmedScopeId?: string;

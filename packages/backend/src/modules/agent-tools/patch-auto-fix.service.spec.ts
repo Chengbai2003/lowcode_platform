@@ -1,6 +1,6 @@
 import { PatchAutoFixService } from './patch-auto-fix.service';
 import { EditorPatchOperation } from './types/editor-patch.types';
-import { A2UISchema } from '../schema-context/types/schema.types';
+import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 
 describe('PatchAutoFixService', () => {
   let service: PatchAutoFixService;
@@ -120,7 +120,7 @@ describe('PatchAutoFixService', () => {
   });
 
   it('normalizes Button danger alias in updateProps with schema context', () => {
-    const schema: A2UISchema = {
+    const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
       components: {

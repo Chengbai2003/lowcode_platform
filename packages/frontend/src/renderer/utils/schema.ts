@@ -1,16 +1,16 @@
-import type { A2UISchema, A2UIComponent } from '../../types';
+import type { PageSchema, ComponentNode } from '../../types';
 
 /**
  * 遍历 Flat A2UI Schema，提取所有组件的初始值
  * 返回 {[id]: value} 结构
  */
-export function flattenSchemaValues(schema: A2UISchema): Record<string, any> {
+export function flattenSchemaValues(schema: PageSchema): Record<string, any> {
   const values: Record<string, any> = {};
   const { components } = schema;
 
   if (!components) return values;
 
-  Object.values(components).forEach((node: A2UIComponent) => {
+  Object.values(components).forEach((node: ComponentNode) => {
     if (node.id) {
       // 提取初始值
       // 优先级：props.initialValue > props.value > props.defaultValue

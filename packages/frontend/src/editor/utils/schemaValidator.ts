@@ -3,7 +3,7 @@
  * 校验 A2UI Schema 结构的合法性
  */
 
-import type { A2UISchema } from '../../types';
+import type { PageSchema } from '../../types';
 import {
   validateA2UISchemaWithWhitelist,
   validateAndAutoFixA2UISchema,
@@ -102,7 +102,7 @@ export class SchemaValidator {
   private options: ValidationOptions;
   private errors: ValidationError[] = [];
   private warnings: ValidationWarning[] = [];
-  private fixedSchema: A2UISchema | null = null;
+  private fixedSchema: PageSchema | null = null;
   private fixes: string[] = [];
 
   constructor(options: Partial<ValidationOptions> = {}) {
@@ -133,7 +133,7 @@ export class SchemaValidator {
       };
     }
 
-    const typedSchema = coreResult.data as A2UISchema;
+    const typedSchema = coreResult.data as PageSchema;
     this.fixedSchema = JSON.parse(JSON.stringify(typedSchema));
     const coreFixes = (coreResult as { fixes?: string[] }).fixes;
     if (Array.isArray(coreFixes) && coreFixes.length > 0) {
@@ -184,7 +184,7 @@ export class SchemaValidator {
   /**
    * 校验大小限制
    */
-  private validateSizeLimits(schema: A2UISchema): void {
+  private validateSizeLimits(schema: PageSchema): void {
     // Schema 大小
     const schemaStr = JSON.stringify(schema);
     if (schemaStr.length > (this.options.maxSchemaSize || DEFAULT_LIMITS.maxSchemaSize)) {
@@ -209,7 +209,7 @@ export class SchemaValidator {
   /**
    * 校验组件 ID 唯一性
    */
-  private validateComponentUniqueness(schema: A2UISchema): void {
+  private validateComponentUniqueness(schema: PageSchema): void {
     const ids = new Set<string>();
     const duplicates: string[] = [];
 
@@ -261,7 +261,7 @@ export class SchemaValidator {
   /**
    * 校验属性
    */
-  private validateProperties(schema: A2UISchema): void {
+  private validateProperties(schema: PageSchema): void {
     for (const [id, component] of Object.entries(schema.components)) {
       const props = component.props || {};
       const componentType = component.type;
@@ -323,7 +323,7 @@ export class SchemaValidator {
   /**
    * 安全检查
    */
-  private validateSecurity(schema: A2UISchema): void {
+  private validateSecurity(schema: PageSchema): void {
     for (const [id, component] of Object.entries(schema.components)) {
       const props = component.props || {};
 
@@ -402,7 +402,7 @@ export class SchemaValidator {
   /**
    * 校验嵌套深度
    */
-  private validateNestingDepth(schema: A2UISchema): void {
+  private validateNestingDepth(schema: PageSchema): void {
     const maxDepth = this.options.maxDepth || DEFAULT_LIMITS.maxDepth;
     const visited = new Set<string>();
 
@@ -489,12 +489,12 @@ export function isValidSchema(schema: unknown, options?: Partial<ValidationOptio
 export function validateAndFixSchema(
   schema: unknown,
   options?: Partial<ValidationOptions>,
-): { schema: A2UISchema | null; result: ValidationResult } {
+): { schema: PageSchema | null; result: ValidationResult } {
   const validator = new SchemaValidator({ ...options, strict: false });
   const result = validator.validate(schema);
 
   return {
-    schema: result.sanitizedData as A2UISchema | null,
+    schema: result.sanitizedData as PageSchema | null,
     result,
   };
 }

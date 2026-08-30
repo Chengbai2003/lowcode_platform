@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, memo, useEffect } from 'react';
 import { Renderer, LowcodeProvider } from '../../../../renderer';
-import type { A2UISchema, ComponentRegistry, A2UIComponent } from '../../../../types';
+import type { PageSchema, ComponentRegistry, ComponentNode } from '../../../../types';
 import { useEditorStore, useSelectionStore } from '../../../store/editor-store';
 import { SelectionHighlight } from './SelectionHighlight';
 import { useComponentPosition } from './useComponentPosition';
@@ -10,7 +10,7 @@ import styles from './PreviewPane.module.scss';
 const COMPONENT_ID_CLASS_PREFIX = 'lowcode-component-id-';
 
 interface SelectableCanvasProps {
-  schema: A2UISchema | null;
+  schema: PageSchema | null;
   allComponents: ComponentRegistry;
   eventContext: Record<string, unknown>;
   isPreviewMode?: boolean;
@@ -82,7 +82,7 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
 
     // Handle component click
     const handleComponentClick = useCallback(
-      (node: A2UIComponent) => {
+      (node: ComponentNode) => {
         if (!isPreviewMode) {
           selectComponent(node.id);
         }

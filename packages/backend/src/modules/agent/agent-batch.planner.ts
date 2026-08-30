@@ -593,7 +593,7 @@ export async function runConfirmedBatchPatch(
   return {
     mode: 'patch',
     pageId: context.pageId,
-    baseVersion: dto.version,
+    basePageVersion: dto.pageVersion,
     resolvedVersion: context.resolvedVersion,
     resolvedSelectedId,
     patch,
