@@ -127,7 +127,6 @@ export class SchemaSlicerService {
       totalComponents: Object.keys(components).length,
       maxDepth: computeMaxDepth(schema.rootId, components),
       rootId: schema.rootId,
-      version: schema.version,
     };
   }
 

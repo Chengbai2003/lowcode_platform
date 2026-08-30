@@ -17,7 +17,7 @@ export class SchemaResolverService {
       raw = input.draftSchema;
     } else if (input.pageId) {
       const page = await this.pageSchemaService.getSchema(input.pageId, input.version);
-      raw = page.schema;
+      raw = page.schema as unknown as Record<string, unknown>;
     } else {
       throw new BadRequestException('Either draftSchema or pageId must be provided');
     }

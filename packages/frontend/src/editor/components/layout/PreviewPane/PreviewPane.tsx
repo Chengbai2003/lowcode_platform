@@ -84,8 +84,8 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   // 将 schema 转换为可展示的 JSON 格式
   const getDisplayJson = useCallback(() => {
     if (!schema) return '{}';
-    const { version, rootId, components } = schema;
-    return JSON.stringify({ version, rootId, components }, null, 2);
+    const { schemaVersion, rootId, components } = schema;
+    return JSON.stringify({ schemaVersion, rootId, components }, null, 2);
   }, [schema]);
 
   // 当 schema 变化或切换到 JSON tab 时，重置编辑内容

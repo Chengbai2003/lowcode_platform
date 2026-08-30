@@ -240,6 +240,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
     };
 
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -275,6 +276,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
   it('A.visible reacts to data.B change via eventDispatcher: hidden → visible', async () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -321,6 +323,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
   it('A.visible reacts to data.B change: visible → hidden', async () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -366,6 +369,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
   it('static visible=false hides component', async () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -396,6 +400,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
   it('A.disabled reacts to data.B change via eventDispatcher', async () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -454,6 +459,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
       ).length;
 
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {

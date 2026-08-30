@@ -97,6 +97,7 @@ describe('SchemaSlicerService', () => {
 
     const ctx = service.slice(
       {
+        schemaVersion: 0,
         rootId: 'page_root',
         components,
       },

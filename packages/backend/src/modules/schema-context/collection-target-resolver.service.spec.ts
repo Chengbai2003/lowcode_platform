@@ -7,6 +7,7 @@ describe('CollectionTargetResolverService', () => {
     const result = service.resolve({
       rootId: 'root',
       schema: {
+        schemaVersion: 0,
         rootId: 'root',
         components: {
           root: { id: 'root', type: 'Div', childrenIds: ['child'] },

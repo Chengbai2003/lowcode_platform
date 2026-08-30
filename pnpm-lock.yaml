@@ -63,6 +63,9 @@ importers:
       '@lowcode-platform/frontend':
         specifier: workspace:*
         version: link:../frontend
+      '@lowcode-platform/schema-contract':
+        specifier: workspace:*
+        version: link:../schema-contract
       '@nestjs/common':
         specifier: ^10.3.0
         version: 10.4.22(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -148,6 +151,9 @@ importers:
       '@jsep-plugin/new':
         specifier: ^1.0.4
         version: 1.0.4(jsep@1.4.0)
+      '@lowcode-platform/schema-contract':
+        specifier: workspace:*
+        version: link:../schema-contract
       '@monaco-editor/react':
         specifier: ^4.6.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)

@@ -13,7 +13,7 @@ import { ToolExecutionContext } from './types/tool.types';
 
 function createSchema(): A2UISchema {
   return {
-    version: 4,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: {
@@ -282,6 +282,7 @@ describe('ToolExecutionService', () => {
 
   it('rejects move_component cycles', async () => {
     const nestedSchema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { id: 'root', type: 'Page', childrenIds: ['parent'] },

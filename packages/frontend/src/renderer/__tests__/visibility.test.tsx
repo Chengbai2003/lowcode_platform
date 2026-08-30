@@ -8,6 +8,7 @@ const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() =
 describe('Renderer visibility', () => {
   it('does not crash when visible toggles to false', async () => {
     const buildSchema = (visible: boolean | string): A2UISchema => ({
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -54,6 +55,7 @@ describe('Renderer visibility', () => {
 
   it('renders without LowcodeProvider', () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -73,6 +75,7 @@ describe('Renderer visibility', () => {
 
   it('does not use host getState as the renderer read chain', () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {

@@ -1,61 +1,32 @@
 // ============================================================================
-// Action 类型定义 (8种精简方案)
+// Action 类型定义 —— 单一真相源对齐（Issue #16 / M0-1）
+// ============================================================================
+// Action 联合类型直接取自 @lowcode-platform/schema-contract：
+// - Schema 与运行时可执行集合严格一致；
+// - customScript 已被永久移除（历史输入在 Contract 校验时直接报错）；
+// - 渲染器运行时执行类型（ActionHandler / ExecutionContext 等）保持本地定义，
+//   仅通过 extension.ts 中的历史类型引用内部实现。
 // ============================================================================
 
-import type { SetValueAction } from './actions/data';
-import type { FeedbackAction, DialogAction } from './actions/ui';
-import type { NavigateAction } from './actions/navigation';
-import type { ApiCallAction, DelayAction } from './actions/async';
-import type { IfAction, LoopAction } from './actions/flow';
-import type { LogAction } from './actions/debug';
-import type { CustomScriptAction } from './actions/extension';
+export type {
+  Action,
+  ActionList,
+  SetValueAction,
+  ApiCallAction,
+  NavigateAction,
+  FeedbackAction,
+  DialogAction,
+  IfAction,
+  LoopAction,
+  DelayAction,
+  LogAction,
+  CoreActionType,
+} from '@lowcode-platform/schema-contract';
 
-// ============================================================================
-// 类型定义
-// ============================================================================
+import type { Action } from '@lowcode-platform/schema-contract';
 
-/**
- * Action 类型 (8种)
- *
- * 精简的 Action 体系，覆盖大多数低代码场景：
- *
- * | 分类 | Action | 用途 |
- * |-----|--------|------|
- * | 数据 | setValue | 设置字段/状态值 |
- * | 网络 | apiCall | API 请求 |
- * | 路由 | navigate | 页面跳转 |
- * | 交互 | feedback | 消息/通知 |
- * | 弹窗 | dialog | 模态框/确认框 |
- * | 控制 | if, loop | 条件分支/循环 |
- * | 工具 | delay, log | 延迟/日志 |
- * | 逃生舱 | customScript | 自定义脚本 |
- */
-export type Action =
-  | SetValueAction
-  | ApiCallAction
-  | NavigateAction
-  | FeedbackAction
-  | DialogAction
-  | IfAction
-  | LoopAction
-  | DelayAction
-  | LogAction
-  | CustomScriptAction;
-
-/**
- * Action 列表
- */
-export type ActionList = Action[];
-
-/**
- * 事件定义
- */
-export type EventDefinition = ActionList;
-
-/**
- * 事件映射
- */
-export type EventsMap = Record<string, EventDefinition>;
+// 历史扩展类型：仅供渲染器内部执行器引用，不再是合法的 Schema Action
+export type { CustomScriptAction } from './actions/extension';
 
 // ============================================================================
 // 常量定义 - 用于 AI Prompt 和运行时校验
@@ -81,7 +52,7 @@ export const ACTION_TYPES = [
   // 工具
   'delay',
   'log',
-  // 逃生舱
+  // 逃生舱（仅历史兼容提示，Schema 层已永久禁止）
   'customScript',
 ] as const;
 
@@ -89,5 +60,5 @@ export const ACTION_TYPES = [
  * Action 类型守卫
  */
 export function isActionType(type: string): type is Action['type'] {
-  return ACTION_TYPES.includes(type as Action['type']);
+  return (ACTION_TYPES as readonly string[]).includes(type) && type !== 'customScript';
 }

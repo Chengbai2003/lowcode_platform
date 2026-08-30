@@ -6,6 +6,7 @@ import type { A2UISchema } from '../../../types/schema';
 import { createHiddenDataNode } from '../reactiveSchema';
 
 const schema: A2UISchema = {
+  schemaVersion: 0,
   rootId: 'page-list',
   components: {
     userRowsAll: createHiddenDataNode('userRowsAll', [
@@ -96,7 +97,17 @@ const schema: A2UISchema = {
           minHeight: '100vh',
         },
       },
-      childrenIds: ['header-wrapper', 'filter-card', 'table-card'],
+      childrenIds: [
+        'header-wrapper',
+        'filter-card',
+        'table-card',
+        'userRowsAll',
+        'activeRows',
+        'bannedRows',
+        'linusRows',
+        'adaRows',
+        'filteredUsers',
+      ],
     },
     'header-wrapper': {
       id: 'header-wrapper',

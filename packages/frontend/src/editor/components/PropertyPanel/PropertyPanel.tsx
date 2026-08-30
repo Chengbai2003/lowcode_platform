@@ -174,7 +174,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
       if (normalizedValue === undefined) {
         delete nextProps[key];
       } else {
-        nextProps[key] = normalizedValue;
+        nextProps[key] = normalizedValue as import('@lowcode-platform/schema-contract').JsonValue;
       }
 
       const newSchema: A2UISchema = {

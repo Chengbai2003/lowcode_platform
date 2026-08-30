@@ -162,7 +162,9 @@
 
 // 悬停效果
 @mixin hover-lift {
-  transition: transform $transition-base $transition-timing, box-shadow $transition-base $transition-timing;
+  transition:
+    transform $transition-base $transition-timing,
+    box-shadow $transition-base $transition-timing;
 
   &:hover {
     transform: translateY(-2px);
@@ -182,7 +184,9 @@
 // 聚焦边框效果
 @mixin focus-ring($color: $accent) {
   outline: none;
-  transition: border-color $transition-base $transition-timing, box-shadow $transition-base $transition-timing;
+  transition:
+    border-color $transition-base $transition-timing,
+    box-shadow $transition-base $transition-timing;
 
   &:focus {
     border-color: $color;

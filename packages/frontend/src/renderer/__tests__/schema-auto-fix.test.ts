@@ -93,9 +93,10 @@ describe('autoFixSchema', () => {
 
     const { fixed, fixes } = autoFixSchema(raw, whitelist);
 
-    expect(fixed.version).toBe(5);
-    expect(typeof fixed.version).toBe('number');
-    expect(fixes).toContain('修正 version 类型 ("5" -> 5)');
+    expect(fixed.schemaVersion).toBe(0);
+    expect(fixes).toContain('规范化 schemaVersion 为 0');
+    expect(fixes).toContain('移除 Schema 内遗留的 version 字段');
+    expect('version' in fixed).toBe(false);
   });
 
   it('should migrate text-like content props to children', () => {

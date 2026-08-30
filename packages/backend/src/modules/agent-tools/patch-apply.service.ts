@@ -11,7 +11,7 @@ interface MutableComponent {
 }
 
 type MutableSchema = {
-  version?: number;
+  schemaVersion: number;
   rootId: string;
   components: Record<string, MutableComponent>;
 };
@@ -169,7 +169,7 @@ export class PatchApplyService {
     );
 
     return {
-      version: schema.version,
+      schemaVersion: schema.schemaVersion,
       rootId: schema.rootId,
       components,
     };
@@ -191,7 +191,7 @@ export class PatchApplyService {
     );
 
     return {
-      version: schema.version,
+      schemaVersion: schema.schemaVersion,
       rootId: schema.rootId,
       components,
     };

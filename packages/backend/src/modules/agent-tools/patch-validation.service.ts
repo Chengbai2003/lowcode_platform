@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import { A2UISchema } from '../schema-context/types/schema.types';
 import { getActionValidationError, hasCustomScriptInValue } from '../page-schema/action-validation';
-import { assertValidPageSchema } from '../page-schema/schema-validation';
+import { requireValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
 import { EditorPatchOperation } from './types/editor-patch.types';
@@ -124,8 +124,9 @@ export class PatchValidationService {
       currentSchema = this.patchApplyService.applyPatch(currentSchema, [operation]);
     }
 
+    let canonicalSchema: A2UISchema;
     try {
-      assertValidPageSchema(currentSchema);
+      canonicalSchema = requireValidPageSchema(currentSchema) as unknown as A2UISchema;
     } catch (error) {
       throw new AgentToolException({
         code: 'SCHEMA_INVALID',
@@ -134,8 +135,8 @@ export class PatchValidationService {
       });
     }
 
-    this.assertReachable(currentSchema, traceId);
-    return currentSchema;
+    this.assertReachable(canonicalSchema, traceId);
+    return canonicalSchema;
   }
 
   private assertInsertValid(

@@ -1,6 +1,8 @@
 /**
  * 值类型：可以是静态值或表达式
  */
+import type { JsonValue } from '@lowcode-platform/schema-contract';
+
 export type Value =
   | string
   | number
@@ -8,7 +10,9 @@ export type Value =
   | null
   | undefined
   | Record<string, unknown>
-  | unknown[];
+  | unknown[]
+  // Contract canonical Schema 中的只读 JSON 值（Issue #16 / M0-1 对齐）
+  | JsonValue;
 
 // 前向声明 ReactiveRuntime 类型，避免循环依赖
 import type { ReactiveRuntime } from '../../renderer/reactive';

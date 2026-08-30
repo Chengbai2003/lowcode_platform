@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ContextAssemblerService } from '../schema-context';
 import { A2UISchema } from '../schema-context/types/schema.types';
 import { PageSchemaService } from '../page-schema/page-schema.service';
-import { assertValidPageSchema } from '../page-schema/schema-validation';
+import { requireValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchPreviewRequestDto } from './dto/patch-preview-request.dto';
 import { PatchPreviewResponseDto } from './dto/patch-preview-response.dto';
@@ -138,7 +138,8 @@ export class ToolExecutionService {
 
     if (input.draftSchema) {
       try {
-        assertValidPageSchema(input.draftSchema);
+        // 只消费 Contract 返回的 canonical 对象；页面版本不写入 Schema
+        workingSchema = requireValidPageSchema(input.draftSchema) as unknown as A2UISchema;
       } catch (error) {
         throw new AgentToolException({
           code: 'SCHEMA_INVALID',
@@ -146,12 +147,6 @@ export class ToolExecutionService {
           traceId,
         });
       }
-
-      const draftSchema = input.draftSchema as unknown as A2UISchema;
-      workingSchema = {
-        ...draftSchema,
-        version: resolvedVersion ?? draftSchema.version,
-      };
     }
 
     if (!workingSchema) {

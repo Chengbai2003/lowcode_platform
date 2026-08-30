@@ -3,47 +3,47 @@
 // ============================================
 
 // 颜色系统 (参考 Tailwind Slate + Emerald)
-$primary: #10b981;              // emerald-500
-$primary-hover: #059669;        // emerald-600
-$primary-active: #047857;       // emerald-700
-$primary-light: #d1fae5;        // emerald-100
+$primary: #10b981; // emerald-500
+$primary-hover: #059669; // emerald-600
+$primary-active: #047857; // emerald-700
+$primary-light: #d1fae5; // emerald-100
 
-$success: #10b981;              // emerald-500
-$warning: #f59e0b;              // amber-500
-$error: #ef4444;                // red-500
-$info: #3b82f6;                 // blue-500
+$success: #10b981; // emerald-500
+$warning: #f59e0b; // amber-500
+$error: #ef4444; // red-500
+$info: #3b82f6; // blue-500
 
-$accent: #3b82f6;               // blue-500
-$accent-hover: #2563eb;         // blue-600
-$accent-light: #dbeafe;         // blue-100
+$accent: #3b82f6; // blue-500
+$accent-hover: #2563eb; // blue-600
+$accent-light: #dbeafe; // blue-100
 
 // 背景色 (Slate 系列)
-$bg-base: #ffffff;              // white
-$bg-elevated: #f8fafc;          // slate-50
-$bg-hover: #f1f5f9;             // slate-100
-$bg-active: #e2e8f0;            // slate-200
+$bg-base: #ffffff; // white
+$bg-elevated: #f8fafc; // slate-50
+$bg-hover: #f1f5f9; // slate-100
+$bg-active: #e2e8f0; // slate-200
 
 // 边框色 (Slate 系列)
-$border-base: #e2e8f0;          // slate-200
-$border-light: #f1f5f9;         // slate-100
-$border-dark: #cbd5e1;          // slate-300
+$border-base: #e2e8f0; // slate-200
+$border-light: #f1f5f9; // slate-100
+$border-dark: #cbd5e1; // slate-300
 
 // 文字色 (Slate 系列)
-$text-primary: #0f172a;         // slate-900
-$text-secondary: #475569;       // slate-600
-$text-tertiary: #94a3b8;        // slate-400
-$text-disabled: #cbd5e1;        // slate-300
-$text-inverse: #ffffff;         // white
-$text-muted: #64748b;           // slate-500
+$text-primary: #0f172a; // slate-900
+$text-secondary: #475569; // slate-600
+$text-tertiary: #94a3b8; // slate-400
+$text-disabled: #cbd5e1; // slate-300
+$text-inverse: #ffffff; // white
+$text-muted: #64748b; // slate-500
 
 // 间距系统（基于 4px）
 $spacing-unit: 4px;
-$spacing-xs: $spacing-unit;        // 4px
-$spacing-sm: $spacing-unit * 2;    // 8px
-$spacing-md: $spacing-unit * 4;    // 16px
-$spacing-lg: $spacing-unit * 6;    // 24px
-$spacing-xl: $spacing-unit * 8;    // 32px
-$spacing-2xl: $spacing-unit * 12;  // 48px
+$spacing-xs: $spacing-unit; // 4px
+$spacing-sm: $spacing-unit * 2; // 8px
+$spacing-md: $spacing-unit * 4; // 16px
+$spacing-lg: $spacing-unit * 6; // 24px
+$spacing-xl: $spacing-unit * 8; // 32px
+$spacing-2xl: $spacing-unit * 12; // 48px
 
 // 圆角
 $radius-sm: 4px;
@@ -59,7 +59,8 @@ $shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
 $shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.15);
 
 // 字体
-$font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+$font-family:
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 $font-family-mono: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
 
 // 字号

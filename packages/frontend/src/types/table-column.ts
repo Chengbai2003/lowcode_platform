@@ -149,7 +149,7 @@ function sanitizeActionList(value: unknown): ActionList {
       (item): item is Record<string, unknown> =>
         Boolean(item) && typeof item === 'object' && typeof item.type === 'string',
     )
-    .map((item) => cloneValue(item)) as ActionList;
+    .map((item) => cloneValue(item)) as unknown as ActionList;
 }
 
 export function createDefaultTableActionButton(index: number): TableActionColumnButton {

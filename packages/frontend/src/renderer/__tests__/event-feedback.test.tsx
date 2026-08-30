@@ -6,6 +6,7 @@ import { LowcodeProvider, Renderer } from '../';
 describe('Renderer feedback action', () => {
   it('dispatches message feedback on click', async () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {

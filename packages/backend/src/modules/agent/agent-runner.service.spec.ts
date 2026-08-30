@@ -29,7 +29,7 @@ function createBaseContext(): ToolExecutionContext {
     version: 3,
     resolvedVersion: 3,
     draftSchema: {
-      version: 3,
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { id: 'root', type: 'Page', childrenIds: ['button'] },
@@ -37,7 +37,7 @@ function createBaseContext(): ToolExecutionContext {
       },
     },
     workingSchema: {
-      version: 3,
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { id: 'root', type: 'Page', childrenIds: ['button'] },
@@ -80,7 +80,6 @@ function createFocusedResult(componentId = 'button'): FocusContextResult {
         totalComponents: 2,
         maxDepth: 1,
         rootId: 'root',
-        version: 3,
       },
       estimatedTokens: 12,
     },
@@ -89,7 +88,7 @@ function createFocusedResult(componentId = 'button'): FocusContextResult {
 
 function createClarificationSchema(): A2UISchema {
   return {
-    version: 3,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: { id: 'root', type: 'Page', childrenIds: ['card-primary', 'card-secondary'] },
@@ -113,7 +112,7 @@ function createClarificationSchema(): A2UISchema {
 
 function createBatchSchema(): A2UISchema {
   return {
-    version: 3,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: { id: 'root', type: 'Page', childrenIds: ['form'] },
@@ -152,7 +151,7 @@ function createBatchContext(): ToolExecutionContext {
 
 function createMixedCollectionSchema(): A2UISchema {
   return {
-    version: 3,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: { id: 'root', type: 'Page', childrenIds: ['primary-button', 'form'] },
@@ -236,7 +235,6 @@ function createFormFocusedResult(): FocusContextResult {
         totalComponents: 6,
         maxDepth: 3,
         rootId: 'root',
-        version: 3,
       },
       estimatedTokens: 40,
     },
@@ -270,7 +268,6 @@ function createRootFocusedResult(): FocusContextResult {
         totalComponents: 6,
         maxDepth: 3,
         rootId: 'root',
-        version: 3,
       },
       estimatedTokens: 24,
     },
@@ -347,7 +344,6 @@ function createMixedRootFocusedResult(): FocusContextResult {
         totalComponents: 7,
         maxDepth: 3,
         rootId: 'root',
-        version: 3,
       },
       estimatedTokens: 56,
     },

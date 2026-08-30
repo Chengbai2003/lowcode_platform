@@ -9,7 +9,6 @@ interface Params {
   pageId?: string;
   schema: A2UISchema;
   pageVersion: number | null;
-  syncSchemaVersion: (next: A2UISchema, targetVersion?: number | null) => A2UISchema;
   setPageVersion: (v: number | null) => void;
   setSchema: (s: React.SetStateAction<A2UISchema>) => void;
   setCompiledCode: (c: string | null) => void;
@@ -20,7 +19,6 @@ export function useEditorActions({
   pageId,
   schema,
   pageVersion,
-  syncSchemaVersion,
   setPageVersion,
   setSchema,
   setCompiledCode,
@@ -34,7 +32,7 @@ export function useEditorActions({
     const requestPageId = pageId ?? null;
     setIsPageSaving(true);
     try {
-      const schemaToSave = syncSchemaVersion(schema);
+      const schemaToSave = schema;
       const result = await pageSchemaApi.savePageSchema(
         pageId,
         schemaToSave,
@@ -44,7 +42,8 @@ export function useEditorActions({
       const currentPageId = useEditorStore.getState().currentPageId;
       if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) return;
       setPageVersion(result.version);
-      setSchema((current) => syncSchemaVersion(current as A2UISchema, result.version));
+      // 页面版本保存在独立状态，不再写回 Schema
+      setSchema((current) => current as A2UISchema);
       message.success(`页面已保存，当前版本 v${result.version}`);
     } catch (error) {
       const currentGeneration = useEditorStore.getState().generation;
@@ -55,7 +54,7 @@ export function useEditorActions({
     } finally {
       setIsPageSaving(false);
     }
-  }, [isPageSaving, pageId, pageVersion, schema, syncSchemaVersion, setPageVersion, setSchema]);
+  }, [isPageSaving, pageId, pageVersion, schema, setPageVersion, setSchema]);
 
   const handleCompile = useCallback(async () => {
     if (!schema) {

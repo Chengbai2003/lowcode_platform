@@ -1,3 +1,4 @@
+import type { JsonObject } from '@lowcode-platform/schema-contract';
 import type { A2UIComponent, A2UISchema, ActionList } from '../../types';
 import type { EditorPatchOperation } from '../types/patch';
 
@@ -10,7 +11,7 @@ interface MutableComponent {
 }
 
 type MutableSchema = {
-  version?: number;
+  schemaVersion: 0;
   rootId: string;
   components: Record<string, MutableComponent>;
 };
@@ -153,7 +154,7 @@ function cloneSchema(schema: A2UISchema): MutableSchema {
   );
 
   return {
-    version: schema.version,
+    schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
   };
@@ -165,7 +166,7 @@ function freezeSchema(schema: MutableSchema): A2UISchema {
       accumulator[id] = {
         id: component.id,
         type: component.type,
-        props: component.props ? { ...component.props } : undefined,
+        props: component.props ? ({ ...component.props } as JsonObject) : undefined,
         childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
         events: component.events ? { ...component.events } : undefined,
       };
@@ -175,7 +176,7 @@ function freezeSchema(schema: MutableSchema): A2UISchema {
   );
 
   return {
-    version: schema.version,
+    schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
   };

@@ -1,16 +1,5 @@
-import type { Value } from '../context';
-
 /**
- * 调试 Actions
+ * debug Action 类型 —— 现为 Contract 单一真相源的 re-export（Issue #16 / M0-1）。
+ * 本地重复定义已删除；字段语义说明见 @lowcode-platform/schema-contract。
  */
-
-/**
- * 日志 Action
- */
-export type LogAction = {
-  type: 'log';
-  /** 要输出的值 */
-  value: Value;
-  /** 日志级别 */
-  level?: 'log' | 'info' | 'warn' | 'error';
-};
+export type { LogAction } from '@lowcode-platform/schema-contract';

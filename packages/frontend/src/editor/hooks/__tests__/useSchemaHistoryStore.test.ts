@@ -6,6 +6,7 @@ import { useSchemaHistoryStore } from '../useSchemaHistoryStore';
 import { useHistoryStore } from '../../store/history';
 
 const createSchema = (text: string): A2UISchema => ({
+  schemaVersion: 0,
   rootId: 'root',
   components: {
     root: {

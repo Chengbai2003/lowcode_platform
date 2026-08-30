@@ -8,14 +8,15 @@ import { pageSchemaApi } from '../services/pageSchemaApi';
  * Page lifecycle hook — handles initial load, generation guard and 404 bootstrap.
  * Extracted from LowcodeEditorInner to keep the facade thin.
  *
- * Must be called with stable refs for syncSchemaVersion to avoid re-trigger.
+ * 语义变更（Issue #16 / M0-1）：schema 与 pageVersion 内部状态严格分离——
+ * Schema 不再回写页面版本，页面版本只保存在独立的 pageVersion 状态中
+ * （临时继续读取旧 API envelope 的顶层 version，PR 3 更名为 pageVersion）。
  */
 interface Params {
   pageId: string | undefined;
   initialSchemaObj: A2UISchema;
   setSchema: React.Dispatch<React.SetStateAction<A2UISchema>>;
   setPageVersion: (v: number | null) => void;
-  syncSchemaVersion: (next: A2UISchema, targetVersion?: number | null) => A2UISchema;
   onErrorRef: React.MutableRefObject<((msg: string) => void) | undefined>;
 }
 
@@ -24,14 +25,8 @@ export function usePageLifecycle({
   initialSchemaObj,
   setSchema,
   setPageVersion,
-  syncSchemaVersion,
   onErrorRef,
 }: Params) {
-  const syncRef = useRef(syncSchemaVersion);
-  useEffect(() => {
-    syncRef.current = syncSchemaVersion;
-  }, [syncSchemaVersion]);
-
   const initialRef = useRef(initialSchemaObj);
   useEffect(() => {
     initialRef.current = initialSchemaObj;
@@ -68,7 +63,7 @@ export function usePageLifecycle({
         ) {
           return;
         }
-        setSchema(syncRef.current(result.schema, result.version));
+        setSchema(result.schema);
         setPageVersion(result.version);
       })
       .catch(async (error: unknown) => {
@@ -100,7 +95,7 @@ export function usePageLifecycle({
             ) {
               return;
             }
-            setSchema(syncRef.current(initial, bootstrapResult.version));
+            setSchema(initial);
             setPageVersion(bootstrapResult.version);
             message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
           } catch (bootstrapError) {

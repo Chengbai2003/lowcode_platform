@@ -166,7 +166,7 @@
 }
 
 .inlineCode {
-  font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
   font-size: 0.92em;
   padding: 2px 6px;
   border-radius: 6px;
@@ -199,7 +199,7 @@
   overflow-x: auto;
 
   code {
-    font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+    font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
     font-size: 12px;
     line-height: 1.6;
     white-space: pre-wrap;
@@ -549,11 +549,7 @@
   padding: 10px 12px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--warning-color, #faad14) 8%, var(--bg-secondary));
-  border: 1px dashed color-mix(
-    in srgb,
-    var(--warning-color, #faad14) 24%,
-    var(--border-secondary)
-  );
+  border: 1px dashed color-mix(in srgb, var(--warning-color, #faad14) 24%, var(--border-secondary));
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
@@ -778,7 +774,7 @@
 
 .clarificationDebug {
   color: var(--text-tertiary);
-  font-family: "JetBrains Mono", Consolas, Monaco, monospace;
+  font-family: 'JetBrains Mono', Consolas, Monaco, monospace;
   font-size: 11px;
 }
 

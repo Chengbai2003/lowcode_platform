@@ -1,27 +1,37 @@
 import { ConflictException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 
-export interface PageRecord {
-  id: string;
-  currentVersion: number;
+/**
+ * 页面指针记录：只保存版本指针，不保存 Schema 本体。
+ * Schema 只存在于不可变快照（PageSnapshotRecord）中。
+ */
+export interface StoredPageRecord {
+  pageId: string;
+  currentPageVersion: number;
   latestSnapshotId: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface PageSchemaSnapshotRecord {
-  id: string;
+/**
+ * 不可变页面快照：Schema 为经过 Contract 校验的 canonical 纯数据对象，
+ * 附加保存精确复现该页面所需的运行时元数据。
+ */
+export interface PageSnapshotRecord {
+  snapshotId: string;
   pageId: string;
-  version: number;
-  schema: Record<string, unknown>;
+  pageVersion: number;
+  schema: PageSchema;
+  runtimeCompatibility: RuntimeCompatibility;
   createdAt: string;
 }
 
 interface PageSchemaStore {
-  pages: PageRecord[];
-  snapshots: PageSchemaSnapshotRecord[];
+  pages: StoredPageRecord[];
+  snapshots: PageSnapshotRecord[];
 }
 
 @Injectable()
@@ -30,8 +40,8 @@ export class PageSchemaRepository implements OnModuleInit {
   private readonly storeFilePath =
     process.env.PAGE_SCHEMA_FILE_PATH || path.resolve(process.cwd(), 'page-schema-store.json');
 
-  private pages = new Map<string, PageRecord>();
-  private snapshots: PageSchemaSnapshotRecord[] = [];
+  private pages = new Map<string, StoredPageRecord>();
+  private snapshots: PageSnapshotRecord[] = [];
 
   // static lock 仅保证单进程多实例，多进程需 DB 事务（如 SELECT FOR UPDATE）。
   private static readonly writeTails = new Map<string, Promise<void>>();
@@ -44,21 +54,21 @@ export class PageSchemaRepository implements OnModuleInit {
     });
   }
 
-  getPage(pageId: string): PageRecord | undefined {
+  getPage(pageId: string): StoredPageRecord | undefined {
     return this.pages.get(pageId);
   }
 
-  getLatestSnapshot(pageId: string): PageSchemaSnapshotRecord | undefined {
+  getLatestSnapshot(pageId: string): PageSnapshotRecord | undefined {
     const page = this.getPage(pageId);
     if (!page) {
       return undefined;
     }
-    return this.snapshots.find((snapshot) => snapshot.id === page.latestSnapshotId);
+    return this.snapshots.find((snapshot) => snapshot.snapshotId === page.latestSnapshotId);
   }
 
-  getSnapshotByVersion(pageId: string, version: number): PageSchemaSnapshotRecord | undefined {
+  getSnapshotByVersion(pageId: string, pageVersion: number): PageSnapshotRecord | undefined {
     return this.snapshots.find(
-      (snapshot) => snapshot.pageId === pageId && snapshot.version === version,
+      (snapshot) => snapshot.pageId === pageId && snapshot.pageVersion === pageVersion,
     );
   }
 
@@ -81,48 +91,51 @@ export class PageSchemaRepository implements OnModuleInit {
 
   async saveSchema(params: {
     pageId: string;
-    schema: Record<string, unknown>;
+    schema: PageSchema;
     baseVersion?: number;
-  }): Promise<{ page: PageRecord; snapshot: PageSchemaSnapshotRecord }> {
+    runtimeCompatibility: RuntimeCompatibility;
+  }): Promise<{ page: StoredPageRecord; snapshot: PageSnapshotRecord }> {
     return this.enqueue(async () => {
       // 重读磁盘最新 store，保证锁内闭环
       const disk = await this.loadStoreFromDisk();
       const existing = disk.pages.get(params.pageId);
-      const currentVersion = existing?.currentVersion ?? 0;
+      const currentPageVersion = existing?.currentPageVersion ?? 0;
 
       if (existing && params.baseVersion === undefined) {
         throw new ConflictException({
           message: 'Page version mismatch',
           pageId: params.pageId,
-          expectedVersion: currentVersion,
+          expectedVersion: currentPageVersion,
           receivedVersion: null,
         });
       }
-      if (params.baseVersion !== undefined && params.baseVersion !== currentVersion) {
+      if (params.baseVersion !== undefined && params.baseVersion !== currentPageVersion) {
         throw new ConflictException({
           message: 'Page version mismatch',
           pageId: params.pageId,
-          expectedVersion: currentVersion,
+          expectedVersion: currentPageVersion,
           receivedVersion: params.baseVersion,
         });
       }
 
-      const nextVersion = currentVersion + 1;
+      const nextPageVersion = currentPageVersion + 1;
       const savedAt = new Date().toISOString();
       const snapshotId = crypto.randomUUID();
-      const normalizedSchema = { ...params.schema, version: nextVersion };
 
-      const snapshot: PageSchemaSnapshotRecord = {
-        id: snapshotId,
+      // Schema 保持 Service 层传入的 canonical 纯数据对象原样保存，
+      // 页面版本只存在于存储元数据，绝不写入 Schema。
+      const snapshot: PageSnapshotRecord = {
+        snapshotId,
         pageId: params.pageId,
-        version: nextVersion,
-        schema: normalizedSchema,
+        pageVersion: nextPageVersion,
+        schema: params.schema,
+        runtimeCompatibility: params.runtimeCompatibility,
         createdAt: savedAt,
       };
 
-      const page: PageRecord = {
-        id: params.pageId,
-        currentVersion: nextVersion,
+      const page: StoredPageRecord = {
+        pageId: params.pageId,
+        currentPageVersion: nextPageVersion,
         latestSnapshotId: snapshotId,
         createdAt: existing?.createdAt || savedAt,
         updatedAt: savedAt,
@@ -149,8 +162,8 @@ export class PageSchemaRepository implements OnModuleInit {
   }
 
   private async loadStoreFromDisk(): Promise<{
-    pages: Map<string, PageRecord>;
-    snapshots: PageSchemaSnapshotRecord[];
+    pages: Map<string, StoredPageRecord>;
+    snapshots: PageSnapshotRecord[];
   }> {
     if (!fs.existsSync(this.storeFilePath)) {
       return { pages: new Map(), snapshots: [] };
@@ -171,25 +184,47 @@ export class PageSchemaRepository implements OnModuleInit {
     if (!Array.isArray(parsed.snapshots)) {
       throw new Error('Page schema store is corrupted: snapshots must be an array');
     }
-    for (const p of parsed.pages as PageRecord[]) {
-      if (!Number.isInteger(p.currentVersion)) {
-        throw new Error(`Page ${p.id} version must be an integer`);
+
+    // 存储字段已重命名（id→pageId、currentVersion→currentPageVersion、id→snapshotId、
+    // version→pageVersion）。旧格式 store 不做静默迁移，直接给出明确清理指引。
+    const looksLikeLegacyStore = (parsed.pages as unknown as Array<Record<string, unknown>>).some(
+      (p) => p && typeof p === 'object' && 'id' in p && !('pageId' in p),
+    );
+    if (looksLikeLegacyStore) {
+      throw new Error(
+        'Page schema store uses the legacy pre-M0-1 format. ' +
+          'Delete the store file (page-schema-store.json) or migrate it manually; ' +
+          'legacy data is never rewritten silently.',
+      );
+    }
+
+    for (const p of parsed.pages as StoredPageRecord[]) {
+      if (typeof p.pageId !== 'string') {
+        throw new Error('Page schema store is corrupted: pages[].pageId must be a string');
+      }
+      if (!Number.isInteger(p.currentPageVersion)) {
+        throw new Error(`Page ${p.pageId} currentPageVersion must be an integer`);
       }
     }
-    for (const s of parsed.snapshots as PageSchemaSnapshotRecord[]) {
-      if (!Number.isInteger(s.version)) {
-        throw new Error(`Snapshot ${s.id} version must be an integer`);
+    for (const s of parsed.snapshots as PageSnapshotRecord[]) {
+      if (typeof s.snapshotId !== 'string') {
+        throw new Error('Page schema store is corrupted: snapshots[].snapshotId must be a string');
+      }
+      if (!Number.isInteger(s.pageVersion)) {
+        throw new Error(`Snapshot ${s.snapshotId} pageVersion must be an integer`);
       }
     }
-    const snapshotIds = new Set((parsed.snapshots as PageSchemaSnapshotRecord[]).map((s) => s.id));
-    for (const p of parsed.pages as PageRecord[]) {
+    const snapshotIds = new Set(
+      (parsed.snapshots as PageSnapshotRecord[]).map((s) => s.snapshotId),
+    );
+    for (const p of parsed.pages as StoredPageRecord[]) {
       if (!snapshotIds.has(p.latestSnapshotId)) {
-        throw new Error(`Page ${p.id} latestSnapshotId ${p.latestSnapshotId} is dangling`);
+        throw new Error(`Page ${p.pageId} latestSnapshotId ${p.latestSnapshotId} is dangling`);
       }
     }
     return {
-      pages: new Map((parsed.pages as PageRecord[]).map((p) => [p.id, p])),
-      snapshots: parsed.snapshots as PageSchemaSnapshotRecord[],
+      pages: new Map((parsed.pages as StoredPageRecord[]).map((p) => [p.pageId, p])),
+      snapshots: parsed.snapshots as PageSnapshotRecord[],
     };
   }
 

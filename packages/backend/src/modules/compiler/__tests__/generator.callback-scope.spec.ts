@@ -3,7 +3,7 @@ import { compileSchemaToCode } from '../pipeline';
 
 function makeSchema(components: A2UISchema['components']): A2UISchema {
   return {
-    version: 1,
+    schemaVersion: 0,
     rootId: 'page_root',
     components,
   };

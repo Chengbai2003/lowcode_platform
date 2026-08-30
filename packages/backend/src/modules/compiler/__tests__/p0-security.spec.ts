@@ -14,7 +14,7 @@ function compileToCode(s: any) {
 
 function makeSchema(overrides: any) {
   return {
-    version: 1,
+    schemaVersion: 0,
     rootId: 'page_root',
     components: overrides,
   } as any;
@@ -237,6 +237,7 @@ describe('P0 compiler security', () => {
   it('rejects invalid component graphs through CompilerService', async () => {
     const dto = new CompileRequestDto();
     dto.schema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { type: 'Page', childrenIds: ['missing'] },
@@ -249,9 +250,7 @@ describe('P0 compiler security', () => {
     };
     mockedCompile.mockImplementationOnce((s: any) => compileSchemaToCode(s));
 
-    await expect(new CompilerService().compile(dto)).rejects.toThrow(
-      'Component root id is required',
-    );
+    await expect(new CompilerService().compile(dto)).rejects.toThrow(/id is required/);
   });
 
   it('allows sibling loops to reuse item without renaming or degrading expressions', () => {
@@ -352,12 +351,38 @@ describe('P0 compiler security', () => {
         childrenIds: [],
       },
     });
-    expect(() => compileToCode(schema)).toThrow('循环变量 itemVar 与 indexVar 不能相同: "i"');
+    expect(() => compileToCode(schema)).toThrow(/loop indexVar cannot be identical to itemVar/);
   });
 
   it('rejects unsafe identifier names as loop variables', () => {
-    const unsafeVars = ['eval', 'arguments', 'constructor', '__proto__', 'class', '123bad'];
-    for (const badVar of unsafeVars) {
+    // Contract 层直接拒绝：保留关键字 / __ 前缀 / 非法标识符
+    const contractBlockedVars = ['eval', 'arguments', 'constructor', '__proto__', '123bad'];
+    for (const badVar of contractBlockedVars) {
+      const schema = makeSchema({
+        page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'click' },
+          events: {
+            onClick: [
+              {
+                type: 'loop',
+                itemVar: badVar,
+                over: [1, 2],
+                actions: [{ type: 'log', value: 'hi' }],
+              },
+            ],
+          },
+          childrenIds: [],
+        },
+      });
+      expect(() => compileToCode(schema)).toThrow(/loop itemVar must be a valid, safe identifier/);
+    }
+
+    // Contract 放行但 Compiler 生成层保留字守卫拒绝（如 JS 保留字 class）
+    const compilerBlockedVars = ['class'];
+    for (const badVar of compilerBlockedVars) {
       const schema = makeSchema({
         page_root: { id: 'page_root', type: 'Page', childrenIds: ['btn'] },
         btn: {

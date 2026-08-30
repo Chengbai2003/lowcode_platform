@@ -15,6 +15,7 @@
   "dependencies": {
     "@ant-design/icons": "^5.2.6",
     "@jsep-plugin/new": "^1.0.4",
+    "@lowcode-platform/schema-contract": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "antd": "^5.0.0",
     "framer-motion": "^12.35.1",

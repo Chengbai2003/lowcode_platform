@@ -12,6 +12,7 @@ import type { Command } from '../../store/history';
 
 // Mock schema for testing
 const createMockSchema = (): A2UISchema => ({
+  schemaVersion: 0,
   rootId: 'root',
   components: {
     root: {

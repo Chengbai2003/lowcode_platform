@@ -1,6 +1,8 @@
-/**
+/*
+
  * 调试类 Action 编辑器（Log, 历史 CustomScript 只读）
  */
+import type { JsonValue } from '@lowcode-platform/schema-contract';
 import {
   ActionUpdate,
   LogActionItem,
@@ -42,7 +44,9 @@ export const LogActionEditor = ({
         <input
           value={formatValue(action.value)}
           aria-label="日志内容"
-          onChange={(event) => updateAction({ value: parseValueInput(event.target.value) })}
+          onChange={(event) =>
+            updateAction({ value: parseValueInput(event.target.value) as JsonValue })
+          }
         />
       </div>
     </div>

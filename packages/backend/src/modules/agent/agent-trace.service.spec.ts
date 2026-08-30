@@ -97,7 +97,7 @@ describe('AgentTraceService', () => {
       mode: 'patch',
       patch: [{ op: 'updateProps', componentId: 'button', props: { children: '提交' } }],
       previewSchema: {
-        version: 3,
+        schemaVersion: 0,
         rootId: 'root',
         components: {
           root: { id: 'root', type: 'Page', childrenIds: ['button'] },

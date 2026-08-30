@@ -55,7 +55,7 @@ export function resolveValue(value: Value, context: ExecutionContext): unknown {
  * 批量解析多个值
  */
 export function resolveValues(
-  values: Record<string, Value>,
+  values: Readonly<Record<string, Value>>,
   context: ExecutionContext,
 ): Record<string, any> {
   const resolved: Record<string, any> = {};

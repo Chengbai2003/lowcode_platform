@@ -1,3 +1,4 @@
+import type { JsonObject } from '@lowcode-platform/schema-contract';
 import type { A2UISchema } from '../../types';
 import type { Command, CommandOptions } from '../store/history';
 import type { EditorPatchOperation } from '../types/patch';
@@ -227,7 +228,7 @@ export class ComponentCommand implements Command {
         if (components[componentId]) {
           components[componentId] = {
             ...components[componentId],
-            props: { ...components[componentId].props, ...newProps },
+            props: { ...components[componentId].props, ...newProps } as JsonObject,
           };
         }
         break;
@@ -300,7 +301,7 @@ export class ComponentCommand implements Command {
           }
           components[componentId] = {
             ...components[componentId],
-            props: { ...currentProps, ...oldProps },
+            props: { ...currentProps, ...oldProps } as JsonObject,
           };
         }
         break;

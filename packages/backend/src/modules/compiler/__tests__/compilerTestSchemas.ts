@@ -2,7 +2,7 @@ import type { A2UISchema } from '../schema.types';
 
 function createSchema(components: A2UISchema['components'], rootId = 'page_root'): A2UISchema {
   return {
-    version: 1,
+    schemaVersion: 0,
     rootId,
     components,
   };

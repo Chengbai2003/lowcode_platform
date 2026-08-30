@@ -10,7 +10,7 @@ export function createHiddenDataNode(id: string, initialValue: unknown): A2UICom
     type: 'Div',
     props: {
       visible: false,
-      initialValue,
+      initialValue: initialValue as import('@lowcode-platform/schema-contract').JsonValue,
     },
     childrenIds: [],
   };
@@ -18,7 +18,7 @@ export function createHiddenDataNode(id: string, initialValue: unknown): A2UICom
 
 export function createDefaultReactiveSchema(): A2UISchema {
   return {
-    version: 1,
+    schemaVersion: 0,
     rootId: 'defaultPage',
     components: {
       defaultPage: {

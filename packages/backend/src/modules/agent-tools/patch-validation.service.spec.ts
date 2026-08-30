@@ -7,7 +7,7 @@ import { EditorPatchOperation } from './types/editor-patch.types';
 
 function createSchema(): A2UISchema {
   return {
-    version: 2,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: {
@@ -31,7 +31,7 @@ function createSchema(): A2UISchema {
 
 function createSchemaWithDetachedHiddenDataNodes(): A2UISchema {
   return {
-    version: 2,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       ticketDetail: {
@@ -125,7 +125,7 @@ describe('PatchValidationService', () => {
     ).not.toThrow();
   });
 
-  it('allows detached hidden data nodes that are outside of the root subtree', () => {
+  it('strictly rejects detached hidden data nodes (no component-library knowledge)', () => {
     const baseSchema = createSchemaWithDetachedHiddenDataNodes();
     const patch: EditorPatchOperation[] = [
       {
@@ -136,9 +136,10 @@ describe('PatchValidationService', () => {
     ];
     const resultSchema = applyService.applyPatch(baseSchema, patch);
 
+    // Contract 采用严格孤儿策略：隐藏数据 Div 特例已被移除（Issue #16 / PR #20 决策）
     expect(() =>
       service.validatePatchAgainstSchema(baseSchema, patch, resultSchema, 'trace-hidden'),
-    ).not.toThrow();
+    ).toThrow(/orphaned/);
   });
 
   it('rejects customScript in bindEvent', async () => {
@@ -237,7 +238,7 @@ describe('PatchValidationService', () => {
 
   it('still rejects actual orphan components after applying a patch', async () => {
     const schemaWithOrphan: A2UISchema = {
-      version: 2,
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         ...createSchema().components,
@@ -267,12 +268,13 @@ describe('PatchValidationService', () => {
         );
       },
       'SCHEMA_INVALID',
-      'orphaned components',
+      'orphaned component',
     );
   });
 
   it('rejects moveComponent cycles', async () => {
     const nestedSchema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {

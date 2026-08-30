@@ -1,10 +1,13 @@
 /**
- * Schema sync helpers — pure functions for version resolution and snapshot handling.
+ * Schema sync helpers — pure functions for snapshot handling.
  *
  * Extracted from LowcodeEditor.tsx to keep the editor facade thin.
+ *
+ * 语义变更（Issue #16 / M0-1）：Schema 不再携带页面修订版本，
+ * 页面版本仅存在于编辑器独立状态（pageVersion）与 API envelope 中，
+ * 因此 resolveSchemaVersion / schemaVersionRef 已删除。
  */
 
-import type React from 'react';
 import type { A2UIComponent, A2UISchema, AIMessageActionResult } from '../../types';
 
 export function isA2UISchema(value: unknown): value is A2UISchema {
@@ -39,7 +42,7 @@ export function buildSubtreeSchema(source: A2UISchema, rootId: string): A2UISche
       }
     }
   }
-  return { rootId, components };
+  return { schemaVersion: source.schemaVersion, rootId, components };
 }
 
 export function applyComponentSnapshot(
@@ -70,20 +73,4 @@ export function applyComponentSnapshot(
   for (const [id, comp] of Object.entries(subtree.components)) nextComponents[id] = comp;
 
   return { ...baseSchema, components: nextComponents };
-}
-
-/**
- * Resolve version for a schema — mirrors LowcodeEditor.syncSchemaVersion semantics.
- * Keeps version stable if already defined, otherwise falls back to refs.
- */
-export function resolveSchemaVersion(
-  nextSchema: A2UISchema,
-  targetVersion: number | null | undefined,
-  pageVersionRef: React.MutableRefObject<number | null>,
-  schemaVersionRef: React.MutableRefObject<number | undefined>,
-): A2UISchema {
-  const resolvedVersion =
-    targetVersion ?? pageVersionRef.current ?? schemaVersionRef.current ?? nextSchema.version;
-  if (resolvedVersion === undefined) return nextSchema;
-  return { ...nextSchema, version: resolvedVersion };
 }
