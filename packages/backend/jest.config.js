@@ -10,16 +10,10 @@ module.exports = {
   rootDir: '.',
 
   // 测试文件匹配模式
-  testMatch: [
-    '<rootDir>/src/**/*.spec.ts',
-    '<rootDir>/test/**/*.e2e-spec.ts',
-  ],
+  testMatch: ['<rootDir>/src/**/*.spec.ts', '<rootDir>/test/**/*.e2e-spec.ts'],
 
   // 忽略的文件
-  testPathIgnorePatterns: [
-    '/node_modules/',
-    '/dist/',
-  ],
+  testPathIgnorePatterns: ['/node_modules/', '/dist/'],
 
   // TypeScript 转换器
   transform: {
@@ -35,12 +29,7 @@ module.exports = {
   },
 
   // 覆盖率配置
-  collectCoverageFrom: [
-    'src/**/*.ts',
-    '!src/**/*.spec.ts',
-    '!src/**/*.d.ts',
-    '!src/main.ts',
-  ],
+  collectCoverageFrom: ['src/**/*.ts', '!src/**/*.spec.ts', '!src/**/*.d.ts', '!src/main.ts'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
 

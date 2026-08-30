@@ -34,7 +34,7 @@ describe('SchemaResolverService', () => {
   it('loads from pageId when no draftSchema', async () => {
     mockPageSchemaService.getSchema.mockResolvedValue({
       pageId: 'page1',
-      version: 1,
+      pageVersion: 1,
       snapshotId: 'snap1',
       schema: validSchema as any,
       runtimeCompatibility: {

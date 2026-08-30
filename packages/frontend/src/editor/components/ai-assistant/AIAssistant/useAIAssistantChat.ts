@@ -440,7 +440,7 @@ export const useAIAssistantChat = ({
               requiresConfirmation: response.requiresConfirmation,
               scopeSummary: response.scopeSummary,
               sourcePageId: response.pageId ?? pageId ?? null,
-              basePageVersion: response.baseVersion ?? pageVersion ?? null,
+              basePageVersion: response.basePageVersion ?? pageVersion ?? null,
               sourceGeneration,
               documentSessionId,
               schemaRevision,

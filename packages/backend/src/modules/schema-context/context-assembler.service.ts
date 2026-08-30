@@ -17,7 +17,7 @@ export class ContextAssemblerService {
 
   async assemble(input: {
     pageId?: string;
-    version?: number;
+    pageVersion?: number;
     draftSchema?: Record<string, unknown>;
     selectedId?: string;
     instruction?: string;
@@ -25,7 +25,7 @@ export class ContextAssemblerService {
   }): Promise<FocusContextResult> {
     const schema = await this.schemaResolver.resolve({
       pageId: input.pageId,
-      version: input.version,
+      pageVersion: input.pageVersion,
       draftSchema: input.draftSchema,
     });
 

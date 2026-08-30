@@ -18,13 +18,13 @@ describe('PageSchemaController (e2e)', () => {
     pageSchemaServiceMock = {
       saveSchema: jest.fn().mockResolvedValue({
         pageId: 'page-1',
-        version: 2,
+        pageVersion: 2,
         snapshotId: 'snapshot-2',
         savedAt: '2026-03-18T00:00:00.000Z',
       }),
       getSchema: jest.fn().mockResolvedValue({
         pageId: 'page-1',
-        version: 2,
+        pageVersion: 2,
         snapshotId: 'snapshot-2',
         savedAt: '2026-03-18T00:00:00.000Z',
         schema: {
@@ -83,6 +83,7 @@ describe('PageSchemaController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         schema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: {
@@ -91,11 +92,11 @@ describe('PageSchemaController (e2e)', () => {
             },
           },
         },
-        baseVersion: 1,
+        basePageVersion: 1,
       })
       .expect(200)
       .expect((res: request.Response) => {
-        expect(res.body.version).toBe(2);
+        expect(res.body.pageVersion).toBe(2);
         expect(res.body.pageId).toBe('page-1');
       });
   });
@@ -105,19 +106,19 @@ describe('PageSchemaController (e2e)', () => {
       .put('/pages/page-1/schema')
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
-        baseVersion: 1,
+        basePageVersion: 1,
       })
       .expect(400);
   });
 
   it('accepts GET /pages/:pageId/schema?version=2', () => {
     return request(app.getHttpServer())
-      .get('/pages/page-1/schema?version=2')
+      .get('/pages/page-1/schema?pageVersion=2')
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .expect(200)
       .expect((res: request.Response) => {
         expect(res.body.pageId).toBe('page-1');
-        expect(res.body.version).toBe(2);
+        expect(res.body.pageVersion).toBe(2);
       });
   });
 
@@ -139,6 +140,7 @@ describe('PageSchemaController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         schema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: {
@@ -147,7 +149,7 @@ describe('PageSchemaController (e2e)', () => {
             },
           },
         },
-        baseVersion: 1,
+        basePageVersion: 1,
       })
       .expect(409);
   });

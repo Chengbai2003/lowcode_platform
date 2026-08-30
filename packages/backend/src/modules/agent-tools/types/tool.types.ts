@@ -15,8 +15,9 @@ export interface ToolInputSchema {
 
 export interface ToolExecutionContext {
   pageId?: string;
-  version?: number;
-  resolvedVersion?: number;
+  /** 上下文解析基准：页面内容修订版本 */
+  basePageVersion?: number;
+  resolvedPageVersion?: number;
   draftSchema?: A2UISchema;
   workingSchema: A2UISchema;
   accumulatedPatch: EditorPatchOperation[];

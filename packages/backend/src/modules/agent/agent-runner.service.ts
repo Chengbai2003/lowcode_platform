@@ -127,7 +127,7 @@ export class AgentRunnerService {
     retryCount += recoveredContext.retryCount;
 
     this.logger.log(
-      `[${traceId}] run start mode=patch pageId=${dto.pageId} version=${dto.version ?? 'n/a'}`,
+      `[${traceId}] run start mode=patch pageId=${dto.pageId} version=${dto.pageVersion ?? 'n/a'}`,
     );
 
     if (dto.confirmedScopeId?.trim()) {
@@ -383,8 +383,8 @@ export class AgentRunnerService {
       return {
         mode: 'patch',
         pageId: context.pageId,
-        baseVersion: dto.version,
-        resolvedVersion: context.resolvedVersion,
+        basePageVersion: dto.pageVersion,
+        resolvedPageVersion: context.resolvedPageVersion,
         resolvedSelectedId,
         patch,
         previewSchema,
@@ -812,7 +812,7 @@ export class AgentRunnerService {
         context: await this.toolExecutionService.createExecutionContext(
           {
             pageId: dto.pageId,
-            version: dto.version,
+            basePageVersion: dto.pageVersion,
             draftSchema: dto.draftSchema,
           },
           traceId,

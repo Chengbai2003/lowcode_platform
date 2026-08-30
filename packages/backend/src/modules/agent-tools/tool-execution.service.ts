@@ -26,7 +26,7 @@ export class ToolExecutionService {
     const context = await this.createExecutionContext(
       {
         pageId: request.pageId,
-        version: request.version,
+        basePageVersion: request.basePageVersion,
         draftSchema: request.draftSchema,
       },
       traceId,
@@ -46,8 +46,8 @@ export class ToolExecutionService {
 
     return {
       pageId: context.pageId,
-      baseVersion: request.version ?? context.resolvedVersion,
-      resolvedVersion: context.resolvedVersion,
+      basePageVersion: request.basePageVersion ?? context.resolvedPageVersion,
+      resolvedPageVersion: context.resolvedPageVersion,
       patch: previewPatch,
       schema: context.workingSchema,
       warnings: [...context.warnings],
@@ -90,29 +90,32 @@ export class ToolExecutionService {
   async createExecutionContext(
     input: {
       pageId?: string;
-      version?: number;
+      basePageVersion?: number;
       draftSchema?: Record<string, unknown>;
     },
     traceId: string,
   ): Promise<ToolExecutionContext> {
     let pageId = input.pageId;
-    let resolvedVersion = input.version;
+    let resolvedPageVersion = input.basePageVersion;
     let workingSchema: A2UISchema | undefined;
 
     if (pageId) {
       try {
         const latestPage = await this.pageSchemaService.getSchema(pageId);
-        resolvedVersion = latestPage.version;
+        resolvedPageVersion = latestPage.pageVersion;
 
-        if (input.version !== undefined && input.version !== latestPage.version) {
+        if (
+          input.basePageVersion !== undefined &&
+          input.basePageVersion !== latestPage.pageVersion
+        ) {
           throw new AgentToolException({
             code: 'PAGE_VERSION_CONFLICT',
             message: 'Page version mismatch',
             traceId,
             details: {
               pageId,
-              expectedVersion: latestPage.version,
-              receivedVersion: input.version,
+              expectedVersion: latestPage.pageVersion,
+              receivedVersion: input.basePageVersion,
             },
           });
         }
@@ -159,8 +162,8 @@ export class ToolExecutionService {
 
     return {
       pageId,
-      version: input.version,
-      resolvedVersion,
+      basePageVersion: input.basePageVersion,
+      resolvedPageVersion,
       draftSchema: workingSchema,
       workingSchema,
       accumulatedPatch: [],

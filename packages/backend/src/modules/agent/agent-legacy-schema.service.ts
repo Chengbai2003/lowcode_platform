@@ -45,7 +45,7 @@ export class AgentLegacySchemaService {
         options?.routeDecision?.prefetchedFocusContext ??
         (await this.contextAssembler.assemble({
           pageId: dto.pageId,
-          version: dto.version,
+          pageVersion: dto.pageVersion,
           draftSchema: dto.draftSchema,
           selectedId: dto.selectedId,
           instruction: dto.instruction,
@@ -95,7 +95,7 @@ export class AgentLegacySchemaService {
       warnings,
       usage: result.usage,
       pageId: dto.pageId,
-      version: dto.version,
+      pageVersion: dto.pageVersion,
       selectedId: dto.selectedId,
       traceId,
       route: options?.routeDecision?.route ?? {

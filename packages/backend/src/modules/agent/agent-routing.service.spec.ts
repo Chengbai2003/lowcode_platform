@@ -134,7 +134,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '这个按钮为什么禁用？',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'auto',
       },
@@ -155,7 +155,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '生成一个登录页',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'auto',
       },
       'agent-trace',
@@ -195,7 +195,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'auto',
       },
@@ -228,7 +228,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '把按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'auto',
       },
       'agent-trace',
@@ -276,7 +276,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '这个按钮为什么禁用？',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'auto',
       },
@@ -329,7 +329,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'auto',
       },
       'agent-trace',
@@ -372,7 +372,7 @@ describe('AgentRoutingService', () => {
       {
         instruction: '把按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'auto',
       },
       'agent-trace',

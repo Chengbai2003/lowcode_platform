@@ -37,7 +37,7 @@ export class AgentEditRequestDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  version?: number;
+  pageVersion?: number;
 
   @IsString()
   @MaxLength(200)

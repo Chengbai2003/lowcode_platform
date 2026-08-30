@@ -154,8 +154,8 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
       documentSessionId: 'test-doc-session',
     });
     // mock pageSchemaApi to return version 3
-    pageSchemaApiMock.getPageSchema.mockResolvedValue({ schema: baseSchema, version: 3 });
-    pageSchemaApiMock.savePageSchema.mockResolvedValue({ version: 3 });
+    pageSchemaApiMock.getPageSchema.mockResolvedValue({ schema: baseSchema, pageVersion: 3 });
+    pageSchemaApiMock.savePageSchema.mockResolvedValue({ pageVersion: 3 });
     mockCreatePatchCommand.mockImplementation(
       (_oldSchema: any, _patch: any, onChange: any, desc: string) => ({
         getNewSchema: () => nextSchema,

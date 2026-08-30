@@ -41,10 +41,10 @@ export function useEditorActions({
       const currentGeneration = useEditorStore.getState().generation;
       const currentPageId = useEditorStore.getState().currentPageId;
       if (currentGeneration !== requestGeneration || currentPageId !== requestPageId) return;
-      setPageVersion(result.version);
+      setPageVersion(result.pageVersion);
       // 页面版本保存在独立状态，不再写回 Schema
       setSchema((current) => current as A2UISchema);
-      message.success(`页面已保存，当前版本 v${result.version}`);
+      message.success(`页面已保存，当前版本 v${result.pageVersion}`);
     } catch (error) {
       const currentGeneration = useEditorStore.getState().generation;
       const currentPageId = useEditorStore.getState().currentPageId;

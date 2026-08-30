@@ -51,7 +51,7 @@ export type EditorPatchOperation =
 
 export interface PatchPreviewRequest {
   pageId?: string;
-  version?: number;
+  basePageVersion?: number;
   draftSchema?: A2UISchema;
   patch: EditorPatchOperation[];
   autoFix?: boolean;
@@ -59,8 +59,8 @@ export interface PatchPreviewRequest {
 
 export interface PatchPreviewResponse {
   pageId?: string;
-  baseVersion?: number;
-  resolvedVersion?: number;
+  basePageVersion?: number;
+  resolvedPageVersion?: number;
   patch: EditorPatchOperation[];
   schema: A2UISchema;
   warnings: string[];

@@ -23,7 +23,7 @@ export class PatchPreviewRequestDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  version?: number;
+  basePageVersion?: number;
 
   @IsObject()
   @IsOptional()

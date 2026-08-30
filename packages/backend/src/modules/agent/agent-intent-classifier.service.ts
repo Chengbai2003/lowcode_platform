@@ -55,7 +55,7 @@ export class AgentIntentClassifierService {
               {
                 instruction,
                 signals: {
-                  hasPageContext: Boolean(dto.pageId?.trim() && dto.version !== undefined),
+                  hasPageContext: Boolean(dto.pageId?.trim() && dto.pageVersion !== undefined),
                   hasSelectedId: Boolean(dto.selectedId?.trim()),
                   hasDraftSchema: Boolean(dto.draftSchema),
                 },

@@ -8,7 +8,7 @@ export interface AgentMetricsSummary {
   confirmationBlockedCount: number;
   averageDurationMs: number;
   averageToolCallCount: number;
-  versionConflictCount: number;
+  pageVersionConflictCount: number;
 }
 
 function isConfirmationResult(trace: AgentTraceRecord) {
@@ -33,7 +33,7 @@ export class AgentMetricsService {
         confirmationBlockedCount: 0,
         averageDurationMs: 0,
         averageToolCallCount: 0,
-        versionConflictCount: 0,
+        pageVersionConflictCount: 0,
       };
     }
 
@@ -50,7 +50,10 @@ export class AgentMetricsService {
       confirmationBlockedCount: traces.filter((trace) => isConfirmationResult(trace)).length,
       averageDurationMs: Math.round(totalDuration / traces.length),
       averageToolCallCount: Number((totalToolCalls / traces.length).toFixed(2)),
-      versionConflictCount: traces.reduce((sum, trace) => sum + trace.versionConflictCount, 0),
+      pageVersionConflictCount: traces.reduce(
+        (sum, trace) => sum + trace.pageVersionConflictCount,
+        0,
+      ),
     };
   }
 }

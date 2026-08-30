@@ -34,7 +34,7 @@ describe('AgentPolicyService', () => {
       service.assertPatchRequestAllowed(
         {
           instruction: '更新按钮',
-          version: 3,
+          pageVersion: 3,
           responseMode: 'patch',
         },
         'trace-1',
@@ -45,7 +45,7 @@ describe('AgentPolicyService', () => {
       service.assertPatchRequestAllowed(
         {
           instruction: '更新按钮',
-          version: 3,
+          pageVersion: 3,
           responseMode: 'patch',
         },
         'trace-1',
@@ -63,7 +63,7 @@ describe('AgentPolicyService', () => {
         {
           instruction: '更新按钮',
           pageId: 'page-1',
-          version: 3,
+          pageVersion: 3,
           provider: 'ollama',
           responseMode: 'patch',
         },

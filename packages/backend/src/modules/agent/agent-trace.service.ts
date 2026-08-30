@@ -13,7 +13,7 @@ const MAX_SUMMARY_CHARS = 320;
 export interface AgentTraceRequestSummary {
   instruction: string;
   pageId?: string;
-  version?: number;
+  pageVersion?: number;
   selectedId?: string;
   sessionId?: string;
   responseMode?: AgentResponseMode;
@@ -56,7 +56,7 @@ export interface AgentTraceRecord {
   toolCalls: AgentTraceToolCallRecord[];
   result?: AgentTraceResultSummary;
   error?: AgentErrorEventPayload;
-  versionConflictCount: number;
+  pageVersionConflictCount: number;
 }
 
 function summarizeValue(value: unknown): string {
@@ -89,7 +89,7 @@ function buildRequestSummary(dto: AgentEditRequestDto): AgentTraceRequestSummary
   return {
     instruction: dto.instruction.trim(),
     pageId: dto.pageId,
-    version: dto.version,
+    pageVersion: dto.pageVersion,
     selectedId: dto.selectedId,
     sessionId: dto.sessionId,
     responseMode: dto.responseMode,
@@ -124,7 +124,7 @@ export class AgentTraceService {
       startedAt: Date.now(),
       statusEvents: [],
       toolCalls: [],
-      versionConflictCount: 0,
+      pageVersionConflictCount: 0,
     });
     this.logStructuredEvent('meta', traceId, {
       request,
@@ -256,9 +256,9 @@ export class AgentTraceService {
 
   markVersionConflict(traceId: string) {
     const trace = this.ensureTrace(traceId);
-    trace.versionConflictCount += 1;
+    trace.pageVersionConflictCount += 1;
     this.logStructuredEvent('version_conflict', traceId, {
-      versionConflictCount: trace.versionConflictCount,
+      pageVersionConflictCount: trace.pageVersionConflictCount,
     });
   }
 
@@ -291,7 +291,7 @@ export class AgentTraceService {
       startedAt: Date.now(),
       statusEvents: [],
       toolCalls: [],
-      versionConflictCount: 0,
+      pageVersionConflictCount: 0,
     };
     this.traces.set(traceId, created);
     return created;

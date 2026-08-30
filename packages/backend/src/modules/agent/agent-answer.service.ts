@@ -45,7 +45,7 @@ export class AgentAnswerService {
         options?.routeDecision?.prefetchedFocusContext ??
         (await this.contextAssembler.assemble({
           pageId: dto.pageId,
-          version: dto.version,
+          pageVersion: dto.pageVersion,
           draftSchema: dto.draftSchema,
           selectedId: dto.selectedId,
           instruction: dto.instruction,

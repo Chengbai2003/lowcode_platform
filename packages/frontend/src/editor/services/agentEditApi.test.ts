@@ -30,13 +30,13 @@ describe('agentEditApi', () => {
     await agentEditApi.editPatch({
       instruction: '把按钮改成提交',
       pageId: 'page-1',
-      version: 4,
+      pageVersion: 4,
     });
 
     expect(fetchAppMock.post).toHaveBeenCalledWith('/api/v1/agent/edit', {
       instruction: '把按钮改成提交',
       pageId: 'page-1',
-      version: 4,
+      pageVersion: 4,
       responseMode: 'patch',
     });
   });
@@ -54,7 +54,7 @@ describe('agentEditApi', () => {
       agentEditApi.editPatch({
         instruction: '把按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
       }),
     ).rejects.toMatchObject({
       code: 'PAGE_VERSION_CONFLICT',

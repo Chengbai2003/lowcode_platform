@@ -101,13 +101,13 @@ describe('PageSchemaRepository', () => {
       repoB.saveSchema({
         pageId: 'p-exist',
         schema: createSchema('v2a'),
-        baseVersion: 1,
+        basePageVersion: 1,
         runtimeCompatibility,
       }),
       repoC.saveSchema({
         pageId: 'p-exist',
         schema: createSchema('v2b'),
-        baseVersion: 1,
+        basePageVersion: 1,
         runtimeCompatibility,
       }),
     ]);
@@ -159,7 +159,7 @@ describe('PageSchemaRepository', () => {
       repo.saveSchema({
         pageId: 'p-rollback',
         schema: createSchema('v2'),
-        baseVersion: 1,
+        basePageVersion: 1,
         runtimeCompatibility,
       }),
     ).rejects.toThrow();
@@ -239,7 +239,7 @@ describe('PageSchemaRepository', () => {
       pages: [
         { id: 'p1', currentVersion: 1, latestSnapshotId: 's1', createdAt: '', updatedAt: '' },
       ],
-      snapshots: [{ id: 's1', pageId: 'p1', version: 1, schema: {}, createdAt: '' }],
+      snapshots: [{ id: 's1', pageId: 'p1', pageVersion: 1, schema: {}, createdAt: '' }],
     });
     await fs.promises.writeFile(storePath, legacy, 'utf-8');
     const repo = createRepo();

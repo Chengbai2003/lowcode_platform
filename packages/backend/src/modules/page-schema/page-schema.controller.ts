@@ -14,12 +14,12 @@ export class PageSchemaController {
     return this.pageSchemaService.saveSchema({
       pageId,
       schema: dto.schema,
-      baseVersion: dto.baseVersion,
+      basePageVersion: dto.basePageVersion,
     });
   }
 
   @Get(':pageId/schema')
   async getSchema(@Param('pageId') pageId: string, @Query() query: GetPageSchemaDto) {
-    return this.pageSchemaService.getSchema(pageId, query.version);
+    return this.pageSchemaService.getSchema(pageId, query.pageVersion);
   }
 }
