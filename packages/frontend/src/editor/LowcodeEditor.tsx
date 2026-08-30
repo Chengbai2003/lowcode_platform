@@ -10,7 +10,7 @@ import type {
 } from './types';
 import type { PageSchema, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
-import { builtInComponents } from '@lowcode-platform/renderer';
+import { antdPreset } from '@lowcode-platform/preset-antd';
 import {
   EditorHeader,
   PreviewPane,
@@ -267,7 +267,7 @@ function LowcodeEditorInner({
 
   // 合并自定义组件与默认注册表
   const allComponents = useMemo(() => {
-    const rendererComponents = { ...builtInComponents };
+    const rendererComponents = { ...antdPreset.runtime };
     const componentsOnly = Object.keys(componentRegistry).reduce(
       (acc, key) => {
         acc[key] = componentRegistry[key].component;

@@ -5,6 +5,7 @@ import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { LowcodeProvider, Renderer, EventDispatcher } from '../';
 import { ComponentRenderer } from '../ComponentRenderer';
 import * as valueResolver from '../executor/parser/valueResolver';
+import { testPreset } from './fixtures/testPreset';
 
 /**
  * 跨组件响应式联动测试
@@ -267,7 +268,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     render(
       <LowcodeProvider>
-        <Renderer schema={schema} />
+        <Renderer preset={testPreset} schema={schema} />
       </LowcodeProvider>,
     );
 
@@ -303,7 +304,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer schema={schema} />
+        <Renderer preset={testPreset} schema={schema} />
       </LowcodeProvider>,
     );
 
@@ -350,7 +351,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer schema={schema} />
+        <Renderer preset={testPreset} schema={schema} />
       </LowcodeProvider>,
     );
 
@@ -391,7 +392,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer schema={schema} />
+        <Renderer preset={testPreset} schema={schema} />
       </LowcodeProvider>,
     );
 
@@ -427,7 +428,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer schema={schema} />
+        <Renderer preset={testPreset} schema={schema} />
       </LowcodeProvider>,
     );
 
@@ -492,7 +493,7 @@ describe('Cross-component reactivity (Phase 1)', () => {
     try {
       await renderWithFlush(
         <LowcodeProvider>
-          <Renderer schema={schema} />
+          <Renderer preset={testPreset} schema={schema} />
         </LowcodeProvider>,
       );
 

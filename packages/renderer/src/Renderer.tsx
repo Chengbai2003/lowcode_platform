@@ -9,10 +9,10 @@ import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { RendererProps } from './types';
 import { flattenSchemaValues } from './utils/schema';
 import { EventDispatcher } from './EventDispatcher';
-import { builtInComponents } from './builtInComponents';
 import { ComponentRenderer } from './ComponentRenderer';
 import { createComponentRuntimeBridge } from './bridge/createComponentRuntimeBridge';
 import { ComponentRuntimeBridgeContext } from './bridge/ComponentRuntimeBridgeContext';
+import { sanitizePropsByManifest } from './preset/sanitizePropsByManifest';
 
 /**
  * 主渲染器组件
@@ -20,6 +20,7 @@ import { ComponentRuntimeBridgeContext } from './bridge/ComponentRuntimeBridgeCo
 export function Renderer({
   schema,
   components = {},
+  preset,
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
@@ -131,7 +132,40 @@ export function Renderer({
     }
   }, [stableFlatComponents, eventDispatcher]);
 
-  const allComponents = { ...builtInComponents, ...components };
+  // M0-4 Scope B：单一 Preset 提供基础组件注册表，宿主 components 可覆盖。
+  const allComponents = useMemo(
+    () => ({ ...(preset?.runtime ?? {}), ...components }),
+    [preset, components],
+  );
+
+  // Manifest 净化只作用于 Preset 自身组件：宿主覆盖后的类型不再受
+  // Preset Manifest 约束（宿主组件有自己的 Props 契约）。
+  const presetOwnedTypes = useMemo(() => {
+    if (!preset) return null;
+    const owned = new Set<string>();
+    for (const [type, component] of Object.entries(preset.runtime)) {
+      if (components[type] === undefined || components[type] === component) {
+        owned.add(type);
+      }
+    }
+    return owned;
+  }, [preset, components]);
+
+  const manifestSanitizer = useMemo(() => {
+    if (!preset || !presetOwnedTypes) return undefined;
+    return (componentType: string, props: Record<string, unknown>): Record<string, unknown> => {
+      if (!presetOwnedTypes.has(componentType)) {
+        return props;
+      }
+      const { props: cleaned, rejected } = sanitizePropsByManifest(componentType, props, preset);
+      if (rejected.length > 0) {
+        console.warn(
+          `[Renderer] Preset "${preset.id}" rejected props for "${componentType}": ${rejected.join(', ')}`,
+        );
+      }
+      return cleaned;
+    };
+  }, [preset, presetOwnedTypes]);
 
   // M0-4 Scope C：组件（Table 等）通过桥消费受控运行时能力，
   // 不再反向导入执行器内部实现。
@@ -147,6 +181,7 @@ export function Renderer({
           nodeId={canonicalSchema.rootId}
           flatComponents={stableFlatComponents}
           components={allComponents}
+          manifestSanitizer={manifestSanitizer}
           eventDispatcher={eventDispatcher}
           onComponentClick={onComponentClick}
         />

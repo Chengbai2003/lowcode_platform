@@ -4,6 +4,7 @@
  */
 
 import type { PageSchema } from '../../types';
+import { antdCompilerBindings } from '@lowcode-platform/preset-antd/compiler';
 
 /**
  * 编译选项
@@ -56,6 +57,16 @@ export async function compileSchema(schema: PageSchema, options?: CompileOptions
   const baseUrl = getApiBaseUrl();
   const token = getAuthToken();
 
+  // M0-4 Scope B：Preview Renderer 与 Compiler 使用同一 Preset Bindings ——
+  // Preset 组件的 import 来源默认取自 antdCompilerBindings，调用方仍可覆盖。
+  const effectiveOptions: CompileOptions = {
+    defaultLibrary: options?.defaultLibrary ?? antdCompilerBindings.defaultLibrary,
+    componentSources: {
+      ...antdCompilerBindings.componentSources,
+      ...options?.componentSources,
+    },
+  };
+
   const response = await fetch(`${baseUrl}/compiler/export`, {
     method: 'POST',
     headers: {
@@ -64,7 +75,7 @@ export async function compileSchema(schema: PageSchema, options?: CompileOptions
     },
     body: JSON.stringify({
       schema,
-      options,
+      options: effectiveOptions,
     }),
   });
 

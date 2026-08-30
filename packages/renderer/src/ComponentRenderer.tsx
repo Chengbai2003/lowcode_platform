@@ -7,7 +7,6 @@
 import { useMemo, memo } from 'react';
 import type { ComponentRegistry, ComponentNode } from './types';
 import type { EventDispatcher } from './EventDispatcher';
-import { builtInComponents } from './builtInComponents';
 import { useNodeValue, useResolvedSchemaProps } from './ComponentRenderer.runtime';
 import { analyzeComponentDeps } from './reactive/dependencyAnalyzer';
 import {
@@ -27,6 +26,14 @@ export interface ComponentRendererProps {
   nodeId: string;
   flatComponents: Record<string, ComponentNode>;
   components: ComponentRegistry;
+  /**
+   * Preset Manifest Props 净化器（M0-4 Scope B）：仅对 Preset 自身组件生效。
+   * 由 Renderer 构建并下发；无 Preset 时为 undefined。
+   */
+  manifestSanitizer?: (
+    componentType: string,
+    props: Record<string, unknown>,
+  ) => Record<string, unknown>;
   eventDispatcher?: EventDispatcher;
   onComponentClick?: (node: ComponentNode) => void;
   ancestors?: Set<string>;
@@ -41,6 +48,7 @@ export const ComponentRenderer = memo(
   ({
     onComponentClick,
     components,
+    manifestSanitizer,
     eventDispatcher,
     nodeId,
     flatComponents,
@@ -85,9 +93,7 @@ export const ComponentRenderer = memo(
     }, [componentName, id, props]);
     const componentValue = useNodeValue(id, schemaInitialValue, eventDispatcher);
 
-    const Component = componentName
-      ? components[componentName] || builtInComponents[componentName]
-      : undefined;
+    const Component = componentName ? components[componentName] : undefined;
 
     const eventHandlers = useMemo(() => {
       return buildEventHandlers(events, eventDispatcher);
@@ -124,6 +130,7 @@ export const ComponentRenderer = memo(
               nodeId={childId}
               flatComponents={flatComponents}
               components={components}
+              manifestSanitizer={manifestSanitizer}
               eventDispatcher={eventDispatcher}
               onComponentClick={onComponentClick}
               ancestors={ancestors}
@@ -132,10 +139,22 @@ export const ComponentRenderer = memo(
         }
         return null;
       });
-    }, [childrenIds, components, flatComponents, eventDispatcher, onComponentClick, ancestors]);
+    }, [
+      childrenIds,
+      components,
+      flatComponents,
+      manifestSanitizer,
+      eventDispatcher,
+      onComponentClick,
+      ancestors,
+    ]);
 
     const mergedProps = useMemo(() => {
-      const p: any = { ...sanitizedProps, ...restProps, ...eventHandlers };
+      // M0-4 Scope B：Preset Manifest 校验与净化先于任何 Props 合并执行
+      const manifestCleanedProps = manifestSanitizer
+        ? manifestSanitizer(componentName as string, sanitizedProps)
+        : sanitizedProps;
+      const p: any = { ...manifestCleanedProps, ...restProps, ...eventHandlers };
 
       if (componentValue !== undefined) {
         p.value = componentValue;
@@ -207,6 +226,7 @@ export const ComponentRenderer = memo(
       return p;
     }, [
       sanitizedProps,
+      manifestSanitizer,
       restProps,
       eventHandlers,
       componentValue,
@@ -225,7 +245,9 @@ export const ComponentRenderer = memo(
     }
 
     if (!Component) {
-      console.warn(`Component "${componentName}" not found in registry, rendering as div`);
+      // M0-4 Scope B：未知组件 fail-close——不把 Props 传给任何实现，
+      // 只渲染显式错误占位（保持子树可导航，便于在编辑器中定位）。
+      console.warn(`[Renderer] Unknown component type "${componentName}" — refused (fail-close)`);
       const fallbackMarkedClassName = buildFallbackClassName(
         sanitizedProps?.className as string | undefined,
         restProps.className,
@@ -234,11 +256,10 @@ export const ComponentRenderer = memo(
       );
       return (
         <div
-          {...sanitizedProps}
-          {...eventHandlers}
-          {...restProps}
+          data-unknown-component={componentName}
           data-fallback-component={componentName}
           className={fallbackMarkedClassName}
+          style={{ color: '#d4380d', border: '1px dashed #ffa39e', padding: 8 }}
           {...(onComponentClick && id ? { 'data-component-id': id } : {})}
         >
           {childrenElements}

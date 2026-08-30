@@ -16,6 +16,8 @@
  *     不把运行时对象挂到可变 window 全局
  *  8. 组件库（Issue #19 / M0-4 Scope C）：不得反向导入 Renderer 内部执行器，
  *     受控能力一律经 ComponentRuntimeBridge 注入
+ *  9. Preset 分层（Issue #19 / M0-4 Scope B）：Renderer 本体不得依赖 antd 或
+ *     任何 Preset 包；Preset 必须经 createSealedPreset 构建
  *
  * 用法：node scripts/check-schema-contract-boundaries.mjs
  */
@@ -241,6 +243,29 @@ for (const file of allFiles) {
   if (!/useComponentRuntimeBridge/.test(tableContent)) {
     violations.push(
       'packages/frontend/src/components/components/Table.tsx: 应通过 useComponentRuntimeBridge 消费受控运行时能力',
+    );
+  }
+}
+
+// ---------- 12: Renderer 本体不得出现组件库/Preset 依赖（Issue #19 / M0-4 Scope B） ----------
+for (const file of allFiles) {
+  const relFile = rel(file);
+  if (!relFile.startsWith('packages/renderer/')) continue;
+  const content = readFileSync(file, 'utf-8');
+  if (/from ['"]antd['"]|require\(['"]antd['"]\)/.test(content)) {
+    violations.push(`${relFile}: Renderer 本体不得依赖 antd（组件库属于 Preset 层）`);
+  }
+  if (/['"]@lowcode-platform\/preset-/.test(content)) {
+    violations.push(`${relFile}: Renderer 本体不得依赖任何 Preset 包（依赖方向必须反向）`);
+  }
+}
+
+{
+  const presetFile = join(ROOT, 'packages/preset-antd/src/createAntdPreset.ts');
+  const presetContent = readFileSync(presetFile, 'utf-8');
+  if (!/createSealedPreset/.test(presetContent)) {
+    violations.push(
+      'packages/preset-antd/src/createAntdPreset.ts: Preset 必须经 createSealedPreset 构建（Bootstrap 即 seal）',
     );
   }
 }

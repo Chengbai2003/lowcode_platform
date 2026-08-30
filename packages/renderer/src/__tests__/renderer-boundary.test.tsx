@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 import { renderToString } from 'react-dom/server';
 import { renderFromJSON, Renderer } from '../index';
+import { testPreset } from './fixtures/testPreset';
 
 const validSchema = {
   schemaVersion: 0 as const,
@@ -14,7 +15,7 @@ const validSchema = {
 describe('Renderer contract boundary (fail-close)', () => {
   it('renderFromJSON returns an element carrying the canonical frozen schema', () => {
     const raw = JSON.stringify(validSchema);
-    const element = renderFromJSON(raw);
+    const element = renderFromJSON(raw, undefined, { preset: testPreset });
     expect(React.isValidElement(element)).toBe(true);
     // 只渲染 Contract 返回的 canonical 深冻结对象，而非原始输入
     expect(element.props.schema).not.toBe(JSON.parse(raw));
@@ -48,13 +49,17 @@ describe('Renderer contract boundary (fail-close)', () => {
       configurable: true,
     });
 
-    expect(() => renderToString(React.createElement(Renderer, { schema: raw as never }))).toThrow();
+    expect(() =>
+      renderToString(React.createElement(Renderer, { schema: raw as never, preset: testPreset })),
+    ).toThrow();
     expect(getterRan).toBe(false);
   });
 
   it('Renderer component rejects invalid schema props (fail-close)', () => {
     const bad: unknown = { ...validSchema, rootId: '' };
-    expect(() => renderToString(React.createElement(Renderer, { schema: bad as never }))).toThrow();
+    expect(() =>
+      renderToString(React.createElement(Renderer, { schema: bad as never, preset: testPreset })),
+    ).toThrow();
   });
 });
 
@@ -64,7 +69,7 @@ describe('Renderer same-reference mutation rerender (fail-safe)', () => {
     const mutable: Record<string, unknown> = JSON.parse(JSON.stringify(validSchema));
 
     const { container, rerender } = render(
-      React.createElement(Renderer, { schema: mutable as never }),
+      React.createElement(Renderer, { schema: mutable as never, preset: testPreset }),
     );
     const before = container.innerHTML;
 
@@ -77,7 +82,7 @@ describe('Renderer same-reference mutation rerender (fail-safe)', () => {
 
     // 同一对象引用 rerender：useMemo 依引用记忆，渲染树必须仍消费首帧的 canonical 快照
     expect(() =>
-      rerender(React.createElement(Renderer, { schema: mutable as never })),
+      rerender(React.createElement(Renderer, { schema: mutable as never, preset: testPreset })),
     ).not.toThrow();
     expect(container.innerHTML).toBe(before);
     expect(container.textContent).not.toContain('Injected');

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { LowcodeProvider, Renderer } from '../';
+import { testPreset } from './fixtures/testPreset';
 
 describe('Renderer feedback action', () => {
   it('dispatches message feedback on click', async () => {
@@ -38,7 +39,7 @@ describe('Renderer feedback action', () => {
 
     render(
       <LowcodeProvider>
-        <Renderer schema={schema} eventContext={{ ui: { message } }} />
+        <Renderer preset={testPreset} schema={schema} eventContext={{ ui: { message } }} />
       </LowcodeProvider>,
     );
 
