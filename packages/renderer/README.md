@@ -55,8 +55,21 @@ host.update({ schema: nextSchema });
 host.unmount();
 ```
 
-页面级 RuntimeSession 隔离（`pageId + documentSessionId`、`dispose()`、异步回调失效）属于
-Scope D（M0-4d），落地前宿主通过 `createRendererHost` 自行管理挂载生命周期。
+## RuntimeSession（M0-4 Scope D）
+
+提供 `pageId + documentSessionId` 时，Renderer 每次挂载创建独立 RuntimeSession，
+`documentSessionId` 变化或卸载时销毁旧 Session：
+
+```tsx
+<Renderer preset={antdPreset} pageId="page-42" documentSessionId={docSessionId} schema={schema} />
+```
+
+- Session 独立持有 State/Computed（ReactiveRuntime）、执行栈、AbortController、
+  timers、tracked cleanups 与 generation；同 Schema 两次挂载不共享状态。
+- `dispose()` 清除 timer、abort in-flight 请求；`apiCall`/`delay` 感知 Session，
+  dispose 后旧异步回调不再写回状态（返回 `aborted`）。
+- 非 React 宿主可直接使用 `createRuntimeSession` / `getOrCreateRuntimeSession` /
+  `disposeRuntimeSession`。
 
 ## ComponentRuntimeBridge（M0-4 Scope C）
 

@@ -209,4 +209,6 @@ Scope C ComponentRuntimeBridge 已落地（M0-4c）：Table 已改经 `useCompon
 
 Scope B ComponentPreset 已落地（M0-4b）：`@lowcode-platform/preset-antd`（`packages/preset-antd`）以 `/runtime`、`/manifest`、`/validation`、`/compiler` 子路径提供运行时组件、Props 白名单 Manifest、Validation 钩子（Link/Image 危险 scheme 检查）与 Compiler 绑定；`builtInComponents` 自 Renderer 包迁出，Renderer 本体零组件库依赖（门禁强制 Renderer 不得 import antd / 任何 Preset 包）；`createSealedPreset` 在 Bootstrap 阶段构建即校验并深冻结 Registry，无 `register()` 出口；渲染前经 `sanitizePropsByManifest` 做白名单净化（未知 Props、函数 Props、`dangerouslySetInnerHTML` 一律移除），未知组件类型 fail-close 拒绝渲染并给出占位标记；宿主覆盖的组件不受 Preset Manifest 约束；前端 `compilerApi` 默认携带 Preset Compiler 绑定（Preview 与 Compiler 消费同一份来源声明）。
 
-尚未完成：Scope D RuntimeSession（`createRuntimeSession`/`dispose`，本文示例中的 `host`/`documentSessionId` 形态）、Scope E HostCapabilities（全部能力默认 deny，桥的 `getResource` 已先行按 deny 实现）。
+Scope D RuntimeSession 已落地（M0-4d）：`RuntimeSession` 绑定 `pageId + documentSessionId`，独立持有 State/Computed（ReactiveRuntime）、执行栈（EventDispatcher）、AbortController、timers、tracked cleanups 与 generation；`createRuntimeSession`（每次挂载独立实例）与 `getOrCreateRuntimeSession`（页面 document 切换语义，`documentSessionId` 变化即销毁旧 Session）双入口；`dispose()` 清除全部 timer、abort in-flight 请求并执行 cleanups；`apiCall`/`delay` 感知 Session——请求携带 Session signal，dispose 后旧请求/timer/异步回调不再写回状态（结果静默丢弃并返回 `aborted`）。Renderer 在提供 `pageId` + `documentSessionId` 时按挂载创建 Session，`documentSessionId` 变化或卸载时 dispose。本文示例中的 `host`/`documentSessionId` 形态由 M0-4e HostCapabilities 收尾。
+
+尚未完成：Scope E HostCapabilities（全部能力默认 deny；桥的 `getResource` 已先行按 deny 实现）。

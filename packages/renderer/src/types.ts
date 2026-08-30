@@ -16,6 +16,8 @@ export interface RendererProps {
   schema: PageSchema; // JSON Schema (严格 A2UI)
   components?: ComponentRegistry; // 宿主自定义组件注册表（可覆盖 Preset 组件）
   preset?: ComponentPreset; // 单一 ComponentPreset（M0-4 Scope B：一个 Host 只绑定一个）
+  pageId?: string; // M0-4 Scope D：提供 pageId + documentSessionId 时按挂载创建 RuntimeSession
+  documentSessionId?: string; // 变化或卸载时销毁旧 Session（异步回调不得写回新页面）
   onComponentClick?: (node: ComponentNode) => void; // 组件点击回调
   eventContext?: Record<string, any>; // 事件执行上下文
 }

@@ -7,7 +7,13 @@ import type { ActionHandler } from '../../dsl';
 import type { ApiCallAction, DelayAction } from '../../dsl/actions/async';
 import type { Action } from '../../dsl/action-union';
 import type { ApiRequestConfig } from '../../dsl/context';
+import type { RuntimeSession } from '../../session/RuntimeSession';
 import { resolveValue, resolveValues } from '../parser';
+
+/** 读取执行上下文中的 Session（M0-4 Scope D；存在时启用 abort/写回守卫） */
+function getSession(context: Record<string, unknown>): RuntimeSession | undefined {
+  return (context as { session?: RuntimeSession }).session;
+}
 
 /**
  * URL 白名单检查（防止 SSRF）
@@ -126,6 +132,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     }
 
     // 请求配置
+    const session = getSession(context);
     const config: RequestInit = {
       method: resolvedMethod,
       headers: {
@@ -133,6 +140,10 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
         ...resolvedHeaders,
       },
     };
+    // M0-4 Scope D：Session 内请求可被 dispose abort
+    if (session) {
+      config.signal = session.signal;
+    }
 
     if (['POST', 'PUT', 'PATCH'].includes(resolvedMethod) && resolvedBody !== undefined) {
       config.body = JSON.stringify(resolvedBody);
@@ -167,6 +178,11 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       response = await fetchResponse.json();
     }
 
+    // M0-4 Scope D：dispose 后旧请求不得写回新页面
+    if (session && session.isDisposed()) {
+      return { success: false, aborted: true };
+    }
+
     if (resultTo) {
       context.runtime.set(resultTo, response);
     }
@@ -182,6 +198,11 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     return { success: true, response, resultTo };
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
+
+    // M0-4 Scope D：dispose/abort 不是业务错误，静默返回且不写回
+    if (errorObj.name === 'AbortError' || getSession(context)?.isDisposed()) {
+      return { success: false, aborted: true };
+    }
 
     if (showError) {
       if (context.ui?.message?.error) {
@@ -211,12 +232,26 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
  * 延迟
  * Action: { type: 'delay'; ms: number; }
  */
-export const delay: ActionHandler = async (action) => {
+export const delay: ActionHandler = async (action, context) => {
   const delayAction = action as DelayAction;
   const ms = typeof delayAction.ms === 'number' ? delayAction.ms : 0;
 
   if (Number.isNaN(ms) || ms < 0) {
     throw new Error('delay: ms must be a positive number');
+  }
+
+  const session = getSession(context);
+  if (session) {
+    // M0-4 Scope D：Session 受控延迟（dispose 清除 timer 并 reject）
+    try {
+      await session.delay(ms);
+    } catch (error) {
+      if ((error as Error)?.name === 'AbortError') {
+        return { delayed: ms, aborted: true };
+      }
+      throw error;
+    }
+    return { delayed: ms };
   }
 
   await new Promise((resolve) => setTimeout(resolve, ms));
