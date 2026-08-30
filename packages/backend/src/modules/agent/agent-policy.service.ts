@@ -129,7 +129,7 @@ export class AgentPolicyService {
       });
     }
 
-    if (dto.version === undefined) {
+    if (dto.pageVersion === undefined) {
       throw new AgentToolException({
         code: 'AGENT_POLICY_BLOCKED',
         message: 'Patch mode requires version',

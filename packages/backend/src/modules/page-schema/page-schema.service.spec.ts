@@ -51,20 +51,20 @@ describe('PageSchemaService', () => {
             snapshot.pageId === pageId && snapshot.snapshotId === pageStore?.latestSnapshotId,
         ),
       ),
-      getSnapshotByVersion: jest.fn((pageId: string, version: number) =>
+      getSnapshotByVersion: jest.fn((pageId: string, pageVersion: number) =>
         snapshots.find(
-          (snapshot) => snapshot.pageId === pageId && snapshot.pageVersion === version,
+          (snapshot) => snapshot.pageId === pageId && snapshot.pageVersion === pageVersion,
         ),
       ),
       saveSchema: jest.fn(
         async (params: {
           pageId: string;
           schema: PageSnapshotRecord['schema'];
-          baseVersion?: number;
+          basePageVersion?: number;
           runtimeCompatibility: typeof runtimeCompatibility;
         }) => {
           const currentPageVersion = pageStore?.currentPageVersion ?? 0;
-          if (pageStore && params.baseVersion === undefined) {
+          if (pageStore && params.basePageVersion === undefined) {
             throw new ConflictException({
               message: 'Page version mismatch',
               pageId: params.pageId,
@@ -72,12 +72,15 @@ describe('PageSchemaService', () => {
               receivedVersion: null,
             });
           }
-          if (params.baseVersion !== undefined && params.baseVersion !== currentPageVersion) {
+          if (
+            params.basePageVersion !== undefined &&
+            params.basePageVersion !== currentPageVersion
+          ) {
             throw new ConflictException({
               message: 'Page version mismatch',
               pageId: params.pageId,
               expectedVersion: currentPageVersion,
-              receivedVersion: params.baseVersion,
+              receivedVersion: params.basePageVersion,
             });
           }
           const nextPageVersion = currentPageVersion + 1;
@@ -124,12 +127,12 @@ describe('PageSchemaService', () => {
     const result = await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
 
     expect(result.pageId).toBe('page-1');
-    expect(result.version).toBe(1);
+    expect(result.pageVersion).toBe(1);
     expect(repository.saveSchema).toHaveBeenCalledTimes(1);
     expect(repository.saveSchema).toHaveBeenCalledWith(
       expect.objectContaining({
         pageId: 'page-1',
-        baseVersion: undefined,
+        basePageVersion: undefined,
         runtimeCompatibility,
       }),
     );
@@ -163,10 +166,10 @@ describe('PageSchemaService', () => {
     const result = await service.saveSchema({
       pageId: 'page-1',
       schema: createSchema('second'),
-      baseVersion: 1,
+      basePageVersion: 1,
     });
 
-    expect(result.version).toBe(2);
+    expect(result.pageVersion).toBe(2);
     expect(pageStore?.currentPageVersion).toBe(2);
   });
 
@@ -177,7 +180,7 @@ describe('PageSchemaService', () => {
       service.saveSchema({
         pageId: 'page-1',
         schema: createSchema('stale'),
-        baseVersion: 0,
+        basePageVersion: 0,
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
@@ -187,18 +190,18 @@ describe('PageSchemaService', () => {
     await service.saveSchema({
       pageId: 'page-1',
       schema: createSchema('second'),
-      baseVersion: 1,
+      basePageVersion: 1,
     });
 
     const latest = await service.getSchema('page-1');
     const v1 = await service.getSchema('page-1', 1);
 
-    expect(latest.version).toBe(2);
+    expect(latest.pageVersion).toBe(2);
     // Schema 是纯数据：不含页面 version，只含 DSL 格式版本
     expect(Object.prototype.hasOwnProperty.call(latest.schema, 'version')).toBe(false);
     expect(latest.schema.schemaVersion).toBe(0);
     expect(getRootLabel(latest.schema)).toBe('second');
-    expect(v1.version).toBe(1);
+    expect(v1.pageVersion).toBe(1);
     expect(v1.schema.schemaVersion).toBe(0);
     expect(getRootLabel(v1.schema)).toBe('first');
   });

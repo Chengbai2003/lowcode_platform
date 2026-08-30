@@ -92,7 +92,7 @@ export class PageSchemaRepository implements OnModuleInit {
   async saveSchema(params: {
     pageId: string;
     schema: PageSchema;
-    baseVersion?: number;
+    basePageVersion?: number;
     runtimeCompatibility: RuntimeCompatibility;
   }): Promise<{ page: StoredPageRecord; snapshot: PageSnapshotRecord }> {
     return this.enqueue(async () => {
@@ -101,7 +101,7 @@ export class PageSchemaRepository implements OnModuleInit {
       const existing = disk.pages.get(params.pageId);
       const currentPageVersion = existing?.currentPageVersion ?? 0;
 
-      if (existing && params.baseVersion === undefined) {
+      if (existing && params.basePageVersion === undefined) {
         throw new ConflictException({
           message: 'Page version mismatch',
           pageId: params.pageId,
@@ -109,12 +109,12 @@ export class PageSchemaRepository implements OnModuleInit {
           receivedVersion: null,
         });
       }
-      if (params.baseVersion !== undefined && params.baseVersion !== currentPageVersion) {
+      if (params.basePageVersion !== undefined && params.basePageVersion !== currentPageVersion) {
         throw new ConflictException({
           message: 'Page version mismatch',
           pageId: params.pageId,
           expectedVersion: currentPageVersion,
-          receivedVersion: params.baseVersion,
+          receivedVersion: params.basePageVersion,
         });
       }
 

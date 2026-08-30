@@ -80,7 +80,7 @@ describe('AgentController (e2e)', () => {
   const pageSchemaServiceMock: Pick<PageSchemaService, 'getSchema'> = {
     getSchema: jest.fn().mockResolvedValue({
       pageId: 'page-1',
-      version: 4,
+      pageVersion: 4,
       snapshotId: 'page-1-v4',
       savedAt: '2026-03-20T00:00:00.000Z',
       schema: {
@@ -389,7 +389,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '生成一个页面',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
       })
       .expect(200)
       .expect((res: request.Response) => {
@@ -406,7 +406,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '生成一个详情页',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'auto',
       })
       .expect(200);
@@ -442,7 +442,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '生成一个登录页',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'auto',
       })
       .expect(200);
@@ -455,7 +455,7 @@ describe('AgentController (e2e)', () => {
         expect(res.body.totalCount).toBeGreaterThan(0);
         expect(typeof res.body.averageDurationMs).toBe('number');
         expect(typeof res.body.averageToolCallCount).toBe('number');
-        expect(typeof res.body.versionConflictCount).toBe('number');
+        expect(typeof res.body.pageVersionConflictCount).toBe('number');
       });
   });
 
@@ -466,7 +466,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '生成一个登录页',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'auto',
       })
       .expect(200)
@@ -496,7 +496,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '这个页面是做什么的？',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'auto',
       })
       .expect(200)
@@ -540,7 +540,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把按钮改成提交',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         selectedId: 'button',
         responseMode: 'patch',
       })
@@ -571,7 +571,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '修改全部表单 label',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'patch',
       })
       .expect(200)
@@ -611,7 +611,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '将当前表单下所有表单项 label 宽度设置为 200',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         selectedId: 'form',
         sessionId: 'session-batch-e2e',
         draftSchema: createBatchSchema(),
@@ -659,7 +659,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         selectedId: 'button',
         responseMode: 'auto',
       })
@@ -699,7 +699,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '给按钮绑定保存事件',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         selectedId: 'button',
         responseMode: 'patch',
       })
@@ -723,7 +723,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'patch',
       })
@@ -731,7 +731,7 @@ describe('AgentController (e2e)', () => {
       .expect((res: request.Response) => {
         expect(res.body.mode).toBe('patch');
         expect(res.body.retryCount).toBe(1);
-        expect(res.body.resolvedVersion).toBe(4);
+        expect(res.body.resolvedPageVersion).toBe(4);
       });
   });
 
@@ -778,7 +778,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把那个按钮改成提交',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'patch',
       })
       .expect(200)
@@ -802,7 +802,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把按钮改成提交',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         provider: 'ollama',
         responseMode: 'patch',
       })
@@ -841,7 +841,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         selectedId: 'button',
         responseMode: 'auto',
       })
@@ -871,7 +871,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '生成一个登录页',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'auto',
       })
       .buffer(true)
@@ -911,7 +911,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '这个页面是做什么的？',
         pageId: 'page-1',
-        version: 4,
+        pageVersion: 4,
         responseMode: 'auto',
       })
       .buffer(true)
@@ -939,7 +939,7 @@ describe('AgentController (e2e)', () => {
       .send({
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'patch',
       })
@@ -1050,7 +1050,7 @@ describe('AgentController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         pageId: 'page-1',
-        version: 3,
+        basePageVersion: 3,
         patch: [{ op: 'updateProps', componentId: 'button', props: { children: '提交' } }],
       })
       .expect(409)

@@ -3,8 +3,8 @@ import { EditorPatchOperation } from '../types/editor-patch.types';
 
 export interface PatchPreviewResponseDto {
   pageId?: string;
-  baseVersion?: number;
-  resolvedVersion?: number;
+  basePageVersion?: number;
+  resolvedPageVersion?: number;
   patch: EditorPatchOperation[];
   schema: A2UISchema;
   warnings: string[];

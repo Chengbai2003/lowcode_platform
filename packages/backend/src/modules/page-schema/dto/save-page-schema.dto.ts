@@ -47,5 +47,5 @@ export class SavePageSchemaDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  baseVersion?: number;
+  basePageVersion?: number;
 }

@@ -37,7 +37,7 @@ describe('ServerAIService', () => {
       instruction: '把按钮改成提交',
       modelId: 'openai-default',
       pageId: 'page-1',
-      version: 3,
+      pageVersion: 3,
       selectedId: 'btn-submit',
       draftSchema: {
         schemaVersion: 0,
@@ -63,7 +63,7 @@ describe('ServerAIService', () => {
       modelId: 'openai-default',
       provider: undefined,
       pageId: 'page-1',
-      version: 3,
+      pageVersion: 3,
       selectedId: 'btn-submit',
       draftSchema: {
         schemaVersion: 0,

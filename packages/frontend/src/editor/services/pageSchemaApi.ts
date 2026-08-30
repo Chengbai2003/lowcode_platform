@@ -4,7 +4,7 @@ import { fetchApp } from '../lib/httpClient';
 
 export interface PageSchemaResponse {
   pageId: string;
-  version: number;
+  pageVersion: number;
   snapshotId: string;
   savedAt: string;
   schema: A2UISchema;
@@ -12,14 +12,14 @@ export interface PageSchemaResponse {
 
 export interface SavePageSchemaResponse {
   pageId: string;
-  version: number;
+  pageVersion: number;
   snapshotId: string;
   savedAt: string;
 }
 
 export const pageSchemaApi = {
-  async getPageSchema(pageId: string, version?: number): Promise<PageSchemaResponse> {
-    const suffix = version ? `?version=${version}` : '';
+  async getPageSchema(pageId: string, pageVersion?: number): Promise<PageSchemaResponse> {
+    const suffix = pageVersion ? `?pageVersion=${pageVersion}` : '';
     const response = await fetchApp.get<PageSchemaResponse | ApiEnvelope<PageSchemaResponse>>(
       `/api/v1/pages/${pageId}/schema${suffix}`,
     );
@@ -29,13 +29,13 @@ export const pageSchemaApi = {
   async savePageSchema(
     pageId: string,
     schema: A2UISchema,
-    baseVersion?: number,
+    basePageVersion?: number,
   ): Promise<SavePageSchemaResponse> {
     const response = await fetchApp.put<
       SavePageSchemaResponse | ApiEnvelope<SavePageSchemaResponse>
     >(`/api/v1/pages/${pageId}/schema`, {
       schema,
-      baseVersion,
+      basePageVersion,
     });
     return unwrapApiEnvelope(response);
   },

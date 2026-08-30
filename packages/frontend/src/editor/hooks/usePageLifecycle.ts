@@ -64,7 +64,7 @@ export function usePageLifecycle({
           return;
         }
         setSchema(result.schema);
-        setPageVersion(result.version);
+        setPageVersion(result.pageVersion);
       })
       .catch(async (error: unknown) => {
         if (cancelled) return;
@@ -96,7 +96,7 @@ export function usePageLifecycle({
               return;
             }
             setSchema(initial);
-            setPageVersion(bootstrapResult.version);
+            setPageVersion(bootstrapResult.pageVersion);
             message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
           } catch (bootstrapError) {
             const errorMessage =

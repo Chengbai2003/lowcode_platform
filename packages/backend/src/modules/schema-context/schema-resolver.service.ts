@@ -8,7 +8,7 @@ export class SchemaResolverService {
 
   async resolve(input: {
     pageId?: string;
-    version?: number;
+    pageVersion?: number;
     draftSchema?: Record<string, unknown>;
   }): Promise<A2UISchema> {
     let raw: Record<string, unknown>;
@@ -16,7 +16,7 @@ export class SchemaResolverService {
     if (input.draftSchema) {
       raw = input.draftSchema;
     } else if (input.pageId) {
-      const page = await this.pageSchemaService.getSchema(input.pageId, input.version);
+      const page = await this.pageSchemaService.getSchema(input.pageId, input.pageVersion);
       raw = page.schema as unknown as Record<string, unknown>;
     } else {
       throw new BadRequestException('Either draftSchema or pageId must be provided');

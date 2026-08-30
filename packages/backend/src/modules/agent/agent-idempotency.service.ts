@@ -55,7 +55,7 @@ export class AgentIdempotencyService {
     return JSON.stringify({
       instruction: dto.instruction.trim(),
       pageId: dto.pageId?.trim(),
-      version: dto.version,
+      version: dto.pageVersion,
       selectedId: dto.selectedId?.trim(),
       responseMode: dto.responseMode ?? 'schema',
       sessionId: dto.sessionId?.trim(),

@@ -168,7 +168,7 @@ export class AgentRoutingService {
     classification: AgentIntentClassification,
   ): Promise<AgentRouteDecision | undefined> {
     if (classification.mode === 'patch') {
-      if (!dto.pageId?.trim() || dto.version === undefined) {
+      if (!dto.pageId?.trim() || dto.pageVersion === undefined) {
         this.logger.warn(
           `[${traceId}] llm intent chose patch but page context is missing, fallback to rules`,
         );
@@ -187,7 +187,7 @@ export class AgentRoutingService {
     }
 
     const prefetchedFocusContext =
-      classification.needsPageContext && dto.pageId?.trim() && dto.version !== undefined
+      classification.needsPageContext && dto.pageId?.trim() && dto.pageVersion !== undefined
         ? await this.prefetchFocusContext(dto)
         : undefined;
 
@@ -235,10 +235,10 @@ export class AgentRoutingService {
 
     if (this.isPageQuestionIntent(dto.instruction)) {
       const prefetchedFocusContext =
-        dto.pageId?.trim() && dto.version !== undefined
+        dto.pageId?.trim() && dto.pageVersion !== undefined
           ? await this.contextAssembler.assemble({
               pageId: dto.pageId,
-              version: dto.version,
+              pageVersion: dto.pageVersion,
               draftSchema: dto.draftSchema,
               selectedId: dto.selectedId,
               instruction: dto.instruction,
@@ -255,13 +255,13 @@ export class AgentRoutingService {
       );
     }
 
-    if (!dto.pageId?.trim() || dto.version === undefined) {
+    if (!dto.pageId?.trim() || dto.pageVersion === undefined) {
       return this.createDecision(dto, traceId, requestedMode, 'schema', 'missing_page_context');
     }
 
     const prefetchedFocusContext = await this.contextAssembler.assemble({
       pageId: dto.pageId,
-      version: dto.version,
+      pageVersion: dto.pageVersion,
       draftSchema: dto.draftSchema,
       selectedId: dto.selectedId,
       instruction: dto.instruction,
@@ -318,7 +318,7 @@ export class AgentRoutingService {
   private prefetchFocusContext(dto: AgentEditRequestDto): Promise<FocusContextResult> {
     return this.contextAssembler.assemble({
       pageId: dto.pageId,
-      version: dto.version,
+      pageVersion: dto.pageVersion,
       draftSchema: dto.draftSchema,
       selectedId: dto.selectedId,
       instruction: dto.instruction,

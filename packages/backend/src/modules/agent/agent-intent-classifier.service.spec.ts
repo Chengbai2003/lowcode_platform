@@ -34,7 +34,7 @@ describe('AgentIntentClassifierService', () => {
       {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button-1',
         draftSchema: {
           rootId: 'root',
@@ -75,7 +75,7 @@ describe('AgentIntentClassifierService', () => {
         {
           instruction: '这个页面是做什么的？',
           pageId: 'page-1',
-          version: 3,
+          pageVersion: 3,
         },
         'agent-trace',
       ),

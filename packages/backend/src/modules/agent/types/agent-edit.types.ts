@@ -99,7 +99,7 @@ export interface AgentEditSchemaResponse {
   warnings: string[];
   usage?: AgentUsage;
   pageId?: string;
-  version?: number;
+  pageVersion?: number;
   selectedId?: string;
   traceId: string;
   route: AgentRouteInfo;
@@ -133,8 +133,8 @@ export interface AgentPatchRiskAssessment {
 export interface AgentEditPatchResponse {
   mode: 'patch';
   pageId?: string;
-  baseVersion?: number;
-  resolvedVersion?: number;
+  basePageVersion?: number;
+  resolvedPageVersion?: number;
   resolvedSelectedId?: string;
   patch: EditorPatchOperation[];
   previewSchema: A2UISchema;

@@ -155,8 +155,8 @@ export interface AgentPatchRiskAssessment {
 export interface AgentEditPatchResponse {
   mode: 'patch';
   pageId?: string;
-  baseVersion?: number;
-  resolvedVersion?: number;
+  basePageVersion?: number;
+  resolvedPageVersion?: number;
   resolvedSelectedId?: string;
   patch: EditorPatchOperation[];
   previewSchema: A2UISchema;
@@ -258,7 +258,7 @@ export interface AgentEditRequest {
   modelId?: string; // 指定使用的模型 ID
   provider?: string;
   pageId?: string;
-  version?: number;
+  pageVersion?: number;
   selectedId?: string;
   draftSchema?: A2UISchema;
   conversationHistory?: AgentConversationMessage[];

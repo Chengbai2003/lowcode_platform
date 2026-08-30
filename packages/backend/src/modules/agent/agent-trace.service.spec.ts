@@ -80,7 +80,7 @@ describe('AgentTraceService', () => {
     traceService.startTrace('agent-expired', {
       instruction: '过期 trace',
       pageId: 'page-1',
-      version: 3,
+      pageVersion: 3,
       responseMode: 'patch',
     });
     traceService.recordDone('agent-expired', true);
@@ -90,7 +90,7 @@ describe('AgentTraceService', () => {
     traceService.startTrace('agent-success', {
       instruction: '把按钮改成提交',
       pageId: 'page-1',
-      version: 3,
+      pageVersion: 3,
       responseMode: 'patch',
     });
     traceService.recordResult('agent-success', {
@@ -129,7 +129,7 @@ describe('AgentTraceService', () => {
     traceService.startTrace('agent-failure', {
       instruction: '把所有按钮都隐藏',
       pageId: 'page-1',
-      version: 3,
+      pageVersion: 3,
       responseMode: 'patch',
     });
     traceService.recordError('agent-failure', {
@@ -153,7 +153,7 @@ describe('AgentTraceService', () => {
       confirmationBlockedCount: 0,
       averageDurationMs: 0,
       averageToolCallCount: 0,
-      versionConflictCount: 1,
+      pageVersionConflictCount: 1,
     });
 
     jest.useRealTimers();

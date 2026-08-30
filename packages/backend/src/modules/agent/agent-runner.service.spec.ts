@@ -26,8 +26,8 @@ import { AgentTraceService } from './agent-trace.service';
 function createBaseContext(): ToolExecutionContext {
   return {
     pageId: 'page-1',
-    version: 3,
-    resolvedVersion: 3,
+    basePageVersion: 3,
+    resolvedPageVersion: 3,
     draftSchema: {
       schemaVersion: 0,
       rootId: 'root',
@@ -139,8 +139,8 @@ function createBatchContext(): ToolExecutionContext {
   const schema = createBatchSchema();
   return {
     pageId: 'page-1',
-    version: 3,
-    resolvedVersion: 3,
+    basePageVersion: 3,
+    resolvedPageVersion: 3,
     draftSchema: schema,
     workingSchema: schema,
     accumulatedPatch: [],
@@ -179,8 +179,8 @@ function createMixedCollectionContext(): ToolExecutionContext {
   const schema = createMixedCollectionSchema();
   return {
     pageId: 'page-1',
-    version: 3,
-    resolvedVersion: 3,
+    basePageVersion: 3,
+    resolvedPageVersion: 3,
     draftSchema: schema,
     workingSchema: schema,
     accumulatedPatch: [],
@@ -647,7 +647,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'patch',
       },
@@ -696,7 +696,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         responseMode: 'patch',
       },
@@ -763,7 +763,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把提交按钮改一下',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'patch',
       },
       'request-2',
@@ -799,7 +799,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把那个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'patch',
       },
       'request-3',
@@ -833,7 +833,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '修改全部表单 label',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         responseMode: 'patch',
       },
       'request-collection-clarify',
@@ -858,7 +858,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-1',
         responseMode: 'patch',
@@ -884,7 +884,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-2',
         responseMode: 'patch',
@@ -903,7 +903,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-2',
         confirmedIntentId: confirmedOption!.intentId,
@@ -936,7 +936,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-multi',
         responseMode: 'patch',
@@ -948,7 +948,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-multi',
         responseMode: 'patch',
@@ -974,7 +974,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-multi',
         confirmedIntentId: firstConfirmedOption!.intentId,
@@ -997,7 +997,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-intent-invalid',
         responseMode: 'patch',
@@ -1017,7 +1017,7 @@ describe('AgentRunnerService', () => {
         {
           instruction: '把所有字段的 label 宽度改成 200',
           pageId: 'page-1',
-          version: 3,
+          pageVersion: 3,
           selectedId: 'root',
           sessionId: 'session-intent-invalid',
           confirmedIntentId: confirmedOption!.intentId,
@@ -1039,7 +1039,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '将当前表单下所有表单项 label 宽度设置为 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-batch-1',
         responseMode: 'patch',
@@ -1095,7 +1095,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '将当前表单下所有表单项 label 宽度设置为 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-batch-2',
         responseMode: 'patch',
@@ -1111,7 +1111,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '将当前表单下所有表单项 label 宽度设置为 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-batch-2',
         confirmedScopeId: scopeResult.scopeConfirmationId,
@@ -1147,7 +1147,7 @@ describe('AgentRunnerService', () => {
       {
         instruction: '将当前表单下所有表单项 label 宽度设置为 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'session-batch-3',
         responseMode: 'patch',
@@ -1166,7 +1166,7 @@ describe('AgentRunnerService', () => {
         {
           instruction: '将当前表单下所有表单项 label 宽度设置为 200',
           pageId: 'page-1',
-          version: 3,
+          pageVersion: 3,
           selectedId: 'root',
           sessionId: 'session-batch-3',
           confirmedScopeId: scopeResult.scopeConfirmationId,
@@ -1195,7 +1195,7 @@ describe('AgentRunnerService', () => {
         {
           instruction: '看看这个页面',
           pageId: 'page-1',
-          version: 3,
+          pageVersion: 3,
           selectedId: 'button',
           responseMode: 'patch',
         },
@@ -1262,7 +1262,7 @@ describe('AgentRunnerService', () => {
         {
           instruction: '调整通过按钮文本为 pass',
           pageId: 'page-1',
-          version: 3,
+          pageVersion: 3,
           responseMode: 'patch',
         },
         'request-5',
@@ -1327,8 +1327,8 @@ describe('AgentRunnerService', () => {
         (sum, trace) => sum + ((trace.finishedAt ?? trace.startedAt) - trace.startedAt),
         0,
       );
-      const versionConflictCount = traces.reduce(
-        (sum, trace) => sum + trace.versionConflictCount,
+      const pageVersionConflictCount = traces.reduce(
+        (sum, trace) => sum + trace.pageVersionConflictCount,
         0,
       );
       const finalMode = lastTrace.error ? 'error' : (lastTrace.result?.mode ?? 'unknown');
@@ -1350,7 +1350,7 @@ describe('AgentRunnerService', () => {
         scopeConfirmationTriggered: stageSequence.includes('awaiting_scope_confirmation'),
         toolCallCount,
         durationMs,
-        versionConflictCount,
+        pageVersionConflictCount,
         outcome,
       };
     };
@@ -1362,7 +1362,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-simple-text', {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         provider: 'openai',
         responseMode: 'patch',
@@ -1380,7 +1380,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-explicit-scope', {
         instruction: '把当前表单下所有表单项的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-explicit-scope',
         provider: 'openai',
@@ -1399,7 +1399,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-ambiguous-field', {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-ambiguous-field',
         provider: 'openai',
@@ -1418,7 +1418,7 @@ describe('AgentRunnerService', () => {
       const intentStep = await runStep(harness, 'eval-intent-scope-1', {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-intent-scope',
         provider: 'openai',
@@ -1437,7 +1437,7 @@ describe('AgentRunnerService', () => {
       const scopeStep = await runStep(harness, 'eval-intent-scope-2', {
         instruction: '把所有字段的 label 宽度改成 200',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-intent-scope',
         confirmedIntentId: confirmedOption!.intentId,
@@ -1479,7 +1479,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-no-match', {
         instruction: '把所有按钮都隐藏',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-no-match',
         provider: 'openai',
@@ -1507,7 +1507,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-version-conflict', {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         provider: 'openai',
         responseMode: 'patch',
@@ -1559,7 +1559,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-tool-failure', {
         instruction: '调整通过按钮文本为 pass',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         provider: 'openai',
         responseMode: 'patch',
       });
@@ -1577,7 +1577,7 @@ describe('AgentRunnerService', () => {
       const scopeStep = await runStep(harness, 'eval-guard-scope', {
         instruction: '把当前表单下所有表单项都隐藏',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-guard',
         provider: 'openai',
@@ -1613,7 +1613,7 @@ describe('AgentRunnerService', () => {
       const guardStep = await runStep(harness, 'eval-guard-patch', {
         instruction: '把当前表单下所有表单项都隐藏',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'form',
         sessionId: 'eval-session-guard',
         confirmedScopeId: scopeStep.response.scopeConfirmationId,
@@ -1633,7 +1633,7 @@ describe('AgentRunnerService', () => {
       const request = {
         instruction: '把这个按钮改成提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'button',
         provider: 'openai',
         responseMode: 'patch' as const,
@@ -1657,7 +1657,7 @@ describe('AgentRunnerService', () => {
       const step = await runStep(harness, 'eval-mixed-hide', {
         instruction: '把所有按钮和字段都隐藏',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'root',
         sessionId: 'eval-session-mixed-hide',
         provider: 'openai',
@@ -1723,7 +1723,7 @@ describe('AgentRunnerService', () => {
         expect.objectContaining({
           name: 'version_conflict_retry',
           finalMode: 'patch',
-          versionConflictCount: 1,
+          pageVersionConflictCount: 1,
           outcome: 'success',
         }),
         expect.objectContaining({
@@ -1768,7 +1768,7 @@ describe('AgentRunnerService', () => {
         successCount: 4,
         failureCount: 3,
         confirmationBlockedCount: 6,
-        versionConflictCount: 1,
+        pageVersionConflictCount: 1,
       }),
     );
   });

@@ -6,5 +6,5 @@ export class GetPageSchemaDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  version?: number;
+  pageVersion?: number;
 }

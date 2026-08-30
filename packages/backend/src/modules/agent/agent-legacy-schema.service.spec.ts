@@ -116,7 +116,7 @@ describe('AgentLegacySchemaService', () => {
       {
         instruction: '把按钮文案改成立即提交',
         pageId: 'page-1',
-        version: 3,
+        pageVersion: 3,
         selectedId: 'btn_submit',
       },
       'agent-trace',
@@ -124,7 +124,7 @@ describe('AgentLegacySchemaService', () => {
 
     expect(contextAssembler.assemble).toHaveBeenCalledWith({
       pageId: 'page-1',
-      version: 3,
+      pageVersion: 3,
       draftSchema: undefined,
       selectedId: 'btn_submit',
       instruction: '把按钮文案改成立即提交',
