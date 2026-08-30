@@ -158,12 +158,23 @@ Manifest 是 Agent 生成提示和 Validator 的共同来源，但 Prompt 不是
 ```ts
 interface ComponentRuntimeBridge {
   resolveValue(value: unknown, scope?: unknown): unknown;
-  dispatchFlow(flowId: string, input?: unknown): Promise<unknown>;
+  executeActions(
+    actions: ActionList,
+    event?: unknown,
+    extraContext?: Record<string, unknown>,
+  ): Promise<unknown>;
   getResource(resourceId: string): Readonly<DataResourceState>;
 }
 ```
 
 这可以消除当前 Table 等组件对 Renderer 内部实现的反向依赖。
+
+> 实施说明（M0-4c）：`dispatchFlow` 面向 M1a 的具名 Flow，落地前以
+> `executeActions`（执行 Schema 内联 ActionList，覆盖表格行按钮等现状）代替；
+> `getResource` 已按 M1b 前默认 deny 实现（冻结的 error 态，fail-close）。
+> 桥由 Renderer 挂载时创建，经 `ComponentRuntimeBridgeContext` /
+> `useComponentRuntimeBridge` 注入；在 Renderer 之外直接渲染组件时桥为
+> `null`，组件需自行降级（如禁用交互按钮）。
 
 ## 最小消费验收
 
@@ -194,4 +205,4 @@ createRoot(document.getElementById('root')!).render(
 
 M0-4 Scope A 已落地（Issue #19 / M0-4a）：`@lowcode-platform/renderer` 独立包（`packages/renderer`）承接原 `packages/frontend/src/renderer` 的全部渲染实现与测试；React/ReactDOM 为 peerDependencies；运行态执行类型（`ActionHandler`/`ExecutionContext`/`ActionResult`/`DSLExecutor` 等）随包内 `dsl` 子路径（`@lowcode-platform/renderer/dsl`）导出；公开入口导出 `PageRenderer`，`createRendererHost`（`@lowcode-platform/renderer/host`）提供最小 React Host；渲染入口保持 `requireSupportedPageSchema` fail-close；`pnpm check:architecture` 强制 Renderer 包不依赖 Frontend/Editor、不把运行时对象挂到可变 `window` 全局；前端消费面全部改从包导入，CI 增加 `build:packages` 守护 workspace 包 dist 的 rollup 可消费性。
 
-尚未完成：Scope B `preset-antd`（`builtInComponents` 仍在 Renderer 包内临时依赖 antd Typography）、Scope C ComponentRuntimeBridge（Table 等组件仍直接导入 `DSLExecutor`/`resolveValue`）、Scope D RuntimeSession（`createRuntimeSession`/`dispose`，本文示例中的 `host`/`documentSessionId` 形态）、Scope E HostCapabilities。
+尚未完成：Scope B `preset-antd`（`builtInComponents` 仍在 Renderer 包内临时依赖 antd Typography）、Scope D RuntimeSession（`createRuntimeSession`/`dispose`，本文示例中的 `host`/`documentSessionId` 形态）、Scope E HostCapabilities。Scope C ComponentRuntimeBridge 已落地（M0-4c）：Table 已改经 `useComponentRuntimeBridge` 消费受控能力，架构门禁禁止组件库 import 执行器并正向断言 Table 走桥。

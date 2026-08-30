@@ -28,6 +28,9 @@ export * from './executor/parser/valueResolver';
 export * from './utils/schema-validator';
 export * from './utils/schema-auto-fix';
 export * from './schemaValidation';
+export * from './bridge/ComponentRuntimeBridgeContext';
+export * from './bridge/createComponentRuntimeBridge';
+export type { ComponentRuntimeBridge, DataResourceState } from './bridge/ComponentRuntimeBridge';
 export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from './types';
 
 // 稳定公开别名：宿主只应依赖 PageRenderer 这个名字。
