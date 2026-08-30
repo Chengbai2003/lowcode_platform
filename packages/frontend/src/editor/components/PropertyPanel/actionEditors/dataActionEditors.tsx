@@ -1,6 +1,8 @@
-/**
+/*
+
  * 数据类 Action 编辑器（SetValue, ApiCall）
  */
+import type { JsonValue } from '@lowcode-platform/schema-contract';
 import {
   ActionUpdate,
   SetValueActionItem,
@@ -32,7 +34,9 @@ export const SetValueActionEditor = ({
       <input
         value={formatValue(action.value)}
         aria-label="字段值"
-        onChange={(event) => updateAction({ value: parseValueInput(event.target.value) })}
+        onChange={(event) =>
+          updateAction({ value: parseValueInput(event.target.value) as JsonValue })
+        }
       />
     </div>
     <label className={styles.checkboxInline}>
@@ -61,7 +65,9 @@ export const ApiCallActionEditor = ({
       <input
         value={formatValue(action.url)}
         aria-label="接口地址"
-        onChange={(event) => updateAction({ url: parseValueInput(event.target.value) })}
+        onChange={(event) =>
+          updateAction({ url: parseValueInput(event.target.value) as JsonValue })
+        }
       />
     </div>
     <div className={styles.actionFieldRow}>

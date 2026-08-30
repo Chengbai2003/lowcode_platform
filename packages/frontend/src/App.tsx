@@ -5,6 +5,7 @@ import type { A2UISchema, Action } from './types';
  * 登录注册页面的初始 Schema (A2UI Flat Structure)
  */
 const loginPageSchema: A2UISchema = {
+  schemaVersion: 0,
   rootId: 'root',
   components: {
     root: {

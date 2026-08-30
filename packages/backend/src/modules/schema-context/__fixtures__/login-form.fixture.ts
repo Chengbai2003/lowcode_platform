@@ -1,7 +1,7 @@
 import { A2UISchema } from '../types/schema.types';
 
 export const LOGIN_FORM_FIXTURE: A2UISchema = {
-  version: 1,
+  schemaVersion: 0,
   rootId: 'page_root',
   components: {
     page_root: { id: 'page_root', type: 'Page', childrenIds: ['container_main'] },

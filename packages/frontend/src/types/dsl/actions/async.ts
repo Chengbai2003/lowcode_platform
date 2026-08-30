@@ -1,40 +1,5 @@
-import type { Action } from '../action-union';
-import type { Value } from '../context';
-
 /**
- * 异步操作 Actions
+ * async Action 类型 —— 现为 Contract 单一真相源的 re-export（Issue #16 / M0-1）。
+ * 本地重复定义已删除；字段语义说明见 @lowcode-platform/schema-contract。
  */
-
-/**
- * API 调用 Action
- */
-export type ApiCallAction = {
-  type: 'apiCall';
-  /** 请求 URL */
-  url: Value;
-  /** 请求方法 */
-  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  /** 请求体 */
-  body?: Value;
-  /** 请求头 */
-  headers?: Record<string, Value>;
-  /** URL 参数 */
-  params?: Record<string, Value>;
-  /** 响应结果存储字段 */
-  resultTo?: string;
-  /** 成功回调 */
-  onSuccess?: Action[];
-  /** 失败回调 */
-  onError?: Action[];
-  /** 是否自动显示错误信息 */
-  showError?: boolean;
-};
-
-/**
- * 延迟 Action
- */
-export type DelayAction = {
-  type: 'delay';
-  /** 延迟时间(ms) */
-  ms?: number;
-};
+export type { ApiCallAction, DelayAction } from '@lowcode-platform/schema-contract';

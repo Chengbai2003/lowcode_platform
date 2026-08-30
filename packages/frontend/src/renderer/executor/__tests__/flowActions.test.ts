@@ -83,7 +83,7 @@ describe('flowActions', () => {
 
         const action: IfAction = {
           type: 'if',
-          condition: value,
+          condition: value as import('@lowcode-platform/schema-contract').JsonValue,
           then: [createLogAction('then')],
         };
 
@@ -106,7 +106,7 @@ describe('flowActions', () => {
 
         const action: IfAction = {
           type: 'if',
-          condition: value,
+          condition: value as import('@lowcode-platform/schema-contract').JsonValue,
           then: [createLogAction('then')],
           else: [createLogAction('else')],
         };

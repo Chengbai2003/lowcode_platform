@@ -46,7 +46,8 @@ export type LogActionItem = Extract<Action, { type: typeof ACTION_TYPE.log }>;
 export type IfActionItem = Extract<Action, { type: typeof ACTION_TYPE.if }>;
 export type LoopActionItem = Extract<Action, { type: typeof ACTION_TYPE.loop }>;
 /** 历史 customScript 类型，仅用于展示禁用态 */
-export type HistoricCustomScriptActionItem = Extract<Action, { type: 'customScript' }>;
+/** 历史customScript动作形状：Schema联合已移除该类型，仅用于只读提示 */
+export type HistoricCustomScriptActionItem = { type: 'customScript'; code?: string };
 
 /** Action 类型配置 */
 export const ACTION_TYPE_CONFIG: Record<

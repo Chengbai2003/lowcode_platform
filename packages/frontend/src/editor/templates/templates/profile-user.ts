@@ -5,7 +5,7 @@ import type { Template } from '../types';
 import type { A2UISchema } from '../../../types/schema';
 
 const schema: A2UISchema = {
-  version: 1,
+  schemaVersion: 0,
   rootId: 'page-profile',
   components: {
     'page-profile': {

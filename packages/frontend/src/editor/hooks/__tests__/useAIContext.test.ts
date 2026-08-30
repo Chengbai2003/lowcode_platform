@@ -25,6 +25,7 @@ describe('useAIContext', () => {
 
   it('should return empty context when no component selected', () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {
@@ -49,6 +50,7 @@ describe('useAIContext', () => {
 
   it('should return context when component is selected', () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: {

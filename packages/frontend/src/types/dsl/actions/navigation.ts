@@ -1,14 +1,5 @@
-import type { Value } from '../context';
-
 /**
- * 导航 Actions
+ * navigation Action 类型 —— 现为 Contract 单一真相源的 re-export（Issue #16 / M0-1）。
+ * 本地重复定义已删除；字段语义说明见 @lowcode-platform/schema-contract。
  */
-export type NavigateAction = {
-  type: 'navigate';
-  /** 目标路径 */
-  to: Value;
-  /** 路径参数 */
-  params?: Record<string, Value>;
-  /** 是否替换当前历史记录 */
-  replace?: boolean;
-};
+export type { NavigateAction } from '@lowcode-platform/schema-contract';

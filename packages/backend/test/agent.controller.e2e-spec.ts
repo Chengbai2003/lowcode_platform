@@ -34,7 +34,7 @@ import { AgentScopeConfirmationService } from '../src/modules/agent/agent-scope-
 
 function createBatchSchema() {
   return {
-    version: 4,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: {
@@ -84,7 +84,7 @@ describe('AgentController (e2e)', () => {
       snapshotId: 'page-1-v4',
       savedAt: '2026-03-20T00:00:00.000Z',
       schema: {
-        version: 4,
+        schemaVersion: 0,
         rootId: 'root',
         components: {
           root: {
@@ -118,7 +118,7 @@ describe('AgentController (e2e)', () => {
       const baseSchema =
         input.draftSchema ??
         ({
-          version: 4,
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: { id: 'root', type: 'Page', childrenIds: ['form'] },
@@ -157,7 +157,6 @@ describe('AgentController (e2e)', () => {
               totalComponents: 3,
               maxDepth: 2,
               rootId: 'root',
-              version: 4,
             },
             estimatedTokens: 16,
           },
@@ -199,7 +198,6 @@ describe('AgentController (e2e)', () => {
               totalComponents: 3,
               maxDepth: 2,
               rootId: 'root',
-              version: 4,
             },
             estimatedTokens: 20,
           },
@@ -741,7 +739,7 @@ describe('AgentController (e2e)', () => {
     (contextAssemblerMock.assemble as jest.Mock).mockResolvedValueOnce({
       mode: 'candidates',
       schema: {
-        version: 4,
+        schemaVersion: 0,
         rootId: 'root',
         components: {
           root: { id: 'root', type: 'Page', childrenIds: ['card-primary', 'card-secondary'] },
@@ -972,6 +970,7 @@ describe('AgentController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         draftSchema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: { id: 'root', type: 'Page', childrenIds: ['button'] },
@@ -993,6 +992,7 @@ describe('AgentController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         draftSchema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: { id: 'root', type: 'Page', childrenIds: ['button'] },
@@ -1022,6 +1022,7 @@ describe('AgentController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         draftSchema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: { id: 'root', type: 'Page', childrenIds: ['form'] },
@@ -1065,6 +1066,7 @@ describe('AgentController (e2e)', () => {
       .set('Authorization', `Bearer ${TEST_SECRET}`)
       .send({
         draftSchema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: { id: 'root', type: 'Page', childrenIds: ['button'] },
@@ -1087,6 +1089,7 @@ describe('AgentController (e2e)', () => {
       .send({
         autoFix: true,
         draftSchema: {
+          schemaVersion: 0,
           rootId: 'root',
           components: {
             root: { id: 'root', type: 'Page', childrenIds: ['form'] },

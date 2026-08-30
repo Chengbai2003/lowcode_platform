@@ -40,6 +40,7 @@ describe('ServerAIService', () => {
       version: 3,
       selectedId: 'btn-submit',
       draftSchema: {
+        schemaVersion: 0,
         rootId: 'root',
         components: {
           root: {
@@ -65,6 +66,7 @@ describe('ServerAIService', () => {
       version: 3,
       selectedId: 'btn-submit',
       draftSchema: {
+        schemaVersion: 0,
         rootId: 'root',
         components: {
           root: {

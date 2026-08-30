@@ -6,7 +6,7 @@ import type { A2UISchema } from '../../../types/schema';
 import { createHiddenDataNode } from '../reactiveSchema';
 
 const schema: A2UISchema = {
-  version: 1,
+  schemaVersion: 0,
   rootId: 'page-detail',
   components: {
     ticketDetail: createHiddenDataNode('ticketDetail', {
@@ -26,7 +26,7 @@ const schema: A2UISchema = {
       props: {
         style: { padding: '24px', backgroundColor: '#f0f2f5', minHeight: '100vh' },
       },
-      childrenIds: ['header-card', 'info-card', 'logs-card'],
+      childrenIds: ['header-card', 'info-card', 'logs-card', 'ticketDetail', 'ticketLogs'],
     },
     'header-card': {
       id: 'header-card',

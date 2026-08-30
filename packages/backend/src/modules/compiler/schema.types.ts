@@ -11,7 +11,8 @@ export interface A2UIComponent {
 }
 
 export interface A2UISchema {
-  version?: number;
+  /** DSL 格式版本（M0 固定 0）；页面内容修订版本不在此对象内 */
+  schemaVersion: number;
   rootId: string;
   components: Record<string, A2UIComponent>;
 }

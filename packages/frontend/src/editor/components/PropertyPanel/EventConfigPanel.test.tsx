@@ -5,6 +5,7 @@ import type { A2UISchema, FeedbackAction } from '../../../types';
 import { EventConfigPanel } from './EventConfigPanel';
 
 const createSchema = (): A2UISchema => ({
+  schemaVersion: 0,
   rootId: 'button-1',
   components: {
     'button-1': {

@@ -110,7 +110,7 @@ import { LowcodeEditor } from './LowcodeEditor';
 
 describe('LowcodeEditor handleAIPatchApply payload guard', () => {
   const baseSchema: A2UISchema = {
-    version: 3,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: { id: 'root', type: 'Page', childrenIds: ['button'] },

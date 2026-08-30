@@ -8,7 +8,6 @@ import type { AgentPatchApplyPayload } from '../components/ai-assistant/types/ai
 
 interface Params {
   allComponents: Record<string, React.ComponentType<Record<string, unknown>>>;
-  syncSchemaVersion: (next: A2UISchema, targetVersion?: number | null) => A2UISchema;
   handleSchemaUpdate: (s: A2UISchema) => void;
   forceUpdateSchema: (s: A2UISchema, desc: string) => void;
   executeSchemaCommand: (c: ReturnType<typeof createPatchCommand>) => void;
@@ -21,7 +20,6 @@ interface Params {
 
 export function useAIPatch({
   allComponents,
-  syncSchemaVersion,
   handleSchemaUpdate,
   forceUpdateSchema,
   executeSchemaCommand,
@@ -45,11 +43,11 @@ export function useAIPatch({
         message.info(`已自动修复 ${result.fixes.length} 处 Schema 问题`);
       }
       useEditorStore.getState().bumpSchemaRevision();
-      forceUpdateSchema(syncSchemaVersion(result.data), 'AI 更新 Schema');
+      forceUpdateSchema(result.data, 'AI 更新 Schema');
       message.success('Schema 已更新！');
       return true;
     },
-    [allComponents, forceUpdateSchema, onError, syncSchemaVersion],
+    [allComponents, forceUpdateSchema, onError],
   );
 
   const describeAIPatch = useCallback((instruction: string, patchCount: number) => {
@@ -87,7 +85,7 @@ export function useAIPatch({
         return null;
       }
       try {
-        const baseSchema = syncSchemaVersion(schemaRef.current);
+        const baseSchema = schemaRef.current;
         const cur2 = useEditorStore.getState();
         if (
           (sourcePageId ?? null) !== (cur2.currentPageId ?? null) ||
@@ -132,7 +130,6 @@ export function useAIPatch({
       handleSchemaUpdate,
       onError,
       selectComponent,
-      syncSchemaVersion,
       mountedRef,
       pageVersionRef,
       schemaRef,

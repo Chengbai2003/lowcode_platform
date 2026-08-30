@@ -44,7 +44,7 @@ vi.mock('../../../hooks', () => ({
 
 describe('useAIAssistantChat', () => {
   const baseSchema: A2UISchema = {
-    version: 3,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: {
@@ -455,7 +455,7 @@ describe('useAIAssistantChat', () => {
 
   it('stores scope confirmation highlights and confirms batch patch generation in-place', async () => {
     const batchSchema: A2UISchema = {
-      version: 3,
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { id: 'root', type: 'Page', childrenIds: ['form'] },
@@ -658,7 +658,7 @@ describe('useAIAssistantChat', () => {
 
   it('confirms ambiguous intent in-place before entering scope confirmation', async () => {
     const batchSchema: A2UISchema = {
-      version: 3,
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { id: 'root', type: 'Page', childrenIds: ['form'] },

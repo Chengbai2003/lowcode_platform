@@ -251,7 +251,7 @@ export class SchemaValidator {
 
         // 自动修复
         if (!this.options.strict && this.fixedSchema) {
-          this.fixedSchema.components[key].id = key;
+          (this.fixedSchema.components[key] as { id: string }).id = key;
           this.addFix(`修正组件 "${key}" 的 id 为 "${key}"`);
         }
       }
@@ -351,7 +351,7 @@ export class SchemaValidator {
 
             // 清理危险值
             if (this.fixedSchema) {
-              delete this.fixedSchema.components[id].props![propKey];
+              delete (this.fixedSchema.components[id].props as Record<string, unknown>)[propKey];
               this.addFix(`移除组件 "${id}" 的危险属性 "${propKey}"`);
             }
           }

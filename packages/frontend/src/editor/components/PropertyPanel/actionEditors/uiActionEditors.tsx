@@ -1,6 +1,7 @@
 /**
  * UI 类 Action 编辑器（Feedback, Dialog）
  */
+import type { JsonValue } from '@lowcode-platform/schema-contract';
 import {
   ActionUpdate,
   FeedbackActionItem,
@@ -61,7 +62,9 @@ export const FeedbackActionEditor = ({
         <input
           value={formatValue(action.content)}
           aria-label="提示内容"
-          onChange={(event) => updateAction({ content: parseValueInput(event.target.value) })}
+          onChange={(event) =>
+            updateAction({ content: parseValueInput(event.target.value) as JsonValue })
+          }
         />
       </div>
       {kind === 'notification' && (
@@ -70,7 +73,9 @@ export const FeedbackActionEditor = ({
           <input
             value={formatValue(action.title)}
             aria-label="提示标题"
-            onChange={(event) => updateAction({ title: parseValueInput(event.target.value) })}
+            onChange={(event) =>
+              updateAction({ title: parseValueInput(event.target.value) as JsonValue })
+            }
           />
         </div>
       )}
@@ -108,7 +113,9 @@ export const DialogActionEditor = ({
         <input
           value={formatValue(action.title)}
           aria-label="弹窗标题"
-          onChange={(event) => updateAction({ title: parseValueInput(event.target.value) })}
+          onChange={(event) =>
+            updateAction({ title: parseValueInput(event.target.value) as JsonValue })
+          }
         />
       </div>
     </div>
@@ -117,7 +124,9 @@ export const DialogActionEditor = ({
       <input
         value={formatValue(action.content)}
         aria-label="弹窗内容"
-        onChange={(event) => updateAction({ content: parseValueInput(event.target.value) })}
+        onChange={(event) =>
+          updateAction({ content: parseValueInput(event.target.value) as JsonValue })
+        }
       />
     </div>
   </div>

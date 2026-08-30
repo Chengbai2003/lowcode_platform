@@ -12,7 +12,7 @@ const A2UIComponentSchema = z.object({
 
 export const A2UISchemaValidator = z
   .object({
-    version: z.number().default(1),
+    schemaVersion: z.literal(0),
     rootId: z.string().min(1),
     components: z.record(z.string(), A2UIComponentSchema),
   })

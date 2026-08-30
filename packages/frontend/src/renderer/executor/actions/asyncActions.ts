@@ -174,7 +174,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     // 成功回调
     if (onSuccess && executor) {
       const typedExecutor = executor as {
-        execute: (actions: Action[], ctx: unknown) => Promise<void>;
+        execute: (actions: readonly Action[], ctx: unknown) => Promise<void>;
       };
       await typedExecutor.execute(onSuccess, { ...context, response });
     }
@@ -194,7 +194,7 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     // 错误回调
     if (onError && executor) {
       const typedExecutor = executor as {
-        execute: (actions: Action[], ctx: unknown) => Promise<void>;
+        execute: (actions: readonly Action[], ctx: unknown) => Promise<void>;
       };
       await typedExecutor.execute(onError, {
         ...context,

@@ -5,7 +5,7 @@ import { applyPatchToSchema } from './patchAdapter';
 
 function createSchema(): A2UISchema {
   return {
-    version: 5,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: {

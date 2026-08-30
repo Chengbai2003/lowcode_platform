@@ -32,7 +32,6 @@ import { useEditorActions } from './hooks/useEditorActions';
 import {
   applyComponentSnapshot as applyComponentSnapshotPure,
   extractSchemaSnapshot,
-  resolveSchemaVersion,
 } from './services/schemaSync';
 
 /**
@@ -67,15 +66,12 @@ function LowcodeEditorInner({
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
   const [pageVersion, setPageVersion] = useState<number | null>(null);
 
-  // ponytail ultra: useRef 稳定化 syncSchemaVersion，避免 pageVersion 抖动触发重请求
+  // ponytail ultra: pageVersionRef 稳定化，避免 pageVersion 抖动触发重请求；
+  // Schema 不再携带页面版本（M0-1），无需 schemaVersionRef
   const pageVersionRef = useRef(pageVersion);
-  const schemaVersionRef = useRef<number | undefined>(schema.version);
   useEffect(() => {
     pageVersionRef.current = pageVersion;
   }, [pageVersion]);
-  useEffect(() => {
-    schemaVersionRef.current = schema.version;
-  }, [schema.version]);
 
   // P0-5 TOCTOU atomic: mounted guard for unmount race + schema ref to avoid closure stale
   const mountedRef = useRef(true);
@@ -90,11 +86,6 @@ function LowcodeEditorInner({
     schemaRef.current = schema;
   }, [schema]);
 
-  const syncSchemaVersion = useCallback(
-    (nextSchema: A2UISchema, targetVersion?: number | null): A2UISchema =>
-      resolveSchemaVersion(nextSchema, targetVersion, pageVersionRef, schemaVersionRef),
-    [],
-  );
   const onErrorRef = useRef(onError);
   useEffect(() => {
     onErrorRef.current = onError;
@@ -208,12 +199,11 @@ function LowcodeEditorInner({
 
   const handleSchemaUpdate = useCallback(
     (newSchema: A2UISchema) => {
-      const normalizedSchema = syncSchemaVersion(newSchema);
-      setSchema(normalizedSchema);
+      setSchema(newSchema);
       useEditorStore.getState().bumpSchemaRevision();
-      onChange?.(normalizedSchema);
+      onChange?.(newSchema);
     },
-    [onChange, syncSchemaVersion],
+    [onChange],
   );
 
   const {
@@ -234,17 +224,17 @@ function LowcodeEditorInner({
   const handleSchemaChange = useCallback(
     (newSchema: A2UISchema) => {
       useEditorStore.getState().bumpSchemaRevision();
-      updateSchema(syncSchemaVersion(newSchema), '更新 Schema');
+      updateSchema(newSchema, '更新 Schema');
     },
-    [syncSchemaVersion, updateSchema],
+    [updateSchema],
   );
 
   const handleSchemaCommit = useCallback(
     (newSchema: A2UISchema) => {
       useEditorStore.getState().bumpSchemaRevision();
-      forceUpdateSchema(syncSchemaVersion(newSchema), '保存 Schema');
+      forceUpdateSchema(newSchema, '保存 Schema');
     },
-    [forceUpdateSchema, syncSchemaVersion],
+    [forceUpdateSchema],
   );
 
   useUndoRedoShortcuts({ onUndo: undo, onRedo: redo });
@@ -254,7 +244,6 @@ function LowcodeEditorInner({
     initialSchemaObj,
     setSchema,
     setPageVersion,
-    syncSchemaVersion,
     onErrorRef,
   });
 
@@ -262,7 +251,6 @@ function LowcodeEditorInner({
     pageId,
     schema,
     pageVersion,
-    syncSchemaVersion,
     setPageVersion,
     setSchema,
     setCompiledCode,
@@ -271,10 +259,10 @@ function LowcodeEditorInner({
   // 处理模板应用
   const handleApplyTemplate = useCallback(
     (templateSchema: A2UISchema) => {
-      forceUpdateSchema(syncSchemaVersion(templateSchema), '应用模板');
+      forceUpdateSchema(templateSchema, '应用模板');
       message.success('模板已应用！');
     },
-    [forceUpdateSchema, syncSchemaVersion],
+    [forceUpdateSchema],
   );
 
   // 合并自定义组件与默认注册表
@@ -292,7 +280,6 @@ function LowcodeEditorInner({
 
   const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({
     allComponents,
-    syncSchemaVersion,
     handleSchemaUpdate,
     forceUpdateSchema,
     executeSchemaCommand,

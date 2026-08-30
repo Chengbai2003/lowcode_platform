@@ -6,12 +6,13 @@ import type { A2UISchema } from '../../../types';
 
 function createSchema(id: string, type: string, props: Record<string, unknown> = {}): A2UISchema {
   return {
+    schemaVersion: 0,
     rootId: id,
     components: {
       [id]: {
         id,
         type,
-        props,
+        props: props as import('@lowcode-platform/schema-contract').JsonObject,
         childrenIds: [],
       },
     },
@@ -199,6 +200,7 @@ describe('PropertyPanel complex editors', () => {
   it('shows conflict hint when slot text and childrenIds both exist', () => {
     const onSchemaChange = vi.fn();
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'button-1',
       components: {
         'button-1': {

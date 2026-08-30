@@ -1,7 +1,7 @@
 /* Light theme is default, defined in :root */
 
 /* Dark theme overrides */
-[data-theme="dark"] {
+[data-theme='dark'] {
   /* Background colors */
   --bg-primary: #141414;
   --bg-secondary: #1f1f1f;

@@ -78,9 +78,7 @@ describe('compiler generator behavior', () => {
   });
 
   it('rejects customScript at compile entry', async () => {
-    expect(() => compileToCode(behaviorSchemas.customScriptSchema as any)).toThrow(
-      'customScript is not allowed',
-    );
+    expect(() => compileToCode(behaviorSchemas.customScriptSchema as any)).toThrow(/customScript/);
   });
 
   it('sanitizes unsafe navigate urls', async () => {

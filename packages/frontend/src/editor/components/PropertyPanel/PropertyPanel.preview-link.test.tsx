@@ -6,6 +6,7 @@ import { PropertyPanel } from './PropertyPanel';
 import { LowcodeProvider, Renderer } from '@/renderer';
 
 const createSchema = (): A2UISchema => ({
+  schemaVersion: 0,
   rootId: 'root',
   components: {
     root: {

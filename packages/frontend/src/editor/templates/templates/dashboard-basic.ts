@@ -6,7 +6,7 @@ import type { A2UISchema } from '../../../types/schema';
 import { createHiddenDataNode } from '../reactiveSchema';
 
 const schema: A2UISchema = {
-  version: 1,
+  schemaVersion: 0,
   rootId: 'page-dashboard',
   components: {
     dashboardScene: createHiddenDataNode('dashboardScene', {
@@ -30,7 +30,14 @@ const schema: A2UISchema = {
       props: {
         style: { padding: '24px', backgroundColor: '#f0f2f5', minHeight: '100vh' },
       },
-      childrenIds: ['dash-header', 'stat-row', 'content-row'],
+      childrenIds: [
+        'dash-header',
+        'stat-row',
+        'content-row',
+        'dashboardScene',
+        'dashboardMetrics',
+        'dashboardActivities',
+      ],
     },
     'dash-header': {
       id: 'dash-header',

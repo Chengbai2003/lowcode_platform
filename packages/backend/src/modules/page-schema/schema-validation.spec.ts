@@ -1,4 +1,5 @@
-import { assertValidPageSchema } from './schema-validation';
+import { BadRequestException } from '@nestjs/common';
+import { requireValidPageSchema } from './schema-validation';
 
 interface TestComponent {
   id?: string;
@@ -8,8 +9,13 @@ interface TestComponent {
   events?: Record<string, unknown>;
 }
 
-function createSchema(): { rootId: string; components: Record<string, TestComponent> } {
+function createSchema(): {
+  schemaVersion: 0;
+  rootId: string;
+  components: Record<string, TestComponent>;
+} {
   return {
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: { id: 'root', type: 'Page', childrenIds: ['child'] },
@@ -18,39 +24,53 @@ function createSchema(): { rootId: string; components: Record<string, TestCompon
   };
 }
 
-describe('assertValidPageSchema', () => {
-  it('rejects missing and mismatched component ids', () => {
+describe('requireValidPageSchema (Contract HTTP adapter)', () => {
+  it('returns a canonical deep-frozen schema for valid input', () => {
+    const input: unknown = createSchema();
+    const canonical = requireValidPageSchema(input);
+
+    expect(canonical).not.toBe(input);
+    expect(canonical.rootId).toBe('root');
+    expect(canonical.schemaVersion).toBe(0);
+    expect(Object.isFrozen(canonical)).toBe(true);
+    expect(Object.isFrozen(canonical.components.root)).toBe(true);
+
+    // 校验后变异原输入不影响 canonical 结果（TOCTOU 隔离）
+    (input as { components: Record<string, unknown> }).components.injected = {};
+    expect(canonical.components.injected).toBeUndefined();
+  });
+
+  it('rejects missing and mismatched component ids as 400', () => {
     const missingId = createSchema();
     delete missingId.components.child.id;
-    expect(() => assertValidPageSchema(missingId)).toThrow('Component child id is required');
+    expect(() => requireValidPageSchema(missingId)).toThrow(BadRequestException);
+    expect(() => requireValidPageSchema(missingId)).toThrow(/id is required/);
 
     const mismatchedId = createSchema();
     mismatchedId.components.child.id = 'other';
-    expect(() => assertValidPageSchema(mismatchedId)).toThrow(
-      'Component child id must match its key',
-    );
+    expect(() => requireValidPageSchema(mismatchedId)).toThrow(/must match its key/);
   });
 
   it('rejects duplicate children, cycles, multiple parents, and ordinary orphans', () => {
     const duplicateChild = createSchema();
     duplicateChild.components.root.childrenIds = ['child', 'child'];
-    expect(() => assertValidPageSchema(duplicateChild)).toThrow('more than once');
+    expect(() => requireValidPageSchema(duplicateChild)).toThrow(/more than once/);
 
     const cycle = createSchema();
     cycle.components.child.childrenIds = ['root'];
-    expect(() => assertValidPageSchema(cycle)).toThrow('component cycle');
+    expect(() => requireValidPageSchema(cycle)).toThrow(/component cycle/);
 
     const multipleParents = createSchema();
     multipleParents.components.other = { id: 'other', type: 'Div', childrenIds: ['child'] };
     multipleParents.components.root.childrenIds = ['child', 'other'];
-    expect(() => assertValidPageSchema(multipleParents)).toThrow('multiple parents');
+    expect(() => requireValidPageSchema(multipleParents)).toThrow(/multiple parents/);
 
     const orphan = createSchema();
     orphan.components.orphan = { id: 'orphan', type: 'Div', childrenIds: [] };
-    expect(() => assertValidPageSchema(orphan)).toThrow('orphaned components: orphan');
+    expect(() => requireValidPageSchema(orphan)).toThrow(/orphaned/);
   });
 
-  it('allows detached hidden data nodes', () => {
+  it('strictly rejects detached hidden data nodes (no component-library knowledge)', () => {
     const schema = createSchema();
     schema.components.data = {
       id: 'data',
@@ -59,68 +79,79 @@ describe('assertValidPageSchema', () => {
       childrenIds: [],
     };
 
-    expect(() => assertValidPageSchema(schema)).not.toThrow();
+    expect(() => requireValidPageSchema(schema)).toThrow(BadRequestException);
   });
 
   it('rejects unknown event actions and nested customScript', () => {
     const unknownAction = createSchema();
     unknownAction.components.child.events = { onClick: [{ type: 'unknown' }] };
-    expect(() => assertValidPageSchema(unknownAction)).toThrow('Unsupported action type unknown');
+    expect(() => requireValidPageSchema(unknownAction)).toThrow(/Unsupported action type/);
 
     const nestedCustomScript = createSchema();
     nestedCustomScript.components.child.events = {
       onClick: [{ type: 'if', then: [{ type: 'customScript', code: 'alert(1)' }] }],
     };
-    expect(() => assertValidPageSchema(nestedCustomScript)).toThrow(
-      'customScript is not allowed in schema',
-    );
+    expect(() => requireValidPageSchema(nestedCustomScript)).toThrow(/customScript/);
   });
 
   it('rejects prototype pollution keys', () => {
     for (const protoKey of ['toString', 'constructor', '__proto__']) {
-      // rootId is prototype key without own component
-      const badRoot: any = JSON.parse(`{"rootId":"${protoKey}","components":{}}`);
-      expect(() => assertValidPageSchema(badRoot)).toThrow('does not exist in components');
+      // rootId 是原型键且没有对应组件
+      const badRoot: unknown = JSON.parse(
+        `{"schemaVersion":0,"rootId":"${protoKey}","components":{}}`,
+      );
+      expect(() => requireValidPageSchema(badRoot)).toThrow(BadRequestException);
 
-      // child reference is prototype key without own component
-      const badChild: any = JSON.parse(
-        `{"rootId":"root","components":{"root":{"id":"root","type":"Page","childrenIds":["${protoKey}"]},"child":{"id":"child","type":"Div","childrenIds":[]}}}`,
+      // childrenIds 引用原型键且没有对应组件
+      const badChild: unknown = JSON.parse(
+        `{"schemaVersion":0,"rootId":"root","components":{"root":{"id":"root","type":"Page","childrenIds":["${protoKey}"]},"child":{"id":"child","type":"Div","childrenIds":[]}}}`,
       );
       if (protoKey === '__proto__') {
-        // JSON.parse for __proto__ as key needs explicit own property to avoid prototype assignment quirk
-        // Ensure we test that without own __proto__ it is rejected
         const parsed: any = JSON.parse(
-          '{"rootId":"root","components":{"root":{"id":"root","type":"Page","childrenIds":["__proto__"]}}}',
+          '{"schemaVersion":0,"rootId":"root","components":{"root":{"id":"root","type":"Page","childrenIds":["__proto__"]}}}',
         );
         parsed.components.child = { id: 'child', type: 'Div', childrenIds: [] };
-        expect(() => assertValidPageSchema(parsed)).toThrow('references missing child');
+        expect(() => requireValidPageSchema(parsed)).toThrow(/references missing child/);
       } else {
-        expect(() => assertValidPageSchema(badChild)).toThrow('references missing child');
+        expect(() => requireValidPageSchema(badChild)).toThrow(/references missing child/);
       }
     }
   });
 
-  it('handles BigInt serialization as 400', () => {
-    const schema: any = createSchema();
-    schema.components.root.props = { value: BigInt(1) };
-    expect(() => assertValidPageSchema(schema)).toThrow('JSON serializable');
+  it('rejects BigInt props as 400', () => {
+    const schema: unknown = createSchema();
+    (schema as { components: Record<string, TestComponent> }).components.root.props = {
+      value: BigInt(1),
+    };
+    expect(() => requireValidPageSchema(schema)).toThrow(BadRequestException);
   });
 
-  it('handles 8000-node deep chain without stack overflow', () => {
-    const depth = 8000;
+  it('rejects unsupported schemaVersion as 400', () => {
+    const schema: unknown = { ...createSchema(), schemaVersion: 999 };
+    expect(() => requireValidPageSchema(schema)).toThrow(/schemaVersion/i);
+  });
+
+  it('keeps a moderate chain valid and rejects oversized schemas without stack overflow', () => {
+    // 30 层链式拓扑在默认预算内合法
+    const depth = 30;
     const components: Record<string, TestComponent> = {};
     for (let i = 0; i < depth; i++) {
       const id = `n${i}`;
       const next = i + 1 < depth ? `n${i + 1}` : null;
-      components[id] = {
-        id,
-        type: 'Div',
-        childrenIds: next ? [next] : [],
-      };
+      components[id] = { id, type: 'Div', childrenIds: next ? [next] : [] };
     }
-    const schema = { rootId: 'n0', components };
-    const serialized = JSON.stringify(schema);
-    expect(Buffer.byteLength(serialized, 'utf-8')).toBeLessThan(1024 * 1024);
-    expect(() => assertValidPageSchema(schema)).not.toThrow();
+    const small = { schemaVersion: 0 as const, rootId: 'n0', components };
+    expect(() => requireValidPageSchema(small)).not.toThrow();
+
+    // 8000 节点超出默认预算：确定性快速失败（测试本身能完成即证明无栈溢出）
+    const bigDepth = 8000;
+    const bigComponents: Record<string, TestComponent> = {};
+    for (let i = 0; i < bigDepth; i++) {
+      const id = `n${i}`;
+      const next = i + 1 < bigDepth ? `n${i + 1}` : null;
+      bigComponents[id] = { id, type: 'Div', childrenIds: next ? [next] : [] };
+    }
+    const big = { schemaVersion: 0 as const, rootId: 'n0', components: bigComponents };
+    expect(() => requireValidPageSchema(big)).toThrow(BadRequestException);
   });
 });

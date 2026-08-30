@@ -1,7 +1,7 @@
 import { A2UISchema } from '../types/schema.types';
 
 export const DASHBOARD_PAGE_FIXTURE: A2UISchema = {
-  version: 1,
+  schemaVersion: 0,
   rootId: 'page_dashboard',
   components: {
     page_dashboard: {

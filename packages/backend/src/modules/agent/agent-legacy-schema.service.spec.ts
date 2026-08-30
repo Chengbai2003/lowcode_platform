@@ -55,7 +55,7 @@ describe('AgentLegacySchemaService', () => {
       mode: 'focused',
       schema: {
         rootId: 'page_root',
-        version: 3,
+        schemaVersion: 0,
         components: {
           page_root: {
             id: 'page_root',
@@ -105,7 +105,6 @@ describe('AgentLegacySchemaService', () => {
           totalComponents: 4,
           maxDepth: 2,
           rootId: 'page_root',
-          version: 3,
         },
         estimatedTokens: 32,
       },

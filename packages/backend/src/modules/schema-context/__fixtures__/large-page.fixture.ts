@@ -53,7 +53,7 @@ function buildLargePageFixture(): A2UISchema {
   components['page_root'] = { id: 'page_root', type: 'Page', childrenIds: ['container_main'] };
   components['container_main'] = { id: 'container_main', type: 'Container', childrenIds: cardIds };
 
-  return { version: 1, rootId: 'page_root', components };
+  return { schemaVersion: 0 as const, rootId: 'page_root', components };
 }
 
 export const LARGE_PAGE_FIXTURE: A2UISchema = buildLargePageFixture();

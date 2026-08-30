@@ -37,6 +37,11 @@ describe('SchemaResolverService', () => {
       version: 1,
       snapshotId: 'snap1',
       schema: validSchema as any,
+      runtimeCompatibility: {
+        componentPresetId: 'builtin-antd',
+        componentPresetVersion: '0.0.0-draft',
+        rendererVersion: '0.0.0-draft',
+      },
       savedAt: new Date().toISOString(),
     });
     const result = await service.resolve({ pageId: 'page1' });

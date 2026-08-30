@@ -1,7 +1,7 @@
 import { A2UISchema } from '../types/schema.types';
 
 export const LIST_PAGE_FIXTURE: A2UISchema = {
-  version: 2,
+  schemaVersion: 0,
   rootId: 'page_root',
   components: {
     page_root: { id: 'page_root', type: 'Page', childrenIds: ['container_main'] },

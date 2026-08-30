@@ -4,7 +4,7 @@ import { EditorPatchOperation } from './types/editor-patch.types';
 
 function createSchema(): A2UISchema {
   return {
-    version: 3,
+    schemaVersion: 0,
     rootId: 'root',
     components: {
       root: {

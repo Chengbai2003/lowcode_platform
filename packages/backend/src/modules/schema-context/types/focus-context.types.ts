@@ -24,7 +24,6 @@ export interface SchemaStats {
   readonly totalComponents: number;
   readonly maxDepth: number;
   readonly rootId: string;
-  readonly version?: number;
 }
 
 export interface FocusContext {

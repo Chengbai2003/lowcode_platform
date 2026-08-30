@@ -32,7 +32,7 @@ import {
   isSafeComponentType,
   isSafeGeneratedIdentifier,
 } from './registry';
-import { assertValidPageSchema } from '../page-schema/schema-validation';
+import { requireValidPageSchema } from '../page-schema/schema-validation';
 
 interface PropNode {
   name: string;
@@ -1759,8 +1759,9 @@ export function generate(root: RootNode): string {
 }
 
 export function compileSchemaToCode(schema: A2UISchema, options?: CompileOptions): string {
-  assertValidPageSchema(schema as unknown);
-  const ast = parseSchema(schema, options);
+  // 只消费 Contract 返回的 canonical 对象，绝不使用原始输入
+  const canonicalSchema = requireValidPageSchema(schema as unknown);
+  const ast = parseSchema(canonicalSchema as unknown as A2UISchema, options);
   transform(ast);
   return generate(ast);
 }

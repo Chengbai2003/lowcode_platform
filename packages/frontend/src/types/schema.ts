@@ -1,3 +1,15 @@
+/**
+ * A2UISchema / A2UIComponent 暂时 re-export Contract 单一真相源（PR 4 移除别名，直接导入）。
+ *
+ * 语义变更（Issue #16 / M0-1）：
+ * - Schema 不再包含页面修订版本字段（version 已移除）；
+ * - schemaVersion 只描述 DSL 格式（M0 固定为 0），必填。
+ */
+export type {
+  PageSchema as A2UISchema,
+  ComponentNode as A2UIComponent,
+} from '@lowcode-platform/schema-contract';
+
 import type { ActionList } from './dsl';
 
 /**
@@ -6,23 +18,3 @@ import type { ActionList } from './dsl';
  * 例如：{ onClick: [...], onChange: [...] }
  */
 export type EventConfig = Record<string, ActionList>;
-
-/**
- * 扁平化组件节点 (A2UI Protocol)
- */
-export interface A2UIComponent {
-  id: string;
-  type: string; // 组件类型，如 "Button", "Container"
-  props?: Record<string, unknown>; // 静态属性
-  childrenIds?: string[]; // 子节点 ID 列表
-  events?: EventConfig; // 事件定义：{ [trigger]: Action[] }
-}
-
-/**
- * 整个页面数据 (A2UI Response)
- */
-export interface A2UISchema {
-  version?: number; // Schema 版本号，默认 1
-  rootId: string; // 入口节点 ID
-  components: Record<string, A2UIComponent>; // 组件池：ID -> Component
-}

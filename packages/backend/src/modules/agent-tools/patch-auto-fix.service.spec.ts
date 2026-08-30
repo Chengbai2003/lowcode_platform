@@ -121,6 +121,7 @@ describe('PatchAutoFixService', () => {
 
   it('normalizes Button danger alias in updateProps with schema context', () => {
     const schema: A2UISchema = {
+      schemaVersion: 0,
       rootId: 'root',
       components: {
         root: { id: 'root', type: 'Page', childrenIds: ['button_submit'] },

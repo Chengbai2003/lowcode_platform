@@ -1,6 +1,7 @@
 /**
  * 流程控制类 Action 编辑器（If, Loop, Delay）
  */
+import type { JsonValue } from '@lowcode-platform/schema-contract';
 import {
   ActionUpdate,
   IfActionItem,
@@ -26,7 +27,9 @@ export const IfActionEditor = ({
       <input
         value={formatValue(action.condition)}
         aria-label="条件表达式"
-        onChange={(event) => updateAction({ condition: parseValueInput(event.target.value) })}
+        onChange={(event) =>
+          updateAction({ condition: parseValueInput(event.target.value) as JsonValue })
+        }
       />
     </div>
     <div className={styles.actionHint}>子动作请在 JSON 模式下编辑</div>
@@ -47,7 +50,9 @@ export const LoopActionEditor = ({
       <input
         value={formatValue(action.over)}
         aria-label="遍历数据"
-        onChange={(event) => updateAction({ over: parseValueInput(event.target.value) })}
+        onChange={(event) =>
+          updateAction({ over: parseValueInput(event.target.value) as JsonValue })
+        }
       />
     </div>
     <div className={styles.actionFieldRow}>

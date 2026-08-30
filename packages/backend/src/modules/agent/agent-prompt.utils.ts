@@ -39,10 +39,6 @@ export function formatPageOverview(contextResult: FocusContextResult): string {
   const lines = ['## 页面概览'];
   lines.push(`- rootId: ${schema.rootId}`);
 
-  if (schema.version !== undefined) {
-    lines.push(`- version: ${schema.version}`);
-  }
-
   lines.push(`- 总组件数: ${totalComponents}`);
 
   if (rootChildren.length > 0) {

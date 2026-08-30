@@ -30,7 +30,7 @@ describe('validateAndAutoFixA2UISchema', () => {
       return;
     }
 
-    expect(result.data.version).toBe(5);
+    expect(result.data.schemaVersion).toBe(0);
     expect(result.data.components.root.id).toBe('root');
     expect(result.data.components['btn-submit'].id).toBe('btn-submit');
     expect(result.data.components['btn-submit'].props).toEqual({ children: '登录' });

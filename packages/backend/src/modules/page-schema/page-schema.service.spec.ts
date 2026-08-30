@@ -1,13 +1,22 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PageSchemaService } from './page-schema.service';
+import { PageRuntimeMetadataProvider } from './page-runtime-metadata.provider';
 import {
-  PageRecord,
+  StoredPageRecord,
   PageSchemaRepository,
-  PageSchemaSnapshotRecord,
+  PageSnapshotRecord,
 } from './repositories/page-schema.repository';
 
+const runtimeCompatibility = {
+  systemId: 'default',
+  componentPresetId: 'builtin-antd',
+  componentPresetVersion: '0.0.0-draft',
+  rendererVersion: '0.0.0-draft',
+};
+
 const createSchema = (label: string) => ({
+  schemaVersion: 0 as const,
   rootId: 'root',
   components: {
     root: {
@@ -20,16 +29,14 @@ const createSchema = (label: string) => ({
   },
 });
 
-const getRootLabel = (schema: Record<string, unknown>) => {
-  const components = schema.components as Record<string, { props?: { children?: string } }>;
-  return components.root?.props?.children;
-};
+const getRootLabel = (schema: { components: Record<string, { props?: { children?: string } }> }) =>
+  schema.components.root?.props?.children;
 
 describe('PageSchemaService', () => {
   let service: PageSchemaService;
   let repository: jest.Mocked<PageSchemaRepository>;
-  let pageStore: PageRecord | undefined;
-  let snapshots: PageSchemaSnapshotRecord[] = [];
+  let pageStore: StoredPageRecord | undefined;
+  let snapshots: PageSnapshotRecord[] = [];
 
   beforeEach(async () => {
     pageStore = undefined;
@@ -37,50 +44,56 @@ describe('PageSchemaService', () => {
 
     const repositoryMock: jest.Mocked<PageSchemaRepository> = {
       onModuleInit: jest.fn(),
-      getPage: jest.fn((pageId: string) => (pageStore?.id === pageId ? pageStore : undefined)),
+      getPage: jest.fn((pageId: string) => (pageStore?.pageId === pageId ? pageStore : undefined)),
       getLatestSnapshot: jest.fn((pageId: string) =>
         snapshots.find(
-          (snapshot) => snapshot.pageId === pageId && snapshot.id === pageStore?.latestSnapshotId,
+          (snapshot) =>
+            snapshot.pageId === pageId && snapshot.snapshotId === pageStore?.latestSnapshotId,
         ),
       ),
       getSnapshotByVersion: jest.fn((pageId: string, version: number) =>
-        snapshots.find((snapshot) => snapshot.pageId === pageId && snapshot.version === version),
+        snapshots.find(
+          (snapshot) => snapshot.pageId === pageId && snapshot.pageVersion === version,
+        ),
       ),
       saveSchema: jest.fn(
         async (params: {
           pageId: string;
-          schema: Record<string, unknown>;
+          schema: PageSnapshotRecord['schema'];
           baseVersion?: number;
+          runtimeCompatibility: typeof runtimeCompatibility;
         }) => {
-          const currentVersion = pageStore?.currentVersion ?? 0;
+          const currentPageVersion = pageStore?.currentPageVersion ?? 0;
           if (pageStore && params.baseVersion === undefined) {
             throw new ConflictException({
               message: 'Page version mismatch',
               pageId: params.pageId,
-              expectedVersion: currentVersion,
+              expectedVersion: currentPageVersion,
               receivedVersion: null,
             });
           }
-          if (params.baseVersion !== undefined && params.baseVersion !== currentVersion) {
+          if (params.baseVersion !== undefined && params.baseVersion !== currentPageVersion) {
             throw new ConflictException({
               message: 'Page version mismatch',
               pageId: params.pageId,
-              expectedVersion: currentVersion,
+              expectedVersion: currentPageVersion,
               receivedVersion: params.baseVersion,
             });
           }
-          const nextVersion = currentVersion + 1;
-          const snapshotId = `mock-${params.pageId}-v${nextVersion}-${Date.now()}`;
-          const snap: PageSchemaSnapshotRecord = {
-            id: snapshotId,
+          const nextPageVersion = currentPageVersion + 1;
+          const snapshotId = `mock-${params.pageId}-v${nextPageVersion}-${Date.now()}`;
+          const snap: PageSnapshotRecord = {
+            snapshotId,
             pageId: params.pageId,
-            version: nextVersion,
-            schema: { ...params.schema, version: nextVersion },
+            pageVersion: nextPageVersion,
+            // 与真实 Repository 一致：按原样保存传入的 schema，不注入版本
+            schema: params.schema,
+            runtimeCompatibility: params.runtimeCompatibility,
             createdAt: new Date().toISOString(),
           };
-          const page: PageRecord = {
-            id: params.pageId,
-            currentVersion: nextVersion,
+          const page: StoredPageRecord = {
+            pageId: params.pageId,
+            currentPageVersion: nextPageVersion,
             latestSnapshotId: snapshotId,
             createdAt: pageStore?.createdAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
@@ -95,6 +108,7 @@ describe('PageSchemaService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PageSchemaService,
+        PageRuntimeMetadataProvider,
         {
           provide: PageSchemaRepository,
           useValue: repositoryMock,
@@ -116,8 +130,31 @@ describe('PageSchemaService', () => {
       expect.objectContaining({
         pageId: 'page-1',
         baseVersion: undefined,
+        runtimeCompatibility,
       }),
     );
+  });
+
+  it('saves the canonical deep-frozen schema, not the original input', async () => {
+    const original: unknown = createSchema('first');
+    await service.saveSchema({ pageId: 'page-1', schema: original });
+
+    const savedWith = repository.saveSchema.mock.calls[0][0];
+    // canonical 与原输入内容等价，但是深冻结的独立对象
+    expect(savedWith.schema).toEqual(original);
+    expect(savedWith.schema).not.toBe(original);
+    expect(Object.isFrozen(savedWith.schema)).toBe(true);
+    expect(Object.isFrozen(savedWith.schema.components.root)).toBe(true);
+    expect(savedWith.schema.schemaVersion).toBe(0);
+  });
+
+  it('rejects invalid schema with 400 before touching the repository', async () => {
+    const invalid = { rootId: '', components: {} };
+
+    await expect(service.saveSchema({ pageId: 'page-1', schema: invalid })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(repository.saveSchema).not.toHaveBeenCalled();
   });
 
   it('increments the version when saving the same page again', async () => {
@@ -130,7 +167,7 @@ describe('PageSchemaService', () => {
     });
 
     expect(result.version).toBe(2);
-    expect(pageStore?.currentVersion).toBe(2);
+    expect(pageStore?.currentPageVersion).toBe(2);
   });
 
   it('throws conflict when baseVersion is stale', async () => {
@@ -145,7 +182,7 @@ describe('PageSchemaService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('loads the latest or versioned snapshot', async () => {
+  it('loads the latest or versioned snapshot with a pure schema', async () => {
     await service.saveSchema({ pageId: 'page-1', schema: createSchema('first') });
     await service.saveSchema({
       pageId: 'page-1',
@@ -157,10 +194,12 @@ describe('PageSchemaService', () => {
     const v1 = await service.getSchema('page-1', 1);
 
     expect(latest.version).toBe(2);
-    expect(latest.schema.version).toBe(2);
+    // Schema 是纯数据：不含页面 version，只含 DSL 格式版本
+    expect(Object.prototype.hasOwnProperty.call(latest.schema, 'version')).toBe(false);
+    expect(latest.schema.schemaVersion).toBe(0);
     expect(getRootLabel(latest.schema)).toBe('second');
     expect(v1.version).toBe(1);
-    expect(v1.schema.version).toBe(1);
+    expect(v1.schema.schemaVersion).toBe(0);
     expect(getRootLabel(v1.schema)).toBe('first');
   });
 

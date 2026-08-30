@@ -325,7 +325,7 @@ export class ErrorRecoveryManager {
           (childId) => !problematicComponents.has(childId),
         );
         if (newChildrenIds.length !== component.childrenIds.length) {
-          component.childrenIds = newChildrenIds;
+          (component as { childrenIds?: string[] }).childrenIds = [...newChildrenIds];
           fixes.push(`更新组件 ${component.id} 的子节点引用`);
         }
       }

@@ -200,13 +200,14 @@ export class DSLExecutor {
    * 内部Action执行逻辑
    */
   private async _executeAction(action: Action, context: ExecutionContext): Promise<any> {
-    const actionType = action.type;
+    const actionType = action.type as string;
 
     if (actionType === 'customScript') {
+      // 历史类型已从 Schema 联合移除；此处兜底拦截，防止任何残留输入被执行
       throw new Error('customScript is unavailable because in-realm execution is unsafe');
     }
 
-    const handler = this.handlers[actionType];
+    const handler = this.handlers[actionType as Action['type']];
 
     if (!handler) {
       throw new Error(`Unknown action type: ${actionType}`);

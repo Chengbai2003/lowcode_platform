@@ -53,6 +53,7 @@ type LooseComponent = {
 };
 
 type LooseSchema = {
+  schemaVersion?: unknown;
   version?: unknown;
   rootId?: unknown;
   components?: Record<string, LooseComponent>;
@@ -77,22 +78,15 @@ export function autoFixSchema(
   // 1. 深度拷贝，避免污染原始对象
   const schema = JSON.parse(JSON.stringify(rawSchema)) as LooseSchema;
 
-  // 2. 基础结构校验与初始化
-  const rawVersion = schema.version;
-
-  if (typeof rawVersion === 'string') {
-    const trimmedVersion = rawVersion.trim();
-    const parsedVersion = Number(trimmedVersion);
-    if (trimmedVersion !== '' && Number.isFinite(parsedVersion)) {
-      schema.version = parsedVersion;
-      fixes.push(`修正 version 类型 (${JSON.stringify(trimmedVersion)} -> ${parsedVersion})`);
-    } else {
-      schema.version = 1;
-      fixes.push(`修正无效 version (${JSON.stringify(trimmedVersion)} -> 1)`);
-    }
-  } else if (typeof rawVersion !== 'number' || !Number.isFinite(rawVersion)) {
-    schema.version = 1;
-    fixes.push('添加默认版本号: 1');
+  // 2. 基础结构校验与初始化：DSL 格式版本固定为 0（schemaVersion）；
+  // 页面修订版本不再进入 Schema（遗留 version 字段直接移除）
+  if (schema.schemaVersion !== 0) {
+    schema.schemaVersion = 0;
+    fixes.push('规范化 schemaVersion 为 0');
+  }
+  if ('version' in schema) {
+    delete schema.version;
+    fixes.push('移除 Schema 内遗留的 version 字段');
   }
 
   if (!schema.components || typeof schema.components !== 'object') {
