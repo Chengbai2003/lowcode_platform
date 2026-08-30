@@ -1,10 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CanActivate } from '@nestjs/common';
 import { AIController } from './ai.controller';
 import { AIService } from './ai.service';
 import { ModelConfigService } from './model-config.service';
-import { ChatRequestDto, GenerateSchemaDto, MessageRole } from './dto/chat-request.dto';
+import { AuthGuard } from '../../common/guards/auth.guard';
+import { ChatRequestDto, MessageRole } from './dto/chat-request.dto';
 import { Response } from 'express';
-import { of, throwError } from 'rxjs';
+
+/**
+ * 固定放行的 Guard：Controller 单测不重复覆盖鉴权，
+ * 鉴权由 E2E（真实 AuthGuard + ConfigService）统一验证。
+ */
+class AllowAllAuthGuard implements CanActivate {
+  canActivate(): boolean {
+    return true;
+  }
+}
 
 describe('AIController', () => {
   let controller: AIController;
@@ -36,7 +47,10 @@ describe('AIController', () => {
         { provide: AIService, useValue: mockAIService },
         { provide: ModelConfigService, useValue: mockModelConfigService },
       ],
-    }).compile();
+    })
+      .overrideGuard(AuthGuard)
+      .useClass(AllowAllAuthGuard)
+      .compile();
 
     controller = module.get<AIController>(AIController);
     aiService = module.get(AIService);
@@ -80,30 +94,19 @@ describe('AIController', () => {
   });
 
   describe('chatStream', () => {
-    it('should set SSE headers and pipe stream to response', async () => {
+    it('should pipe the AI SDK text stream to the HTTP response', async () => {
       const dto: ChatRequestDto = { messages: [{ role: MessageRole.USER, content: 'test' }] };
+      const pipeTextStreamToResponse = jest.fn();
+      aiService.chatStream.mockResolvedValue({
+        pipeTextStreamToResponse,
+      } as any);
 
-      const mockStreamChunk = { choices: [{ delta: { content: 'hello' } }] };
-      aiService.chatStream.mockReturnValue(of(mockStreamChunk as any));
-
-      const mockResponse = {
-        setHeader: jest.fn(),
-        write: jest.fn(),
-        end: jest.fn(),
-        on: jest.fn(),
-      } as unknown as Response;
+      const mockResponse = {} as unknown as Response;
 
       await controller.chatStream(dto, mockResponse);
 
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('Content-Type', 'text/event-stream');
-      expect(mockResponse.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-cache');
-
-      // Verification that it writes to stream
-      expect(mockResponse.write).toHaveBeenCalledWith(
-        `data: ${JSON.stringify(mockStreamChunk)}\n\n`,
-      );
-      expect(mockResponse.write).toHaveBeenCalledWith('data: [DONE]\n\n');
-      expect(mockResponse.end).toHaveBeenCalled();
+      expect(aiService.chatStream).toHaveBeenCalledWith(dto);
+      expect(pipeTextStreamToResponse).toHaveBeenCalledWith(mockResponse);
     });
   });
 });

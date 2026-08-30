@@ -6,15 +6,24 @@ import { ModelConfigService } from '../src/modules/ai/model-config.service';
 import { AIService } from '../src/modules/ai/ai.service';
 import { ConfigService } from '@nestjs/config';
 
+/**
+ * AIController E2E：使用真实 AuthGuard 验证鉴权与 DTO 校验。
+ * - ConfigService mock 真实响应 API_SECRET，不依赖开发机环境变量
+ * - App 全生命周期只创建（beforeAll）与关闭（afterAll）一次，beforeEach 仅清理 Mock，
+ *   避免每个用例泄漏一个未关闭的 Nest 实例
+ */
 describe('AIController (e2e) - Security & Routes Validation', () => {
   let app: INestApplication;
-  let modelConfigService: ModelConfigService;
   const TEST_SECRET = 'test-secret';
 
-  beforeEach(async () => {
-    // 注入模拟的环境变量用于鉴权拦截器
-    process.env.API_SECRET = TEST_SECRET;
+  const configServiceMock = {
+    get: jest.fn((key: string) => {
+      if (key === 'API_SECRET') return TEST_SECRET;
+      return undefined;
+    }),
+  };
 
+  beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [AIController],
       providers: [
@@ -31,7 +40,7 @@ describe('AIController (e2e) - Security & Routes Validation', () => {
         },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn() },
+          useValue: configServiceMock,
         },
       ],
     }).compile();
@@ -47,8 +56,11 @@ describe('AIController (e2e) - Security & Routes Validation', () => {
       }),
     );
     await app.init();
+  });
 
-    modelConfigService = moduleFixture.get<ModelConfigService>(ModelConfigService);
+  beforeEach(() => {
+    // 仅清理调用记录；实现（如 ConfigService.get 的响应）保持不变
+    jest.clearAllMocks();
   });
 
   afterAll(async () => {
