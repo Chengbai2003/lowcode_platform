@@ -15,6 +15,8 @@ import * as path from 'path';
  */
 export interface StoredPageRecord {
   pageId: string;
+  /** 页面所属系统（M0 Draft 固定 default，由服务端写入；Agent/客户端不可自报） */
+  systemId: string;
   currentPageVersion: number;
   latestSnapshotId: string;
   createdAt: string;
@@ -98,13 +100,23 @@ export class PageSchemaRepository implements OnModuleInit {
     pageId: string;
     schema: PageSchema;
     basePageVersion?: number;
+    systemId: string;
     runtimeCompatibility: RuntimeCompatibility;
   }): Promise<{ page: StoredPageRecord; snapshot: PageSnapshotRecord }> {
     return this.enqueue(async () => {
       // Repository 自身边界：磁盘数据视为不可信输入，保存前重新校验并取 canonical；
       // Service 层传入 canonical 并不能替代 Repository 自身防线。
       const canonicalSchema = this.canonicalizeOrCorrupt(params.schema, `page ${params.pageId}`);
-      this.assertRuntimeCompatibility(params.runtimeCompatibility, `page ${params.pageId}`);
+      if (typeof params.systemId !== 'string' || !params.systemId.trim()) {
+        throw new Error(
+          `Page schema store is corrupted: page ${params.pageId} systemId must be a non-empty string`,
+        );
+      }
+      // 精确重建：拒绝/丢弃 Contract 未声明的字段（如误混入的 systemId）
+      const canonicalCompatibility = this.buildRuntimeCompatibility(
+        params.runtimeCompatibility,
+        `page ${params.pageId}`,
+      );
 
       // 重读磁盘最新 store，保证锁内闭环
       const disk = await this.loadStoreFromDisk();
@@ -139,12 +151,13 @@ export class PageSchemaRepository implements OnModuleInit {
         pageId: params.pageId,
         pageVersion: nextPageVersion,
         schema: canonicalSchema,
-        runtimeCompatibility: Object.freeze({ ...params.runtimeCompatibility }),
+        runtimeCompatibility: canonicalCompatibility,
         createdAt: savedAt,
       };
 
       const page: StoredPageRecord = {
         pageId: params.pageId,
+        systemId: params.systemId,
         currentPageVersion: nextPageVersion,
         latestSnapshotId: snapshotId,
         createdAt: existing?.createdAt || savedAt,
@@ -212,6 +225,9 @@ export class PageSchemaRepository implements OnModuleInit {
       if (typeof p.pageId !== 'string') {
         throw new Error('Page schema store is corrupted: pages[].pageId must be a string');
       }
+      if (typeof p.systemId !== 'string' || !p.systemId) {
+        throw new Error(`Page ${p.pageId} systemId must be a non-empty string`);
+      }
       if (!Number.isInteger(p.currentPageVersion)) {
         throw new Error(`Page ${p.pageId} currentPageVersion must be an integer`);
       }
@@ -241,14 +257,14 @@ export class PageSchemaRepository implements OnModuleInit {
           snapshot.schema,
           `snapshot ${snapshot.snapshotId}`,
         );
-        this.assertRuntimeCompatibility(
+        const runtimeCompatibility = this.buildRuntimeCompatibility(
           snapshot.runtimeCompatibility,
           `snapshot ${snapshot.snapshotId}`,
         );
         return {
           ...snapshot,
           schema: canonicalSchema,
-          runtimeCompatibility: Object.freeze({ ...snapshot.runtimeCompatibility }),
+          runtimeCompatibility,
         };
       },
     );
@@ -275,20 +291,32 @@ export class PageSchemaRepository implements OnModuleInit {
     }
   }
 
-  private assertRuntimeCompatibility(value: unknown, context: string): void {
-    const compat = value as Partial<RuntimeCompatibility> | undefined;
-    const fields: Array<keyof RuntimeCompatibility> = [
-      'componentPresetId',
-      'componentPresetVersion',
-      'rendererVersion',
-    ];
-    for (const field of fields) {
-      if (typeof compat?.[field] !== 'string' || !compat[field]) {
-        throw new Error(
-          `Page schema store is corrupted: ${context} runtimeCompatibility.${field} must be a non-empty string`,
-        );
-      }
+  /**
+   * 精确重建 RuntimeCompatibility：逐字段校验并只保留 Contract 声明的三个字段，
+   * 拒绝/丢弃任何未知字段（如误混入的 systemId），结果冻结。
+   */
+  private buildRuntimeCompatibility(value: unknown, context: string): RuntimeCompatibility {
+    const source = value as Partial<RuntimeCompatibility> | undefined;
+    const componentPresetId = source?.componentPresetId;
+    const componentPresetVersion = source?.componentPresetVersion;
+    const rendererVersion = source?.rendererVersion;
+    if (typeof componentPresetId !== 'string' || !componentPresetId) {
+      throw new Error(
+        `Page schema store is corrupted: ${context} runtimeCompatibility.componentPresetId must be a non-empty string`,
+      );
     }
+    if (typeof componentPresetVersion !== 'string' || !componentPresetVersion) {
+      throw new Error(
+        `Page schema store is corrupted: ${context} runtimeCompatibility.componentPresetVersion must be a non-empty string`,
+      );
+    }
+    if (typeof rendererVersion !== 'string' || !rendererVersion) {
+      throw new Error(
+        `Page schema store is corrupted: ${context} runtimeCompatibility.rendererVersion must be a non-empty string`,
+      );
+    }
+    // 精确重建：只保留 Contract 声明的字段，未知字段（如误混入的 systemId）被丢弃
+    return Object.freeze({ componentPresetId, componentPresetVersion, rendererVersion });
   }
 
   private async persistStore(store: PageSchemaStore): Promise<void> {

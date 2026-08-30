@@ -149,6 +149,26 @@ for (const req of requiredUsages) {
   }
 }
 
+// ---------- 8: Renderer 渲染树禁用原始 Schema 引用 ----------
+const rendererFile = join(ROOT, 'packages/frontend/src/renderer/Renderer.tsx');
+const rendererContent = readFileSync(rendererFile, 'utf-8');
+const rendererRawPatterns = [
+  {
+    name: '渲染树读取原始 schema?.components（必须用 canonicalSchema）',
+    regex: /schema\?\.components/,
+  },
+  { name: '渲染树读取原始 schema?.rootId（必须用 canonicalSchema）', regex: /schema\?\.rootId/ },
+  {
+    name: '原始 schema 直接作为 useRef 初值（必须用 canonicalSchema）',
+    regex: /useRef\(schema\?\./,
+  },
+];
+for (const rule of rendererRawPatterns) {
+  if (rule.regex.test(rendererContent)) {
+    violations.push(`packages/frontend/src/renderer/Renderer.tsx: ${rule.name}`);
+  }
+}
+
 // ---------- 结果 ----------
 if (violations.length > 0) {
   console.error('✗ Schema Contract 架构边界检查失败：\n');

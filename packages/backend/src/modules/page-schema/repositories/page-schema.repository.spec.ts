@@ -4,7 +4,6 @@ import * as path from 'path';
 import { PageSchemaRepository } from './page-schema.repository';
 
 const runtimeCompatibility = {
-  systemId: 'default',
   componentPresetId: 'builtin-antd',
   componentPresetVersion: '0.0.0-draft',
   rendererVersion: '0.0.0-draft',
@@ -53,11 +52,13 @@ describe('PageSchemaRepository', () => {
     const results = await Promise.allSettled([
       repoA.saveSchema({
         pageId: 'p-concurrent',
+        systemId: 'default',
         schema: createSchema('a'),
         runtimeCompatibility,
       }),
       repoB.saveSchema({
         pageId: 'p-concurrent',
+        systemId: 'default',
         schema: createSchema('b'),
         runtimeCompatibility,
       }),
@@ -88,6 +89,7 @@ describe('PageSchemaRepository', () => {
     await repoA.onModuleInit();
     await repoA.saveSchema({
       pageId: 'p-exist',
+      systemId: 'default',
       schema: createSchema('v1'),
       runtimeCompatibility,
     });
@@ -100,12 +102,14 @@ describe('PageSchemaRepository', () => {
     const results = await Promise.allSettled([
       repoB.saveSchema({
         pageId: 'p-exist',
+        systemId: 'default',
         schema: createSchema('v2a'),
         basePageVersion: 1,
         runtimeCompatibility,
       }),
       repoC.saveSchema({
         pageId: 'p-exist',
+        systemId: 'default',
         schema: createSchema('v2b'),
         basePageVersion: 1,
         runtimeCompatibility,
@@ -125,6 +129,7 @@ describe('PageSchemaRepository', () => {
 
     const { snapshot } = await repo.saveSchema({
       pageId: 'p-pure',
+      systemId: 'default',
       schema: createSchema('v1'),
       runtimeCompatibility,
     });
@@ -144,6 +149,7 @@ describe('PageSchemaRepository', () => {
     await repo.onModuleInit();
     await repo.saveSchema({
       pageId: 'p-rollback',
+      systemId: 'default',
       schema: createSchema('v1'),
       runtimeCompatibility,
     });
@@ -158,6 +164,7 @@ describe('PageSchemaRepository', () => {
     await expect(
       repo.saveSchema({
         pageId: 'p-rollback',
+        systemId: 'default',
         schema: createSchema('v2'),
         basePageVersion: 1,
         runtimeCompatibility,
@@ -239,6 +246,7 @@ describe('PageSchemaRepository', () => {
       pages: [
         {
           pageId: 'p1',
+          systemId: 'default',
           currentPageVersion: 1,
           latestSnapshotId: 's1',
           createdAt: '',
@@ -267,6 +275,7 @@ describe('PageSchemaRepository', () => {
     await expect(
       repo.saveSchema({
         pageId: 'p-invalid',
+        systemId: 'default',
         schema: { rootId: 'root', components: {} } as never,
         runtimeCompatibility,
       }),
@@ -280,6 +289,7 @@ describe('PageSchemaRepository', () => {
     await expect(
       repo.saveSchema({
         pageId: 'p-bad-compat',
+        systemId: 'default',
         schema: createSchema('v1'),
         runtimeCompatibility: { componentPresetId: 'builtin-antd' } as never,
       }),

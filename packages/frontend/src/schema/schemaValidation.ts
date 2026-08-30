@@ -3,7 +3,7 @@ import {
   SchemaValidationError,
 } from '@lowcode-platform/schema-contract';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
-import { autoFixSchema } from '../renderer/utils/schema-auto-fix';
+import { autoFixSchema, UnsafeSchemaInputError } from '../renderer/utils/schema-auto-fix';
 
 type ValidationIssueLike = {
   message: string;
@@ -134,7 +134,24 @@ export function validateAndAutoFixA2UISchema(
     };
   }
 
-  const { fixed, fixes } = autoFixSchema(input, whitelist);
+  let fixed: PageSchema | null = null;
+  let autoFixes: string[] = [];
+  try {
+    const result = autoFixSchema(input, whitelist);
+    fixed = result.fixed;
+    autoFixes = result.fixes;
+  } catch (error) {
+    if (error instanceof UnsafeSchemaInputError) {
+      return {
+        success: false,
+        data: null,
+        fixes: [],
+        error: { issues: [{ message: error.message }] },
+      };
+    }
+    throw error;
+  }
+  const fixes = autoFixes;
   const finalResult = safeValidateA2UISchema(fixed);
 
   if (!finalResult.success) {

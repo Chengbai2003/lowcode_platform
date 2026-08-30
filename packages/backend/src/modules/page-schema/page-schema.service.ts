@@ -34,12 +34,13 @@ export class PageSchemaService {
     // 原始输入对象即使在校验后被变异也不会影响存储内容。
     const canonicalSchema = requireValidPageSchema(params.schema);
 
+    const draftMetadata = this.runtimeMetadataProvider.getDraftPageRuntimeMetadata();
     const { page, snapshot } = await this.repository.saveSchema({
       pageId: params.pageId,
       schema: canonicalSchema,
       basePageVersion: params.basePageVersion,
-      runtimeCompatibility:
-        this.runtimeMetadataProvider.getDraftPageRuntimeMetadata().runtimeCompatibility,
+      systemId: draftMetadata.systemId,
+      runtimeCompatibility: draftMetadata.runtimeCompatibility,
     });
 
     return {
