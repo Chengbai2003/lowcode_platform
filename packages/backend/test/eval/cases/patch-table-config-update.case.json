@@ -41,7 +41,15 @@
     "submittedOps": 1,
     "normalizedOps": 1,
     "riskLevel": "low",
-    "schemaValid": true
+    "schemaValid": true,
+    "props": {
+      "table1": {
+        "pagination": {
+          "pageSize": 20
+        }
+      }
+    }
   },
+
   "caseSchemaVersion": 1
 }

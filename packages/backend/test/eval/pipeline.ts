@@ -16,6 +16,8 @@ import { assessPatchRisk } from '../../src/modules/agent/agent-preview.utils';
 import { AgentPolicyService } from '../../src/modules/agent/agent-policy.service';
 import { isSafeInlineExpression } from '../../src/modules/compiler/security/validators';
 import { PageSchemaRepository } from '../../src/modules/page-schema/repositories/page-schema.repository';
+import { PatchApplyService } from '../../src/modules/agent-tools/patch-apply.service';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { EditorPatchOperation } from '../../src/modules/agent-tools/types/editor-patch.types';
 import type { EvalCase, EvalCaseResult, ExpectedOutcome } from './eval-case.types';
 
@@ -113,12 +115,77 @@ async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
   const patch = kase.fixtures.patch as EditorPatchOperation[];
   const normalized = normalizeFinalPatch(baseSchema, patch);
   const risk = assessPatchRisk(baseSchema, normalized);
-  return makeResult(kase, {
+
+  // 1. 真实调用 PatchApplyService 执行补丁应用
+  const patchApplyService = new PatchApplyService();
+  const rawPatchedSchema = patchApplyService.applyPatch(baseSchema, normalized);
+
+  // 2. 补丁结果经 Contract 严格校验（Fail-Close 保证规范性）
+  let finalSchema: PageSchema;
+  let schemaValid = false;
+  try {
+    finalSchema = requireValidPageSchema(rawPatchedSchema);
+    schemaValid = true;
+  } catch (err) {
+    return makeResult(kase, {
+      submittedOps: patch.length,
+      normalizedOps: normalized.length,
+      riskLevel: risk.level,
+      schemaValid: false,
+      blocked: true,
+      blockedReason: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  // 3. 构建包含实际语义指标的 actual 结果
+  const actual: Record<string, unknown> = {
     submittedOps: patch.length,
     normalizedOps: normalized.length,
     riskLevel: risk.level,
-    schemaValid: true,
-  });
+    schemaValid,
+  };
+
+  if (kase.expected.componentExists) {
+    actual.componentExists = kase.expected.componentExists.filter((id) =>
+      Boolean(finalSchema.components[id]),
+    );
+  }
+
+  if (kase.expected.componentMissing) {
+    actual.componentMissing = kase.expected.componentMissing.filter(
+      (id) => !finalSchema.components[id],
+    );
+  }
+
+  if (kase.expected.props) {
+    const actualProps: Record<string, Record<string, unknown>> = {};
+    for (const [id, expectedComponentProps] of Object.entries(kase.expected.props)) {
+      const component = finalSchema.components[id];
+      if (component && component.props) {
+        actualProps[id] = {};
+        for (const propKey of Object.keys(expectedComponentProps)) {
+          actualProps[id][propKey] = component.props[propKey];
+        }
+      }
+    }
+    actual.props = actualProps;
+  }
+
+  if (kase.expected.events) {
+    const actualEvents: Record<string, Record<string, unknown[]>> = {};
+    for (const [id, expectedComponentEvents] of Object.entries(kase.expected.events)) {
+      const component = finalSchema.components[id];
+      if (component && component.events) {
+        actualEvents[id] = {};
+        for (const eventKey of Object.keys(expectedComponentEvents)) {
+          actualEvents[id][eventKey] = component.events[eventKey] as unknown[];
+        }
+      }
+    }
+    actual.events = actualEvents;
+  }
+
+  return makeResult(kase, actual);
 }
 
 async function runValidationCase(kase: EvalCase): Promise<EvalCaseResult> {
