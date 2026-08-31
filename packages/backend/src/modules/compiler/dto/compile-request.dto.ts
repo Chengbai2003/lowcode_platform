@@ -2,67 +2,33 @@
  * Compiler 请求 DTO
  */
 
-import { IsObject, IsOptional, IsString, ValidateNested, IsNotEmpty } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsDefined, IsObject, IsOptional, IsString } from 'class-validator';
 
 /**
- * 编译选项
+ * 编译选项（只接受安全受控选项，禁止客户端覆盖 componentSources / defaultLibrary）
  */
 export class CompileOptionsDto {
   @IsOptional()
-  @IsObject()
-  componentSources?: Record<string, string>;
+  @IsString()
+  pageId?: string;
 
   @IsOptional()
   @IsString()
-  defaultLibrary?: string;
-}
-
-/**
- * A2UI Schema 组件定义
- */
-class ComponentDefinition {
-  @IsString()
-  type!: string;
-
-  @IsOptional()
-  @IsObject()
-  props?: Record<string, any>;
-
-  @IsOptional()
-  @IsObject()
-  events?: Record<string, any>;
-
-  @IsOptional()
-  childrenIds?: string[];
-}
-
-/**
- * A2UI Schema 结构
- */
-class A2UISchemaDto {
-  @IsString()
-  @IsNotEmpty()
-  rootId!: string;
-
-  @IsObject()
-  components!: Record<string, ComponentDefinition>;
-
-  @IsOptional()
-  @IsString()
-  version?: string;
+  presetId?: string;
 }
 
 /**
  * 编译请求 DTO
+ * 遵循 Contract 统一校验原则：DTO 不使用 Record<string, any>，
+ * 不对 schema 使用 @ValidateNested / @Type(A2UISchemaDto)，
+ * 由 CompilerService 显式调用 validatePageSchemaValue 进行 Contract 级 fail-close 校验。
  */
 export class CompileRequestDto {
-  @ValidateNested()
-  @Type(() => A2UISchemaDto)
-  schema!: A2UISchemaDto;
+  @IsDefined()
+  @IsObject()
+  schema!: Record<string, unknown>;
 
   @IsOptional()
-  @ValidateNested()
-  @Type(() => CompileOptionsDto)
+  @IsObject()
   options?: CompileOptionsDto;
 }

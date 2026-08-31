@@ -23,6 +23,7 @@
     "@ai-sdk/anthropic": "^3.0.47",
     "@ai-sdk/openai": "^3.0.34",
     "@ai-sdk/vue": "^3.0.101",
+    "@lowcode-platform/preset-antd": "workspace:*",
     "@lowcode-platform/schema-contract": "workspace:*",
     "@nestjs/common": "^10.3.0",
     "@nestjs/config": "^3.1.1",
