@@ -58,6 +58,8 @@ const TestHarness: React.FC<TestHarnessProps> = ({
         <Renderer
           preset={antdPreset}
           schema={schema}
+          pageId="preview-link-page"
+          documentSessionId="doc-1"
           eventContext={eventContext}
           onComponentClick={() => {}}
         />

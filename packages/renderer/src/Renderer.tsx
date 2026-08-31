@@ -8,7 +8,6 @@ import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { RendererProps } from './types';
 import { flattenSchemaValues } from './utils/schema';
-import { EventDispatcher } from './EventDispatcher';
 import { ComponentRenderer } from './ComponentRenderer';
 import { createComponentRuntimeBridge } from './bridge/createComponentRuntimeBridge';
 import { ComponentRuntimeBridgeContext } from './bridge/ComponentRuntimeBridgeContext';
@@ -17,11 +16,10 @@ import { createRuntimeSession } from './session/RuntimeSession';
 import { normalizeHostCapabilities } from './host/HostCapabilities';
 
 /**
- * 主渲染器组件
+ * 主渲染器组件（Issue #19 / M0-4 Scope A/B/D/E）
  */
 export function Renderer({
   schema,
-  components = {},
   preset,
   pageId,
   documentSessionId,
@@ -29,6 +27,17 @@ export function Renderer({
   onComponentClick,
   eventContext = {},
 }: RendererProps): React.ReactElement {
+  // 必须参数前置断言（fail-close）
+  if (!preset) {
+    throw new Error('[Renderer] Missing required prop "preset" (fail-close)');
+  }
+  if (typeof pageId !== 'string' || pageId.length === 0) {
+    throw new Error('[Renderer] Missing or invalid required prop "pageId" (fail-close)');
+  }
+  if (typeof documentSessionId !== 'string' || documentSessionId.length === 0) {
+    throw new Error('[Renderer] Missing or invalid required prop "documentSessionId" (fail-close)');
+  }
+
   // Contract 边界（fail-close）：渲染入口只接受 Contract 校验通过的 canonical Schema；
   // 不支持的 schemaVersion、getter、畸形结构在此直接抛错，绝不进入渲染树。
   const canonicalSchema: PageSchema | null = useMemo(
@@ -80,115 +89,22 @@ export function Renderer({
     return next;
   }, [canonicalSchema?.components]);
 
-  const eventDispatcher = useMemo(() => {
-    return new EventDispatcher(
-      {
+  // M0-4 Scope D：每次 pageId + documentSessionId 身份组合变化或初始挂载时，
+  // 创建全新的 RuntimeSession（独立持有 Dispatcher、ReactiveRuntime、AbortSignal 与 timers）。
+  const session = useMemo(() => {
+    return createRuntimeSession({
+      pageId,
+      documentSessionId,
+      dispatcherInit: {
         ...eventContext,
         data: runtimeInitialData,
         components: stableFlatComponents,
       },
-      eventContext.dispatch,
-      eventContext.getState,
-    );
-  }, [eventContext.dispatch, eventContext.getState]); // eventContext变化会在下面的useEffect中处理
+    });
+  }, [pageId, documentSessionId]);
 
+  // 身份切换或组件卸载时，严格销毁旧 Session（abort signal、clear timers、cleanups）
   useEffect(() => {
-    if (eventContext && eventDispatcher) {
-      Object.entries(eventContext).forEach(([key, value]) => {
-        if (key === 'data' || key === 'components') {
-          return;
-        }
-        eventDispatcher.setContext(key, value);
-      });
-    }
-  }, [eventContext, eventDispatcher]);
-
-  useEffect(() => {
-    if (eventDispatcher) {
-      const nextRootId = canonicalSchema?.rootId ?? null;
-      const rootChanged = lastRootIdRef.current !== nextRootId;
-
-      if (rootChanged) {
-        eventDispatcher.setContext('data', runtimeInitialData);
-        lastRootIdRef.current = nextRootId;
-        return;
-      }
-
-      const currentData = eventDispatcher.getExecutionContext().data ?? {};
-      const mergedData = {
-        ...flattenedData,
-        ...currentData,
-        ...eventContextData,
-      };
-
-      eventDispatcher.setContext('data', mergedData);
-    }
-  }, [
-    eventDispatcher,
-    eventContextData,
-    flattenedData,
-    runtimeInitialData,
-    canonicalSchema?.rootId,
-  ]);
-
-  useEffect(() => {
-    if (stableFlatComponents && eventDispatcher) {
-      eventDispatcher.setContext('components', stableFlatComponents);
-    }
-  }, [stableFlatComponents, eventDispatcher]);
-
-  // M0-4 Scope B：单一 Preset 提供基础组件注册表，宿主 components 可覆盖。
-  const allComponents = useMemo(
-    () => ({ ...(preset?.runtime ?? {}), ...components }),
-    [preset, components],
-  );
-
-  // Manifest 净化只作用于 Preset 自身组件：宿主覆盖后的类型不再受
-  // Preset Manifest 约束（宿主组件有自己的 Props 契约）。
-  const presetOwnedTypes = useMemo(() => {
-    if (!preset) return null;
-    const owned = new Set<string>();
-    for (const [type, component] of Object.entries(preset.runtime)) {
-      if (components[type] === undefined || components[type] === component) {
-        owned.add(type);
-      }
-    }
-    return owned;
-  }, [preset, components]);
-
-  const manifestSanitizer = useMemo(() => {
-    if (!preset || !presetOwnedTypes) return undefined;
-    return (componentType: string, props: Record<string, unknown>): Record<string, unknown> => {
-      if (!presetOwnedTypes.has(componentType)) {
-        return props;
-      }
-      const { props: cleaned, rejected } = sanitizePropsByManifest(componentType, props, preset);
-      if (rejected.length > 0) {
-        console.warn(
-          `[Renderer] Preset "${preset.id}" rejected props for "${componentType}": ${rejected.join(', ')}`,
-        );
-      }
-      return cleaned;
-    };
-  }, [preset, presetOwnedTypes]);
-
-  // M0-4 Scope C：组件（Table 等）通过桥消费受控运行时能力，
-  // 不再反向导入执行器内部实现。
-  const runtimeBridge = useMemo(
-    () => createComponentRuntimeBridge(eventDispatcher),
-    [eventDispatcher],
-  );
-
-  // M0-4 Scope D：提供 pageId + documentSessionId 时，每次挂载创建独立
-  // RuntimeSession；documentSessionId 变化或卸载时销毁旧 Session。
-  const session = useMemo(() => {
-    if (!pageId || !documentSessionId) return null;
-    return createRuntimeSession({ pageId, documentSessionId, dispatcher: eventDispatcher });
-  }, [pageId, documentSessionId, eventDispatcher]);
-
-  useEffect(() => {
-    if (!session) return;
-    session.dispatcher.setHostConfig('session', session);
     return () => {
       session.dispose();
     };
@@ -201,18 +117,85 @@ export function Renderer({
   );
 
   useEffect(() => {
-    eventDispatcher.setHostConfig('hostCapabilities', hostCapabilities);
-  }, [eventDispatcher, hostCapabilities]);
+    session.dispatcher.setHostConfig('hostCapabilities', hostCapabilities);
+    session.dispatcher.setHostConfig('session', session);
+  }, [session, hostCapabilities]);
+
+  // 在同一个 Session 生命周期内同步上下文变更
+  useEffect(() => {
+    if (eventContext && session.dispatcher) {
+      Object.entries(eventContext).forEach(([key, value]) => {
+        if (key === 'data' || key === 'components') {
+          return;
+        }
+        session.dispatcher.setContext(key, value);
+      });
+    }
+  }, [eventContext, session.dispatcher]);
+
+  useEffect(() => {
+    if (session.dispatcher) {
+      const nextRootId = canonicalSchema?.rootId ?? null;
+      const rootChanged = lastRootIdRef.current !== nextRootId;
+
+      if (rootChanged) {
+        session.dispatcher.setContext('data', runtimeInitialData);
+        lastRootIdRef.current = nextRootId;
+        return;
+      }
+
+      const currentData = session.dispatcher.getExecutionContext().data ?? {};
+      const mergedData = {
+        ...flattenedData,
+        ...currentData,
+        ...eventContextData,
+      };
+
+      session.dispatcher.setContext('data', mergedData);
+    }
+  }, [
+    session.dispatcher,
+    eventContextData,
+    flattenedData,
+    runtimeInitialData,
+    canonicalSchema?.rootId,
+  ]);
+
+  useEffect(() => {
+    if (stableFlatComponents && session.dispatcher) {
+      session.dispatcher.setContext('components', stableFlatComponents);
+    }
+  }, [stableFlatComponents, session.dispatcher]);
+
+  // M0-4 Scope B：所有组件由封闭 Preset 提供，Manifest 净化作用于所有渲染组件
+  const manifestSanitizer = useMemo(() => {
+    return (componentType: string, props: Record<string, unknown>): Record<string, unknown> => {
+      const { props: cleaned, rejected } = sanitizePropsByManifest(componentType, props, preset);
+      if (rejected.length > 0) {
+        console.warn(
+          `[Renderer] Preset "${preset.id}" rejected props for "${componentType}": ${rejected.join(', ')}`,
+        );
+      }
+      return cleaned;
+    };
+  }, [preset]);
+
+  // M0-4 Scope C：组件（Table 等）通过桥消费受控运行时能力
+  const runtimeBridge = useMemo(
+    () => createComponentRuntimeBridge(session.dispatcher),
+    [session.dispatcher],
+  );
 
   if (canonicalSchema && canonicalSchema.rootId && stableFlatComponents) {
     return (
       <ComponentRuntimeBridgeContext.Provider value={runtimeBridge}>
         <ComponentRenderer
+          key={`${pageId}:${documentSessionId}`}
           nodeId={canonicalSchema.rootId}
           flatComponents={stableFlatComponents}
-          components={allComponents}
+          components={preset.runtime}
           manifestSanitizer={manifestSanitizer}
-          eventDispatcher={eventDispatcher}
+          eventDispatcher={session.dispatcher}
           onComponentClick={onComponentClick}
         />
       </ComponentRuntimeBridgeContext.Provider>

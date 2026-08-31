@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
+import type { ComponentPreset } from '@lowcode-platform/renderer';
 import type { ComponentRegistry, PageSchema } from '../../../../types';
 import { validateA2UISchemaWithWhitelist } from '../../../../schema/schemaValidation';
 import { SelectableCanvas } from './SelectableCanvas';
@@ -32,7 +33,10 @@ function parseAndValidateSchema(jsonString: string, whitelist: string[]): PageSc
 
 interface PreviewPaneProps {
   schema: PageSchema | null;
-  allComponents: ComponentRegistry;
+  preset: ComponentPreset;
+  pageId: string;
+  documentSessionId: string;
+  allComponents?: ComponentRegistry;
   eventContext: Record<string, unknown>;
   previewTheme: 'light' | 'dark';
   selectedId?: string | null;
@@ -46,7 +50,10 @@ type ActiveTab = 'preview' | 'json' | 'compiled';
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
   schema,
-  allComponents,
+  preset,
+  pageId,
+  documentSessionId,
+  allComponents = {},
   eventContext,
   previewTheme,
   selectedId,
@@ -338,7 +345,9 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
         {(activeTab === 'preview' || isPreviewMode) && (
           <SelectableCanvas
             schema={schema}
-            allComponents={allComponents}
+            preset={preset}
+            pageId={pageId}
+            documentSessionId={documentSessionId}
             eventContext={eventContext}
             isPreviewMode={isPreviewMode}
           />

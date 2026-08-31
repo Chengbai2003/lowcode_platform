@@ -12,7 +12,17 @@
 
 import type { ComponentManifestRegistry } from '@lowcode-platform/renderer';
 
-const COMMON_DOM_PROPS = ['style', 'className', 'id', 'title', 'value', 'children'] as const;
+const COMMON_DOM_PROPS = [
+  'style',
+  'className',
+  'id',
+  'title',
+  'value',
+  'children',
+  'initialValue',
+  'initialValues',
+  'key',
+] as const;
 
 function entry(componentType: string, allowedProps: string[]) {
   return Object.freeze({
@@ -26,8 +36,21 @@ export const antdManifest: ComponentManifestRegistry = Object.freeze({
   Div: entry('Div', []),
   Span: entry('Span', []),
   Container: entry('Container', []),
-  Row: entry('Row', []),
-  Col: entry('Col', []),
+  Row: entry('Row', ['gutter', 'justify', 'align', 'wrap']),
+  Col: entry('Col', [
+    'span',
+    'offset',
+    'flex',
+    'order',
+    'pull',
+    'push',
+    'xs',
+    'sm',
+    'md',
+    'lg',
+    'xl',
+    'xxl',
+  ]),
   Text: entry('Text', [
     'strong',
     'type',
@@ -59,7 +82,8 @@ export const antdManifest: ComponentManifestRegistry = Object.freeze({
     'maxLength',
     'readOnly',
   ]),
-  Button: entry('Button', ['type', 'name', 'disabled', 'danger', 'block', 'size']),
+  Button: entry('Button', ['type', 'name', 'disabled', 'danger', 'block', 'size', 'htmlType']),
+
   TextArea: entry('TextArea', [
     'placeholder',
     'name',

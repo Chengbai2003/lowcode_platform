@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, memo, useEffect } from 'react';
 import { Renderer, LowcodeProvider } from '@lowcode-platform/renderer';
-import { antdPreset } from '@lowcode-platform/preset-antd';
-import type { PageSchema, ComponentRegistry, ComponentNode } from '../../../../types';
+import type { ComponentPreset } from '@lowcode-platform/renderer';
+import type { PageSchema, ComponentNode } from '../../../../types';
 import { useEditorStore, useSelectionStore } from '../../../store/editor-store';
 import { SelectionHighlight } from './SelectionHighlight';
 import { useComponentPosition } from './useComponentPosition';
@@ -12,7 +12,9 @@ const COMPONENT_ID_CLASS_PREFIX = 'lowcode-component-id-';
 
 interface SelectableCanvasProps {
   schema: PageSchema | null;
-  allComponents: ComponentRegistry;
+  preset: ComponentPreset;
+  pageId: string;
+  documentSessionId: string;
   eventContext: Record<string, unknown>;
   isPreviewMode?: boolean;
 }
@@ -22,7 +24,7 @@ interface SelectableCanvasProps {
  * 为渲染的组件添加选中、悬停交互功能
  */
 export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
-  ({ schema, allComponents, eventContext, isPreviewMode = false }) => {
+  ({ schema, preset, pageId, documentSessionId, eventContext, isPreviewMode = false }) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Selection store
@@ -159,9 +161,10 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
           {schema ? (
             <LowcodeProvider>
               <Renderer
-                preset={antdPreset}
+                preset={preset}
                 schema={schema}
-                components={allComponents}
+                pageId={pageId}
+                documentSessionId={documentSessionId}
                 eventContext={eventContext}
                 onComponentClick={isPreviewMode ? undefined : handleComponentClick}
               />

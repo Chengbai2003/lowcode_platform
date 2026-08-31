@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   createRuntimeSession,
-  getOrCreateRuntimeSession,
-  disposeRuntimeSession,
+  createRuntimeSessionManager,
   RuntimeSession,
 } from '../RuntimeSession';
 import { EventDispatcher } from '../../EventDispatcher';
@@ -28,11 +27,12 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
     );
   });
 
-  it('getOrCreate：同身份复用；documentSessionId 变化时销毁旧 Session', () => {
-    const first = getOrCreateRuntimeSession({ pageId: 'page-1', documentSessionId: 'doc-1' });
-    expect(getOrCreateRuntimeSession({ pageId: 'page-1', documentSessionId: 'doc-1' })).toBe(first);
+  it('RuntimeSessionManager：同身份复用；documentSessionId 变化时销毁旧 Session', () => {
+    const manager = createRuntimeSessionManager();
+    const first = manager.getOrCreate({ pageId: 'page-1', documentSessionId: 'doc-1' });
+    expect(manager.getOrCreate({ pageId: 'page-1', documentSessionId: 'doc-1' })).toBe(first);
 
-    const second = getOrCreateRuntimeSession({ pageId: 'page-1', documentSessionId: 'doc-2' });
+    const second = manager.getOrCreate({ pageId: 'page-1', documentSessionId: 'doc-2' });
     expect(second).not.toBe(first);
     expect(first.isDisposed()).toBe(true);
     expect(first.signal.aborted).toBe(true);
@@ -60,11 +60,12 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
     expect(session.isCurrent(0)).toBe(false);
   });
 
-  it('disposeRuntimeSession 清理登记表（页面离开语义）', () => {
-    const session = getOrCreateRuntimeSession({ pageId: 'p3', documentSessionId: 'd1' });
-    disposeRuntimeSession('p3');
+  it('RuntimeSessionManager.dispose 清理会话（页面离开语义）', () => {
+    const manager = createRuntimeSessionManager();
+    const session = manager.getOrCreate({ pageId: 'p3', documentSessionId: 'd1' });
+    manager.dispose('p3');
     expect(session.isDisposed()).toBe(true);
-    expect(getOrCreateRuntimeSession({ pageId: 'p3', documentSessionId: 'd1' })).not.toBe(session);
+    expect(manager.getOrCreate({ pageId: 'p3', documentSessionId: 'd1' })).not.toBe(session);
   });
 
   it('dispose 后旧 apiCall 异步回调不得写回状态（结果静默丢弃）', async () => {

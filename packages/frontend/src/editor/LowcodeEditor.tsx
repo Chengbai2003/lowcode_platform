@@ -8,9 +8,9 @@ import type {
   LowcodeEditorProps,
   NotificationOptions,
 } from './types';
-import type { PageSchema, AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
 import { antdPreset } from '@lowcode-platform/preset-antd';
+import { createComponentPreset } from '@lowcode-platform/renderer';
 import {
   EditorHeader,
   PreviewPane,
@@ -18,6 +18,7 @@ import {
   ErrorBoundary,
   useUndoRedoShortcuts,
 } from './components';
+
 import { ComponentTree } from './components/TreeView/ComponentTree';
 import { useFloatingIslandHotkey } from './hooks/useFloatingIslandHotkey';
 import { useSchemaHistoryStore } from './hooks/useSchemaHistoryStore';
@@ -265,7 +266,40 @@ function LowcodeEditorInner({
     [forceUpdateSchema],
   );
 
-  // 合并自定义组件与默认注册表
+  // 获取当前 documentSessionId 并计算唯一页面身份（未保存草稿使用 draft:${sessionId}，禁止固定 default-page）
+  const documentSessionId = useSelectionStore((state) => state.documentSessionId);
+  const runtimePageId = pageId ?? `draft:${documentSessionId}`;
+
+  // 构建封闭组合的 ComponentPreset：将宿主扩展组件经 Manifest 校验后安全合并至 antdPreset
+  const editorPreset = useMemo(() => {
+    const customEntries = Object.entries(customComponents);
+    if (customEntries.length === 0) {
+      return antdPreset;
+    }
+    const extensions = customEntries.map(([type, component]) => ({
+      type,
+      component,
+      manifest: {
+        componentType: type,
+        allowedProps: Object.freeze([
+          'children',
+          'className',
+          'style',
+          'id',
+          'key',
+          'title',
+          'value',
+          'onClick',
+        ]),
+      },
+    }));
+    return createComponentPreset({
+      base: antdPreset,
+      extensions,
+    });
+  }, [customComponents]);
+
+  // 合并自定义组件与默认注册表（供属性面板/左侧面板使用）
   const allComponents = useMemo(() => {
     const rendererComponents = { ...antdPreset.runtime };
     const componentsOnly = Object.keys(componentRegistry).reduce(
@@ -362,6 +396,9 @@ function LowcodeEditorInner({
           <main className={`${styles.centerPane} ${isPreviewMode ? styles.fullWidth : ''}`}>
             <PreviewPane
               schema={schema}
+              preset={editorPreset}
+              pageId={runtimePageId}
+              documentSessionId={documentSessionId}
               allComponents={allComponents}
               eventContext={mergedEventContext}
               previewTheme={previewTheme}

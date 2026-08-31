@@ -15,7 +15,11 @@ const validSchema = {
 describe('Renderer contract boundary (fail-close)', () => {
   it('renderFromJSON returns an element carrying the canonical frozen schema', () => {
     const raw = JSON.stringify(validSchema);
-    const element = renderFromJSON(raw, undefined, { preset: testPreset });
+    const element = renderFromJSON(raw, {
+      preset: testPreset,
+      pageId: 'json-p',
+      documentSessionId: 'json-d',
+    });
     expect(React.isValidElement(element)).toBe(true);
     // 只渲染 Contract 返回的 canonical 深冻结对象，而非原始输入
     expect(element.props.schema).not.toBe(JSON.parse(raw));
@@ -25,12 +29,14 @@ describe('Renderer contract boundary (fail-close)', () => {
 
   it('renderFromJSON rejects unsupported schemaVersion', () => {
     const bad = JSON.stringify({ ...validSchema, schemaVersion: 999 });
-    expect(() => renderFromJSON(bad)).toThrow(/schemaVersion/i);
+    expect(() => renderFromJSON(bad, { preset: testPreset })).toThrow(/schemaVersion/i);
   });
 
   it('renderFromJSON rejects malformed schema', () => {
-    expect(() => renderFromJSON(JSON.stringify({ components: {} }))).toThrow();
-    expect(() => renderFromJSON('not json')).toThrow();
+    expect(() =>
+      renderFromJSON(JSON.stringify({ components: {} }), { preset: testPreset }),
+    ).toThrow();
+    expect(() => renderFromJSON('not json', { preset: testPreset })).toThrow();
   });
 
   it('Renderer rejects getter-carrying schema without executing it', () => {
@@ -50,7 +56,14 @@ describe('Renderer contract boundary (fail-close)', () => {
     });
 
     expect(() =>
-      renderToString(React.createElement(Renderer, { schema: raw as never, preset: testPreset })),
+      renderToString(
+        React.createElement(Renderer, {
+          schema: raw as never,
+          preset: testPreset,
+          pageId: 'boundary-p',
+          documentSessionId: 'boundary-d',
+        }),
+      ),
     ).toThrow();
     expect(getterRan).toBe(false);
   });
@@ -58,7 +71,14 @@ describe('Renderer contract boundary (fail-close)', () => {
   it('Renderer component rejects invalid schema props (fail-close)', () => {
     const bad: unknown = { ...validSchema, rootId: '' };
     expect(() =>
-      renderToString(React.createElement(Renderer, { schema: bad as never, preset: testPreset })),
+      renderToString(
+        React.createElement(Renderer, {
+          schema: bad as never,
+          preset: testPreset,
+          pageId: 'boundary-p',
+          documentSessionId: 'boundary-d',
+        }),
+      ),
     ).toThrow();
   });
 });
@@ -69,7 +89,12 @@ describe('Renderer same-reference mutation rerender (fail-safe)', () => {
     const mutable: Record<string, unknown> = JSON.parse(JSON.stringify(validSchema));
 
     const { container, rerender } = render(
-      React.createElement(Renderer, { schema: mutable as never, preset: testPreset }),
+      React.createElement(Renderer, {
+        schema: mutable as never,
+        preset: testPreset,
+        pageId: 'same-ref-p',
+        documentSessionId: 'same-ref-d',
+      }),
     );
     const before = container.innerHTML;
 
@@ -82,7 +107,14 @@ describe('Renderer same-reference mutation rerender (fail-safe)', () => {
 
     // 同一对象引用 rerender：useMemo 依引用记忆，渲染树必须仍消费首帧的 canonical 快照
     expect(() =>
-      rerender(React.createElement(Renderer, { schema: mutable as never, preset: testPreset })),
+      rerender(
+        React.createElement(Renderer, {
+          schema: mutable as never,
+          preset: testPreset,
+          pageId: 'same-ref-p',
+          documentSessionId: 'same-ref-d',
+        }),
+      ),
     ).not.toThrow();
     expect(container.innerHTML).toBe(before);
     expect(container.textContent).not.toContain('Injected');

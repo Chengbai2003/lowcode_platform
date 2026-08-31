@@ -33,7 +33,12 @@ describe('Renderer visibility', () => {
     await act(async () => {
       const renderResult = render(
         <LowcodeProvider>
-          <Renderer preset={testPreset} schema={buildSchema('{{ true }}')} />
+          <Renderer
+            preset={testPreset}
+            pageId="p-visibility"
+            documentSessionId="doc-1"
+            schema={buildSchema('{{ true }}')}
+          />
         </LowcodeProvider>,
       );
       rerender = renderResult.rerender;
@@ -45,7 +50,12 @@ describe('Renderer visibility', () => {
     await act(async () => {
       rerender(
         <LowcodeProvider>
-          <Renderer preset={testPreset} schema={buildSchema('{{ false }}')} />
+          <Renderer
+            preset={testPreset}
+            pageId="p-visibility"
+            documentSessionId="doc-1"
+            schema={buildSchema('{{ false }}')}
+          />
         </LowcodeProvider>,
       );
       await flushMicrotasks();
@@ -69,7 +79,14 @@ describe('Renderer visibility', () => {
       },
     };
 
-    render(<Renderer preset={testPreset} schema={schema} />);
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="p-visibility"
+        documentSessionId="doc-1"
+        schema={schema}
+      />,
+    );
 
     expect(screen.getByDisplayValue('standalone')).toBeTruthy();
   });
@@ -97,7 +114,15 @@ describe('Renderer visibility', () => {
       },
     });
 
-    render(<Renderer preset={testPreset} schema={schema} eventContext={{ getState }} />);
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="p-visibility"
+        documentSessionId="doc-1"
+        schema={schema}
+        eventContext={{ getState }}
+      />,
+    );
 
     expect(screen.getByDisplayValue('schema-value')).toBeTruthy();
   });

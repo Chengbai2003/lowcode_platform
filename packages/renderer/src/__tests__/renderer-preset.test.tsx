@@ -3,6 +3,7 @@ import { render } from '@testing-library/react';
 import React from 'react';
 import { Renderer } from '../Renderer';
 import { sanitizePropsByManifest } from '../preset/sanitizePropsByManifest';
+import { createComponentPreset } from '../preset/createComponentPreset';
 import { testPreset } from './fixtures/testPreset';
 
 const divSchema = (props: Record<string, unknown>) => ({
@@ -22,7 +23,14 @@ describe('Renderer preset contract (M0-4 Scope B)', () => {
       components: { root: { id: 'root', type: 'NotRegistered', childrenIds: [] } },
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { container } = render(<Renderer preset={testPreset} schema={schema as never} />);
+    const { container } = render(
+      <Renderer
+        preset={testPreset}
+        pageId="p-unknown"
+        documentSessionId="doc-1"
+        schema={schema as never}
+      />,
+    );
     expect(container.querySelector('[data-unknown-component="NotRegistered"]')).not.toBeNull();
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('NotRegistered'));
     warn.mockRestore();
@@ -33,6 +41,8 @@ describe('Renderer preset contract (M0-4 Scope B)', () => {
     const { container } = render(
       <Renderer
         preset={testPreset}
+        pageId="p-manifest"
+        documentSessionId="doc-1"
         schema={
           divSchema({
             className: 'kept',
@@ -59,32 +69,75 @@ describe('Renderer preset contract (M0-4 Scope B)', () => {
     expect(props.className).toBe('ok');
   });
 
-  it('宿主组件覆盖 Preset 类型后不再受 Preset Manifest 约束', () => {
+  it('宿主扩展组件经 createComponentPreset 封闭组合并受其 Manifest 约束', () => {
     const received: Record<string, unknown> = {};
-    const HostDiv = (props: Record<string, unknown>) => {
+    const CustomWidget = (props: Record<string, unknown>) => {
       Object.assign(received, props);
-      return <div data-host="1" />;
+      return <div data-custom-widget="1" className={props.className as string} />;
     };
+    const composedPreset = createComponentPreset({
+      base: testPreset,
+      extensions: [
+        {
+          type: 'CustomWidget',
+          component: CustomWidget as never,
+          manifest: {
+            componentType: 'CustomWidget',
+            allowedProps: ['className', 'title'],
+          },
+        },
+      ],
+    });
+
+    const schema = {
+      schemaVersion: 0 as const,
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['w1'] },
+        w1: {
+          id: 'w1',
+          type: 'CustomWidget',
+          props: { className: 'custom-class', 'data-unknown': 'bad' },
+        },
+      },
+    };
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { container } = render(
       <Renderer
-        preset={testPreset}
-        components={{ Div: HostDiv as never }}
-        schema={divSchema({ 'data-not-in-manifest': 'x' }) as never}
+        preset={composedPreset}
+        pageId="p-composed"
+        documentSessionId="doc-1"
+        schema={schema as never}
       />,
     );
-    expect(container.querySelector('[data-host="1"]')).not.toBeNull();
-    expect(received['data-not-in-manifest']).toBe('x');
+    expect(container.querySelector('[data-custom-widget="1"]')).not.toBeNull();
+    expect(received.className).toBe('custom-class');
+    expect(received['data-unknown']).toBeUndefined(); // Manifest fail-close 过滤
+    warn.mockRestore();
   });
 
-  it('未绑定 Preset 且无宿主组件时同样 fail-close（无内置兜底）', () => {
+  it('未提供 Preset 或 pageId / documentSessionId 时 fail-close 抛错', () => {
     const schema = {
       schemaVersion: 0 as const,
       rootId: 'root',
       components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
     };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { container } = render(<Renderer schema={schema as never} />);
-    expect(container.querySelector('[data-unknown-component="Page"]')).not.toBeNull();
-    warn.mockRestore();
+    expect(() => render((<Renderer schema={schema as never} />) as never)).toThrow(/preset/);
+    expect(() =>
+      render(
+        <Renderer
+          preset={testPreset}
+          pageId=""
+          documentSessionId="doc-1"
+          schema={schema as never}
+        />,
+      ),
+    ).toThrow(/pageId/);
+    expect(() =>
+      render(
+        <Renderer preset={testPreset} pageId="p1" documentSessionId="" schema={schema as never} />,
+      ),
+    ).toThrow(/documentSessionId/);
   });
 });

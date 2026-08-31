@@ -63,6 +63,8 @@ describe('antdPreset Props 净化（fail-close，经 Renderer 端到端）', () 
     const { container } = render(
       <Renderer
         preset={antdPreset}
+        pageId="p-antd-test"
+        documentSessionId="doc-1"
         schema={
           schemaWithDiv({
             className: 'kept',
@@ -97,7 +99,15 @@ describe('antdPreset Props 净化（fail-close，经 Renderer 端到端）', () 
         },
       },
     };
-    const { container } = render(<Renderer preset={antdPreset} schema={schema as never} />);
+    const { container } = render(
+      <Renderer
+        preset={antdPreset}
+        pageId="p-antd-test"
+        documentSessionId="doc-1"
+        schema={schema as never}
+      />,
+    );
+
     const link = container.querySelector('a');
     expect(link).not.toBeNull();
     expect(link!.getAttribute('href')).toBeNull();

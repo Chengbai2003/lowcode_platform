@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { act, cleanup } from '@testing-library/react';
 import { createRendererHost } from '../createRendererHost';
+import { testPreset } from '../../__tests__/fixtures/testPreset';
 
 const schemaWithRootType = (type: string) => ({
   schemaVersion: 0 as const,
@@ -17,12 +18,22 @@ describe('createRendererHost (最小 React Host)', () => {
 
     let host: ReturnType<typeof createRendererHost>;
     act(() => {
-      host = createRendererHost(container, { schema: schemaWithRootType('Page') });
+      host = createRendererHost(container, {
+        preset: testPreset,
+        pageId: 'host-page',
+        documentSessionId: 'host-session-1',
+        schema: schemaWithRootType('Page'),
+      });
     });
     expect(container.children.length).toBe(1);
 
     act(() => {
-      host.update({ schema: schemaWithRootType('Div') });
+      host.update({
+        preset: testPreset,
+        pageId: 'host-page',
+        documentSessionId: 'host-session-2',
+        schema: schemaWithRootType('Div'),
+      });
     });
     expect(container.children.length).toBe(1);
 
