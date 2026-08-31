@@ -3,6 +3,7 @@
   "category": "validation",
   "title": "非法输入：Patch 操作数超过策略上限",
   "intent": "一次提交 8 个 patch 操作",
+  "capabilities": ["patch_policy"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,
@@ -83,7 +84,7 @@
   },
   "expected": {
     "blocked": true,
-    "blockedReason": "exceed policy limit"
+    "blockedReason": "maximum operation count"
   },
   "caseSchemaVersion": 1
 }

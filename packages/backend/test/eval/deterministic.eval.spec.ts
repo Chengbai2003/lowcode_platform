@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { runEvalCase, serializeResult } from './pipeline';
 import { computeMetrics } from './metrics';
 import { writeReports } from './report';
+import { validateEvalCase } from './case-contract';
 import {
   BASELINE_CASE_QUOTAS,
   EVAL_CASE_SCHEMA_VERSION,
@@ -29,6 +30,7 @@ function loadCases(): EvalCase[] {
   const files = readdirSync(CASES_DIR)
     .filter((f) => f.endsWith('.case.json'))
     .sort();
+  const ids = new Set<string>();
   return files.map((file) => {
     const raw = JSON.parse(readFileSync(join(CASES_DIR, file), 'utf-8')) as EvalCase;
     if (raw.caseSchemaVersion !== EVAL_CASE_SCHEMA_VERSION) {
@@ -36,6 +38,7 @@ function loadCases(): EvalCase[] {
         `Eval case ${raw.id}: caseSchemaVersion ${raw.caseSchemaVersion} != expected ${EVAL_CASE_SCHEMA_VERSION}`,
       );
     }
+    validateEvalCase(raw, ids);
     return raw;
   });
 }

@@ -1,0 +1,24 @@
+{
+  "id": "draft-form-page",
+  "caseSchemaVersion": 1,
+  "category": "draft",
+  "title": "冷启动起草：合法输入表单页面",
+  "intent": "创建一个包含标题和输入框的注册页面",
+  "capabilities": ["schema_generation"],
+  "fixtures": {
+    "modelOutputSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": { "id": "root", "type": "Page", "childrenIds": ["title1", "input1"] },
+        "title1": { "id": "title1", "type": "Title", "props": { "children": "注册" } },
+        "input1": { "id": "input1", "type": "Input", "props": { "placeholder": "请输入邮箱" } }
+      }
+    }
+  },
+  "expected": {
+    "schemaValid": true,
+    "blocked": false,
+    "componentIds": ["input1", "root", "title1"]
+  }
+}

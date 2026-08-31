@@ -1,6 +1,13 @@
 export interface CompileOptions {
   componentSources?: Record<string, string>;
+  componentBindings?: Record<string, CompilerComponentBinding>;
   defaultLibrary?: string;
+  allowDefaultComponentFallback?: boolean;
+}
+
+export interface CompilerComponentBinding {
+  module: string;
+  exportName?: string;
 }
 
 export interface ExpressionNode {

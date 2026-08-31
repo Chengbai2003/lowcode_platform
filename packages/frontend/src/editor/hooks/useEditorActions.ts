@@ -62,10 +62,15 @@ export function useEditorActions({
       setCompiledCode(null);
       return;
     }
+    if (!pageId || pageVersion === null) {
+      message.warning('请先保存页面后再编译');
+      setCompiledCode(null);
+      return;
+    }
     const requestGeneration = useEditorStore.getState().generation;
     const requestPageId = pageId ?? null;
     try {
-      const code = await compileSchema(schema);
+      const code = await compileSchema(schema, { pageId, pageVersion });
       const curGen = useEditorStore.getState().generation;
       const curPageId = useEditorStore.getState().currentPageId;
       if (curGen !== requestGeneration || curPageId !== requestPageId) return;
@@ -80,7 +85,7 @@ export function useEditorActions({
       message.error('编译失败：' + errorMessage);
       setCompiledCode(null);
     }
-  }, [onError, pageId, schema, setCompiledCode]);
+  }, [onError, pageId, pageVersion, schema, setCompiledCode]);
 
   return { handleSavePage, handleCompile, isPageSaving };
 }

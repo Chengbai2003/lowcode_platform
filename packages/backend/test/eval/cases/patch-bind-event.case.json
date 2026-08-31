@@ -3,6 +3,7 @@
   "category": "patch",
   "title": "局部 Patch：绑定按钮点击事件",
   "intent": "给提交按钮绑定点击更新状态事件",
+  "capabilities": ["patch_preview", "safe_actions"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

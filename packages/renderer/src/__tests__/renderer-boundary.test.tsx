@@ -29,14 +29,26 @@ describe('Renderer contract boundary (fail-close)', () => {
 
   it('renderFromJSON rejects unsupported schemaVersion', () => {
     const bad = JSON.stringify({ ...validSchema, schemaVersion: 999 });
-    expect(() => renderFromJSON(bad, { preset: testPreset })).toThrow(/schemaVersion/i);
+    expect(() =>
+      renderFromJSON(bad, { preset: testPreset, pageId: 'json-p', documentSessionId: 'json-d' }),
+    ).toThrow(/schemaVersion/i);
   });
 
   it('renderFromJSON rejects malformed schema', () => {
     expect(() =>
-      renderFromJSON(JSON.stringify({ components: {} }), { preset: testPreset }),
+      renderFromJSON(JSON.stringify({ components: {} }), {
+        preset: testPreset,
+        pageId: 'json-p',
+        documentSessionId: 'json-d',
+      }),
     ).toThrow();
-    expect(() => renderFromJSON('not json', { preset: testPreset })).toThrow();
+    expect(() =>
+      renderFromJSON('not json', {
+        preset: testPreset,
+        pageId: 'json-p',
+        documentSessionId: 'json-d',
+      }),
+    ).toThrow();
   });
 
   it('Renderer rejects getter-carrying schema without executing it', () => {

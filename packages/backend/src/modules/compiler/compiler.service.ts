@@ -8,10 +8,13 @@ import { validatePageSchemaValue } from '@lowcode-platform/schema-contract';
 import { CompileRequestDto } from './dto/compile-request.dto';
 import { compileToCode, formatCode } from './generator';
 import { resolveTrustedCompilerBindings } from './preset/trustedCompilerPresetResolver';
+import { PageSchemaService } from '../page-schema/page-schema.service';
 
 @Injectable()
 export class CompilerService {
   private readonly logger = new Logger(CompilerService.name);
+
+  constructor(private readonly pageSchemaService: PageSchemaService) {}
 
   /**
    * 编译 Schema 为 React 代码
@@ -36,8 +39,14 @@ export class CompilerService {
 
     const canonicalSchema = validationResult.value;
 
-    // 2. 服务端可信 Preset 解析：禁止客户端注入不受信任的 module 路径
-    const trustedBindings = resolveTrustedCompilerBindings(dto.options?.presetId);
+    // 2. 页面快照是运行时兼容信息的唯一可信来源；客户端不得指定 Preset 或导入路径。
+    const page = await this.pageSchemaService.getSchema(
+      dto.options.pageId,
+      dto.options.pageVersion,
+    );
+    const trustedBindings = resolveTrustedCompilerBindings(
+      page.runtimeCompatibility.componentPresetId,
+    );
 
     try {
       // 3. 执行代码生成流水线

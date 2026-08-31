@@ -2,19 +2,20 @@
  * Compiler 请求 DTO
  */
 
-import { IsDefined, IsObject, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsDefined, IsInt, IsObject, IsString, Min, ValidateNested } from 'class-validator';
 
 /**
- * 编译选项（只接受安全受控选项，禁止客户端覆盖 componentSources / defaultLibrary）
+ * 编译目标。组件导入绑定只从该页面快照的 runtimeCompatibility 推导。
  */
 export class CompileOptionsDto {
-  @IsOptional()
   @IsString()
-  pageId?: string;
+  pageId!: string;
 
-  @IsOptional()
-  @IsString()
-  presetId?: string;
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pageVersion!: number;
 }
 
 /**
@@ -28,7 +29,8 @@ export class CompileRequestDto {
   @IsObject()
   schema!: Record<string, unknown>;
 
-  @IsOptional()
   @IsObject()
-  options?: CompileOptionsDto;
+  @ValidateNested()
+  @Type(() => CompileOptionsDto)
+  options!: CompileOptionsDto;
 }

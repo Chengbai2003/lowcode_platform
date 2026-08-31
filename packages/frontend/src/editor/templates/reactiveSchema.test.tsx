@@ -1,68 +1,13 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { componentRegistry } from '../../components';
-import { Renderer, createComponentPreset } from '@lowcode-platform/renderer';
+import { Renderer } from '@lowcode-platform/renderer';
 import { getTemplateSchema } from './index';
+import { BUILTIN_TEMPLATE_IDS } from './types';
 import { createDefaultReactiveSchema } from './reactiveSchema';
 import { formContactTemplate } from './templates/form-contact';
 import { antdPreset } from '@lowcode-platform/preset-antd';
 
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
-
-const testPreset = createComponentPreset({
-  base: antdPreset,
-  extensions: Object.entries(componentRegistry)
-    .filter(([key]) => !antdPreset.runtime[key])
-    .map(([key, entry]) => ({
-      type: key,
-      component: entry.component,
-      manifest: {
-        componentType: key,
-        allowedProps: [
-          'children',
-          'className',
-          'style',
-          'id',
-          'key',
-          'title',
-          'value',
-          'onClick',
-          'initialValues',
-          'name',
-          'label',
-          'rules',
-          'options',
-          'placeholder',
-          'rows',
-          'type',
-          'size',
-          'direction',
-          'layout',
-          'extra',
-          'bordered',
-          'columns',
-          'dataSource',
-          'pagination',
-          'rowKey',
-          'loading',
-          'scroll',
-          'gutter',
-          'span',
-          'offset',
-          'flex',
-          'htmlType',
-          'block',
-          'danger',
-          'justify',
-          'align',
-          'message',
-          'description',
-          'showIcon',
-          'banner',
-        ],
-      },
-    })),
-});
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {
@@ -81,10 +26,25 @@ if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
 }
 
 describe('reactive template schemas', () => {
+  it('built-in preset covers every component used by the default page and templates', () => {
+    const schemas = [createDefaultReactiveSchema(), ...BUILTIN_TEMPLATE_IDS.map(getTemplateSchema)];
+    for (const schema of schemas) {
+      expect(schema).toBeTruthy();
+      for (const node of Object.values(schema!.components) as Array<{ type: string }>) {
+        expect(antdPreset.runtime[node.type], `runtime for ${node.type}`).toBeDefined();
+        expect(antdPreset.manifest[node.type], `manifest for ${node.type}`).toBeDefined();
+        expect(
+          antdPreset.compiler.componentSources[node.type],
+          `compiler binding for ${node.type}`,
+        ).toBeDefined();
+      }
+    }
+  });
+
   it('default schema updates preview copy when form values change', async () => {
     render(
       <Renderer
-        preset={testPreset}
+        preset={antdPreset}
         schema={createDefaultReactiveSchema()}
         pageId="template-page-1"
         documentSessionId="doc-1"
@@ -126,7 +86,7 @@ describe('reactive template schemas', () => {
 
     render(
       <Renderer
-        preset={testPreset}
+        preset={antdPreset}
         schema={schema!}
         pageId="template-page-2"
         documentSessionId="doc-1"
@@ -156,7 +116,7 @@ describe('reactive template schemas', () => {
 
     render(
       <Renderer
-        preset={testPreset}
+        preset={antdPreset}
         schema={schema}
         pageId="template-page-3"
         documentSessionId="doc-1"
@@ -181,7 +141,7 @@ describe('reactive template schemas', () => {
     const baseSchema = JSON.parse(JSON.stringify(formContactTemplate.schema));
     const { rerender } = render(
       <Renderer
-        preset={testPreset}
+        preset={antdPreset}
         schema={baseSchema}
         pageId="template-page-4"
         documentSessionId="doc-1"
@@ -206,7 +166,7 @@ describe('reactive template schemas', () => {
 
     rerender(
       <Renderer
-        preset={testPreset}
+        preset={antdPreset}
         schema={nextSchema}
         pageId="template-page-4"
         documentSessionId="doc-1"

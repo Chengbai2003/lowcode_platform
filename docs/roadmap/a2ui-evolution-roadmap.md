@@ -65,12 +65,12 @@ M5 项目资产与显式记忆
 
 目标：让 DSL、Renderer、Compiler 和 Agent 的每次改动都可验证、可量化、可回归。
 
-| Epic                 | 优先级 | 目标                                                                 | 状态      |
-| -------------------- | ------ | -------------------------------------------------------------------- | --------- |
-| M0-1 Schema Contract | P0     | 建立协议单一真相源，分离 `schemaVersion` 与 `pageVersion`            | Completed |
-| M0-2 全量测试门禁    | P0     | 修复 3 组 Nest 测试，恢复后端 36/36 suites                           | Completed |
-| M0-3 Agent Eval      | P0     | 建立确定性离线评测与真实模型趋势评测                                 | Planned   |
-| M0-4 独立 Renderer   | P0     | 抽离 Renderer Package、单系统 ComponentPreset 与 RuntimeSession 隔离 | Completed |
+| Epic                 | 优先级 | 目标                                                                | 状态        |
+| -------------------- | ------ | ------------------------------------------------------------------- | ----------- |
+| M0-1 Schema Contract | P0     | 建立协议单一真相源，分离 `schemaVersion` 与 `pageVersion`           | Completed   |
+| M0-2 全量测试门禁    | P0     | 修复 3 组 Nest 测试，恢复后端 36/36 suites                          | Completed   |
+| M0-3 Agent Eval      | P0     | 确定性 Patch Apply 基线可运行；完整生产编排与 Live 趋势契约仍待完成 | In Progress |
+| M0-4 独立 Renderer   | P0     | 内置 Preset/Session 完成；外部 Preset 服务端可信注册仍待产品化      | In Progress |
 
 推荐执行顺序：
 

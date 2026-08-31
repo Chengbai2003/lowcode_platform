@@ -33,6 +33,7 @@ export { default as Typography, Text, Title, Paragraph } from './components/Typo
 export { default as Tag } from './components/Tag';
 export { default as Badge } from './components/Badge';
 export { default as Alert } from './components/Alert';
+export { Avatar } from 'antd';
 export { default as Steps, Step } from './components/Steps';
 export { default as Progress } from './components/Progress';
 export { default as Spin } from './components/Spin';
@@ -69,6 +70,7 @@ import Typography, { Text, Title, Paragraph } from './components/Typography';
 import Tag from './components/Tag';
 import Badge from './components/Badge';
 import Alert from './components/Alert';
+import { Avatar } from 'antd';
 import Steps, { Step } from './components/Steps';
 import Progress from './components/Progress';
 import Spin from './components/Spin';
@@ -126,6 +128,7 @@ import { SpinMeta } from './components/Spin.meta';
 import { SkeletonMeta } from './components/Skeleton.meta';
 import { DatePickerMeta } from './components/DatePicker.meta';
 import { RangePickerMeta } from './components/RangePicker.meta';
+import { AvatarMeta } from './components/Avatar.meta';
 
 import type { ComponentPanelConfig } from '../types';
 
@@ -175,6 +178,7 @@ export const componentRegistry: Record<string, ComponentRegistryEntry> = {
   Popover: { component: Popover, meta: PopoverMeta },
   Tooltip: { component: Tooltip, meta: TooltipMeta },
   Alert: { component: Alert, meta: AlertMeta },
+  Avatar: { component: Avatar, meta: AvatarMeta },
 
   // 布局
   Space: { component: Space, meta: SpaceMeta },

@@ -3,6 +3,7 @@
   "category": "draft",
   "title": "冷启动起草：多组件页面",
   "intent": "创建一个带标题、段落和按钮的落地页",
+  "capabilities": ["schema_generation"],
   "fixtures": {
     "modelOutputSchema": {
       "schemaVersion": 0,

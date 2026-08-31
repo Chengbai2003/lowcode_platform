@@ -7,7 +7,9 @@ import type {
   EventUIContext,
   LowcodeEditorProps,
   NotificationOptions,
+  PageSchema,
 } from './types';
+import type { AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
 import { antdPreset } from '@lowcode-platform/preset-antd';
 import { createComponentPreset } from '@lowcode-platform/renderer';
@@ -270,28 +272,15 @@ function LowcodeEditorInner({
   const documentSessionId = useSelectionStore((state) => state.documentSessionId);
   const runtimePageId = pageId ?? `draft:${documentSessionId}`;
 
-  // 构建封闭组合的 ComponentPreset：将宿主扩展组件经 Manifest 校验后安全合并至 antdPreset
+  // 宿主扩展必须携带 Manifest 与 Compiler binding，不能猜测 Props 或导入来源。
   const editorPreset = useMemo(() => {
     const customEntries = Object.entries(customComponents);
     if (customEntries.length === 0) {
       return antdPreset;
     }
-    const extensions = customEntries.map(([type, component]) => ({
+    const extensions = customEntries.map(([type, extension]) => ({
       type,
-      component,
-      manifest: {
-        componentType: type,
-        allowedProps: Object.freeze([
-          'children',
-          'className',
-          'style',
-          'id',
-          'key',
-          'title',
-          'value',
-          'onClick',
-        ]),
-      },
+      ...extension,
     }));
     return createComponentPreset({
       base: antdPreset,
@@ -309,7 +298,10 @@ function LowcodeEditorInner({
       },
       {} as Record<string, React.ComponentType<Record<string, unknown>>>,
     );
-    return { ...rendererComponents, ...componentsOnly, ...customComponents };
+    const customRuntime = Object.fromEntries(
+      Object.entries(customComponents).map(([type, extension]) => [type, extension.component]),
+    );
+    return { ...rendererComponents, ...componentsOnly, ...customRuntime };
   }, [customComponents]);
 
   const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({

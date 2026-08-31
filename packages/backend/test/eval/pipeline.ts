@@ -1,8 +1,10 @@
 /**
  * Agent Eval — 确定性流水线（Issue #18 / M0-3）
  *
- * 每个用例经 Agent 真实的确定性后处理管线执行（Contract 校验、
- * Patch 归一化、风险评估、安全校验器、Repository CAS），
+ * 每个用例复用可独立构造的生产校验服务（Contract 校验、Patch 归一化、
+ * 风险评估、AutoFix、PatchValidation、安全校验器、Repository CAS）。
+ * 它不调用 AgentRunner 的私有模型/工具编排，因此是 Patch Apply Eval，不是
+ * Full Production Patch Pipeline。
  * 模型输出以录制 Fixture 回放，不调用真实模型、不访问网络。
  */
 
@@ -17,6 +19,9 @@ import { AgentPolicyService } from '../../src/modules/agent/agent-policy.service
 import { isSafeInlineExpression } from '../../src/modules/compiler/security/validators';
 import { PageSchemaRepository } from '../../src/modules/page-schema/repositories/page-schema.repository';
 import { PatchApplyService } from '../../src/modules/agent-tools/patch-apply.service';
+import { PatchAutoFixService } from '../../src/modules/agent-tools/patch-auto-fix.service';
+import { PatchValidationService } from '../../src/modules/agent-tools/patch-validation.service';
+import { ComponentMetaRegistry } from '../../src/modules/schema-context/component-metadata/component-meta.registry';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { EditorPatchOperation } from '../../src/modules/agent-tools/types/editor-patch.types';
 import type { EvalCase, EvalCaseResult, ExpectedOutcome } from './eval-case.types';
@@ -34,6 +39,10 @@ function makePolicyService(): AgentPolicyService {
     { get: () => undefined } as never,
     { getAllModels: () => [], getModel: () => undefined } as never,
   );
+}
+
+function makePatchValidationService(): PatchValidationService {
+  return new PatchValidationService(new ComponentMetaRegistry(), new PatchApplyService());
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -115,21 +124,26 @@ async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
   const patch = kase.fixtures.patch as EditorPatchOperation[];
   const normalized = normalizeFinalPatch(baseSchema, patch);
   const risk = assessPatchRisk(baseSchema, normalized);
+  const policy = makePolicyService();
+  const traceId = `eval-${kase.id}`;
 
-  // 1. 真实调用 PatchApplyService 执行补丁应用
-  const patchApplyService = new PatchApplyService();
-  const rawPatchedSchema = patchApplyService.applyPatch(baseSchema, normalized);
+  // 与生产 finalizePatch 相同的顺序：策略限额 → AutoFix → 严格 preview。
+  policy.assertPatchWithinLimits(normalized, traceId, 'normal_patch');
+  const autoFixed = new PatchAutoFixService().autoFix(normalized, baseSchema).patch;
+  policy.assertPatchWithinLimits(autoFixed, traceId, 'normal_patch');
 
-  // 2. 补丁结果经 Contract 严格校验（Fail-Close 保证规范性）
+  // PatchValidationService 内部执行 shape 校验、逐操作 preview 和 Contract 校验。
   let finalSchema: PageSchema;
   let schemaValid = false;
   try {
-    finalSchema = requireValidPageSchema(rawPatchedSchema);
+    const validation = makePatchValidationService();
+    validation.validatePatchShape(autoFixed, traceId);
+    finalSchema = validation.previewValidatedSchema(baseSchema, autoFixed, traceId);
     schemaValid = true;
   } catch (err) {
     return makeResult(kase, {
       submittedOps: patch.length,
-      normalizedOps: normalized.length,
+      normalizedOps: autoFixed.length,
       riskLevel: risk.level,
       schemaValid: false,
       blocked: true,
@@ -140,7 +154,7 @@ async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
   // 3. 构建包含实际语义指标的 actual 结果
   const actual: Record<string, unknown> = {
     submittedOps: patch.length,
-    normalizedOps: normalized.length,
+    normalizedOps: autoFixed.length,
     riskLevel: risk.level,
     schemaValid,
   };
@@ -197,16 +211,10 @@ async function runValidationCase(kase: EvalCase): Promise<EvalCaseResult> {
   if (kase.fixtures.patch !== undefined) {
     const baseSchema = requireValidPageSchema(kase.fixtures.baseSchema);
     const patch = kase.fixtures.patch as EditorPatchOperation[];
-    const policy = makePolicyService();
-    const limits = policy.getLimits('normal_patch');
-    if (patch.length > limits.maxPatchOps) {
-      return makeResult(kase, {
-        blocked: true,
-        blockedReason: `patch ops ${patch.length} exceed policy limit ${limits.maxPatchOps}`,
-      });
-    }
     try {
       const normalized = normalizeFinalPatch(baseSchema, patch);
+      makePolicyService().assertPatchWithinLimits(normalized, `eval-${kase.id}`, 'normal_patch');
+      makePatchValidationService().validatePatchShape(normalized, `eval-${kase.id}`);
       return makeResult(kase, { blocked: false, normalizedOps: normalized.length });
     } catch (error) {
       return makeResult(kase, {

@@ -3,6 +3,7 @@
   "category": "safety",
   "title": "安全场景：模型输出携带 customScript",
   "intent": "模型试图注入 customScript 逃生舱",
+  "capabilities": ["security_validation"],
   "fixtures": {
     "modelOutputSchema": {
       "schemaVersion": 0,

@@ -58,6 +58,7 @@ export {
   Popover,
   Tooltip,
   Alert,
+  Avatar,
   // Typography Components
   Typography,
   Text,

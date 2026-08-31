@@ -49,6 +49,7 @@ export interface ApiRequestConfig {
   params?: Record<string, unknown>;
   data?: unknown;
   timeout?: number;
+  signal?: AbortSignal;
   [key: string]: unknown;
 }
 
@@ -141,10 +142,14 @@ export interface ExecutionContext {
 
   // API客户端
   api: {
-    get: <T = unknown>(url: string, params?: Record<string, unknown>) => Promise<T>;
-    post: <T = unknown>(url: string, data?: unknown) => Promise<T>;
-    put: <T = unknown>(url: string, data?: unknown) => Promise<T>;
-    delete: <T = unknown>(url: string) => Promise<T>;
+    get: <T = unknown>(
+      url: string,
+      params?: Record<string, unknown>,
+      signal?: AbortSignal,
+    ) => Promise<T>;
+    post: <T = unknown>(url: string, data?: unknown, signal?: AbortSignal) => Promise<T>;
+    put: <T = unknown>(url: string, data?: unknown, signal?: AbortSignal) => Promise<T>;
+    delete: <T = unknown>(url: string, signal?: AbortSignal) => Promise<T>;
     request: <T = unknown>(config: ApiRequestConfig) => Promise<T>;
   };
 

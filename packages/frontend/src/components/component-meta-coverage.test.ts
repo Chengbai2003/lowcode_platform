@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ComponentPanelConfig, EditorType } from '../types';
 import { componentRegistry, getComponentMeta } from './index';
+import { antdPreset } from '@lowcode-platform/preset-antd';
 
 const SUPPORTED_EDITORS = new Set<EditorType>([
   'string',
@@ -68,9 +69,9 @@ function isSerializableValue(value: unknown): boolean {
 }
 
 describe('component meta coverage', () => {
-  it('keeps registry and meta coverage at 50/50', () => {
+  it('keeps registry and meta coverage at 51/51', () => {
     const entries = Object.entries(componentRegistry);
-    expect(entries).toHaveLength(50);
+    expect(entries).toHaveLength(51);
 
     const missingMeta = entries
       .filter(([, entry]) => !entry.meta)
@@ -84,6 +85,19 @@ describe('component meta coverage', () => {
       expect(meta.properties.length).toBeGreaterThan(0);
       expect(getComponentMeta(componentType)).toBeDefined();
     });
+  });
+
+  it('keeps every editable component property in the built-in manifest', () => {
+    const missingManifestProps = Object.entries(componentRegistry).flatMap(
+      ([componentType, registryEntry]) => {
+        const allowedProps = new Set(antdPreset.manifest[componentType]?.allowedProps ?? []);
+        return (registryEntry.meta?.properties ?? [])
+          .filter((property) => !allowedProps.has(property.key))
+          .map((property) => `${componentType}.${property.key}`);
+      },
+    );
+
+    expect(missingManifestProps).toEqual([]);
   });
 
   it('uses supported editor types and safe visible guards', () => {

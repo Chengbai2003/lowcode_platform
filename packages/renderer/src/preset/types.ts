@@ -33,6 +33,15 @@ export type ComponentValidationRegistry = Readonly<Record<string, ComponentProps
 export interface CompilerBindings {
   readonly defaultLibrary: string;
   readonly componentSources: Readonly<Record<string, string>>;
+  /** Complete binding metadata. `componentSources` remains for legacy compiler consumers. */
+  readonly componentBindings?: Readonly<Record<string, CompilerComponentBinding>>;
+  /** Trusted presets fail closed when a schema references an unbound component type. */
+  readonly allowDefaultComponentFallback?: boolean;
+}
+
+export interface CompilerComponentBinding {
+  readonly module: string;
+  readonly exportName?: string;
 }
 
 /** Preset 的 Compiler 绑定注册表（seal 后只读） */

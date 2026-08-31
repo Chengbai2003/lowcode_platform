@@ -1,9 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { LowcodeEditor } from '../LowcodeEditor';
 import { useSelectionStore } from '../store/editor-store';
-import type { PageSchema } from '../../../types';
+import type { PageSchema } from '../../types';
+import { getTemplateSchema } from '../templates';
+import { BUILTIN_TEMPLATE_IDS } from '../templates/types';
 
 beforeEach(() => {
   global.ResizeObserver = class ResizeObserver {
@@ -29,6 +31,20 @@ beforeEach(() => {
 });
 
 describe('Editor -> Renderer Session Integration (PR #34)', () => {
+  it('真实 LowcodeEditor 挂载默认页及所有内置模板时没有未知组件', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const schemas = [undefined, ...BUILTIN_TEMPLATE_IDS.map(getTemplateSchema)];
+
+    for (const schema of schemas) {
+      const view = render(<LowcodeEditor initialSchema={schema} />);
+      expect(view.container.querySelector('[data-unknown-component]')).toBeNull();
+      view.unmount();
+    }
+
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('Unknown component type'));
+    warn.mockRestore();
+  });
+
   it('未保存草稿在 LowcodeEditor 中生成独立的 draft:${documentSessionId} 身份', () => {
     const customSchema: PageSchema = {
       schemaVersion: 0,
@@ -74,7 +90,14 @@ describe('Editor -> Renderer Session Integration (PR #34)', () => {
         pageId="custom-page-1"
         initialSchema={schemaWithCustom}
         components={{
-          CustomAlert: CustomAlert as never,
+          CustomAlert: {
+            component: CustomAlert,
+            manifest: {
+              componentType: 'CustomAlert',
+              allowedProps: ['title', 'children'],
+            },
+            compilerBinding: { module: '@example/components' },
+          },
         }}
       />,
     );

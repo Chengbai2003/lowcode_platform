@@ -7,29 +7,32 @@
  * - 默认预设 'builtin-antd' 映射至 @lowcode-platform/preset-antd/compiler。
  */
 
+import { BadRequestException } from '@nestjs/common';
 import { antdCompilerBindings } from '@lowcode-platform/preset-antd';
 
 export interface CompilerBindings {
   readonly defaultLibrary?: string;
   readonly componentSources?: Readonly<Record<string, string>>;
+  readonly componentBindings?: Readonly<
+    Record<string, { readonly module: string; readonly exportName?: string }>
+  >;
+  readonly allowDefaultComponentFallback?: boolean;
 }
 
 export const TRUSTED_COMPILER_PRESETS: Record<string, CompilerBindings> = Object.freeze({
   'builtin-antd': antdCompilerBindings,
-  default: antdCompilerBindings,
 });
 
-export function resolveTrustedCompilerBindings(presetId?: string): CompilerBindings {
+export function resolveTrustedCompilerBindings(presetId: string): CompilerBindings {
   if (!presetId || presetId.trim() === '') {
-    return TRUSTED_COMPILER_PRESETS.default;
+    throw new BadRequestException('Page runtimeCompatibility componentPresetId is required');
   }
 
   const normalized = presetId.trim().toLowerCase();
   const matched = TRUSTED_COMPILER_PRESETS[normalized];
 
   if (!matched) {
-    // 未知预设：fail-close 回落至默认安全预设，禁止客户端注入任意模块路径
-    return TRUSTED_COMPILER_PRESETS.default;
+    throw new BadRequestException(`Unsupported compiler preset: ${presetId}`);
   }
 
   return matched;

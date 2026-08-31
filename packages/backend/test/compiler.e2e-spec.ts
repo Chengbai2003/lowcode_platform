@@ -4,18 +4,43 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { CompilerController } from '../src/modules/compiler/compiler.controller';
 import { CompilerService } from '../src/modules/compiler/compiler.service';
+import { PageSchemaService } from '../src/modules/page-schema/page-schema.service';
 
 describe('Compiler (e2e security & contract boundaries)', () => {
   let app: INestApplication;
   const TEST_SECRET = 'test-secret';
+  const validOptions = { pageId: 'page-1', pageVersion: 1 };
+  const pageSchemaServiceMock: Pick<PageSchemaService, 'getSchema'> = {
+    getSchema: jest.fn(async (pageId: string) => ({
+      pageId,
+      pageVersion: 1,
+      snapshotId: 'snapshot-1',
+      savedAt: '2026-01-01T00:00:00.000Z',
+      schema: {
+        schemaVersion: 0,
+        rootId: 'root',
+        components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
+      } as const,
+      runtimeCompatibility: {
+        componentPresetId: pageId === 'unknown-preset-page' ? 'unknown-preset' : 'builtin-antd',
+        componentPresetVersion: '0.0.0-draft',
+        rendererVersion: '0.0.0-draft',
+      },
+    })),
+  };
 
   beforeEach(async () => {
+    jest.clearAllMocks();
     process.env.API_SECRET = TEST_SECRET;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       controllers: [CompilerController],
       providers: [
         CompilerService,
+        {
+          provide: PageSchemaService,
+          useValue: pageSchemaServiceMock,
+        },
         {
           provide: ConfigService,
           useValue: {
@@ -34,6 +59,7 @@ describe('Compiler (e2e security & contract boundaries)', () => {
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
+        forbidNonWhitelisted: true,
         transform: true,
       }),
     );
@@ -62,6 +88,7 @@ describe('Compiler (e2e security & contract boundaries)', () => {
           root: { id: 'root', type: 'Page', childrenIds: [] },
         },
       },
+      options: validOptions,
     };
 
     const response = await request(app.getHttpServer())
@@ -101,16 +128,21 @@ describe('Compiler (e2e security & contract boundaries)', () => {
     const response = await request(app.getHttpServer())
       .post('/compiler/export')
       .set('Authorization', `Bearer ${TEST_SECRET}`)
-      .send({ schema: validSchema })
+      .send({ schema: validSchema, options: validOptions })
       .expect(200);
 
     expect(response.body.success).toBe(true);
     expect(response.body.data.code).toContain('from "@lowcode-platform/preset-antd/runtime"');
     expect(response.body.data.code).toContain('Button');
     expect(response.body.data.code).toContain('Page');
+    expect(pageSchemaServiceMock.getSchema).toHaveBeenCalledWith('page-1', 1);
   });
 
-  it('POST /compiler/export 忽略客户端注入的非法 componentSources，强制使用服务端可信绑定', async () => {
+  it.each([
+    ['componentSources', { componentSources: { Title: 'malicious-injected-module' } }],
+    ['defaultLibrary', { defaultLibrary: 'malicious-lib' }],
+    ['presetId', { presetId: 'unknown-preset' }],
+  ])('POST /compiler/export 拒绝废弃或不可信的 options.%s', async (_field, unsafeOption) => {
     const validSchema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -128,21 +160,63 @@ describe('Compiler (e2e security & contract boundaries)', () => {
     const response = await request(app.getHttpServer())
       .post('/compiler/export')
       .set('Authorization', `Bearer ${TEST_SECRET}`)
-      .send({
-        schema: validSchema,
-        options: {
-          componentSources: {
-            Title: 'malicious-injected-module',
-          },
-          defaultLibrary: 'malicious-lib',
-        },
-      })
-      .expect(200);
+      .send({ schema: validSchema, options: { ...validOptions, ...unsafeOption } })
+      .expect(400);
 
-    expect(response.body.success).toBe(true);
-    // 客户端注入的 malicious 模块不得出现在生成代码中
-    expect(response.body.data.code).not.toContain('malicious-injected-module');
-    expect(response.body.data.code).not.toContain('malicious-lib');
-    expect(response.body.data.code).toContain('@lowcode-platform/preset-antd/runtime');
+    expect(response.body.message).toBeDefined();
+  });
+
+  it('POST /compiler/export 从页面快照解析未知 preset 时 fail-close', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/compiler/export')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        schema: {
+          schemaVersion: 0,
+          rootId: 'root',
+          components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
+        },
+        options: { pageId: 'unknown-preset-page', pageVersion: 1 },
+      })
+      .expect(400);
+
+    expect(response.body.message).toMatch(/Unsupported compiler preset/i);
+  });
+
+  it('POST /compiler/export 拒绝可信 Preset 未绑定的组件类型', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/compiler/export')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        schema: {
+          schemaVersion: 0,
+          rootId: 'root',
+          components: {
+            root: { id: 'root', type: 'CustomWidget', childrenIds: [] },
+          },
+        },
+        options: validOptions,
+      })
+      .expect(400);
+
+    expect(response.body.message).toMatch(/Unsupported component type/i);
+  });
+
+  it('POST /compiler/export 拒绝遗留 schema version 字段', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/compiler/export')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        schema: {
+          schemaVersion: 0,
+          version: 1,
+          rootId: 'root',
+          components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
+        },
+        options: validOptions,
+      })
+      .expect(400);
+
+    expect(response.body.message).toMatch(/version/i);
   });
 });

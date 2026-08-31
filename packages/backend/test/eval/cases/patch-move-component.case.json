@@ -3,6 +3,7 @@
   "category": "patch",
   "title": "局部 Patch：移动组件到新位置",
   "intent": "把标题移动到根容器末尾",
+  "capabilities": ["patch_preview"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

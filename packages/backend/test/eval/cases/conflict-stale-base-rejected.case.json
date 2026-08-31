@@ -3,6 +3,7 @@
   "category": "conflict",
   "title": "版本冲突：过期 basePageVersion 被 CAS 拒绝",
   "intent": "并发保存场景：保存后再用过期基线提交",
+  "capabilities": ["page_version_cas"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

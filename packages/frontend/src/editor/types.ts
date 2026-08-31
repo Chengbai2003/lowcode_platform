@@ -1,6 +1,7 @@
 import type {
   PageSchema,
   ComponentRegistry,
+  ComponentExtension,
   ComponentNode,
   PropertyMeta,
   NotificationOptions,
@@ -11,6 +12,7 @@ import type {
 export type {
   PageSchema,
   ComponentRegistry,
+  ComponentExtension,
   ComponentNode,
   PropertyMeta,
   NotificationOptions,
@@ -34,9 +36,9 @@ export interface LowcodeEditorProps {
   initialSchema?: PageSchema | string;
 
   /**
-   * 自定义组件映射
+   * 自定义组件扩展。每项必须声明 Manifest 与 Compiler import 绑定。
    */
-  components?: ComponentRegistry;
+  components?: Record<string, ComponentExtension>;
 
   /**
    * Schema 变更回调

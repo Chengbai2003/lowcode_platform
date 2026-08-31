@@ -52,6 +52,7 @@ export class RuntimeSession {
     this.documentSessionId = documentSessionId;
     this.dispatcher = options.dispatcher ?? new EventDispatcher(options.dispatcherInit ?? {});
     this.runtime = this.dispatcher.getRuntime();
+    this.dispatcher.setHostConfig('session', this);
   }
 
   get identity(): RuntimeSessionIdentity {

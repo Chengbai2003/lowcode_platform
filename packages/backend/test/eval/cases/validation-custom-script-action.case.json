@@ -3,6 +3,7 @@
   "category": "validation",
   "title": "非法输入：Schema 携带 customScript 动作",
   "intent": "回放一个包含 customScript 的模型输出",
+  "capabilities": ["schema_validation", "security_validation"],
   "fixtures": {
     "schema": {
       "schemaVersion": 0,
