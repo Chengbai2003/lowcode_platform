@@ -268,7 +268,12 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     render(
       <LowcodeProvider>
-        <Renderer preset={testPreset} schema={schema} />
+        <Renderer
+          preset={testPreset}
+          pageId="p-reactivity"
+          documentSessionId="doc-1"
+          schema={schema}
+        />
       </LowcodeProvider>,
     );
 
@@ -304,7 +309,12 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer preset={testPreset} schema={schema} />
+        <Renderer
+          preset={testPreset}
+          pageId="p-reactivity"
+          documentSessionId="doc-1"
+          schema={schema}
+        />
       </LowcodeProvider>,
     );
 
@@ -351,7 +361,12 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer preset={testPreset} schema={schema} />
+        <Renderer
+          preset={testPreset}
+          pageId="p-reactivity"
+          documentSessionId="doc-1"
+          schema={schema}
+        />
       </LowcodeProvider>,
     );
 
@@ -392,7 +407,12 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer preset={testPreset} schema={schema} />
+        <Renderer
+          preset={testPreset}
+          pageId="p-reactivity"
+          documentSessionId="doc-1"
+          schema={schema}
+        />
       </LowcodeProvider>,
     );
 
@@ -428,7 +448,12 @@ describe('Cross-component reactivity (Phase 1)', () => {
 
     await renderWithFlush(
       <LowcodeProvider>
-        <Renderer preset={testPreset} schema={schema} />
+        <Renderer
+          preset={testPreset}
+          pageId="p-reactivity"
+          documentSessionId="doc-1"
+          schema={schema}
+        />
       </LowcodeProvider>,
     );
 
@@ -493,7 +518,12 @@ describe('Cross-component reactivity (Phase 1)', () => {
     try {
       await renderWithFlush(
         <LowcodeProvider>
-          <Renderer preset={testPreset} schema={schema} />
+          <Renderer
+            preset={testPreset}
+            pageId="p-reactivity"
+            documentSessionId="doc-1"
+            schema={schema}
+          />
         </LowcodeProvider>,
       );
 

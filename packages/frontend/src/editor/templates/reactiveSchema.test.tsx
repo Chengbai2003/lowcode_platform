@@ -1,16 +1,68 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { componentRegistry } from '../../components';
-import { Renderer } from '@lowcode-platform/renderer';
+import { Renderer, createComponentPreset } from '@lowcode-platform/renderer';
 import { getTemplateSchema } from './index';
 import { createDefaultReactiveSchema } from './reactiveSchema';
 import { formContactTemplate } from './templates/form-contact';
 import { antdPreset } from '@lowcode-platform/preset-antd';
 
 const flushMicrotasks = () => new Promise<void>((resolve) => queueMicrotask(() => resolve()));
-const testComponents = Object.fromEntries(
-  Object.entries(componentRegistry).map(([key, entry]) => [key, entry.component]),
-);
+
+const testPreset = createComponentPreset({
+  base: antdPreset,
+  extensions: Object.entries(componentRegistry)
+    .filter(([key]) => !antdPreset.runtime[key])
+    .map(([key, entry]) => ({
+      type: key,
+      component: entry.component,
+      manifest: {
+        componentType: key,
+        allowedProps: [
+          'children',
+          'className',
+          'style',
+          'id',
+          'key',
+          'title',
+          'value',
+          'onClick',
+          'initialValues',
+          'name',
+          'label',
+          'rules',
+          'options',
+          'placeholder',
+          'rows',
+          'type',
+          'size',
+          'direction',
+          'layout',
+          'extra',
+          'bordered',
+          'columns',
+          'dataSource',
+          'pagination',
+          'rowKey',
+          'loading',
+          'scroll',
+          'gutter',
+          'span',
+          'offset',
+          'flex',
+          'htmlType',
+          'block',
+          'danger',
+          'justify',
+          'align',
+          'message',
+          'description',
+          'showIcon',
+          'banner',
+        ],
+      },
+    })),
+});
 
 if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {
@@ -32,9 +84,10 @@ describe('reactive template schemas', () => {
   it('default schema updates preview copy when form values change', async () => {
     render(
       <Renderer
-        preset={antdPreset}
+        preset={testPreset}
         schema={createDefaultReactiveSchema()}
-        components={testComponents}
+        pageId="template-page-1"
+        documentSessionId="doc-1"
       />,
     );
 
@@ -71,7 +124,14 @@ describe('reactive template schemas', () => {
     const schema = getTemplateSchema('dashboard-basic');
     expect(schema).toBeTruthy();
 
-    render(<Renderer preset={antdPreset} schema={schema!} components={testComponents} />);
+    render(
+      <Renderer
+        preset={testPreset}
+        schema={schema!}
+        pageId="template-page-2"
+        documentSessionId="doc-1"
+      />,
+    );
 
     expect(screen.getByText('工作台')).toBeInTheDocument();
     expect(screen.getByText('24,593')).toBeInTheDocument();
@@ -94,7 +154,14 @@ describe('reactive template schemas', () => {
       visible: '{{ contactForm.message == 1 }}',
     };
 
-    render(<Renderer preset={antdPreset} schema={schema} components={testComponents} />);
+    render(
+      <Renderer
+        preset={testPreset}
+        schema={schema}
+        pageId="template-page-3"
+        documentSessionId="doc-1"
+      />,
+    );
 
     expect(screen.queryByRole('button', { name: '提交信息' })).not.toBeInTheDocument();
 
@@ -113,7 +180,12 @@ describe('reactive template schemas', () => {
   it('preserves live form data when schema props change on the same page', async () => {
     const baseSchema = JSON.parse(JSON.stringify(formContactTemplate.schema));
     const { rerender } = render(
-      <Renderer preset={antdPreset} schema={baseSchema} components={testComponents} />,
+      <Renderer
+        preset={testPreset}
+        schema={baseSchema}
+        pageId="template-page-4"
+        documentSessionId="doc-1"
+      />,
     );
 
     fireEvent.change(screen.getByPlaceholderText('请详细描述您的需求...'), {
@@ -132,7 +204,14 @@ describe('reactive template schemas', () => {
       visible: '{{ contactForm.message == 1 }}',
     };
 
-    rerender(<Renderer schema={nextSchema} components={testComponents} />);
+    rerender(
+      <Renderer
+        preset={testPreset}
+        schema={nextSchema}
+        pageId="template-page-4"
+        documentSessionId="doc-1"
+      />,
+    );
 
     await act(async () => {
       await flushMicrotasks();

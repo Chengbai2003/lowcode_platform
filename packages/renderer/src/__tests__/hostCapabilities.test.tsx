@@ -148,7 +148,15 @@ describe('HostCapabilities（M0-4 Scope E）', () => {
     };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    render(<Renderer preset={testPreset} schema={schema as never} />);
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="p-caps"
+        documentSessionId="doc-1"
+        schema={schema as never}
+      />,
+    );
+
     fireEvent.click(screen.getByText('open dialog'));
     await new Promise((r) => setTimeout(r, 10));
     // 默认 deny：默认 UI modal.confirm 恒 false、原生 confirm 不触发

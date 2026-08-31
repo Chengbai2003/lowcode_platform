@@ -170,11 +170,6 @@ export class RuntimeSession {
     this.cleanups.clear();
 
     this.controller.abort();
-
-    const registered = activeSessions.get(this.pageId);
-    if (registered === this) {
-      activeSessions.delete(this.pageId);
-    }
   }
 }
 
@@ -187,37 +182,49 @@ function abortError(): Error {
   return error;
 }
 
-/** 按 pageId 登记的活跃 Session（供 getOrCreate 语义使用） */
-const activeSessions = new Map<string, RuntimeSession>();
-
 /**
- * 纯工厂：每次调用返回全新独立 Session（不注册、不共享任何状态）。
- * Renderer 每次页面挂载都应使用它，并在卸载/换页时 dispose。
+ * 纯工厂：每次调用返回全新独立 Session（不共享任何全局状态）。
+ * Renderer 每次页面挂载由 useMemo 自建，并在卸载/换页时 dispose。
  */
 export function createRuntimeSession(options: RuntimeSessionOptions): RuntimeSession {
   return new RuntimeSession(options);
 }
 
 /**
- * 页面级 Session 管理：同一 pageId 的活跃 Session 被复用；
- * documentSessionId 变化或旧 Session 已销毁时创建新 Session 并销毁旧 Session。
- * 供非 React 宿主或页面容器做 document 切换语义使用。
+ * 宿主级 Session 管理器：每个宿主实例可自建独立的会话管理器，
+ * 绝不使用跨 Host / 跨应用的全局可变单例。
  */
-export function getOrCreateRuntimeSession(options: RuntimeSessionOptions): RuntimeSession {
-  const { pageId, documentSessionId } = options;
-  const existing = activeSessions.get(pageId);
-  if (existing && !existing.isDisposed() && existing.documentSessionId === documentSessionId) {
-    return existing;
+export class RuntimeSessionManager {
+  private readonly sessions = new Map<string, RuntimeSession>();
+
+  getOrCreate(options: RuntimeSessionOptions): RuntimeSession {
+    const { pageId, documentSessionId } = options;
+    const existing = this.sessions.get(pageId);
+    if (existing && !existing.isDisposed() && existing.documentSessionId === documentSessionId) {
+      return existing;
+    }
+    existing?.dispose();
+    const session = new RuntimeSession(options);
+    this.sessions.set(pageId, session);
+    return session;
   }
-  existing?.dispose();
-  const session = new RuntimeSession(options);
-  activeSessions.set(pageId, session);
-  return session;
+
+  dispose(pageId: string): void {
+    const existing = this.sessions.get(pageId);
+    if (existing) {
+      existing.dispose();
+      this.sessions.delete(pageId);
+    }
+  }
+
+  disposeAll(): void {
+    for (const session of this.sessions.values()) {
+      session.dispose();
+    }
+    this.sessions.clear();
+  }
 }
 
-/**
- * 直接销毁某页面的活跃 Session（页面离开语义）；无活跃 Session 时为 no-op。
- */
-export function disposeRuntimeSession(pageId: string): void {
-  activeSessions.get(pageId)?.dispose();
+export function createRuntimeSessionManager(): RuntimeSessionManager {
+  return new RuntimeSessionManager();
 }

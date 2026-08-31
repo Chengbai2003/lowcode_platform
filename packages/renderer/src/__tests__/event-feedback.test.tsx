@@ -39,7 +39,13 @@ describe('Renderer feedback action', () => {
 
     render(
       <LowcodeProvider>
-        <Renderer preset={testPreset} schema={schema} eventContext={{ ui: { message } }} />
+        <Renderer
+          preset={testPreset}
+          pageId="p-feedback"
+          documentSessionId="doc-1"
+          schema={schema}
+          eventContext={{ ui: { message } }}
+        />
       </LowcodeProvider>,
     );
 

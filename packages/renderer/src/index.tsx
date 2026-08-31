@@ -30,6 +30,7 @@ export * from './schemaValidation';
 export * from './bridge/ComponentRuntimeBridgeContext';
 export * from './bridge/createComponentRuntimeBridge';
 export * from './preset/createSealedPreset';
+export * from './preset/createComponentPreset';
 export * from './session/RuntimeSession';
 export * from './host/HostCapabilities';
 export * from './preset/sanitizePropsByManifest';
@@ -43,6 +44,10 @@ export type {
   CompilerBindings,
   ComponentCompilerRegistry,
 } from './preset/types';
+export type {
+  ComponentPresetExtension,
+  PresetCompositionOptions,
+} from './preset/createComponentPreset';
 export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from './types';
 
 // 稳定公开别名：宿主只应依赖 PageRenderer 这个名字。
@@ -63,11 +68,21 @@ export const LowcodeProvider = ({ children }: { children: React.ReactNode }) => 
  */
 export function renderFromJSON(
   jsonString: string,
-  components?: Record<string, React.ComponentType<any>>,
-  options?: { preset?: import('./preset/types').ComponentPreset },
+  options?: {
+    preset?: import('./preset/types').ComponentPreset;
+    pageId?: string;
+    documentSessionId?: string;
+  },
 ): React.ReactElement {
   const raw = JSON.parse(jsonString);
   // Contract 边界：只渲染 Contract 返回的 canonical Schema（不支持版本/畸形结构 fail-close）
   const schema = requireSupportedPageSchema(raw);
-  return React.createElement(Renderer, { schema, components, preset: options?.preset });
+  const pageId = options?.pageId ?? 'json-page';
+  const documentSessionId = options?.documentSessionId ?? 'json-session';
+  return React.createElement(Renderer, {
+    schema,
+    preset: options?.preset as never,
+    pageId,
+    documentSessionId,
+  });
 }
