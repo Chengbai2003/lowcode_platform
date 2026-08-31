@@ -16,14 +16,18 @@ export function compileToCode(schema: Record<string, any>, options?: CompileOpti
 
 export async function formatCode(code: string): Promise<string> {
   try {
-    return await prettier.format(code, {
-      parser: 'babel',
-      semi: true,
-      singleQuote: false,
-      trailingComma: 'es5',
-      printWidth: 100,
-      tabWidth: 2,
-    });
+    const prettierModule = await import('prettier');
+    if (prettierModule && typeof prettierModule.format === 'function') {
+      return await prettierModule.format(code, {
+        parser: 'babel',
+        semi: true,
+        singleQuote: false,
+        trailingComma: 'es5',
+        printWidth: 100,
+        tabWidth: 2,
+      });
+    }
+    return code;
   } catch {
     return code;
   }
