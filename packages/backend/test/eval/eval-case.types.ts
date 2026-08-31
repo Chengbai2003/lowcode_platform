@@ -61,6 +61,14 @@ export interface ExpectedOutcome {
   missingBaseConflict?: boolean;
   /** draft：canonical Schema 中出现的组件 id（排序后） */
   componentIds?: string[];
+  /** 语义断言：补丁应用后存在的组件 id */
+  componentExists?: string[];
+  /** 语义断言：补丁应用后不存在/被删除的组件 id */
+  componentMissing?: string[];
+  /** 语义断言：指定组件的属性期望值 */
+  props?: Record<string, Record<string, unknown>>;
+  /** 语义断言：指定组件的事件绑定期望值 */
+  events?: Record<string, Record<string, unknown[]>>;
 }
 
 export interface EvalCase {

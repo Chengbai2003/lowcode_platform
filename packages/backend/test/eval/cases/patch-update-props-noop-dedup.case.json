@@ -44,6 +44,11 @@
     "submittedOps": 2,
     "normalizedOps": 1,
     "riskLevel": "low",
-    "schemaValid": true
+    "schemaValid": true,
+    "props": {
+      "title1": {
+        "children": "Updated"
+      }
+    }
   }
 }

@@ -38,7 +38,20 @@ for (const evalCase of cases) {
   const startedAt = Date.now();
   let ok = false;
   let route = null;
+  let traceId = null;
+  let model = null;
+  let tokens = null;
+  let toolCalls = [];
   let error = null;
+
+  const pageId = `eval-live-${evalCase.id}`;
+  const requestBody = {
+    instruction: evalCase.intent,
+    pageId,
+    responseMode: evalCase.category === 'draft' ? 'schema' : 'patch',
+    ...(evalCase.fixtures?.baseSchema ? { draftSchema: evalCase.fixtures.baseSchema } : {}),
+  };
+
   try {
     const response = await fetch(`${BASE_URL}/agent/edit`, {
       method: 'POST',
@@ -46,31 +59,42 @@ for (const evalCase of cases) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${TOKEN}`,
       },
-      body: JSON.stringify({
-        prompt: evalCase.intent,
-        pageId: 'eval-live-page',
-        responseMode: evalCase.category === 'draft' ? 'schema' : 'patch',
-      }),
+      body: JSON.stringify(requestBody),
     });
+
     ok = response.ok;
     if (response.ok) {
       const body = await response.json();
       route = body?.route ?? body?.routeDecision?.route ?? null;
+      traceId = body?.traceId ?? body?.trace?.traceId ?? null;
+      model = body?.model ?? body?.modelConfig?.modelName ?? null;
+      tokens = body?.usage?.totalTokens ?? body?.usage?.tokens ?? null;
+      toolCalls = body?.toolCalls ?? body?.executedTools ?? [];
     } else {
-      error = `HTTP ${response.status}`;
+      const errBody = await response.text();
+      error = `HTTP ${response.status}: ${errBody}`;
     }
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
   }
+
+  const latencyMs = Date.now() - startedAt;
   results.push({
     id: evalCase.id,
     category: evalCase.category,
     ok,
     route,
+    traceId,
+    model,
+    tokens,
+    toolCallsCount: toolCalls.length,
     error,
-    latencyMs: Date.now() - startedAt,
+    latencyMs,
   });
-  console.log(`[eval:live] ${evalCase.id}: ${ok ? 'ok' : `failed (${error})`} ${results.at(-1).latencyMs}ms`);
+
+  console.log(
+    `[eval:live] ${evalCase.id}: ${ok ? 'ok' : `failed (${error})`} ${latencyMs}ms (route=${route ?? 'none'})`,
+  );
 }
 
 const report = {
@@ -83,6 +107,10 @@ const report = {
     results.length === 0
       ? null
       : Math.round((results.filter((r) => r.ok).length / results.length) * 10_000) / 10_000,
+  averageLatencyMs:
+    results.length === 0
+      ? null
+      : Math.round(results.reduce((sum, r) => sum + r.latencyMs, 0) / results.length),
   results,
 };
 
@@ -95,13 +123,16 @@ writeFileSync(
     '',
     `- Generated at: ${report.generatedAt}`,
     `- First-pass Success Rate: ${report.firstPassSuccessRate ?? 'n/a'}`,
+    `- Average Latency: ${report.averageLatencyMs ?? 'n/a'}ms`,
     '',
-    '| 用例 | 结果 | 延迟(ms) | 路由 |',
-    '| --- | --- | --- | --- |',
+    '| 用例 | 结果 | 延迟(ms) | 路由 | 消耗 Tokens | Trace ID |',
+    '| --- | --- | --- | --- | --- | --- |',
     ...results.map(
-      (r) => `| ${r.id} | ${r.ok ? '✅' : `❌ ${r.error ?? ''}`} | ${r.latencyMs} | ${r.route ?? '-'} |`,
+      (r) =>
+        `| ${r.id} | ${r.ok ? '✅' : `❌ ${r.error ?? ''}`} | ${r.latencyMs} | ${r.route ?? '-'} | ${r.tokens ?? '-'} | ${r.traceId ?? '-'} |`,
     ),
     '',
   ].join('\n'),
 );
 console.log(`[eval:live] 报告已写入 ${OUT_DIR}`);
+

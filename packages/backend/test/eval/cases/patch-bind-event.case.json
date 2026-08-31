@@ -1,0 +1,58 @@
+{
+  "id": "patch-bind-event",
+  "category": "patch",
+  "title": "局部 Patch：绑定按钮点击事件",
+  "intent": "给提交按钮绑定点击更新状态事件",
+  "fixtures": {
+    "baseSchema": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page",
+          "childrenIds": ["btn1"]
+        },
+        "btn1": {
+          "id": "btn1",
+          "type": "Button",
+          "props": {
+            "children": "提交"
+          }
+        }
+      }
+    },
+    "patch": [
+      {
+        "op": "bindEvent",
+        "componentId": "btn1",
+        "event": "onClick",
+        "actions": [
+          {
+            "type": "setValue",
+            "field": "submitted",
+            "value": true
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "submittedOps": 1,
+    "normalizedOps": 1,
+    "riskLevel": "low",
+    "schemaValid": true,
+    "events": {
+      "btn1": {
+        "onClick": [
+          {
+            "type": "setValue",
+            "field": "submitted",
+            "value": true
+          }
+        ]
+      }
+    }
+  },
+  "caseSchemaVersion": 1
+}

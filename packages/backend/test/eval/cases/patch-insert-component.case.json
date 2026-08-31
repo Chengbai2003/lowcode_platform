@@ -41,7 +41,14 @@
     "submittedOps": 1,
     "normalizedOps": 1,
     "riskLevel": "low",
-    "schemaValid": true
+    "schemaValid": true,
+    "componentExists": ["btn1"],
+    "props": {
+      "btn1": {
+        "children": "提交"
+      }
+    }
   },
+
   "caseSchemaVersion": 1
 }
