@@ -41,18 +41,27 @@ interface SystemRuntimeProfile {
   componentPresetId: string;
   componentPresetVersion: string;
   rendererVersion: string;
-  themeVersion?: string;
-  gatewayProfileId?: string;
+  compilerBindingId: string;
+  status: 'active' | 'deprecated' | 'disabled';
 }
 
-interface PageRecord {
+interface StoredPageRecord {
   pageId: string;
   systemId: string;
+  currentPageVersion: number;
+  latestSnapshotId: string;
+}
+
+interface PageSnapshotRecord {
+  snapshotId: string;
+  pageId: string;
   pageVersion: number;
-  componentPresetId: string;
-  componentPresetVersion: string;
-  rendererVersion: string;
   schema: PageSchema;
+  runtimeCompatibility: {
+    componentPresetId: string;
+    componentPresetVersion: string;
+    rendererVersion: string;
+  };
 }
 
 interface PageSchema {
@@ -65,18 +74,24 @@ interface PageSchema {
 
 `systemId` 必须由服务端依据 page/project 关系解析，不能信任 Agent 或客户端任意指定。
 
-`componentPresetId`、`componentPresetVersion` 和 `rendererVersion` 是每个页面版本及快照的不可变复现元数据，由服务端在保存时从可信 `SystemRuntimeProfile` 写入。系统升级 Preset 后，历史快照仍按原版本解析；若对应版本不可用，只允许查看原始 JSON，不得用当前 Preset 猜测性渲染、执行或编译。
+| 状态         | 新页面绑定 | 已绑定页面产生新快照 | 历史快照恢复                  |
+| ------------ | ---------- | -------------------- | ----------------------------- |
+| `active`     | 允许       | 允许                 | 精确三元组匹配时允许          |
+| `deprecated` | 禁止       | 允许                 | 精确三元组匹配时允许          |
+| `disabled`   | 禁止       | 禁止                 | 禁止运行，仅允许查看原始 JSON |
+
+`StoredPageRecord` 只保存页面归属和当前版本指针；Schema 与运行时兼容三元组只存在于不可变 `PageSnapshotRecord`。`componentPresetId`、`componentPresetVersion` 和 `rendererVersion` 由服务端在保存时从可信 `SystemRuntimeProfile` 写入。系统升级 Preset 后，历史快照仍按原版本解析；若对应版本不可用，只允许查看原始 JSON，不得用当前 Preset 猜测性渲染、执行或编译。
 
 ## 包边界
 
 ```text
 @lowcode-platform/schema-contract
   ├── PageSchema / ActionFlow / DataSource 类型
-  ├── ComponentPreset 接口
   └── 运行时 Validator
 
 @lowcode-platform/renderer
   ├── React Schema Renderer
+  ├── ComponentPreset 运行时接口
   ├── RuntimeSession
   ├── SafeEvaluator
   ├── ReactiveRuntime
