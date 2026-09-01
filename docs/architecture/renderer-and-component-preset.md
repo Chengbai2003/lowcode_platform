@@ -26,7 +26,8 @@ interface SystemRuntimeProfile {
   componentPresetId: string;
   componentPresetVersion: string;
   rendererVersion: string;
-  themeVersion?: string;
+  compilerBindingId: string;
+  status: 'active' | 'deprecated' | 'disabled';
 }
 
 interface ComponentPreset {
@@ -40,6 +41,8 @@ interface ComponentPreset {
 ```
 
 Renderer 只接收一个 Preset，不在组件节点或运行时中判断 AntD、Arco 等组件库名称。
+
+`systemId` 由服务端页面/项目关系选择当前 `active` Profile；历史快照只保存精确的 Preset/Renderer 三元组并据此恢复 Profile。`deprecated` 只允许精确恢复历史快照，`disabled` 仅允许原始 JSON 只读。完整部署边界见 [ADR-0006](../adr/0006-system-runtime-profile-deployment-boundary.md)。
 
 新增组件库只需新增：
 

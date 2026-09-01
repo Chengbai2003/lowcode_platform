@@ -41,8 +41,8 @@ interface SystemRuntimeProfile {
   componentPresetId: string;
   componentPresetVersion: string;
   rendererVersion: string;
-  themeVersion?: string;
-  gatewayProfileId?: string;
+  compilerBindingId: string;
+  status: 'active' | 'deprecated' | 'disabled';
 }
 
 interface PageRecord {
@@ -64,6 +64,8 @@ interface PageSchema {
 ```
 
 `systemId` 必须由服务端依据 page/project 关系解析，不能信任 Agent 或客户端任意指定。
+
+`active` Profile 可用于新页面与新快照；`deprecated` 不再用于新绑定，但允许历史快照按精确三元组恢复；`disabled` 拒绝预览、执行与编译，只允许原始 JSON 只读。
 
 `componentPresetId`、`componentPresetVersion` 和 `rendererVersion` 是每个页面版本及快照的不可变复现元数据，由服务端在保存时从可信 `SystemRuntimeProfile` 写入。系统升级 Preset 后，历史快照仍按原版本解析；若对应版本不可用，只允许查看原始 JSON，不得用当前 Preset 猜测性渲染、执行或编译。
 
