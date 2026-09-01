@@ -1,28 +1,45 @@
 /**
  * Agent Eval — 确定性流水线（Issue #18 / M0-3）
  *
- * 每个用例复用可独立构造的生产校验服务（Contract 校验、Patch 归一化、
- * 风险评估、AutoFix、PatchValidation、安全校验器、Repository CAS）。
- * 它不调用 AgentRunner 的私有模型/工具编排，因此是 Patch Apply Eval，不是
- * Full Production Patch Pipeline。
- * 模型输出以录制 Fixture 回放，不调用真实模型、不访问网络。
+ * Patch 用例通过公开 AgentRunnerService.runEdit() 回放 Fixture Tool Call，
+ * 执行真实 ToolExecution、Policy、AutoFix、PatchValidation 与 Preview 编排。
+ * Draft/Validation/Safety/Conflict 保持为生产 Contract、安全校验器与 Repository CAS 探针。
+ * Fixture 不调用真实模型、不使用凭据、不访问网络。
  */
 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { ConflictException } from '@nestjs/common';
+import {
+  AIToolCallingError,
+  type AIService,
+  type AIToolCallingResult,
+} from '../../src/modules/ai/ai.service';
+import { AgentRunnerService } from '../../src/modules/agent/agent-runner.service';
+import { AgentIntentConfirmationService } from '../../src/modules/agent/agent-intent-confirmation.service';
+import { AgentIntentNormalizationService } from '../../src/modules/agent/agent-intent-normalization.service';
+import { AgentScopeConfirmationService } from '../../src/modules/agent/agent-scope-confirmation.service';
+import { AgentTraceService } from '../../src/modules/agent/agent-trace.service';
 import { requireValidPageSchema } from '../../src/modules/page-schema/schema-validation';
 import { normalizeFinalPatch } from '../../src/modules/agent/agent-patch-normalizer.utils';
-import { assessPatchRisk } from '../../src/modules/agent/agent-preview.utils';
 import { AgentPolicyService } from '../../src/modules/agent/agent-policy.service';
 import { isSafeInlineExpression } from '../../src/modules/compiler/security/validators';
 import { PageSchemaRepository } from '../../src/modules/page-schema/repositories/page-schema.repository';
+import { PageSchemaService } from '../../src/modules/page-schema/page-schema.service';
+import { PageRuntimeMetadataProvider } from '../../src/modules/page-schema/page-runtime-metadata.provider';
 import { BUILTIN_ANTD_RUNTIME_PROFILE } from '../../src/modules/page-schema/runtime-profiles';
 import { PatchApplyService } from '../../src/modules/agent-tools/patch-apply.service';
 import { PatchAutoFixService } from '../../src/modules/agent-tools/patch-auto-fix.service';
 import { PatchValidationService } from '../../src/modules/agent-tools/patch-validation.service';
+import { ToolExecutionService } from '../../src/modules/agent-tools/tool-execution.service';
+import { ToolRegistryService } from '../../src/modules/agent-tools/tool-registry.service';
 import { ComponentMetaRegistry } from '../../src/modules/schema-context/component-metadata/component-meta.registry';
+import { CollectionTargetResolverService } from '../../src/modules/schema-context/collection-target-resolver.service';
+import { ContextAssemblerService } from '../../src/modules/schema-context/context-assembler.service';
+import { NodeLocatorService } from '../../src/modules/schema-context/node-locator.service';
+import { SchemaResolverService } from '../../src/modules/schema-context/schema-resolver.service';
+import { SchemaSlicerService } from '../../src/modules/schema-context/schema-slicer.service';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { EditorPatchOperation } from '../../src/modules/agent-tools/types/editor-patch.types';
 import type { EvalCase, EvalCaseResult, ExpectedOutcome } from './eval-case.types';
@@ -40,6 +57,132 @@ function makePolicyService(): AgentPolicyService {
 
 function makePatchValidationService(): PatchValidationService {
   return new PatchValidationService(new ComponentMetaRegistry(), new PatchApplyService());
+}
+
+const FIXTURE_PROVIDER = 'openai';
+const FIXTURE_REPLAY_INSTRUCTION = '执行录制的补丁工具调用';
+
+interface FixtureToolCall {
+  name: string;
+  input: Record<string, unknown>;
+}
+
+/** 离线回放录制工具调用；执行仍经由 AgentRunner 提供的真实 executeTool。 */
+export class FixtureAIService {
+  readonly executedToolNames: string[] = [];
+
+  constructor(private readonly patch: readonly EditorPatchOperation[]) {}
+
+  async runToolCalling(
+    input: Parameters<AIService['runToolCalling']>[0],
+  ): Promise<AIToolCallingResult> {
+    const calls = this.patch.map(toFixtureToolCall);
+    const allowedToolNames = new Set(input.toolDefinitions.map((definition) => definition.name));
+    const replayCalls = calls.slice(0, input.maxSteps);
+    const stoppedAtStepLimit = replayCalls.length < calls.length;
+
+    for (const [stepNumber, call] of replayCalls.entries()) {
+      const toolCallCount = stepNumber + 1;
+      if (toolCallCount > input.maxToolCalls) {
+        throw new AIToolCallingError('policy', 'Tool call limit exceeded', {
+          toolCallCount,
+          maxToolCalls: input.maxToolCalls,
+        });
+      }
+      if (!allowedToolNames.has(call.name)) {
+        throw new AIToolCallingError('policy', `Fixture tool is not active: ${call.name}`, {
+          toolName: call.name,
+        });
+      }
+
+      input.onToolCallStart?.({ stepNumber, toolCall: { toolName: call.name } });
+      try {
+        await input.executeTool(call.name, call.input);
+      } catch (error) {
+        input.onToolCallFinish?.({
+          stepNumber,
+          toolCall: { toolName: call.name },
+          success: false,
+        });
+        if (error instanceof AIToolCallingError) {
+          throw error;
+        }
+        throw new AIToolCallingError(
+          'policy',
+          error instanceof Error ? error.message : 'Tool calling request failed',
+          {
+            toolCallCount,
+            causeName: error instanceof Error ? error.name : 'UnknownError',
+          },
+        );
+      }
+      this.executedToolNames.push(call.name);
+      input.onToolCallFinish?.({ stepNumber, toolCall: { toolName: call.name }, success: true });
+      input.onStepFinish?.({
+        stepNumber,
+        finishReason:
+          !stoppedAtStepLimit && stepNumber === replayCalls.length - 1 ? 'stop' : 'tool_calls',
+        toolCalls: [{ toolName: call.name }],
+      });
+    }
+    return {
+      text: 'fixture replay',
+      finishReason: stoppedAtStepLimit ? 'tool_calls' : 'stop',
+      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      warnings: [],
+      steps: replayCalls.map((call, stepNumber) => ({
+        stepNumber,
+        finishReason:
+          !stoppedAtStepLimit && stepNumber === replayCalls.length - 1 ? 'stop' : 'tool_calls',
+        toolCalls: [{ toolName: call.name }],
+      })),
+      toolCallCount: replayCalls.length,
+    };
+  }
+}
+
+function toFixtureToolCall(operation: EditorPatchOperation): FixtureToolCall {
+  switch (operation.op) {
+    case 'insertComponent':
+      return {
+        name: 'insert_component',
+        input: {
+          parentId: operation.parentId,
+          ...(operation.index === undefined ? {} : { index: operation.index }),
+          component: operation.component,
+        },
+      };
+    case 'updateProps':
+      return {
+        name: 'update_component_props',
+        input: { componentId: operation.componentId, props: operation.props },
+      };
+    case 'bindEvent':
+      return {
+        name: 'bind_event',
+        input: {
+          componentId: operation.componentId,
+          event: operation.event,
+          actions: operation.actions,
+        },
+      };
+    case 'removeComponent':
+      return { name: 'remove_component', input: { componentId: operation.componentId } };
+    case 'moveComponent':
+      return {
+        name: 'move_component',
+        input: {
+          componentId: operation.componentId,
+          newParentId: operation.newParentId,
+          newIndex: operation.newIndex,
+        },
+      };
+  }
+}
+
+function selectedIdForPatch(operation: EditorPatchOperation): string {
+  return operation.op === 'insertComponent' ? operation.parentId : operation.componentId;
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -116,44 +259,101 @@ async function runDraftCase(kase: EvalCase): Promise<EvalCaseResult> {
   return makeResult(kase, probe as unknown as Record<string, unknown>);
 }
 
-async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
-  const baseSchema = requireValidPageSchema(kase.fixtures.baseSchema);
+export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
+  response: Awaited<ReturnType<AgentRunnerService['runEdit']>>;
+  fixtureToolNames: readonly string[];
+}> {
+  // ponytail: Repository 目前只从进程 env 读取存储路径；Eval Jest 因此固定 --runInBand。
+  const tempDir = await mkdtemp(join(tmpdir(), 'agent-eval-runner-'));
+  const previousPath = process.env.PAGE_SCHEMA_FILE_PATH;
   const patch = kase.fixtures.patch as EditorPatchOperation[];
-  const normalized = normalizeFinalPatch(baseSchema, patch);
-  const risk = assessPatchRisk(baseSchema, normalized);
-  const policy = makePolicyService();
-  const traceId = `eval-${kase.id}`;
-
-  // 与生产 finalizePatch 相同的顺序：策略限额 → AutoFix → 严格 preview。
-  policy.assertPatchWithinLimits(normalized, traceId, 'normal_patch');
-  const autoFixed = new PatchAutoFixService().autoFix(normalized, baseSchema).patch;
-  policy.assertPatchWithinLimits(autoFixed, traceId, 'normal_patch');
-
-  // PatchValidationService 内部执行 shape 校验、逐操作 preview 和 Contract 校验。
-  let finalSchema: PageSchema;
-  let schemaValid = false;
-  try {
-    const validation = makePatchValidationService();
-    validation.validatePatchShape(autoFixed, traceId);
-    finalSchema = validation.previewValidatedSchema(baseSchema, autoFixed, traceId);
-    schemaValid = true;
-  } catch (err) {
-    return makeResult(kase, {
-      submittedOps: patch.length,
-      normalizedOps: autoFixed.length,
-      riskLevel: risk.level,
-      schemaValid: false,
-      blocked: true,
-      blockedReason: err instanceof Error ? err.message : String(err),
-    });
+  const firstOperation = patch[0];
+  if (!firstOperation) {
+    throw new Error(
+      `Eval case ${kase.id}: production replay requires at least one patch operation`,
+    );
   }
+  try {
+    const storePath = join(tempDir, 'page-schema-store.json');
+    await writeFile(storePath, JSON.stringify({ pages: [], snapshots: [] }), 'utf-8');
+    process.env.PAGE_SCHEMA_FILE_PATH = storePath;
+    const repository = new PageSchemaRepository();
+    await repository.onModuleInit();
+    const pageSchemaService = new PageSchemaService(repository, new PageRuntimeMetadataProvider());
+    const pageId = `eval-${kase.id}`;
+    const saved = await pageSchemaService.saveSchema({ pageId, schema: kase.fixtures.baseSchema });
+    const componentMetaRegistry = new ComponentMetaRegistry();
+    const collectionTargetResolver = new CollectionTargetResolverService(componentMetaRegistry);
+    const contextAssembler = new ContextAssemblerService(
+      new SchemaResolverService(pageSchemaService),
+      new NodeLocatorService(componentMetaRegistry),
+      new SchemaSlicerService(),
+      componentMetaRegistry,
+    );
+    const patchValidationService = new PatchValidationService(
+      componentMetaRegistry,
+      new PatchApplyService(),
+    );
+    const toolRegistry = new ToolRegistryService(
+      contextAssembler,
+      componentMetaRegistry,
+      collectionTargetResolver,
+      new PatchAutoFixService(),
+      patchValidationService,
+    );
+    const fixtureAI = new FixtureAIService(patch);
+    const runner = new AgentRunnerService(
+      fixtureAI as unknown as AIService,
+      new ToolExecutionService(pageSchemaService, contextAssembler, toolRegistry),
+      toolRegistry,
+      makePolicyService(),
+      componentMetaRegistry,
+      collectionTargetResolver,
+      new AgentIntentNormalizationService(collectionTargetResolver),
+      new AgentIntentConfirmationService(),
+      new AgentScopeConfirmationService(),
+      new AgentTraceService(),
+    );
+    const response = await runner.runEdit(
+      {
+        instruction: FIXTURE_REPLAY_INSTRUCTION,
+        pageId,
+        pageVersion: saved.pageVersion,
+        selectedId: selectedIdForPatch(firstOperation),
+        responseMode: 'patch',
+        provider: FIXTURE_PROVIDER,
+      },
+      `eval-${kase.id}`,
+      { executionPath: 'tool_call' },
+    );
+    return { response, fixtureToolNames: fixtureAI.executedToolNames };
+  } finally {
+    if (previousPath === undefined) delete process.env.PAGE_SCHEMA_FILE_PATH;
+    else process.env.PAGE_SCHEMA_FILE_PATH = previousPath;
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
 
-  // 3. 构建包含实际语义指标的 actual 结果
+async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
+  const patch = kase.fixtures.patch as EditorPatchOperation[];
+  const replay = await replayPatchThroughAgent(kase);
+  const expectedToolNames = patch.map(toFixtureToolCall).map((call) => call.name);
+  if (!deepEqual(replay.fixtureToolNames, expectedToolNames)) {
+    throw new Error(
+      `Eval case ${kase.id}: expected fixture tools ${JSON.stringify(expectedToolNames)}, got ${JSON.stringify(replay.fixtureToolNames)}`,
+    );
+  }
+  if (replay.response.mode !== 'patch') {
+    throw new Error(
+      `Eval case ${kase.id}: AgentRunner returned ${replay.response.mode}, expected patch`,
+    );
+  }
+  const finalSchema = replay.response.previewSchema;
   const actual: Record<string, unknown> = {
     submittedOps: patch.length,
-    normalizedOps: autoFixed.length,
-    riskLevel: risk.level,
-    schemaValid,
+    normalizedOps: replay.response.patch.length,
+    riskLevel: replay.response.risk.level,
+    schemaValid: true,
   };
 
   if (kase.expected.componentExists) {
