@@ -2,6 +2,7 @@
 
 > Status: Accepted  
 > Date: 2026-08-25
+> Related: [ADR-0006](0006-system-runtime-profile-deployment-boundary.md)
 
 ## 背景
 
