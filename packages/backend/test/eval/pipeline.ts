@@ -11,7 +11,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { ConflictException } from '@nestjs/common';
-import type { AIService, AIToolCallingResult } from '../../src/modules/ai/ai.service';
+import {
+  AIToolCallingError,
+  type AIService,
+  type AIToolCallingResult,
+} from '../../src/modules/ai/ai.service';
 import { AgentRunnerService } from '../../src/modules/agent/agent-runner.service';
 import { AgentIntentConfirmationService } from '../../src/modules/agent/agent-intent-confirmation.service';
 import { AgentIntentNormalizationService } from '../../src/modules/agent/agent-intent-normalization.service';
@@ -63,7 +67,7 @@ interface FixtureToolCall {
 }
 
 /** 离线回放录制工具调用；执行仍经由 AgentRunner 提供的真实 executeTool。 */
-class FixtureAIService {
+export class FixtureAIService {
   readonly executedToolNames: string[] = [];
 
   constructor(private readonly patch: readonly EditorPatchOperation[]) {}
@@ -72,29 +76,67 @@ class FixtureAIService {
     input: Parameters<AIService['runToolCalling']>[0],
   ): Promise<AIToolCallingResult> {
     const calls = this.patch.map(toFixtureToolCall);
-    for (const [stepNumber, call] of calls.entries()) {
+    const allowedToolNames = new Set(input.toolDefinitions.map((definition) => definition.name));
+    const replayCalls = calls.slice(0, input.maxSteps);
+    const stoppedAtStepLimit = replayCalls.length < calls.length;
+
+    for (const [stepNumber, call] of replayCalls.entries()) {
+      const toolCallCount = stepNumber + 1;
+      if (toolCallCount > input.maxToolCalls) {
+        throw new AIToolCallingError('policy', 'Tool call limit exceeded', {
+          toolCallCount,
+          maxToolCalls: input.maxToolCalls,
+        });
+      }
+      if (!allowedToolNames.has(call.name)) {
+        throw new AIToolCallingError('policy', `Fixture tool is not active: ${call.name}`, {
+          toolName: call.name,
+        });
+      }
+
       input.onToolCallStart?.({ stepNumber, toolCall: { toolName: call.name } });
-      await input.executeTool(call.name, call.input);
+      try {
+        await input.executeTool(call.name, call.input);
+      } catch (error) {
+        input.onToolCallFinish?.({
+          stepNumber,
+          toolCall: { toolName: call.name },
+          success: false,
+        });
+        if (error instanceof AIToolCallingError) {
+          throw error;
+        }
+        throw new AIToolCallingError(
+          'policy',
+          error instanceof Error ? error.message : 'Tool calling request failed',
+          {
+            toolCallCount,
+            causeName: error instanceof Error ? error.name : 'UnknownError',
+          },
+        );
+      }
       this.executedToolNames.push(call.name);
       input.onToolCallFinish?.({ stepNumber, toolCall: { toolName: call.name }, success: true });
       input.onStepFinish?.({
         stepNumber,
-        finishReason: stepNumber === calls.length - 1 ? 'stop' : 'tool_calls',
+        finishReason:
+          !stoppedAtStepLimit && stepNumber === replayCalls.length - 1 ? 'stop' : 'tool_calls',
         toolCalls: [{ toolName: call.name }],
       });
     }
     return {
       text: 'fixture replay',
-      finishReason: 'stop',
+      finishReason: stoppedAtStepLimit ? 'tool_calls' : 'stop',
       usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       warnings: [],
-      steps: calls.map((call, stepNumber) => ({
+      steps: replayCalls.map((call, stepNumber) => ({
         stepNumber,
-        finishReason: stepNumber === calls.length - 1 ? 'stop' : 'tool_calls',
+        finishReason:
+          !stoppedAtStepLimit && stepNumber === replayCalls.length - 1 ? 'stop' : 'tool_calls',
         toolCalls: [{ toolName: call.name }],
       })),
-      toolCallCount: calls.length,
+      toolCallCount: replayCalls.length,
     };
   }
 }
@@ -281,6 +323,7 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
         provider: FIXTURE_PROVIDER,
       },
       `eval-${kase.id}`,
+      { executionPath: 'tool_call' },
     );
     return { response, fixtureToolNames: fixtureAI.executedToolNames };
   } finally {
@@ -293,6 +336,12 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
 async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
   const patch = kase.fixtures.patch as EditorPatchOperation[];
   const replay = await replayPatchThroughAgent(kase);
+  const expectedToolNames = patch.map(toFixtureToolCall).map((call) => call.name);
+  if (!deepEqual(replay.fixtureToolNames, expectedToolNames)) {
+    throw new Error(
+      `Eval case ${kase.id}: expected fixture tools ${JSON.stringify(expectedToolNames)}, got ${JSON.stringify(replay.fixtureToolNames)}`,
+    );
+  }
   if (replay.response.mode !== 'patch') {
     throw new Error(
       `Eval case ${kase.id}: AgentRunner returned ${replay.response.mode}, expected patch`,

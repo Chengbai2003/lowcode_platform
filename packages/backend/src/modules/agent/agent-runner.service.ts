@@ -101,6 +101,7 @@ export class AgentRunnerService {
       routeDecision?: AgentRouteDecision;
       reporter?: AgentProgressReporter;
       conversationContext?: AgentConversationContext;
+      executionPath?: 'auto' | 'tool_call';
     },
   ): Promise<
     | AgentEditPatchResponse
@@ -259,15 +260,17 @@ export class AgentRunnerService {
 
     try {
       let finishReason = 'fast_path';
-      const fastPathApplied = await this.tryFastPath(
-        dto,
-        context,
-        focusContextResult,
-        resolvedSelectedId,
-        selectedProfile,
-        traceId,
-        reporter,
-      );
+      const fastPathApplied =
+        options?.executionPath !== 'tool_call' &&
+        (await this.tryFastPath(
+          dto,
+          context,
+          focusContextResult,
+          resolvedSelectedId,
+          selectedProfile,
+          traceId,
+          reporter,
+        ));
 
       if (fastPathApplied) {
         metrics.stepCount = 1;
