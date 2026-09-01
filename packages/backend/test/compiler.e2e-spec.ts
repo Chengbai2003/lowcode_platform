@@ -23,8 +23,14 @@ describe('Compiler (e2e security & contract boundaries)', () => {
       } as const,
       runtimeCompatibility: {
         componentPresetId: pageId === 'unknown-preset-page' ? 'unknown-preset' : 'builtin-antd',
-        componentPresetVersion: '0.0.0-draft',
-        rendererVersion: '0.0.0-draft',
+        componentPresetVersion: ['legacy-draft-page', 'preset-version-mismatch-page'].includes(
+          pageId,
+        )
+          ? '0.0.0-draft'
+          : '0.1.0',
+        rendererVersion: ['legacy-draft-page', 'renderer-version-mismatch-page'].includes(pageId)
+          ? '0.0.0-draft'
+          : '1.0.0',
       },
     })),
   };
@@ -180,8 +186,45 @@ describe('Compiler (e2e security & contract boundaries)', () => {
       })
       .expect(400);
 
-    expect(response.body.message).toMatch(/Unsupported compiler preset/i);
+    expect(response.body.message).toMatch(/Unsupported compiler runtimeCompatibility/i);
   });
+
+  it('POST /compiler/export 拒绝历史 draft runtimeCompatibility', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/compiler/export')
+      .set('Authorization', `Bearer ${TEST_SECRET}`)
+      .send({
+        schema: {
+          schemaVersion: 0,
+          rootId: 'root',
+          components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
+        },
+        options: { pageId: 'legacy-draft-page', pageVersion: 1 },
+      })
+      .expect(400);
+
+    expect(response.body.message).toMatch(/runtimeCompatibility|preset/i);
+  });
+
+  it.each(['preset-version-mismatch-page', 'renderer-version-mismatch-page'])(
+    'POST /compiler/export 对 %s 的单字段版本不匹配执行 fail-close',
+    async (pageId) => {
+      const response = await request(app.getHttpServer())
+        .post('/compiler/export')
+        .set('Authorization', `Bearer ${TEST_SECRET}`)
+        .send({
+          schema: {
+            schemaVersion: 0,
+            rootId: 'root',
+            components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
+          },
+          options: { pageId, pageVersion: 1 },
+        })
+        .expect(400);
+
+      expect(response.body.message).toMatch(/Unsupported compiler runtimeCompatibility/i);
+    },
+  );
 
   it('POST /compiler/export 拒绝可信 Preset 未绑定的组件类型', async () => {
     const response = await request(app.getHttpServer())

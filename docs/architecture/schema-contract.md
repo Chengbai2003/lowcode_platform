@@ -1,39 +1,44 @@
 # Schema Contract 设计原则
 
-> Status: Draft  
-> Last Updated: 2026-08-25  
-> Target Milestone: M0-1 / M1
+> Status: Implemented for M0
+> Last Updated: 2026-09-01
+> Target Milestone: M0-1
 
 ## 当前决策
 
-项目尚未正式发布，没有需要长期兼容的生产 Schema。当前结构被视为开发期 Draft，仓库内 fixtures、examples 和本地数据可以一次性升级，不建设通用 V1 → V2 migration registry。
-
-M0 建立版本边界和单一真相源；M1 完成后冻结首个正式 Schema V1。正式发布后出现破坏性协议变化时，再建设逐版本 migration chain。
+M0 的 Contract 是唯一 Schema 类型与校验来源。当前唯一支持的 DSL 版本为
+`schemaVersion: 0`；不支持的版本和未知顶层字段均 fail-close。
 
 ## 版本职责
 
 ```ts
 interface PageSchema {
-  schemaVersion: 1;
+  schemaVersion: 0;
   rootId: string;
   components: Record<string, ComponentNode>;
-  logic: PageLogic;
 }
 
-interface PageRecord {
+interface StoredPageRecord {
   pageId: string;
   systemId: string;
+  currentPageVersion: number;
+}
+
+interface PageSnapshotRecord {
+  pageId: string;
   pageVersion: number;
-  componentPresetId: string;
-  componentPresetVersion: string;
-  rendererVersion: string;
-  schema: PageSchema;
+  schema: Readonly<PageSchema>;
+  runtimeCompatibility: {
+    componentPresetId: string;
+    componentPresetVersion: string;
+    rendererVersion: string;
+  };
 }
 ```
 
 - `schemaVersion` 描述 DSL 格式。
 - `pageVersion` 描述页面内容修订，用于乐观锁、Patch Preview 和快照。
-- `componentPresetId`、`componentPresetVersion` 和 `rendererVersion` 随每个页面版本及快照持久化，用于历史复现。
+- `runtimeCompatibility` 随不可变 `PageSnapshotRecord` 持久化，用于历史复现。
 - Repository 不再通过修改 Schema 的协议版本表达页面修订。
 
 运行时仍由服务端根据 `systemId` 解析当前可信 `SystemRuntimeProfile`；持久化的版本字段不能由客户端或 Agent 自报。恢复历史快照时必须使用快照记录的精确 Preset/Renderer 版本，不可用时 fail-close 为原始 JSON 只读。
@@ -48,24 +53,15 @@ interface ComponentNode {
   id: string;
   type: string;
   props?: Record<string, JsonValue>;
-  events?: Record<string, FlowBinding>;
+  events?: Record<string, ActionList>;
   childrenIds?: string[];
 }
 
-interface FlowBinding {
-  flowId: string;
-  input?: Record<string, JsonValue>;
-}
-
-interface PageLogic {
-  states: Record<string, StateDefinition>;
-  computed: Record<string, ComputedDefinition>;
-  flows: Record<string, ActionFlow>;
-  dataSources: Record<string, DataSourceDefinition>;
-}
+type ActionList = Action[];
 ```
 
-具体 State、Computed、ActionFlow 和 DataSource 联合类型在对应 M1 Issue 中冻结，但必须继续由同一 contract 包导出。
+> M1（未来）：State、Computed、ActionFlow 与 DataSource 的类型和持久化语义尚未进入
+> M0 Contract；在对应 Milestone 实施时再冻结，不能将其当作当前 `PageSchema` 字段。
 
 ## 统一组件协议与 Props
 
@@ -100,7 +96,7 @@ parse raw JSON
   ↓
 验证组件类型、Props 和事件
   ↓
-验证表达式、Flow、DataSource 和 Policy
+验证表达式、ActionList 和资源预算
   ↓
 生成 canonical readonly PageSchema
 ```
@@ -117,8 +113,7 @@ parse raw JSON
 - 组件类型不在当前 System Preset 中
 - Props 不符合 Manifest 或包含危险值
 - 表达式包含不支持 AST、危险属性或超出预算
-- Flow 引用缺失、循环失控或危险路径未确认
-- DataSource 引用无法通过可信 OperationResolver 解析
+- ActionList 结构非法、动作超出预算或表达式包含危险路径
 
 未来遇到高于当前实现的正式 Schema 版本时，可以提供“原始 JSON 只读查看”，但不得渲染、执行、编译或再次保存。
 
@@ -144,6 +139,6 @@ Contract fixture 必须被以下消费面共同使用：
 
 ---
 
-## 实施状态（2026-08）
+## 实施状态（2026-09）
 
 M0-1 已完成：Contract 为唯一 Schema 类型与校验来源（PR #20/#22/#23/#24，Issue #16）。消费面（Editor、Renderer、Compiler、Agent、SchemaContext、Repository）直接导入 Contract；Renderer 挂载边界、Repository 磁盘/写入边界与 Compiler 入口使用 `requireSupportedPageSchema` 做 fail-close 校验并只消费返回值；渲染树内部使用 canonical 的工作副本（reactive 运行时可写，深冻结语义由 M0-4 RuntimeSession 承接），持久化对象保持深冻结；`pnpm check:architecture` 强制架构边界。

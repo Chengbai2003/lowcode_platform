@@ -1,7 +1,6 @@
 import type {
   PageSchema,
   ComponentRegistry,
-  ComponentExtension,
   ComponentNode,
   PropertyMeta,
   NotificationOptions,
@@ -12,7 +11,6 @@ import type {
 export type {
   PageSchema,
   ComponentRegistry,
-  ComponentExtension,
   ComponentNode,
   PropertyMeta,
   NotificationOptions,
@@ -34,11 +32,6 @@ export interface LowcodeEditorProps {
    * 初始 JSON Schema (A2UI Format)
    */
   initialSchema?: PageSchema | string;
-
-  /**
-   * 自定义组件扩展。每项必须声明 Manifest 与 Compiler import 绑定。
-   */
-  components?: Record<string, ComponentExtension>;
 
   /**
    * Schema 变更回调

@@ -47,7 +47,6 @@ export type {
 } from './preset/types';
 export type {
   ComponentPresetExtension,
-  ComponentExtension,
   PresetCompositionOptions,
 } from './preset/createComponentPreset';
 export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from './types';
@@ -56,6 +55,7 @@ export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from
 // 本地绑定（而非 import 再导出）确保编译为直接赋值。
 const PageRenderer = Renderer;
 export { PageRenderer };
+export { RENDERER_VERSION } from './version';
 
 /**
  * 兼容保留的 Provider 包装组件。

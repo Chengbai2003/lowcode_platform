@@ -18,6 +18,7 @@ import { assessPatchRisk } from '../../src/modules/agent/agent-preview.utils';
 import { AgentPolicyService } from '../../src/modules/agent/agent-policy.service';
 import { isSafeInlineExpression } from '../../src/modules/compiler/security/validators';
 import { PageSchemaRepository } from '../../src/modules/page-schema/repositories/page-schema.repository';
+import { BUILTIN_ANTD_RUNTIME_PROFILE } from '../../src/modules/page-schema/runtime-profiles';
 import { PatchApplyService } from '../../src/modules/agent-tools/patch-apply.service';
 import { PatchAutoFixService } from '../../src/modules/agent-tools/patch-auto-fix.service';
 import { PatchValidationService } from '../../src/modules/agent-tools/patch-validation.service';
@@ -26,12 +27,8 @@ import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { EditorPatchOperation } from '../../src/modules/agent-tools/types/editor-patch.types';
 import type { EvalCase, EvalCaseResult, ExpectedOutcome } from './eval-case.types';
 
-/** 与 PageSchemaService Draft Provider 一致的可信运行时兼容元数据 */
-const DRAFT_RUNTIME_COMPATIBILITY = {
-  componentPresetId: 'builtin-antd',
-  componentPresetVersion: '0.0.0-draft',
-  rendererVersion: '0.0.0-draft',
-};
+/** 与 PageSchemaService 一致的可信运行时兼容元数据 */
+const DRAFT_RUNTIME_COMPATIBILITY = BUILTIN_ANTD_RUNTIME_PROFILE;
 
 function makePolicyService(): AgentPolicyService {
   // getLimits 只读常量与注入的 profile，不触网；依赖以最小桩注入

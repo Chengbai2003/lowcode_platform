@@ -23,6 +23,9 @@ pnpm eval:live            # 需 AGENT_EVAL_BASE_URL + AGENT_EVAL_TOKEN；不进 
 - `eval:live`：先创建真实页面，再对运行中的后端 `POST /agent/edit` 发送用例 intent；
   Draft/Patch 记录真实首轮完成，Validation/Safety/Conflict 以生产边界的预期拒绝为成功。
   当前 API 无法表达的表达式与录制 Patch 注入场景会标记 `skipped` 并排除成功率分母。
+  Live 报告同时输出 `totalCases`、`executedCases`、`skippedCases` 与 `coverageRate`；
+  因而首轮成功率不能被理解为全部基线的覆盖结果。例如 20 个基线中执行 17 个、跳过 3 个时，
+  覆盖率为 0.85，未验证项必须在 Markdown 明细中保留。
   报告记录路由、Trace tool calls、repair、usage/cost（服务端可用时）及版本标签，写入
   `.codex/artifacts/agent-eval/live/`。
 

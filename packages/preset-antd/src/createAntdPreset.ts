@@ -5,7 +5,11 @@
  * seal，之后整棵结构深冻结，不暴露任何 register() / 可变 Map。
  */
 
-import { createSealedPreset, type ComponentPreset } from '@lowcode-platform/renderer';
+import {
+  createSealedPreset,
+  RENDERER_VERSION,
+  type ComponentPreset,
+} from '@lowcode-platform/renderer';
 import { antdRuntime } from './runtime';
 import { antdManifest } from './manifest';
 import { antdValidation } from './validation';
@@ -13,6 +17,11 @@ import { antdCompilerBindings } from './compiler';
 
 export const ANT_PRESET_ID = 'builtin-antd';
 export const ANT_PRESET_VERSION = '0.1.0';
+export const ANTD_RUNTIME_COMPATIBILITY = Object.freeze({
+  componentPresetId: ANT_PRESET_ID,
+  componentPresetVersion: ANT_PRESET_VERSION,
+  rendererVersion: RENDERER_VERSION,
+});
 
 /**
  * 每次调用返回一个新的 sealed 实例（注册表内容共享、结构只读），

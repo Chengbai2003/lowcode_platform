@@ -12,6 +12,15 @@ const valid = {
 };
 
 describe('Eval case contract', () => {
+  it('rejects unsupported schema versions and empty capabilities', () => {
+    expect(() => validateEvalCase({ ...valid, caseSchemaVersion: 2 }, new Set())).toThrow(
+      'caseSchemaVersion',
+    );
+    expect(() => validateEvalCase({ ...valid, capabilities: [] }, new Set())).toThrow(
+      'capabilities',
+    );
+  });
+
   it('rejects duplicate capabilities and invalid ExpectedOutcome keys', () => {
     expect(() => validateEvalCase({ ...valid, capabilities: ['x', 'x'] }, new Set())).toThrow(
       'capabilities',

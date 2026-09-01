@@ -1,4 +1,9 @@
-import type { EvalCase, EvalCaseCategory, ExpectedOutcome } from './eval-case.types';
+import {
+  EVAL_CASE_SCHEMA_VERSION,
+  type EvalCase,
+  type EvalCaseCategory,
+  type ExpectedOutcome,
+} from './eval-case.types';
 
 const categories: EvalCaseCategory[] = ['draft', 'patch', 'validation', 'conflict', 'safety'];
 const expectedKeys: Array<keyof ExpectedOutcome> = [
@@ -30,12 +35,15 @@ export function validateEvalCase(raw: unknown, ids: Set<string>): asserts raw is
   };
   if (typeof raw.id !== 'string' || !raw.id.trim() || ids.has(raw.id))
     fail('id must be a unique non-empty string');
+  if (raw.caseSchemaVersion !== EVAL_CASE_SCHEMA_VERSION)
+    fail(`caseSchemaVersion must equal ${EVAL_CASE_SCHEMA_VERSION}`);
   if (typeof raw.title !== 'string' || !raw.title.trim()) fail('title must be a non-empty string');
   if (typeof raw.intent !== 'string' || !raw.intent.trim())
     fail('intent must be a non-empty string');
   if (!categories.includes(raw.category as EvalCaseCategory)) fail('category is invalid');
   if (
     !isStringArray(raw.capabilities) ||
+    raw.capabilities.length === 0 ||
     raw.capabilities.some((item) => !item.trim()) ||
     new Set(raw.capabilities).size !== raw.capabilities.length
   )

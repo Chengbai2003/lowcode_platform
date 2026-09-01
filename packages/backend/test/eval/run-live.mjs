@@ -14,6 +14,7 @@
 
 import { readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import liveReport from './live-report.cjs';
 
 const BASE_URL = process.env.AGENT_EVAL_BASE_URL || 'http://localhost:3000/api/v1';
 const TOKEN = process.env.AGENT_EVAL_TOKEN || '';
@@ -180,28 +181,14 @@ for (const evalCase of cases) {
   );
 }
 
-const executedResults = results.filter((result) => !result.skipped);
+const summary = liveReport.summarizeLiveResults(results);
 const report = {
   generatedAt: new Date().toISOString(),
   baseUrl: BASE_URL,
   contractPackageVersion: JSON.parse(
     readFileSync(join(process.cwd(), '../schema-contract/package.json'), 'utf-8'),
   ).version,
-  firstPassSuccessRate:
-    executedResults.length === 0
-      ? null
-      : Math.round(
-          (executedResults.filter((result) => result.firstPassSuccess).length /
-            executedResults.length) *
-            10_000,
-        ) / 10_000,
-  averageLatencyMs:
-    executedResults.length === 0
-      ? null
-      : Math.round(
-          executedResults.reduce((sum, result) => sum + result.latencyMs, 0) /
-            executedResults.length,
-        ),
+  ...summary,
   results,
 };
 
@@ -213,6 +200,8 @@ writeFileSync(
     '# Agent Live Eval Trend',
     '',
     `- Generated at: ${report.generatedAt}`,
+    `- Cases: ${report.totalCases} total / ${report.executedCases} executed / ${report.skippedCases} skipped`,
+    `- Coverage Rate: ${report.coverageRate ?? 'n/a'}`,
     `- First-pass Success Rate: ${report.firstPassSuccessRate ?? 'n/a'}`,
     `- Average Latency: ${report.averageLatencyMs ?? 'n/a'}ms`,
     '',

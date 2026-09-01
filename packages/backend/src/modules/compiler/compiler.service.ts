@@ -44,9 +44,7 @@ export class CompilerService {
       dto.options.pageId,
       dto.options.pageVersion,
     );
-    const trustedBindings = resolveTrustedCompilerBindings(
-      page.runtimeCompatibility.componentPresetId,
-    );
+    const trustedBindings = resolveTrustedCompilerBindings(page.runtimeCompatibility);
 
     try {
       // 3. 执行代码生成流水线

@@ -81,6 +81,41 @@ describe('antdPreset seal 语义（Bootstrap 后不可变）', () => {
 });
 
 describe('antdPreset Props 净化（fail-close，经 Renderer 端到端）', () => {
+  it('Select 保留 defaultValue 并启用 showSearch', () => {
+    render(
+      <Renderer
+        preset={antdPreset}
+        pageId="p-select-test"
+        documentSessionId="doc-1"
+        schema={
+          {
+            schemaVersion: 0,
+            rootId: 'root',
+            components: {
+              root: { id: 'root', type: 'Page', childrenIds: ['select'] },
+              select: {
+                id: 'select',
+                type: 'Select',
+                props: {
+                  defaultValue: 'banana',
+                  showSearch: true,
+                  options: [
+                    { label: 'Apple', value: 'apple' },
+                    { label: 'Banana', value: 'banana' },
+                  ],
+                },
+              },
+            },
+          } as never
+        }
+      />,
+    );
+
+    const select = screen.getByRole('combobox');
+    expect(screen.getByText('Banana')).toBeTruthy();
+    expect(select.closest('.ant-select')?.classList.contains('ant-select-show-search')).toBe(true);
+  });
+
   it('白名单外 Props 与危险 DOM Props 不进入组件', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { container } = render(

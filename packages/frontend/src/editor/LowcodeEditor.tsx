@@ -12,7 +12,6 @@ import type {
 import type { AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
 import { antdPreset } from '@lowcode-platform/preset-antd';
-import { createComponentPreset } from '@lowcode-platform/renderer';
 import {
   EditorHeader,
   PreviewPane,
@@ -44,7 +43,6 @@ function LowcodeEditorInner({
   pageId,
   projectName,
   initialSchema,
-  components: customComponents = {},
   onChange,
   onError,
   eventContext = {},
@@ -272,23 +270,10 @@ function LowcodeEditorInner({
   const documentSessionId = useSelectionStore((state) => state.documentSessionId);
   const runtimePageId = pageId ?? `draft:${documentSessionId}`;
 
-  // 宿主扩展必须携带 Manifest 与 Compiler binding，不能猜测 Props 或导入来源。
-  const editorPreset = useMemo(() => {
-    const customEntries = Object.entries(customComponents);
-    if (customEntries.length === 0) {
-      return antdPreset;
-    }
-    const extensions = customEntries.map(([type, extension]) => ({
-      type,
-      ...extension,
-    }));
-    return createComponentPreset({
-      base: antdPreset,
-      extensions,
-    });
-  }, [customComponents]);
+  // 内置 Preset 是编辑器唯一的 Preview/Compiler 组件集合。
+  const editorPreset = antdPreset;
 
-  // 合并自定义组件与默认注册表（供属性面板/左侧面板使用）
+  // 内置组件注册表供属性面板/左侧面板使用。
   const allComponents = useMemo(() => {
     const rendererComponents = { ...antdPreset.runtime };
     const componentsOnly = Object.keys(componentRegistry).reduce(
@@ -298,11 +283,8 @@ function LowcodeEditorInner({
       },
       {} as Record<string, React.ComponentType<Record<string, unknown>>>,
     );
-    const customRuntime = Object.fromEntries(
-      Object.entries(customComponents).map(([type, extension]) => [type, extension.component]),
-    );
-    return { ...rendererComponents, ...componentsOnly, ...customRuntime };
-  }, [customComponents]);
+    return { ...rendererComponents, ...componentsOnly };
+  }, []);
 
   const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({
     allComponents,
@@ -505,6 +487,18 @@ function LowcodeEditorInner({
  * ponytail ultra: key 移至 ErrorBoundary 以在 document 切换时清除错误边界状态；Inner 内同步 reset 避免 generation 竞态
  */
 export function LowcodeEditor(props: LowcodeEditorProps) {
+  const legacyComponents = (props as { components?: unknown }).components;
+  const hasUnsupportedCustomComponents =
+    legacyComponents !== undefined &&
+    (typeof legacyComponents !== 'object' ||
+      legacyComponents === null ||
+      Object.keys(legacyComponents).length > 0);
+
+  if (hasUnsupportedCustomComponents) {
+    throw new Error(
+      'LowcodeEditor does not support custom components until the backend registers their SystemRuntimeProfile.',
+    );
+  }
   const documentKey = `doc::${props.pageId ?? '__local'}`;
   return (
     <ErrorBoundary key={documentKey}>

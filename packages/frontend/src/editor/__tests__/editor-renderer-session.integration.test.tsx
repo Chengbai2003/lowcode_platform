@@ -64,7 +64,8 @@ describe('Editor -> Renderer Session Integration (PR #34)', () => {
     expect(typeof currentDocSessionId).toBe('string');
   });
 
-  it('自定义组件通过 createComponentPreset 封闭组合进入渲染树，Props 经 Manifest 净化', () => {
+  it('LowcodeEditor 拒绝自定义组件，避免 Preview 与 Compiler 不一致', () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     const CustomAlert = (props: { title?: string; children?: React.ReactNode }) => (
       <div data-testid="custom-alert">
         <span>{props.title}</span>
@@ -85,24 +86,26 @@ describe('Editor -> Renderer Session Integration (PR #34)', () => {
       },
     };
 
-    render(
-      <LowcodeEditor
-        pageId="custom-page-1"
-        initialSchema={schemaWithCustom}
-        components={{
-          CustomAlert: {
-            component: CustomAlert,
-            manifest: {
-              componentType: 'CustomAlert',
-              allowedProps: ['title', 'children'],
+    expect(() =>
+      render(
+        <LowcodeEditor
+          pageId="custom-page-1"
+          initialSchema={schemaWithCustom}
+          {...({
+            components: {
+              CustomAlert: {
+                component: CustomAlert,
+                manifest: {
+                  componentType: 'CustomAlert',
+                  allowedProps: ['title', 'children'],
+                },
+                compilerBinding: { module: '@example/components' },
+              },
             },
-            compilerBinding: { module: '@example/components' },
-          },
-        }}
-      />,
-    );
-
-    expect(screen.getAllByText('自定义警告').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('内容详情').length).toBeGreaterThanOrEqual(1);
+          } as { components: unknown })}
+        />,
+      ),
+    ).toThrow(/does not support custom components/i);
+    error.mockRestore();
   });
 });

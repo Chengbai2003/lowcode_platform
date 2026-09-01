@@ -10,8 +10,8 @@ import {
 
 const runtimeCompatibility = {
   componentPresetId: 'builtin-antd',
-  componentPresetVersion: '0.0.0-draft',
-  rendererVersion: '0.0.0-draft',
+  componentPresetVersion: '0.1.0',
+  rendererVersion: '1.0.0',
 };
 
 const createSchema = (label: string) => ({

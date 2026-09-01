@@ -19,14 +19,6 @@ export interface ComponentPresetExtension {
   readonly compilerBinding: CompilerComponentBinding;
 }
 
-/** Host extension payload keyed by component type. */
-export interface ComponentExtension {
-  readonly component: React.ComponentType<any>;
-  readonly manifest: ComponentManifestEntry;
-  readonly validator?: ComponentPropsValidator;
-  readonly compilerBinding: CompilerComponentBinding;
-}
-
 /**
  * Preset 组合配置选项
  */

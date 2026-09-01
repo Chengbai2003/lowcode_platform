@@ -19,4 +19,5 @@ export {
   antdPreset,
   ANT_PRESET_ID,
   ANT_PRESET_VERSION,
+  ANTD_RUNTIME_COMPATIBILITY,
 } from './createAntdPreset';
