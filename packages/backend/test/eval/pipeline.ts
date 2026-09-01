@@ -60,6 +60,7 @@ function makePatchValidationService(): PatchValidationService {
 }
 
 const FIXTURE_PROVIDER = 'openai';
+const FIXTURE_REPLAY_INSTRUCTION = '执行录制的补丁工具调用';
 
 interface FixtureToolCall {
   name: string;
@@ -315,7 +316,7 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
     );
     const response = await runner.runEdit(
       {
-        instruction: kase.intent,
+        instruction: FIXTURE_REPLAY_INSTRUCTION,
         pageId,
         pageVersion: saved.pageVersion,
         selectedId: selectedIdForPatch(firstOperation),

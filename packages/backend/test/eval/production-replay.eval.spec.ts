@@ -61,6 +61,20 @@ describe('Agent production replay', () => {
     expect(replay.response.patch).toHaveLength(1);
   });
 
+  it('replays recorded tools even when a live intent would enter collection planning', async () => {
+    const evalCase = loadCase('patch-insert-component');
+    evalCase.intent = '把所有按钮都隐藏';
+
+    const replay = await replayPatchThroughAgent(evalCase);
+
+    expect(replay.fixtureToolNames).toEqual(['insert_component']);
+    expect(replay.response.mode).toBe('patch');
+    if (replay.response.mode !== 'patch') {
+      throw new Error(`Expected patch response, got ${replay.response.mode}`);
+    }
+    expect(replay.response.patch).toHaveLength(1);
+  });
+
   it('rejects fixture tool calls that exceed the supplied tool budget', async () => {
     const patch = loadCase('patch-update-props-noop-dedup').fixtures
       .patch as EditorPatchOperation[];
