@@ -1,7 +1,7 @@
 # Renderer 与 ComponentPreset 架构
 
-> Status: Draft  
-> Last Updated: 2026-08-30  
+> Status: Implemented for M0
+> Last Updated: 2026-09-01
 > Target Milestone: M0-4
 
 ## 目标
@@ -213,4 +213,4 @@ Scope D RuntimeSession 已落地（M0-4d）：`RuntimeSession` 绑定 `pageId + 
 
 Scope E HostCapabilities 已落地（M0-4e）：`HostCapabilities`（navigation / dialogs / network / dataResources）默认全 deny、`normalizeHostCapabilities` 归一化为冻结对象后经 `setHostConfig` 注入执行上下文（不触发响应式脏标记）；Renderer 内置回退逐项门控——导航的 `window` 回退与默认 `navigate`（宿主注入 `context.navigate` 不受限）、dialog 的原生 `confirm/alert` 回退（默认 UI modal 恒 false）、`apiCall` 的内置 `fetch` 回退（宿主注入 `context.api` 不受限）；表达式上下文剔除宿主命名空间（`ui`/`api`/`dispatch`/`getState`/`navigate`/`session`/`runtime` 等，函数本就被 sanitize 克隆剔除）。
 
-M0-4 的内置 Renderer/Preset/RuntimeSession 已完成：Renderer 可被最小 React 宿主仅依赖 Contract + Renderer + 一个 Preset 渲染 JSON；Registry 与 canonical Schema 无法被运行时组件修改；非法 Props 在渲染前被拒绝。当前服务端可信 Profile 为 `builtin-antd / 0.1.0 / renderer 1.0.0`，页面保存、编辑器加载与 Compiler 均精确匹配完整三元组；旧 `0.0.0-draft` 快照没有对应 Runtime，只允许原始 JSON 只读，不会静默映射到当前版本。外部组合 Preset 若需要进入编辑器和后端编译，必须先完成服务端 SystemRuntimeProfile 注册与可信 binding 部署；客户端声明不会成为可信导入来源。
+M0-4 的内置 Renderer/Preset/RuntimeSession 已完成：Renderer 可被最小 React 宿主仅依赖 Contract + Renderer + 一个 Preset 渲染 JSON；Registry 与 canonical Schema 无法被运行时组件修改；非法 Props 在渲染前被拒绝。当前服务端可信 Profile 为 `builtin-antd / 0.1.0 / renderer 1.0.0`，页面保存、编辑器加载与 Compiler 均精确匹配完整三元组；旧 `0.0.0-draft` 快照没有对应 Runtime，只允许原始 JSON 只读，不会静默映射到当前版本。外部组合 Preset 若需要进入编辑器和后端编译，必须先完成 [M1F-2 SystemRuntimeProfile Registry](https://github.com/Chengbai2003/lowcode_platform/issues/39) 与可信 binding 部署；客户端声明不会成为可信导入来源。
