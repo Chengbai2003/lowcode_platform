@@ -41,7 +41,7 @@ interface PageSnapshotRecord {
 - `runtimeCompatibility` 随不可变 `PageSnapshotRecord` 持久化，用于历史复现。
 - Repository 不再通过修改 Schema 的协议版本表达页面修订。
 
-运行时仍由服务端根据 `systemId` 解析当前可信 `SystemRuntimeProfile`；持久化的版本字段不能由客户端或 Agent 自报。恢复历史快照时必须使用快照记录的精确 Preset/Renderer 版本，不可用时 fail-close 为原始 JSON 只读。
+M0 服务端将 `systemId: default` 固定映射到唯一可信的内置 Profile；持久化的版本字段不能由客户端或 Agent 自报。恢复历史快照时必须使用快照记录的精确 Preset/Renderer 版本，不可用时 fail-close 为原始 JSON 只读。多系统和外部 Preset 的通用解析由 [M1F-2 SystemRuntimeProfile Registry](https://github.com/Chengbai2003/lowcode_platform/issues/39) 承接，不能把未来 Registry 描述成当前已实现能力。
 
 ## 基础结构
 

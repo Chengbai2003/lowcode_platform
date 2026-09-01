@@ -1,13 +1,13 @@
 # A2UI 文档索引
 
 > Status: Active  
-> Last Updated: 2026-08-25
+> Last Updated: 2026-09-01
 
 本目录是当前架构与演进方向的文档真相源。具体任务、负责人和实施进度以 GitHub Issues 与 Pull Requests 为准。
 
 ## 从这里开始
 
-1. [`roadmap/a2ui-evolution-roadmap.md`](roadmap/a2ui-evolution-roadmap.md)：了解 M0～M5 阶段、依赖和发布门槛。
+1. [`roadmap/a2ui-evolution-roadmap.md`](roadmap/a2ui-evolution-roadmap.md)：了解已完成的 M0、当前 M1 Foundation，以及 M1a～M5 的依赖和发布门槛。
 2. [`architecture/target-architecture.md`](architecture/target-architecture.md)：了解目标系统、包边界和核心链路。
 3. [`architecture/schema-contract.md`](architecture/schema-contract.md)：了解 DSL 单一真相源与版本边界。
 4. [`architecture/renderer-and-component-preset.md`](architecture/renderer-and-component-preset.md)：了解独立 Renderer 和多组件库扩展方式。

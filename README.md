@@ -1,14 +1,17 @@
 # A2UI 低代码平台
 
 > 一个围绕 **A2UI Schema** 构建的低代码编辑器与页面编辑 Agent。  
-> 当前状态：**P0 安全加固已合入，进入 M0 工程与运行时地基阶段**。
+> 当前状态：**M0 工程与运行时地基已完成，进入 M1 Foundation 与 M1a 演进阶段**。
 
 ## 项目概览
 
-这个仓库由两部分组成：
+这个仓库的核心包包括：
 
-- `packages/frontend`：编辑器、AI 助手、patch 本地应用
-- `packages/backend`：页面快照、agent 编排、工具层、代码导出
+- `packages/schema-contract`：A2UI Schema 类型、版本与统一校验边界
+- `packages/renderer`：可独立消费的 Renderer、RuntimeSession 与 HostCapabilities
+- `packages/preset-antd`：内置 AntD Runtime、Manifest、Validation 与 Compiler bindings
+- `packages/frontend`：编辑器、AI 助手与 Preview 宿主
+- `packages/backend`：页面快照、Agent 编排、工具层与代码导出
 
 当前主线能力可以简单理解为：
 
@@ -76,11 +79,12 @@ pnpm --filter @lowcode-platform/backend test
 
 ```text
 packages/
+├── schema-contract/                # Schema 单一真相源
+├── renderer/                       # 独立 Renderer 与运行时执行
+├── preset-antd/                    # 内置 AntD ComponentPreset
 ├── frontend/
 │   ├── src/editor/                 # 编辑器与 AI 助手主链路
-│   ├── src/renderer/               # 运行时渲染与 DSL 执行
-│   ├── src/components/             # 组件库与元数据
-│   └── src/schema/                 # Schema 校验与 auto-fix
+│   └── src/components/             # 编辑器组件元数据与面板
 └── backend/
     ├── src/modules/page-schema/    # 页面快照读写与版本控制
     ├── src/modules/schema-context/ # 页面理解与焦点切片
@@ -92,6 +96,9 @@ packages/
 
 建议从这些文件开始读：
 
+- `packages/schema-contract/src/index.ts`
+- `packages/renderer/src/Renderer.tsx`
+- `packages/preset-antd/src/createAntdPreset.ts`
 - `packages/frontend/src/editor/LowcodeEditor.tsx`
 - `packages/frontend/src/editor/components/ai-assistant/AIAssistant/useAIAssistantChat.ts`
 - `packages/backend/src/modules/agent/agent.service.ts`
@@ -100,11 +107,12 @@ packages/
 
 ## 当前边界
 
-- 页面快照已有接口和版本语义，但底层仍是 file-backed store
-- Schema 类型仍分散在前后端，尚未抽成独立 Contract Package
-- Renderer 仍位于前端编辑器包内，尚未成为可独立消费的运行包
-- Agent 主链路和首轮模块拆分已落地，但 `Domain Pack` 仍分散在工具、Prompt、规则和元数据中
-- CI 暂时排除 3 组历史 Nest 装配测试；M0 将恢复后端 36/36 suites 全量门禁
+- 页面快照、版本与 CAS 语义已落地，但底层仍是 file-backed store
+- Schema 类型和校验由 `@lowcode-platform/schema-contract` 统一提供
+- Renderer 已成为独立 Package；内置可信运行时固定为 `builtin-antd / 0.1.0 / renderer 1.0.0`
+- Deterministic Eval 已进入 CI；生产 Agent Replay 与 Live Trend Contract 由 [#38](https://github.com/Chengbai2003/lowcode_platform/issues/38) 承接
+- 外部 Preset 的服务端 Registry 与 Frontend Catalog 由 [#39](https://github.com/Chengbai2003/lowcode_platform/issues/39) 承接
+- M1a State & Computed 可与两个 M1 Foundation Epic 并行推进
 
 ## 文档入口
 
