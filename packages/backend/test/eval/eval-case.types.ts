@@ -76,6 +76,8 @@ export interface EvalCase {
   caseSchemaVersion: number;
   category: EvalCaseCategory;
   title: string;
+  /** 此用例依赖的已实现能力；用于防止未落地能力被计入 M0 基线。 */
+  capabilities: string[];
   /** 模型意图（live 通道使用；deterministic 通道仅记录） */
   intent: string;
   fixtures: EvalCaseFixtures;

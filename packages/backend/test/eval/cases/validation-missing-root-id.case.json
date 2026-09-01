@@ -3,6 +3,7 @@
   "category": "validation",
   "title": "非法输入：Schema 缺失 rootId",
   "intent": "回放一个缺失 rootId 的模型输出",
+  "capabilities": ["schema_validation"],
   "fixtures": {
     "schema": {
       "schemaVersion": 0,

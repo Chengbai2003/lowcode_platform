@@ -34,11 +34,6 @@ export interface LowcodeEditorProps {
   initialSchema?: PageSchema | string;
 
   /**
-   * 自定义组件映射
-   */
-  components?: ComponentRegistry;
-
-  /**
    * Schema 变更回调
    */
   onChange?: (schema: PageSchema) => void;

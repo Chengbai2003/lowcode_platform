@@ -101,6 +101,29 @@ describe('RuntimeSession (M0-4 Scope D)', () => {
     expect(session.runtime.get('data.result')).toEqual({ ok: true });
   });
 
+  it('宿主 api 方法和 request 都接收 Session AbortSignal', async () => {
+    const get = vi.fn(async () => ({ ok: true }));
+    const deleteRequest = vi.fn(async () => ({ ok: true }));
+    const request = vi.fn(async () => ({ ok: true }));
+    const session = createRuntimeSession({
+      pageId: 'p5-signal',
+      documentSessionId: 'd1',
+      dispatcher: new EventDispatcher({ api: { get, delete: deleteRequest, request } }),
+    });
+
+    await session.dispatcher.execute([
+      { type: 'apiCall', url: 'https://example.test/get' } as never,
+      { type: 'apiCall', url: 'https://example.test/delete', method: 'DELETE' } as never,
+      { type: 'apiCall', url: 'https://example.test/post', method: 'POST' } as never,
+    ]);
+
+    expect(get).toHaveBeenCalledWith('https://example.test/get', undefined, session.signal);
+    expect(deleteRequest).toHaveBeenCalledWith('https://example.test/delete', session.signal);
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://example.test/post', signal: session.signal }),
+    );
+  });
+
   it('fetch 路径携带 Session signal；dispose 中止 in-flight 请求且不写回', async () => {
     const session = createRuntimeSession({ pageId: 'p5b', documentSessionId: 'd1' });
     const { apiCall } = await import('../../executor/actions/asyncActions');

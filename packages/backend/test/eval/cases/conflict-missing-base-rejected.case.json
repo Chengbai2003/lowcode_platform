@@ -3,6 +3,7 @@
   "category": "conflict",
   "title": "版本冲突：已存在页面缺失基线被 CAS 拒绝",
   "intent": "并发保存场景：不带基线覆盖已有页面",
+  "capabilities": ["page_version_cas"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

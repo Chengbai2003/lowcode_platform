@@ -4,6 +4,7 @@
   "category": "conflict",
   "title": "版本冲突：CAS 递增、过期基线与缺失基线全部拒绝",
   "intent": "并发保存场景下的页面版本完整性",
+  "capabilities": ["page_version_cas"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

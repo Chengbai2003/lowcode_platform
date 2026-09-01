@@ -3,6 +3,7 @@
   "category": "patch",
   "title": "局部 Patch：删除无用按钮组件",
   "intent": "删除页面底部的废弃操作按钮",
+  "capabilities": ["patch_preview"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

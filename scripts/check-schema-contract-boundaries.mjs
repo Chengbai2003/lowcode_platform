@@ -235,18 +235,21 @@ for (const file of allFiles) {
       `${relFile}: 组件库 import Renderer 内部执行器（应改用 ComponentRuntimeBridge）`,
     );
   } else if (EXECUTOR_CLASS_RULE.test(content)) {
-    violations.push(
-      `${relFile}: 组件库引用执行器类 DSLExecutor（应改用 ComponentRuntimeBridge）`,
-    );
+    violations.push(`${relFile}: 组件库引用执行器类 DSLExecutor（应改用 ComponentRuntimeBridge）`);
   }
 }
 
 {
-  const tableFile = join(ROOT, 'packages/frontend/src/components/components/Table.tsx');
-  const tableContent = readFileSync(tableFile, 'utf-8');
-  if (!/useComponentRuntimeBridge/.test(tableContent)) {
+  const frontendTableFile = join(ROOT, 'packages/frontend/src/components/components/Table.tsx');
+  const frontendTableContent = readFileSync(frontendTableFile, 'utf-8');
+  const presetRuntimeFile = join(ROOT, 'packages/preset-antd/src/runtime.tsx');
+  const presetRuntimeContent = readFileSync(presetRuntimeFile, 'utf-8');
+  if (
+    !/@lowcode-platform\/preset-antd\/runtime/.test(frontendTableContent) ||
+    !/useComponentRuntimeBridge/.test(presetRuntimeContent)
+  ) {
     violations.push(
-      'packages/frontend/src/components/components/Table.tsx: 应通过 useComponentRuntimeBridge 消费受控运行时能力',
+      'Table Runtime: 前端必须复用 Preset 实现，Preset 必须通过 useComponentRuntimeBridge 消费受控能力',
     );
   }
 }

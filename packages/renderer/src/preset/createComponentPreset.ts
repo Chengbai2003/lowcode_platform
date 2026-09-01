@@ -4,6 +4,7 @@ import type {
   ComponentManifestEntry,
   ComponentPropsValidator,
   CompilerBindings,
+  CompilerComponentBinding,
 } from './types';
 import { createSealedPreset } from './createSealedPreset';
 
@@ -15,10 +16,7 @@ export interface ComponentPresetExtension {
   readonly component: React.ComponentType<any>;
   readonly manifest: ComponentManifestEntry;
   readonly validator?: ComponentPropsValidator;
-  readonly compilerBinding?: {
-    readonly module: string;
-    readonly exportName?: string;
-  };
+  readonly compilerBinding: CompilerComponentBinding;
 }
 
 /**
@@ -54,6 +52,9 @@ export function createComponentPreset(options: PresetCompositionOptions): Compon
   const manifest: Record<string, ComponentManifestEntry> = { ...base.manifest };
   const validation: Record<string, ComponentPropsValidator> = { ...base.validation };
   const componentSources: Record<string, string> = { ...base.compiler.componentSources };
+  const componentBindings: Record<string, CompilerComponentBinding> = {
+    ...base.compiler.componentBindings,
+  };
 
   const seenTypes = new Set<string>();
 
@@ -75,6 +76,9 @@ export function createComponentPreset(options: PresetCompositionOptions): Compon
     }
     if (!ext.manifest) {
       throw new Error(`createComponentPreset: extension for "${type}" is missing manifest`);
+    }
+    if (!ext.compilerBinding?.module) {
+      throw new Error(`createComponentPreset: extension for "${type}" is missing compilerBinding`);
     }
     if (ext.manifest.componentType !== type) {
       throw new Error(
@@ -103,14 +107,15 @@ export function createComponentPreset(options: PresetCompositionOptions): Compon
     if (ext.validator) {
       validation[type] = ext.validator;
     }
-    if (ext.compilerBinding?.module) {
-      componentSources[type] = ext.compilerBinding.module;
-    }
+    componentSources[type] = ext.compilerBinding.module;
+    componentBindings[type] = ext.compilerBinding;
   }
 
   const compiler: CompilerBindings = {
     defaultLibrary: base.compiler.defaultLibrary,
     componentSources,
+    componentBindings,
+    allowDefaultComponentFallback: base.compiler.allowDefaultComponentFallback,
   };
 
   return createSealedPreset({

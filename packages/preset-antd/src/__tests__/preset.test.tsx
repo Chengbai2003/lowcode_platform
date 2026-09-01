@@ -1,11 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { render } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { Renderer } from '@lowcode-platform/renderer';
+import {
+  ComponentRuntimeBridgeContext,
+  Renderer,
+  type ComponentRuntimeBridge,
+} from '@lowcode-platform/renderer';
 import { createAntdPreset, antdPreset } from '../createAntdPreset';
-import { antdRuntime } from '../runtime';
+import { antdRuntime, Table } from '../runtime';
 import { antdCompilerBindings } from '../compiler';
 import { isUnsafeResourceUrl } from '../validation';
+
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: () => ({
+      matches: false,
+      media: '',
+      onchange: null,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      dispatchEvent: () => false,
+    }),
+  });
+}
 
 const schemaWithDiv = (props: Record<string, unknown>) => ({
   schemaVersion: 0 as const,
@@ -52,12 +72,50 @@ describe('antdPreset seal 语义（Bootstrap 后不可变）', () => {
       expect(antdCompilerBindings.componentSources[type]).toBe(
         '@lowcode-platform/preset-antd/runtime',
       );
+      expect(antdCompilerBindings.componentBindings?.[type]).toEqual({
+        module: '@lowcode-platform/preset-antd/runtime',
+      });
     }
     expect(antdCompilerBindings.defaultLibrary).toBe('antd');
   });
 });
 
 describe('antdPreset Props 净化（fail-close，经 Renderer 端到端）', () => {
+  it('Select 保留 defaultValue 并启用 showSearch', () => {
+    render(
+      <Renderer
+        preset={antdPreset}
+        pageId="p-select-test"
+        documentSessionId="doc-1"
+        schema={
+          {
+            schemaVersion: 0,
+            rootId: 'root',
+            components: {
+              root: { id: 'root', type: 'Page', childrenIds: ['select'] },
+              select: {
+                id: 'select',
+                type: 'Select',
+                props: {
+                  defaultValue: 'banana',
+                  showSearch: true,
+                  options: [
+                    { label: 'Apple', value: 'apple' },
+                    { label: 'Banana', value: 'banana' },
+                  ],
+                },
+              },
+            },
+          } as never
+        }
+      />,
+    );
+
+    const select = screen.getByRole('combobox');
+    expect(screen.getByText('Banana')).toBeTruthy();
+    expect(select.closest('.ant-select')?.classList.contains('ant-select-show-search')).toBe(true);
+  });
+
   it('白名单外 Props 与危险 DOM Props 不进入组件', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { container } = render(
@@ -115,6 +173,27 @@ describe('antdPreset Props 净化（fail-close，经 Renderer 端到端）', () 
     warn.mockRestore();
   });
 
+  it('Avatar 的危险 src 被移除', () => {
+    const { container } = render(
+      <Renderer
+        preset={antdPreset}
+        pageId="p-avatar-test"
+        documentSessionId="doc-1"
+        schema={
+          {
+            schemaVersion: 0,
+            rootId: 'root',
+            components: {
+              root: { id: 'root', type: 'Page', childrenIds: ['avatar'] },
+              avatar: { id: 'avatar', type: 'Avatar', props: { src: 'javascript:alert(1)' } },
+            },
+          } as never
+        }
+      />,
+    );
+    expect(container.querySelector('img')?.getAttribute('src') ?? null).toBeNull();
+  });
+
   it('isUnsafeResourceUrl 判定危险 scheme', () => {
     expect(isUnsafeResourceUrl('javascript:alert(1)')).toBe(true);
     expect(isUnsafeResourceUrl('data:text/html,<b>x</b>')).toBe(true);
@@ -122,5 +201,53 @@ describe('antdPreset Props 净化（fail-close，经 Renderer 端到端）', () 
     expect(isUnsafeResourceUrl('https://example.com/a.png')).toBe(false);
     expect(isUnsafeResourceUrl('/relative/path.png')).toBe(false);
     expect(isUnsafeResourceUrl(42)).toBe(false);
+  });
+});
+
+describe('antdPreset Table runtime bridge', () => {
+  it('结构化 link/action 列通过桥执行 actions', () => {
+    const bridge: ComponentRuntimeBridge = {
+      resolveValue: vi.fn(() => '查看 Alice'),
+      executeActions: vi.fn(async () => undefined),
+      getResource: vi.fn(() => ({ status: 'error', error: 'denied' })),
+    };
+    render(
+      <ComponentRuntimeBridgeContext.Provider value={bridge}>
+        <Table
+          __componentId="table-1"
+          pagination={false}
+          dataSource={[{ key: '1', id: 'u1', name: 'Alice' }]}
+          columns={[
+            {
+              kind: 'link',
+              title: '详情',
+              dataIndex: 'name',
+              textMode: 'template',
+              textTemplate: '查看 {{record.name}}',
+              actions: [{ type: 'navigate', to: '/users/u1' }],
+            },
+            {
+              kind: 'action',
+              title: '操作',
+              buttons: [
+                {
+                  label: '编辑',
+                  actions: [{ type: 'feedback', kind: 'message', content: 'edit' }],
+                },
+              ],
+            },
+          ]}
+        />
+      </ComponentRuntimeBridgeContext.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '查看 Alice' }));
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }));
+    expect(bridge.executeActions).toHaveBeenCalledTimes(2);
+    expect(bridge.executeActions).toHaveBeenCalledWith(
+      [{ type: 'navigate', to: '/users/u1' }],
+      expect.any(MouseEvent),
+      expect.objectContaining({ componentId: 'table-1', rowIndex: 0 }),
+    );
   });
 });

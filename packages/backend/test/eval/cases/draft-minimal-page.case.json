@@ -4,6 +4,7 @@
   "category": "draft",
   "title": "冷启动起草：最小合法页面",
   "intent": "创建一个包含标题和按钮的简单页面",
+  "capabilities": ["schema_generation"],
   "fixtures": {
     "modelOutputSchema": {
       "schemaVersion": 0,

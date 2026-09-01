@@ -4,6 +4,7 @@
   "category": "patch",
   "title": "局部 Patch：updateProps no-op 被归一化剔除",
   "intent": "把标题文案改成 Updated",
+  "capabilities": ["patch_preview"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

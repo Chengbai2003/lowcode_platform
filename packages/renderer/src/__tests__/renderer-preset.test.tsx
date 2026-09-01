@@ -85,6 +85,7 @@ describe('Renderer preset contract (M0-4 Scope B)', () => {
             componentType: 'CustomWidget',
             allowedProps: ['className', 'title'],
           },
+          compilerBinding: { module: '@example/custom-widget' },
         },
       ],
     });
@@ -115,6 +116,21 @@ describe('Renderer preset contract (M0-4 Scope B)', () => {
     expect(received.className).toBe('custom-class');
     expect(received['data-unknown']).toBeUndefined(); // Manifest fail-close 过滤
     warn.mockRestore();
+  });
+
+  it('拒绝缺少 Compiler binding 的宿主扩展', () => {
+    expect(() =>
+      createComponentPreset({
+        base: testPreset,
+        extensions: [
+          {
+            type: 'NoCompilerBinding',
+            component: () => null,
+            manifest: { componentType: 'NoCompilerBinding', allowedProps: ['children'] },
+          } as never,
+        ],
+      }),
+    ).toThrow(/compilerBinding/);
   });
 
   it('未提供 Preset 或 pageId / documentSessionId 时 fail-close 抛错', () => {

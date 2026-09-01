@@ -3,6 +3,7 @@
   "category": "patch",
   "title": "局部 Patch：新增按钮组件",
   "intent": "在页面里新增一个提交按钮",
+  "capabilities": ["patch_preview"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

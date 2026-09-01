@@ -1,4 +1,5 @@
-import type { PageSchema } from '../../types';
+import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
+import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 import { type ApiEnvelope, unwrapApiEnvelope } from '../lib/apiResponse';
 import { fetchApp } from '../lib/httpClient';
 
@@ -7,6 +8,7 @@ export interface PageSchemaResponse {
   pageVersion: number;
   snapshotId: string;
   savedAt: string;
+  runtimeCompatibility: RuntimeCompatibility;
   schema: PageSchema;
 }
 
@@ -17,13 +19,31 @@ export interface SavePageSchemaResponse {
   savedAt: string;
 }
 
+function requireSupportedRuntimeCompatibility(
+  runtimeCompatibility: RuntimeCompatibility | undefined,
+): void {
+  const expected = ANTD_RUNTIME_COMPATIBILITY;
+  if (
+    !runtimeCompatibility ||
+    runtimeCompatibility.componentPresetId !== expected.componentPresetId ||
+    runtimeCompatibility.componentPresetVersion !== expected.componentPresetVersion ||
+    runtimeCompatibility.rendererVersion !== expected.rendererVersion
+  ) {
+    throw new Error(
+      `[PageSchema] Unsupported runtimeCompatibility: ${JSON.stringify(runtimeCompatibility ?? null)}`,
+    );
+  }
+}
+
 export const pageSchemaApi = {
   async getPageSchema(pageId: string, pageVersion?: number): Promise<PageSchemaResponse> {
     const suffix = pageVersion ? `?pageVersion=${pageVersion}` : '';
     const response = await fetchApp.get<PageSchemaResponse | ApiEnvelope<PageSchemaResponse>>(
       `/api/v1/pages/${pageId}/schema${suffix}`,
     );
-    return unwrapApiEnvelope(response);
+    const page = unwrapApiEnvelope(response);
+    requireSupportedRuntimeCompatibility(page.runtimeCompatibility);
+    return page;
   },
 
   async savePageSchema(

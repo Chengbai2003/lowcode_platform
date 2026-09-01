@@ -165,10 +165,16 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
     if (context.api) {
       const apiMethod = resolvedMethod.toLowerCase() as keyof typeof context.api;
       if (typeof context.api[apiMethod] === 'function') {
-        const apiFn = context.api[apiMethod] as (url: string, body?: unknown) => Promise<unknown>;
-        response = await (['GET', 'DELETE'].includes(resolvedMethod)
-          ? apiFn(fullUrl)
-          : apiFn(fullUrl, resolvedBody));
+        const apiFn = context.api[apiMethod] as (
+          url: string,
+          bodyOrParams?: unknown,
+          signal?: AbortSignal,
+        ) => Promise<unknown>;
+        response = await (resolvedMethod === 'GET'
+          ? apiFn(fullUrl, resolvedParams, session?.signal)
+          : resolvedMethod === 'DELETE'
+            ? apiFn(fullUrl, session?.signal)
+            : apiFn(fullUrl, resolvedBody, session?.signal));
       } else if (typeof context.api.request === 'function') {
         const requestConfig: ApiRequestConfig = {
           url: resolvedUrl as string,
@@ -177,6 +183,9 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
           params: resolvedParams,
           data: resolvedBody,
         };
+        if (session) {
+          requestConfig.signal = session.signal;
+        }
         response = await context.api.request(requestConfig);
       }
     } else {

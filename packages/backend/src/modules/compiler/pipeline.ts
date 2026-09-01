@@ -244,7 +244,9 @@ const LABEL_MARGIN_BOTTOM = 8;
 function createCompileOptions(options?: CompileOptions): Required<CompileOptions> {
   return {
     componentSources: options?.componentSources || {},
+    componentBindings: options?.componentBindings || {},
     defaultLibrary: options?.defaultLibrary || 'antd',
+    allowDefaultComponentFallback: options?.allowDefaultComponentFallback ?? true,
   };
 }
 
@@ -525,15 +527,21 @@ function collectFields(ctx: TransformContext) {
   }
 }
 
-function addImport(ctx: TransformContext, source: string, name: string) {
+function addImport(
+  ctx: TransformContext,
+  source: string,
+  exportName: string,
+  localName = exportName,
+) {
   if (!ctx.imports.has(source)) {
     ctx.imports.set(source, new Set());
   }
   const set = ctx.imports.get(source);
-  if (set?.has(name)) return;
-  set?.add(name);
-  if (!ctx.registry.has(name)) {
-    ctx.registry.reserveExact(name, `import:${name}`);
+  const specifier = exportName === localName ? exportName : `${exportName} as ${localName}`;
+  if (set?.has(specifier)) return;
+  set?.add(specifier);
+  if (!ctx.registry.has(localName)) {
+    ctx.registry.reserveExact(localName, `import:${localName}`);
   }
 }
 
@@ -547,9 +555,13 @@ function collectImports(ctx: TransformContext) {
     if (!isSafeComponentType(component.componentType)) {
       continue;
     }
-    const source =
-      ctx.root.options.componentSources[component.componentType] || ctx.root.options.defaultLibrary;
-    addImport(ctx, source, component.componentType);
+    const binding = ctx.root.options.componentBindings[component.componentType];
+    const legacySource = ctx.root.options.componentSources[component.componentType];
+    if (!binding && !legacySource && !ctx.root.options.allowDefaultComponentFallback) {
+      throw new Error(`Unsupported component type for compiler preset: ${component.componentType}`);
+    }
+    const source = binding?.module || legacySource || ctx.root.options.defaultLibrary;
+    addImport(ctx, source, binding?.exportName || component.componentType, component.componentType);
   }
 }
 

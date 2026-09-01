@@ -40,6 +40,7 @@ const sanitizeSrc: ComponentPropsValidator = (props) => sanitizeResourceProp(pro
 export const antdValidation: ComponentValidationRegistry = Object.freeze({
   Link: sanitizeHref,
   Image: sanitizeSrc,
+  Avatar: sanitizeSrc,
 });
 
 /** 供测试与宿主复用的危险 scheme 判定 */

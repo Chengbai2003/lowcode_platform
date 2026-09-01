@@ -42,6 +42,7 @@ export type {
   ComponentPropsValidator,
   ComponentValidationRegistry,
   CompilerBindings,
+  CompilerComponentBinding,
   ComponentCompilerRegistry,
 } from './preset/types';
 export type {
@@ -54,6 +55,7 @@ export type { RendererProps, ComponentRegistry, ComponentNode, PageSchema } from
 // 本地绑定（而非 import 再导出）确保编译为直接赋值。
 const PageRenderer = Renderer;
 export { PageRenderer };
+export { RENDERER_VERSION } from './version';
 
 /**
  * 兼容保留的 Provider 包装组件。
@@ -68,21 +70,19 @@ export const LowcodeProvider = ({ children }: { children: React.ReactNode }) => 
  */
 export function renderFromJSON(
   jsonString: string,
-  options?: {
-    preset?: import('./preset/types').ComponentPreset;
-    pageId?: string;
-    documentSessionId?: string;
+  options: {
+    preset: import('./preset/types').ComponentPreset;
+    pageId: string;
+    documentSessionId: string;
   },
 ): React.ReactElement {
   const raw = JSON.parse(jsonString);
   // Contract 边界：只渲染 Contract 返回的 canonical Schema（不支持版本/畸形结构 fail-close）
   const schema = requireSupportedPageSchema(raw);
-  const pageId = options?.pageId ?? 'json-page';
-  const documentSessionId = options?.documentSessionId ?? 'json-session';
   return React.createElement(Renderer, {
     schema,
-    preset: options?.preset as never,
-    pageId,
-    documentSessionId,
+    preset: options.preset,
+    pageId: options.pageId,
+    documentSessionId: options.documentSessionId,
   });
 }

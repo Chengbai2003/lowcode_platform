@@ -1,90 +1,48 @@
-/**
- * @lowcode-platform/preset-antd/manifest
- *
- * AntD Preset 的组件 Manifest（Issue #19 / M0-4 Scope B）。
- * allowedProps 为 Props 白名单：渲染前经 Manifest 净化，白名单外的
- * Props（连同函数型 Props 与危险 DOM Props）一律 fail-close 移除。
- *
- * value/value 类字段来自渲染器的受控值管道（useNodeValue），
- * 因此对所有可绑定类型放行；白名单按 Preset 自身组件实现的真实
- * 消费面枚举。
- */
-
+import { antdRuntime } from './runtime';
 import type { ComponentManifestRegistry } from '@lowcode-platform/renderer';
 
-const COMMON_DOM_PROPS = [
-  'style',
+const COMMON = [
+  'children',
   'className',
+  'style',
   'id',
   'title',
-  'value',
-  'children',
-  'initialValue',
-  'initialValues',
   'key',
+  'value',
+  'initialValue',
+] as const;
+const TEXT = [
+  'strong',
+  'type',
+  'code',
+  'mark',
+  'underline',
+  'delete',
+  'keyboard',
+  'ellipsis',
+] as const;
+const INPUT = [
+  'placeholder',
+  'type',
+  'name',
+  'defaultValue',
+  'disabled',
+  'size',
+  'allowClear',
+  'maxLength',
+  'readOnly',
 ] as const;
 
-function entry(componentType: string, allowedProps: string[]) {
-  return Object.freeze({
-    componentType,
-    allowedProps: Object.freeze([...COMMON_DOM_PROPS, 'value', ...allowedProps]),
-  });
-}
-
-export const antdManifest: ComponentManifestRegistry = Object.freeze({
-  Page: entry('Page', []),
-  Div: entry('Div', []),
-  Span: entry('Span', []),
-  Container: entry('Container', []),
-  Row: entry('Row', ['gutter', 'justify', 'align', 'wrap']),
-  Col: entry('Col', [
-    'span',
-    'offset',
-    'flex',
-    'order',
-    'pull',
-    'push',
-    'xs',
-    'sm',
-    'md',
-    'lg',
-    'xl',
-    'xxl',
-  ]),
-  Text: entry('Text', [
-    'strong',
-    'type',
-    'code',
-    'mark',
-    'underline',
-    'delete',
-    'keyboard',
-    'ellipsis',
-  ]),
-  Title: entry('Title', ['level', 'code', 'mark', 'type', 'underline', 'delete', 'ellipsis']),
-  Paragraph: entry('Paragraph', [
-    'strong',
-    'type',
-    'code',
-    'mark',
-    'underline',
-    'delete',
-    'ellipsis',
-  ]),
-  Input: entry('Input', [
-    'placeholder',
-    'type',
-    'name',
-    'defaultValue',
-    'disabled',
-    'size',
-    'allowClear',
-    'maxLength',
-    'readOnly',
-  ]),
-  Button: entry('Button', ['type', 'name', 'disabled', 'danger', 'block', 'size', 'htmlType']),
-
-  TextArea: entry('TextArea', [
+const componentProps: Record<string, readonly string[]> = {
+  Page: [],
+  Div: [],
+  Span: [],
+  Container: ['width', 'padding', 'center'],
+  Row: ['gutter', 'justify', 'align', 'wrap'],
+  Col: ['span', 'offset', 'flex', 'order', 'pull', 'push', 'xs', 'sm', 'md', 'lg', 'xl', 'xxl'],
+  Button: ['type', 'name', 'disabled', 'danger', 'block', 'size', 'htmlType', 'loading'],
+  Input: [...INPUT, 'bordered'],
+  TextArea: [
     'placeholder',
     'name',
     'rows',
@@ -92,7 +50,151 @@ export const antdManifest: ComponentManifestRegistry = Object.freeze({
     'disabled',
     'maxLength',
     'readOnly',
-  ]),
-  Image: entry('Image', ['src', 'alt', 'width', 'height']),
-  Link: entry('Link', ['href', 'target', 'rel']),
-});
+    'allowClear',
+    'autoSize',
+  ],
+  InputNumber: ['min', 'max', 'step', 'placeholder', 'disabled', 'size'],
+  Select: [
+    'options',
+    'placeholder',
+    'disabled',
+    'mode',
+    'allowClear',
+    'size',
+    'defaultValue',
+    'showSearch',
+  ],
+  Checkbox: ['checked', 'disabled', 'indeterminate'],
+  CheckboxGroup: ['options', 'disabled', 'name', 'defaultValue'],
+  Radio: ['checked', 'disabled', 'value'],
+  RadioGroup: ['options', 'disabled', 'name', 'buttonStyle', 'defaultValue', 'optionType'],
+  RadioButton: ['checked', 'disabled', 'value'],
+  Switch: ['checked', 'disabled', 'loading', 'size', 'checkedChildren', 'unCheckedChildren'],
+  Slider: ['min', 'max', 'step', 'range', 'marks', 'disabled', 'defaultValue', 'vertical'],
+  Form: [
+    'layout',
+    'initialValues',
+    'name',
+    'disabled',
+    'size',
+    'autoComplete',
+    'labelCol',
+    'wrapperCol',
+    'labelAlign',
+    'preserve',
+    'validateTrigger',
+    'validateMessages',
+    'requiredMark',
+    'colon',
+    'scrollToFirstError',
+  ],
+  FormItem: [
+    'name',
+    'label',
+    'rules',
+    'valuePropName',
+    'extra',
+    'required',
+    'tooltip',
+    'trigger',
+    'hasFeedback',
+    'validateTrigger',
+    'help',
+    'preserve',
+    'hidden',
+    'noStyle',
+    'validateFirst',
+    'dependencies',
+    'labelCol',
+    'wrapperCol',
+  ],
+  DatePicker: ['placeholder', 'format', 'disabled', 'picker', 'allowClear', 'size', 'showTime'],
+  RangePicker: [
+    'placeholder',
+    'format',
+    'disabled',
+    'picker',
+    'allowClear',
+    'size',
+    'showTime',
+    'separator',
+  ],
+  Table: [
+    'columns',
+    'dataSource',
+    'rowKey',
+    'showHeader',
+    'size',
+    'bordered',
+    'tableLayout',
+    'pagination',
+    'scroll',
+    'sticky',
+    'rowHoverable',
+    'rowSelection',
+    'loading',
+  ],
+  Card: ['bordered', 'variant', 'cover', 'extra', 'loading', 'size', 'type', 'hoverable'],
+  List: ['dataSource', 'renderItem', 'loading', 'size', 'bordered', 'header', 'footer', 'split'],
+  ListItem: ['actions', 'extra'],
+  Tabs: ['activeKey', 'defaultActiveKey', 'type', 'size', 'centered', 'tabPosition'],
+  TabPane: ['tab', 'disabled', 'forceRender', 'closable'],
+  Collapse: [
+    'activeKey',
+    'defaultActiveKey',
+    'accordion',
+    'bordered',
+    'destroyInactivePanel',
+    'expandIconPosition',
+    'ghost',
+  ],
+  CollapsePanel: ['header', 'key', 'showArrow', 'disabled', 'collapsible', 'forceRender'],
+  Modal: [
+    'open',
+    'visible',
+    'width',
+    'footer',
+    'closable',
+    'maskClosable',
+    'title',
+    'okText',
+    'cancelText',
+  ],
+  Popover: ['content', 'placement', 'open', 'trigger', 'title'],
+  Tooltip: ['title', 'placement', 'open', 'trigger', 'color'],
+  Space: ['size', 'direction', 'align', 'wrap'],
+  Divider: ['dashed', 'orientation', 'plain', 'type'],
+  Layout: ['hasSider'],
+  Header: [],
+  Content: [],
+  Footer: [],
+  Sider: ['width', 'collapsed', 'collapsible', 'theme', 'breakpoint', 'collapsedWidth'],
+  Typography: [],
+  Text: [...TEXT, 'copyable'],
+  Title: ['level', ...TEXT, 'copyable'],
+  Paragraph: [...TEXT, 'copyable'],
+  Tag: ['color', 'closable', 'bordered'],
+  Badge: ['count', 'showZero', 'dot', 'status', 'text', 'overflowCount'],
+  Alert: ['message', 'description', 'type', 'showIcon', 'closable', 'banner'],
+  Steps: ['current', 'items', 'direction', 'size', 'status', 'labelPlacement', 'responsive'],
+  Step: ['title', 'description', 'status', 'disabled', 'subTitle'],
+  Progress: ['percent', 'status', 'type', 'showInfo', 'strokeColor', 'size'],
+  Spin: ['spinning', 'size', 'tip', 'delay'],
+  Skeleton: ['active', 'loading', 'avatar', 'paragraph', 'title', 'round'],
+  Avatar: ['src', 'size', 'shape', 'alt'],
+  Image: ['src', 'alt', 'width', 'height', 'preview'],
+  Link: ['href', 'target', 'rel'],
+};
+
+function entry(componentType: string, allowedProps: readonly string[]) {
+  return Object.freeze({
+    componentType,
+    allowedProps: Object.freeze([...COMMON, ...allowedProps]),
+  });
+}
+
+export const antdManifest: ComponentManifestRegistry = Object.freeze(
+  Object.fromEntries(
+    Object.keys(antdRuntime).map((type) => [type, entry(type, componentProps[type] ?? [])]),
+  ),
+);

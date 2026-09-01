@@ -3,6 +3,7 @@
   "category": "draft",
   "title": "冷启动起草：带 navigate 事件绑定的页面",
   "intent": "创建一个点击按钮跳转首页的页面",
+  "capabilities": ["schema_generation", "safe_actions"],
   "fixtures": {
     "modelOutputSchema": {
       "schemaVersion": 0,

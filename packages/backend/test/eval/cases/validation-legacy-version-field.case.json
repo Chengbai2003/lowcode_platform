@@ -4,6 +4,7 @@
   "category": "validation",
   "title": "非法输入：Schema 携带遗留顶层 version 字段",
   "intent": "回放一个携带旧版本字段的模型输出",
+  "capabilities": ["schema_validation"],
   "fixtures": {
     "schema": {
       "version": 5,

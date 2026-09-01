@@ -83,6 +83,16 @@ export function createSealedPreset(input: {
       );
     }
   }
+  for (const [type, binding] of Object.entries(compiler.componentBindings ?? {})) {
+    if (
+      !runtime[type] ||
+      !binding ||
+      typeof binding.module !== 'string' ||
+      binding.module.length === 0
+    ) {
+      throw new Error(`createSealedPreset: invalid complete compiler binding for "${type}"`);
+    }
+  }
 
   // ---- seal：深冻结，运行时不可变 ----
   const frozenRuntime = Object.freeze({ ...runtime });
@@ -98,6 +108,15 @@ export function createSealedPreset(input: {
   const frozenCompiler = Object.freeze({
     defaultLibrary: compiler.defaultLibrary,
     componentSources: Object.freeze({ ...compiler.componentSources }),
+    componentBindings: Object.freeze(
+      Object.fromEntries(
+        Object.entries(compiler.componentBindings ?? {}).map(([type, binding]) => [
+          type,
+          Object.freeze({ ...binding }),
+        ]),
+      ),
+    ),
+    allowDefaultComponentFallback: compiler.allowDefaultComponentFallback,
   });
 
   return Object.freeze({

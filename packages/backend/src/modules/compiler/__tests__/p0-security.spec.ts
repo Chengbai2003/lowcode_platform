@@ -250,7 +250,9 @@ describe('P0 compiler security', () => {
     };
     mockedCompile.mockImplementationOnce((s: any) => compileSchemaToCode(s));
 
-    await expect(new CompilerService().compile(dto)).rejects.toThrow(/id is required/);
+    await expect(new CompilerService(undefined as never).compile(dto)).rejects.toThrow(
+      /id is required/,
+    );
   });
 
   it('allows sibling loops to reuse item without renaming or degrading expressions', () => {

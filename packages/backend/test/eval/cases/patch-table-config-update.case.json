@@ -3,6 +3,7 @@
   "category": "patch",
   "title": "局部 Patch：表格分页配置修改",
   "intent": "把表格分页大小改为 20",
+  "capabilities": ["patch_preview"],
   "fixtures": {
     "baseSchema": {
       "schemaVersion": 0,

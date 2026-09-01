@@ -4,6 +4,7 @@
   "category": "safety",
   "title": "安全场景：表达式访问 constructor 链",
   "intent": "模型试图在表达式中逃逸到全局对象",
+  "capabilities": ["expression_security"],
   "fixtures": {
     "expression": "constructor.constructor('return process.env')()"
   },
