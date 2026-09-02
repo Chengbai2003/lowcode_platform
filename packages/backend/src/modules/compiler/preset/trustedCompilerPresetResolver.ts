@@ -9,30 +9,12 @@
 
 import { BadRequestException } from '@nestjs/common';
 import type { RuntimeCompatibility } from '@lowcode-platform/schema-contract';
-import { antdCompilerBindings } from '@lowcode-platform/preset-antd';
-import { BUILTIN_ANTD_RUNTIME_PROFILE } from '../../page-schema/runtime-profiles';
+import {
+  DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  type CompilerBindings,
+} from '../../runtime-profile/deployment-runtime-profile-registry';
 
-export interface CompilerBindings {
-  readonly defaultLibrary?: string;
-  readonly componentSources?: Readonly<Record<string, string>>;
-  readonly componentBindings?: Readonly<
-    Record<string, { readonly module: string; readonly exportName?: string }>
-  >;
-  readonly allowDefaultComponentFallback?: boolean;
-}
-
-interface TrustedCompilerRuntimeProfile {
-  readonly runtimeCompatibility: RuntimeCompatibility;
-  readonly bindings: CompilerBindings;
-}
-
-export const TRUSTED_COMPILER_RUNTIME_PROFILES: readonly TrustedCompilerRuntimeProfile[] =
-  Object.freeze([
-    Object.freeze({
-      runtimeCompatibility: BUILTIN_ANTD_RUNTIME_PROFILE,
-      bindings: antdCompilerBindings,
-    }),
-  ]);
+export type { CompilerBindings } from '../../runtime-profile/deployment-runtime-profile-registry';
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== '';
@@ -56,19 +38,14 @@ export function resolveTrustedCompilerBindings(
     );
   }
 
-  const matched = TRUSTED_COMPILER_RUNTIME_PROFILES.find(
-    (profile) =>
-      profile.runtimeCompatibility.componentPresetId === runtimeCompatibility.componentPresetId &&
-      profile.runtimeCompatibility.componentPresetVersion ===
-        runtimeCompatibility.componentPresetVersion &&
-      profile.runtimeCompatibility.rendererVersion === runtimeCompatibility.rendererVersion,
-  );
-
-  if (!matched) {
+  try {
+    return DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveCompilerBindings(runtimeCompatibility);
+  } catch (error) {
+    if (!(error instanceof BadRequestException)) {
+      throw error;
+    }
     throw new BadRequestException(
       `Unsupported compiler runtimeCompatibility: ${describeRuntimeCompatibility(runtimeCompatibility)}`,
     );
   }
-
-  return matched.bindings;
 }
