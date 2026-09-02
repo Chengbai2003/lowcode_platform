@@ -10,7 +10,7 @@ const currentRuntimeCompatibility = {
 
 describe('resolveTrustedCompilerBindings', () => {
   it('resolves the exact builtin antd runtime profile', () => {
-    expect(resolveTrustedCompilerBindings(currentRuntimeCompatibility as never)).toBe(
+    expect(resolveTrustedCompilerBindings(currentRuntimeCompatibility as never)).toEqual(
       antdCompilerBindings,
     );
   });

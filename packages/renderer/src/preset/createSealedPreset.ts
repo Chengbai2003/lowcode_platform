@@ -1,5 +1,14 @@
 import type { ComponentPreset } from './types';
 
+// `Object.isFrozen()` is observable but not a provenance boundary: a caller can
+// deep-freeze an arbitrary lookalike object. Keep the factory's provenance
+// private so bootstrap catalogs only accept presets produced by this module.
+const sealedPresets = new WeakSet<ComponentPreset>();
+
+export function isSealedComponentPreset(value: unknown): value is ComponentPreset {
+  return typeof value === 'object' && value !== null && sealedPresets.has(value as ComponentPreset);
+}
+
 /**
  * Bootstrap 阶段构建并 seal 一个 ComponentPreset（Issue #19 / M0-4 Scope B）
  *
@@ -119,12 +128,14 @@ export function createSealedPreset(input: {
     allowDefaultComponentFallback: compiler.allowDefaultComponentFallback,
   });
 
-  return Object.freeze({
+  const preset = Object.freeze({
     id,
     version,
     runtime: frozenRuntime,
     manifest: frozenManifest,
     validation: frozenValidation,
     compiler: frozenCompiler,
-  });
+  }) as ComponentPreset;
+  sealedPresets.add(preset);
+  return preset;
 }

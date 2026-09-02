@@ -88,10 +88,10 @@ M0 发布门槛：
 
 目标：在不改变 M0 Contract 安全边界的前提下，将评测接入生产 Agent 编排，并让第二个可信 Preset 可以通过部署配置进入全链路。
 
-| Epic                                                                                         | 优先级 | 目标                                                               | 状态    |
-| -------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------ | ------- |
-| [M1F-1 Production Eval](https://github.com/Chengbai2003/lowcode_platform/issues/38)          | P0     | 生产 Agent Replay、版本化报告契约与 Live Trends                    | Planned |
-| [M1F-2 Runtime Profile Registry](https://github.com/Chengbai2003/lowcode_platform/issues/39) | P0     | SystemRuntimeProfile Registry、Frontend Catalog 与第二 Preset 验收 | Planned |
+| Epic                                                                                         | 优先级 | 目标                                                               | 状态        |
+| -------------------------------------------------------------------------------------------- | ------ | ------------------------------------------------------------------ | ----------- |
+| [M1F-1 Production Eval](https://github.com/Chengbai2003/lowcode_platform/issues/38)          | P0     | 生产 Agent Replay、版本化报告契约与 Live Trends                    | In Progress |
+| [M1F-2 Runtime Profile Registry](https://github.com/Chengbai2003/lowcode_platform/issues/39) | P0     | SystemRuntimeProfile Registry、Frontend Catalog 与第二 Preset 验收 | In Progress |
 
 执行关系：
 
