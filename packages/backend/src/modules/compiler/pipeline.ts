@@ -1,4 +1,11 @@
-import type { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  FORBIDDEN_DATA_PATH_KEYS,
+  isSafeDataPathKey,
+  isSafeLogicKey,
+  type PageSchema,
+  type ComponentNode,
+  type JsonValue,
+} from '@lowcode-platform/schema-contract';
 import { compileStyle } from './styleCompiler';
 import {
   type CompileOptions,
@@ -124,6 +131,7 @@ interface RootNode {
   fields: FieldInfo[];
   handlers: HandlerDeclaration[];
   helpers: Set<string>;
+  usesPageState: boolean;
 }
 
 interface JSXElementNode {
@@ -193,12 +201,27 @@ function isSafeEventName(name: string): boolean {
   return isValidIdentifier(name) && /^on[A-Z]/.test(name) && isSafeGeneratedIdentifier(name);
 }
 
+function hasDeclaredPageState(ctx: TransformContext): boolean {
+  return ctx.root.schema.logic?.states !== undefined;
+}
+
+function sanitizeStatePath(
+  statePath: string,
+  allowLegacyNestedPath: boolean,
+): readonly string[] | undefined {
+  const parts = statePath.split('.');
+  if (allowLegacyNestedPath) {
+    return parts.every(isSafeDataPathKey) ? parts : undefined;
+  }
+  return parts.length === 1 && isSafeLogicKey(parts[0]) ? parts : undefined;
+}
+
 function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): string | undefined {
   if (!resultTo) return undefined;
   if (ctx.fieldByName.has(resultTo)) return resultTo;
   if (resultTo.startsWith('state.')) {
     const suffix = resultTo.slice(6);
-    if (isSafeGeneratedIdentifier(suffix)) {
+    if (sanitizeStatePath(suffix, !hasDeclaredPageState(ctx))) {
       return resultTo;
     }
     return undefined;
@@ -206,8 +229,48 @@ function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): 
   return undefined;
 }
 
-function sanitizeStateKey(stateKey: string): string | undefined {
-  return isSafeGeneratedIdentifier(stateKey) ? stateKey : undefined;
+function getStatePathValueCode(path: readonly string[]): string {
+  return `state${path.map((part) => `?.[${toQuotedString(part)}]`).join('')}`;
+}
+
+function getNestedStateUpdateCode(path: readonly string[], valueCode: string): string {
+  const pathCode = JSON.stringify(path);
+  return `((source, path, value) => {
+  const root = source !== null && typeof source === 'object'
+    ? Array.isArray(source) ? [...source] : { ...source }
+    : {};
+  let sourceCursor = source;
+  let targetCursor = root;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const nextSource = sourceCursor !== null && typeof sourceCursor === 'object'
+      ? sourceCursor[path[index]]
+      : undefined;
+    const nextTarget = nextSource !== null && typeof nextSource === 'object'
+      ? Array.isArray(nextSource) ? [...nextSource] : { ...nextSource }
+      : {};
+    targetCursor[path[index]] = nextTarget;
+    sourceCursor = nextSource;
+    targetCursor = nextTarget;
+  }
+  targetCursor[path[path.length - 1]] = value;
+  return root;
+})(state, ${pathCode}, ${valueCode})`;
+}
+
+function getMergedStateValueCode(currentValueCode: string, valueCode: string): string {
+  const forbiddenKeysCode = JSON.stringify(FORBIDDEN_DATA_PATH_KEYS);
+  return `((currentValue, resolvedValue) => {
+  if (resolvedValue !== null && typeof resolvedValue === 'object') {
+    const safeValue = Object.fromEntries(
+      Object.entries(resolvedValue).filter(([key]) => !${forbiddenKeysCode}.includes(key)),
+    );
+    const base = currentValue !== null && typeof currentValue === 'object' && !Array.isArray(currentValue)
+      ? currentValue
+      : {};
+    return { ...base, ...safeValue };
+  }
+  return resolvedValue;
+})(${currentValueCode}, ${valueCode})`;
 }
 
 const ALLOWED_FEEDBACK_LEVELS = new Set(['info', 'success', 'warning', 'error']);
@@ -319,6 +382,99 @@ function parseEvents(events: ComponentNode['events']): EventBindingNode[] {
   }));
 }
 
+function valueNodeUsesPageState(value: ValueNode | undefined): boolean {
+  if (!value) return false;
+
+  switch (value.kind) {
+    case 'expression':
+      return collectInlineExpressionIdentifiers(value.code).has('state');
+    case 'template':
+      return value.parts.some(
+        (part) => part.kind === 'expression' && valueNodeUsesPageState(part.value),
+      );
+    case 'array':
+      return value.items.some(valueNodeUsesPageState);
+    case 'object':
+      return value.properties.some((property) => valueNodeUsesPageState(property.value));
+    default:
+      return false;
+  }
+}
+
+function actionUsesPageState(action: ActionNode, includeExpressionReferences: boolean): boolean {
+  if (action.field?.startsWith('state.') || action.resultTo?.startsWith('state.')) {
+    return true;
+  }
+
+  if (includeExpressionReferences) {
+    for (const value of [
+      action.value,
+      action.url,
+      action.to,
+      action.content,
+      action.title,
+      action.condition,
+      action.over,
+      action.body,
+    ]) {
+      if (valueNodeUsesPageState(value)) return true;
+    }
+
+    for (const values of [action.headers, action.params]) {
+      if (Object.values(values ?? {}).some(valueNodeUsesPageState)) return true;
+    }
+  }
+
+  return [
+    action.actions,
+    action.then,
+    action.else,
+    action.onSuccess,
+    action.onError,
+    action.onOk,
+    action.onCancel,
+  ].some(
+    (actions) =>
+      actions?.some((nestedAction) =>
+        actionUsesPageState(nestedAction, includeExpressionReferences),
+      ) ?? false,
+  );
+}
+
+function componentUsesPageState(
+  component: FlatComponentNode,
+  includeExpressionReferences: boolean,
+): boolean {
+  return (
+    (includeExpressionReferences &&
+      component.props.some((prop) => valueNodeUsesPageState(prop.value))) ||
+    component.events.some((event) =>
+      event.actions.some((action) => actionUsesPageState(action, includeExpressionReferences)),
+    )
+  );
+}
+
+function componentDeclaresLegacyStateField(component: FlatComponentNode): boolean {
+  const fieldProp = component.props.find((prop) => prop.name === 'field');
+  if (
+    fieldProp?.value.kind === 'literal' &&
+    typeof fieldProp.value.value === 'string' &&
+    resolveFieldName(fieldProp.value.value, 'field') === 'state'
+  ) {
+    return true;
+  }
+
+  const initialValue = component.props.find((prop) => prop.name === 'initialValue')?.value;
+  const visibleProp = component.props.find((prop) => prop.name === 'visible')?.value;
+  return Boolean(
+    initialValue &&
+    visibleProp?.kind === 'literal' &&
+    visibleProp.value === false &&
+    component.childIds.length === 0 &&
+    resolveFieldName(component.id, 'hiddenData') === 'state',
+  );
+}
+
 function parseFlatComponent(componentId: string, component: ComponentNode): FlatComponentNode {
   return {
     id: componentId,
@@ -386,6 +542,7 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
   const children = schema.rootId
     ? [buildComponentTree(schema.rootId, componentMap, new Set<string>())]
     : [];
+  const hasLegacyStateField = flatComponents.some(componentDeclaresLegacyStateField);
 
   return {
     type: 'root',
@@ -397,6 +554,9 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     fields: [],
     handlers: [],
     helpers: new Set(),
+    usesPageState:
+      schema.logic?.states !== undefined ||
+      flatComponents.some((component) => componentUsesPageState(component, !hasLegacyStateField)),
   };
 }
 
@@ -481,6 +641,26 @@ function resolveFieldName(sourceKey: string, source: FieldInfo['source']): strin
   return candidate;
 }
 
+function resolveFieldNameForContext(
+  ctx: TransformContext,
+  sourceKey: string,
+  source: FieldInfo['source'],
+): string {
+  const preferredName = resolveFieldName(sourceKey, source);
+  if (
+    !ctx.root.usesPageState ||
+    (preferredName !== 'state' &&
+      preferredName !== 'setState' &&
+      createSetterName(preferredName) !== 'setState')
+  ) {
+    return preferredName;
+  }
+
+  throw new Error(
+    `Field "${sourceKey}" conflicts with the reserved Page State binding; rename the field before enabling logic.states`,
+  );
+}
+
 function collectFields(ctx: TransformContext) {
   for (const component of ctx.root.flatComponents) {
     const fieldProp = findProp(component, 'field');
@@ -497,7 +677,7 @@ function collectFields(ctx: TransformContext) {
       registerField(
         ctx,
         createFieldInfo(
-          resolveFieldName(rawFieldName, 'field'),
+          resolveFieldNameForContext(ctx, rawFieldName, 'field'),
           rawFieldName,
           'field',
           initialValue,
@@ -517,7 +697,7 @@ function collectFields(ctx: TransformContext) {
       registerField(
         ctx,
         createFieldInfo(
-          resolveFieldName(component.id, 'hiddenData'),
+          resolveFieldNameForContext(ctx, component.id, 'hiddenData'),
           component.id,
           'hiddenData',
           initialValue,
@@ -606,6 +786,10 @@ function createTransformContext(root: RootNode): TransformContext {
   for (const name of BUILTIN_IDENTIFIERS) {
     // avoid double-reserve if already in RESERVED (none overlap but keep safe)
     if (!registry.has(name)) registry.reserveExact(name, `builtin:${name}`);
+  }
+  if (root.usesPageState) {
+    registry.reserveExact('state', 'page-state');
+    registry.reserveExact('setState', 'page-state-setter');
   }
   const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
   for (const name of reservedHandlerNames) {
@@ -881,6 +1065,14 @@ function getFieldInfo(ctx: TransformContext, sourceKey: string): FieldInfo | und
   return ctx.fieldBySourceKey.get(sourceKey) ?? ctx.fieldByName.get(sourceKey);
 }
 
+function getExpressionContextFields(ctx: TransformContext): Set<string> {
+  const fields = new Set(ctx.fieldByName.keys());
+  if (ctx.root.usesPageState) {
+    fields.add('state');
+  }
+  return fields;
+}
+
 function getExpressionCode(
   value: ValueNode | undefined,
   fallback = 'undefined',
@@ -923,6 +1115,22 @@ function getExpressionCode(
     default:
       return fallback;
   }
+}
+
+function getJsonLiteralCode(value: JsonValue): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return toQuotedString(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => getJsonLiteralCode(item)).join(', ')}]`;
+  }
+
+  return `{ ${Object.entries(value)
+    .map(([key, nestedValue]) => {
+      const keyCode = key === '__proto__' ? `[${toQuotedString(key)}]` : toObjectKeyCode(key);
+      return `${keyCode}: ${getJsonLiteralCode(nestedValue)}`;
+    })
+    .join(', ')} }`;
 }
 
 function canCompileStaticStyle(value: ValueNode): value is ObjectValueNode {
@@ -1098,7 +1306,7 @@ function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode
     };
   }
 
-  const ctxFields = new Set(ctx.fieldByName.keys());
+  const ctxFields = getExpressionContextFields(ctx);
   const fieldProp = findProp(node, 'field');
   const labelProp = findProp(node, 'label');
   const styleProp = findProp(node, 'style');
@@ -1276,12 +1484,17 @@ function resolveResultTarget(
     return `${fieldInfo.setterName}(${valueCode});`;
   }
   if (sanitized.startsWith('state.')) {
-    const stateKey = sanitized.slice(6);
-    const safeKey = sanitizeStateKey(stateKey);
-    if (!safeKey) {
+    const statePath = sanitizeStatePath(
+      sanitized.slice('state.'.length),
+      !hasDeclaredPageState(ctx),
+    );
+    if (!statePath) {
       return `/* invalid resultTo discarded */`;
     }
-    return `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`;
+    if (statePath.length === 1) {
+      return `setState((state) => ({ ...state, ${toObjectKeyCode(statePath[0])}: ${valueCode} }));`;
+    }
+    return `setState((state) => ${getNestedStateUpdateCode(statePath, valueCode)});`;
   }
   return `/* invalid resultTo discarded */`;
 }
@@ -1330,7 +1543,7 @@ function buildActionStatement(
   ownerHandlerName: string,
   localScope: Set<string> = new Set(),
 ): { code: string; async: boolean } {
-  const ctxFields = new Set(ctx.fieldByName.keys());
+  const ctxFields = getExpressionContextFields(ctx);
   switch (action.type) {
     case 'setValue': {
       const valueCode = getExpressionCode(
@@ -1352,11 +1565,23 @@ function buildActionStatement(
         }
 
         if (action.field.startsWith('state.')) {
-          const stateKey = action.field.slice(6);
-          const safeKey = sanitizeStateKey(stateKey);
-          if (safeKey) {
+          const statePath = sanitizeStatePath(
+            action.field.slice('state.'.length),
+            !hasDeclaredPageState(ctx),
+          );
+          if (statePath) {
+            const currentValueCode = getStatePathValueCode(statePath);
+            const nextValueCode = action.merge
+              ? getMergedStateValueCode(currentValueCode, valueCode)
+              : valueCode;
+            if (statePath.length > 1) {
+              return {
+                code: `setState((state) => ${getNestedStateUpdateCode(statePath, nextValueCode)});`,
+                async: false,
+              };
+            }
             return {
-              code: `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`,
+              code: `setState((state) => ({ ...state, ${toObjectKeyCode(statePath[0])}: ${nextValueCode} }));`,
               async: false,
             };
           }
@@ -1736,14 +1961,23 @@ function genImports(imports: Map<string, Set<string>>): string {
   return statements.join('\n');
 }
 
-function genStateHooks(fields: FieldInfo[]): string {
-  const ctxFields = new Set(fields.map((field) => field.name));
-  return fields
-    .map(
+function genStateHooks(root: RootNode): string {
+  const ctxFields = new Set(root.fields.map((field) => field.name));
+  const hooks: string[] = [];
+  if (root.usesPageState) {
+    ctxFields.add('state');
+    const initialState = root.schema.logic?.states ?? {};
+    const initialStateCode =
+      Object.keys(initialState).length === 0 ? '{}' : getJsonLiteralCode(initialState);
+    hooks.push(`const [state, setState] = useState(${initialStateCode});`);
+  }
+  hooks.push(
+    ...root.fields.map(
       (field) =>
         `const [${field.name}, ${field.setterName}] = useState(${getExpressionCode(field.initialValue, 'undefined', ctxFields)});`,
-    )
-    .join('\n');
+    ),
+  );
+  return hooks.join('\n');
 }
 
 function genHandlers(handlers: HandlerDeclaration[]): string {
@@ -1752,7 +1986,7 @@ function genHandlers(handlers: HandlerDeclaration[]): string {
 
 export function generate(root: RootNode): string {
   const importsCode = genImports(root.imports);
-  const stateHooksCode = genStateHooks(root.fields);
+  const stateHooksCode = genStateHooks(root);
   const handlersCode = genHandlers(root.handlers);
   const rootNode = root.children[0];
   const jsxCode =

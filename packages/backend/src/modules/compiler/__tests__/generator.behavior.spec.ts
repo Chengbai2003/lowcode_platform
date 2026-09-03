@@ -6,6 +6,19 @@ async function compileFormatted(schema: unknown) {
   return formatCode(compileToCode(schema as Record<string, any>));
 }
 
+function extractGeneratedComponentBody(code: string): string {
+  const functionStart = 'export default function GeneratedPage() {\n';
+  const start = code.indexOf(functionStart);
+  const end = code.lastIndexOf('\n  return ');
+  if (start < 0 || end < 0) {
+    throw new Error('GeneratedPage body not found');
+  }
+  return code
+    .slice(start + functionStart.length, end)
+    .replace(/^  /gm, '')
+    .trim();
+}
+
 describe('compiler generator behavior', () => {
   it('supports {{ }} expressions and template strings', async () => {
     const code = await compileFormatted(behaviorSchemas.expressionsAndTemplates);
@@ -75,6 +88,274 @@ describe('compiler generator behavior', () => {
     );
     expect(code).toContain('const [hidden_num, setHidden_num] = useState(3);');
     expect(code).toContain('const [isEnabled, setIsEnabled] = useState(false);');
+  });
+
+  it('generates declared Page State and preserves sibling keys on updates', async () => {
+    const code = await compileFormatted({
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: { states: { count: 1, ready: false, label: '{{ literal }}' } },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['value', 'increment'] },
+        value: { id: 'value', type: 'Text', props: { children: '{{ state.count }}' } },
+        increment: {
+          id: 'increment',
+          type: 'Button',
+          props: { children: 'increment' },
+          events: {
+            onClick: [{ type: 'setValue', field: 'state.count', value: '{{ state.count + 1 }}' }],
+          },
+        },
+      },
+    });
+
+    expect(code).toContain(
+      'const [state, setState] = useState({ count: 1, ready: false, label: "{{ literal }}" });',
+    );
+    expect(code).toContain('{state.count}');
+    expect(code).toContain('setState((state) => ({ ...state, count: state.count + 1 }));');
+  });
+
+  it.each(['assign', 'freeze', 'eval'])(
+    'reads non-call JSON Page State member %s consistently with Renderer',
+    async (key) => {
+      const code = await compileFormatted({
+        schemaVersion: 0,
+        rootId: 'root',
+        logic: { states: { [key]: 1 } },
+        components: {
+          root: { id: 'root', type: 'Text', props: { children: `{{ state.${key} }}` } },
+        },
+      });
+
+      expect(code).toContain(`${key}: 1`);
+      expect(code).toContain(`{state.${key}}`);
+    },
+  );
+
+  it('defines empty Page State for legacy state actions instead of emitting an unbound setter', async () => {
+    const code = await compileFormatted({
+      schemaVersion: 0,
+      rootId: 'button',
+      components: {
+        button: {
+          id: 'button',
+          type: 'Button',
+          events: { onClick: [{ type: 'setValue', field: 'state.open', value: true }] },
+        },
+      },
+    });
+
+    expect(code).toContain('const [state, setState] = useState({});');
+    expect(code).toContain('setState((state) => ({ ...state, open: true }));');
+  });
+
+  it('matches Renderer shallow-merge semantics for Page State', () => {
+    const code = compileToCode({
+      schemaVersion: 0,
+      rootId: 'merge',
+      logic: { states: { profile: { name: 'Ada' } } },
+      components: {
+        merge: {
+          id: 'merge',
+          type: 'Button',
+          events: {
+            onClick: [
+              {
+                type: 'setValue',
+                field: 'state.profile',
+                value: { age: 37 },
+                merge: true,
+              },
+            ],
+          },
+        },
+      },
+    });
+    let currentState: unknown;
+    const useState = (initialState: unknown) => {
+      currentState = initialState;
+      return [
+        initialState,
+        (update: unknown) => {
+          currentState =
+            typeof update === 'function'
+              ? (update as (state: unknown) => unknown)(currentState)
+              : update;
+        },
+      ];
+    };
+    const handlerFactory = new Function(
+      'useState',
+      `${extractGeneratedComponentBody(code)}\nreturn handleMergeClick;`,
+    );
+
+    const handler = handlerFactory(useState) as () => void;
+    handler();
+
+    expect(currentState).toEqual({ profile: { name: 'Ada', age: 37 } });
+  });
+
+  it('preserves a legacy nested State write in generated code', () => {
+    const code = compileToCode({
+      schemaVersion: 0,
+      rootId: 'update',
+      components: {
+        update: {
+          id: 'update',
+          type: 'Button',
+          events: {
+            onClick: [
+              { type: 'setValue', field: 'state.profile.name', value: 'Ada' },
+              { type: 'setValue', field: 'state.profile.age', value: 37 },
+            ],
+          },
+        },
+      },
+    });
+    let currentState: unknown;
+    const useState = (initialState: unknown) => {
+      currentState = initialState;
+      return [
+        initialState,
+        (update: unknown) => {
+          currentState =
+            typeof update === 'function'
+              ? (update as (state: unknown) => unknown)(currentState)
+              : update;
+        },
+      ];
+    };
+    const handlerFactory = new Function(
+      'useState',
+      `${extractGeneratedComponentBody(code)}\nreturn handleUpdateClick;`,
+    );
+
+    const handler = handlerFactory(useState) as () => void;
+    handler();
+
+    expect(currentState).toEqual({ profile: { name: 'Ada', age: 37 } });
+  });
+
+  it('preserves a legacy nested API result target in generated code', async () => {
+    const code = compileToCode({
+      schemaVersion: 0,
+      rootId: 'load',
+      components: {
+        load: {
+          id: 'load',
+          type: 'Button',
+          events: {
+            onClick: [{ type: 'apiCall', url: '/profile', resultTo: 'state.user.profile' }],
+          },
+        },
+      },
+    });
+    let currentState: unknown;
+    const useState = (initialState: unknown) => {
+      currentState = initialState;
+      return [
+        initialState,
+        (update: unknown) => {
+          currentState =
+            typeof update === 'function'
+              ? (update as (state: unknown) => unknown)(currentState)
+              : update;
+        },
+      ];
+    };
+    const fetchMock = jest.fn(() =>
+      Promise.resolve({ json: () => Promise.resolve({ name: 'Ada' }) }),
+    );
+    const handlerFactory = new Function(
+      'useState',
+      'fetch',
+      `${extractGeneratedComponentBody(code)}\nreturn handleLoadClick;`,
+    );
+
+    const handler = handlerFactory(useState, fetchMock) as () => void;
+    handler();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(currentState).toEqual({ user: { profile: { name: 'Ada' } } });
+  });
+
+  it('does not mistake static state-like text for the Page State namespace', async () => {
+    const code = await compileFormatted({
+      schemaVersion: 0,
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['input', 'help'] },
+        input: { id: 'input', type: 'Input', props: { field: 'state', defaultValue: 'draft' } },
+        help: { id: 'help', type: 'Text', props: { children: 'Use state.value in an expression' } },
+      },
+    });
+
+    expect(code).toContain('const [state, setState] = useState("draft");');
+    expect(code).not.toContain('useState({});');
+  });
+
+  it('keeps a legacy state field authoritative when expressions reference that binding', async () => {
+    const code = await compileFormatted({
+      schemaVersion: 0,
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['input', 'value'] },
+        input: { id: 'input', type: 'Input', props: { field: 'state', defaultValue: 'draft' } },
+        value: { id: 'value', type: 'Text', props: { children: '{{ state }}' } },
+      },
+    });
+
+    expect(code).toContain('const [state, setState] = useState("draft");');
+    expect(code).toContain('{state}');
+    expect(code).not.toContain('stateField');
+    expect(code).not.toContain('useState({});');
+  });
+
+  it('fails closed when a legacy state field conflicts with declared Page State', () => {
+    expect(() =>
+      compileToCode({
+        schemaVersion: 0,
+        rootId: 'root',
+        logic: { states: { count: 1 } },
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: ['input'] },
+          input: { id: 'input', type: 'Input', props: { field: 'state', defaultValue: 'draft' } },
+        },
+      }),
+    ).toThrow(/conflicts with the reserved Page State binding/);
+  });
+
+  it.each([
+    ['state', 'stateField'],
+    ['stateField', 'state'],
+  ])('rejects state binding collisions independent of field order: %s, %s', (first, second) => {
+    expect(() =>
+      compileToCode({
+        schemaVersion: 0,
+        rootId: 'root',
+        logic: { states: { count: 1 } },
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: ['first', 'second'] },
+          first: { id: 'first', type: 'Input', props: { field: first } },
+          second: { id: 'second', type: 'Input', props: { field: second } },
+        },
+      }),
+    ).toThrow(/conflicts with the reserved Page State binding/);
+  });
+
+  it('rejects State whose generated setter would shadow the Page State setter', () => {
+    expect(() =>
+      compileToCode({
+        schemaVersion: 0,
+        rootId: 'root',
+        logic: { states: { count: 1 } },
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: ['input'] },
+          input: { id: 'input', type: 'Input', props: { field: 'State', defaultValue: 'draft' } },
+        },
+      }),
+    ).toThrow(/conflicts with the reserved Page State binding/);
   });
 
   it('rejects customScript at compile entry', async () => {

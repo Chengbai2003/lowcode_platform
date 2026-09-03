@@ -1,8 +1,8 @@
 # Schema Contract 设计原则
 
-> Status: Implemented for M0
-> Last Updated: 2026-09-01
-> Target Milestone: M0-1
+> Status: Implemented for M0; M1a Page State in progress
+> Last Updated: 2026-09-03
+> Target Milestone: M1a-1
 
 ## 当前决策
 
@@ -16,6 +16,11 @@ interface PageSchema {
   schemaVersion: 0;
   rootId: string;
   components: Record<string, ComponentNode>;
+  logic?: PageLogic;
+}
+
+interface PageLogic {
+  states?: Record<string, JsonValue>;
 }
 
 interface StoredPageRecord {
@@ -60,8 +65,9 @@ interface ComponentNode {
 type ActionList = Action[];
 ```
 
-> M1（未来）：State、Computed、ActionFlow 与 DataSource 的类型和持久化语义尚未进入
-> M0 Contract；在对应 Milestone 实施时再冻结，不能将其当作当前 `PageSchema` 字段。
+M1a-1 的首个纵向切片已将 State Declaration 纳入 Draft Contract：`logic.states`
+只保存 RuntimeSession 初值，Session State 变化不回写 Schema。Computed、ActionFlow 与
+DataSource 尚未进入 Contract；在对应切片完成六消费面闭环时再加入，不能将其描述成当前能力。
 
 ## 统一组件协议与 Props
 
@@ -90,6 +96,8 @@ parse raw JSON
   ↓
 验证 schemaVersion
   ↓
+验证 Page Logic 结构、Logic Key 与 State 资源预算
+  ↓
 验证 Schema 结构和组件图
   ↓
 按 SystemProfile 解析 ComponentPreset
@@ -109,6 +117,7 @@ parse raw JSON
 
 - 不支持的 `schemaVersion`
 - 未知顶层字段或非法命名空间
+- 非法 Page Logic 字段、危险 Logic Key 或超出 State/JSON 资源预算
 - 组件图成环、多父、重复 child 或孤儿节点
 - 组件类型不在当前 System Preset 中
 - Props 不符合 Manifest 或包含危险值

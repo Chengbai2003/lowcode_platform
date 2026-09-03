@@ -1,5 +1,6 @@
 import jsep from 'jsep';
 import jsepNew from '@jsep-plugin/new';
+import { FORBIDDEN_LOGIC_KEYS } from '@lowcode-platform/schema-contract';
 import { pauseTracking, resumeTracking, isTrackingProxy } from '../../reactive/tracking';
 import {
   cloneSanitizedSafe,
@@ -66,16 +67,7 @@ const INTERNAL_PURE_UTILS: Record<string, unknown> = {
   clone: pureCloneInternal,
 };
 
-const BLOCKED_MEMBER_PROPS = new Set([
-  '__proto__',
-  'prototype',
-  'constructor',
-  'toJSON',
-  '__defineGetter__',
-  '__defineSetter__',
-  '__lookupGetter__',
-  '__lookupSetter__',
-]);
+const BLOCKED_MEMBER_PROPS = new Set<string>(FORBIDDEN_LOGIC_KEYS);
 
 const BLOCKED_CALL_METHODS = new Set([
   '__proto__',

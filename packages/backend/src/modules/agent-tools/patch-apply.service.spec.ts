@@ -86,6 +86,24 @@ describe('PatchApplyService', () => {
     });
   });
 
+  it('preserves Page Logic while applying component-only Agent patches', () => {
+    const schema: PageSchema = {
+      ...createSchema(),
+      logic: { states: { count: 1 } },
+    };
+
+    const result = service.applyPatch(schema, [
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: { children: 'New' },
+      },
+    ]);
+
+    expect(result.logic).toEqual(schema.logic);
+    expect(result.logic).not.toBe(schema.logic);
+  });
+
   it('applies bindEvent with replace semantics', () => {
     const result = service.applyPatch(createSchema(), [
       {

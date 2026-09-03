@@ -6,23 +6,7 @@ import {
   isExpression,
   isPlainObject,
 } from '../helpers/codeHelpers';
-
-const DANGEROUS_TOKENS = [
-  '__proto__',
-  'prototype',
-  'constructor',
-  'eval',
-  'Function',
-  'import(',
-  'require(',
-  'globalThis',
-  'process',
-  'document',
-  'window.',
-  'window[',
-  'XMLHttpRequest',
-  'fetch(',
-];
+import { FORBIDDEN_LOGIC_KEYS } from '@lowcode-platform/schema-contract';
 
 const MUSTACHE_REGEX = /\{\{([\s\S]+?)\}\}/g;
 
@@ -51,7 +35,8 @@ export function isValidExpressionPath(code: string): boolean {
   return /^[a-zA-Z_$][\w$]*(\.[a-zA-Z_$][\w$]*|\[\d+\])*$/.test(code);
 }
 
-// P0 保守白名单：仅允许的直接调用与 Math/Date 成员调用；Identifier 根白名单需动态结合 schema 字段（动态字段无法静态枚举），此处依靠 DANGEROUS_TOKENS + 调用白名单兜底
+// P0 保守白名单：仅允许指定的直接调用与 Math/Date 成员调用；其余入口由 AST、
+// reserved identifier 与调用白名单共同 fail-close。
 const ALLOWED_DIRECT_CALLS = new Set<string>([
   'String',
   'Number',
@@ -95,6 +80,8 @@ const BLOCKED_CALLEE_NAMES = new Set([
   'eval',
   'Function',
 ]);
+
+const BLOCKED_MEMBER_PROPS = new Set<string>(FORBIDDEN_LOGIC_KEYS);
 
 // Prop-level denylist — intentional subset of BLOCKED_CALLEE_NAMES for JSX prop names
 export const BLOCKED_PROP_NAMES = new Set<string>([
@@ -241,7 +228,7 @@ function isAllowedASTNode(
             : typeof prop?.name === 'string'
               ? prop.name
               : '';
-      if (propName && BLOCKED_CALLEE_NAMES.has(propName)) return false;
+      if (propName && BLOCKED_MEMBER_PROPS.has(propName)) return false;
       // Validate object: allow builtin member roots directly without ctxFields, otherwise require ctxFields
       const reservedSet = ctx?.reserved ?? RESERVED_GENERATED_IDENTIFIERS;
       let objectValid: boolean;
@@ -334,12 +321,6 @@ export function isSafeInlineExpression(
   if (!code || typeof code !== 'string') return false;
   const trimmed = code.trim();
   if (!trimmed) return false;
-
-  for (const token of DANGEROUS_TOKENS) {
-    if (trimmed.includes(token)) {
-      return false;
-    }
-  }
 
   if (/[;`]/.test(trimmed)) {
     return false;

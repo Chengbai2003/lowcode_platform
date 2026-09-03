@@ -4,14 +4,15 @@ ADR 记录已经接受的重要架构决策、备选方案和长期后果。状�
 
 ## 当前决策
 
-| ADR                                                            | 状态     | 决策                                                       |
-| -------------------------------------------------------------- | -------- | ---------------------------------------------------------- |
-| [ADR-0001](0001-separate-schema-and-page-version.md)           | Accepted | 分离 Schema 协议版本与页面内容版本                         |
-| [ADR-0002](0002-single-component-preset-per-system.md)         | Accepted | 一个系统只能绑定一个 ComponentPreset                       |
-| [ADR-0003](0003-isolated-renderer-runtime-session.md)          | Accepted | Renderer 全局复用代码，页面隔离 RuntimeSession             |
-| [ADR-0004](0004-disable-arbitrary-script-execution.md)         | Accepted | 永久禁止任意脚本执行                                       |
-| [ADR-0005](0005-operation-ref-data-source.md)                  | Accepted | DataSource 使用 OperationRef，不在 Schema 保存基础设施秘密 |
-| [ADR-0006](0006-system-runtime-profile-deployment-boundary.md) | Accepted | SystemRuntimeProfile 属于部署可信边界                      |
+| ADR                                                                     | 状态     | 决策                                                       |
+| ----------------------------------------------------------------------- | -------- | ---------------------------------------------------------- |
+| [ADR-0001](0001-separate-schema-and-page-version.md)                    | Accepted | 分离 Schema 协议版本与页面内容版本                         |
+| [ADR-0002](0002-single-component-preset-per-system.md)                  | Accepted | 一个系统只能绑定一个 ComponentPreset                       |
+| [ADR-0003](0003-isolated-renderer-runtime-session.md)                   | Accepted | Renderer 全局复用代码，页面隔离 RuntimeSession             |
+| [ADR-0004](0004-disable-arbitrary-script-execution.md)                  | Accepted | 永久禁止任意脚本执行                                       |
+| [ADR-0005](0005-operation-ref-data-source.md)                           | Accepted | DataSource 使用 OperationRef，不在 Schema 保存基础设施秘密 |
+| [ADR-0006](0006-system-runtime-profile-deployment-boundary.md)          | Accepted | SystemRuntimeProfile 属于部署可信边界                      |
+| [ADR-0007](0007-separate-page-logic-declarations-and-session-values.md) | Accepted | 分离 Page Logic 声明与 RuntimeSession 值                   |
 
 ## 新增 ADR
 

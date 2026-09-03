@@ -14,6 +14,7 @@ type MutableSchema = {
   schemaVersion: 0;
   rootId: string;
   components: Record<string, MutableComponent>;
+  logic?: PageSchema['logic'];
 };
 
 export function applyPatchToSchema(
@@ -157,6 +158,7 @@ function cloneSchema(schema: PageSchema): MutableSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
+    logic: schema.logic ? structuredClone(schema.logic) : undefined,
   };
 }
 
@@ -179,5 +181,6 @@ function freezeSchema(schema: MutableSchema): PageSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
+    ...(schema.logic ? { logic: schema.logic } : {}),
   };
 }

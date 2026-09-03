@@ -66,6 +66,15 @@ export function Renderer({
     [flattenedData, eventContextData],
   );
 
+  const declaredInitialState = useMemo(
+    () =>
+      canonicalSchema?.logic?.states
+        ? (structuredClone(canonicalSchema.logic.states) as Record<string, unknown>)
+        : undefined,
+    [canonicalSchema?.logic?.states],
+  );
+  const hasDeclaredState = canonicalSchema?.logic?.states !== undefined;
+
   // 稳定 flatComponents 引用：仅在内容实际变化时更新。
   // 注意：这里必须使用 canonicalSchema（而非原始 schema prop），
   // 否则同引用原地变异可绕过 Contract 边界进入渲染树。
@@ -98,6 +107,8 @@ export function Renderer({
       dispatcherInit: {
         ...eventContext,
         data: runtimeInitialData,
+        // 声明式 State 是新 Session 的权威初始值；无声明时保留旧宿主上下文行为。
+        state: hasDeclaredState ? declaredInitialState : eventContext.state,
         components: stableFlatComponents,
       },
     });
@@ -125,13 +136,13 @@ export function Renderer({
   useEffect(() => {
     if (eventContext && session.dispatcher) {
       Object.entries(eventContext).forEach(([key, value]) => {
-        if (key === 'data' || key === 'components') {
+        if (key === 'data' || key === 'components' || (key === 'state' && hasDeclaredState)) {
           return;
         }
         session.dispatcher.setContext(key, value);
       });
     }
-  }, [eventContext, session.dispatcher]);
+  }, [eventContext, hasDeclaredState, session.dispatcher]);
 
   useEffect(() => {
     if (session.dispatcher) {

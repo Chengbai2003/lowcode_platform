@@ -3,6 +3,7 @@ import Editor, { type OnMount } from '@monaco-editor/react';
 import type { ComponentPreset } from '@lowcode-platform/renderer';
 import type { ComponentRegistry, PageSchema } from '../../../../types';
 import { validateA2UISchemaWithWhitelist } from '../../../../schema/schemaValidation';
+import { serializePageSchema } from '../../../services/schemaSync';
 import { SelectableCanvas } from './SelectableCanvas';
 import { NoSchemaEmptyState } from '../../EmptyState';
 import styles from './PreviewPane.module.scss';
@@ -90,9 +91,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
 
   // 将 schema 转换为可展示的 JSON 格式
   const getDisplayJson = useCallback(() => {
-    if (!schema) return '{}';
-    const { schemaVersion, rootId, components } = schema;
-    return JSON.stringify({ schemaVersion, rootId, components }, null, 2);
+    return serializePageSchema(schema);
   }, [schema]);
 
   // 当 schema 变化或切换到 JSON tab 时，重置编辑内容

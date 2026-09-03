@@ -138,4 +138,27 @@ describe('applyPatchToSchema', () => {
     const result = applyPatchToSchema(createSchema(), patch);
     expect(result.components['new-input'].props?.placeholder).toBe('请输入邮箱');
   });
+
+  it('preserves page logic without aliasing the input', () => {
+    const schema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: {
+          count: 1,
+        },
+      },
+    };
+
+    const result = applyPatchToSchema(schema, [
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: { children: 'Increment' },
+      },
+    ]);
+
+    expect(result.logic).toEqual(schema.logic);
+    expect(result.logic).not.toBe(schema.logic);
+    expect(result.logic?.states).not.toBe(schema.logic?.states);
+  });
 });

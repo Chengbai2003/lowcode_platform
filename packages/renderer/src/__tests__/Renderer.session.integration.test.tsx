@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, act, cleanup } from '@testing-library/react';
+import { render, screen, act, cleanup, fireEvent } from '@testing-library/react';
 import React, { useState } from 'react';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { Renderer } from '../Renderer';
@@ -15,6 +15,90 @@ const simpleSchema: PageSchema = {
 };
 
 describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
+  it('initializes declared Page State and rerenders after a state action', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: { states: { count: 1 } },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['value', 'increment'] },
+        value: { id: 'value', type: 'Text', props: { children: '{{ state.count }}' } },
+        increment: {
+          id: 'increment',
+          type: 'Button',
+          props: { children: 'increment' },
+          events: {
+            onClick: [{ type: 'setValue', field: 'state.count', value: '{{ state.count + 1 }}' }],
+          },
+        },
+      },
+    };
+
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="state-page"
+        documentSessionId="state-session"
+        schema={schema}
+        eventContext={{ state: { count: 99 } }}
+      />,
+    );
+
+    expect(screen.getByText('1')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'increment' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('2')).toBeTruthy();
+  });
+
+  it('shallow-merges an object into declared Page State', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: { states: { profile: { name: 'Ada' } } },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['value', 'merge'] },
+        value: {
+          id: 'value',
+          type: 'Text',
+          props: { children: '{{ state.profile.name + ":" + (state.profile.age || 0) }}' },
+        },
+        merge: {
+          id: 'merge',
+          type: 'Button',
+          props: { children: 'merge' },
+          events: {
+            onClick: [
+              {
+                type: 'setValue',
+                field: 'state.profile',
+                value: { age: 37 },
+                merge: true,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="merge-page"
+        documentSessionId="merge-session"
+        schema={schema}
+      />,
+    );
+
+    expect(screen.getByText('Ada:0')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'merge' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Ada:37')).toBeTruthy();
+  });
+
   it('渲染组件成功创建独立 Session，并正确绑定数据上下文', () => {
     render(
       <Renderer

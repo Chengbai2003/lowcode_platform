@@ -10,6 +10,7 @@ import {
   SchemaValidationError,
   UnsupportedSchemaVersionError,
   DEFAULT_SCHEMA_LIMITS,
+  FORBIDDEN_LOGIC_KEYS,
   type PageSchema,
 } from '../index';
 
@@ -60,6 +61,155 @@ describe('@lowcode-platform/schema-contract', () => {
 
     it('defines 1 MiB maxBytes default limit', () => {
       expect(DEFAULT_SCHEMA_LIMITS.maxBytes).toBe(1024 * 1024);
+    });
+  });
+
+  describe('M1a State declarations', () => {
+    it('canonicalizes and deeply freezes logic.states without mutating the source', () => {
+      const source = {
+        ...validSchema,
+        logic: {
+          states: {
+            count: 1,
+            profile: { name: 'Ada', tags: ['admin'] },
+          },
+        },
+      };
+
+      const result = validatePageSchemaValue(source);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.logic?.states).toEqual({
+        count: 1,
+        profile: { name: 'Ada', tags: ['admin'] },
+      });
+      expect(result.value.logic).not.toBe(source.logic);
+      expect(result.value.logic?.states).not.toBe(source.logic.states);
+      expect(Object.isFrozen(result.value.logic)).toBe(true);
+      expect(Object.isFrozen(result.value.logic?.states.profile)).toBe(true);
+      expect(Object.isFrozen((result.value.logic?.states.profile as { tags: unknown }).tags)).toBe(
+        true,
+      );
+
+      source.logic.states.profile.name = 'Grace';
+      expect((result.value.logic?.states.profile as { name: string }).name).toBe('Ada');
+    });
+
+    it.each([
+      ['logic must be an object', { logic: [] }, 'INVALID_LOGIC_OBJECT'],
+      ['states must be an object', { logic: { states: [] } }, 'INVALID_STATES_OBJECT'],
+      ['unknown logic fields fail closed', { logic: { state: {} } }, 'UNKNOWN_LOGIC_FIELD'],
+      [
+        'state keys must be identifiers',
+        { logic: { states: { 'not-safe': 1 } } },
+        'INVALID_STATE_KEY',
+      ],
+    ])('rejects %s', (_label, extension, expectedCode) => {
+      const result = validatePageSchemaValue({ ...validSchema, ...extension });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((issue) => issue.code === expectedCode)).toBe(true);
+      }
+    });
+
+    it.each(FORBIDDEN_LOGIC_KEYS)('rejects the cross-runtime forbidden Logic Key %s', (key) => {
+      const states = Object.create(null) as Record<string, unknown>;
+      states[key] = 1;
+      const result = validatePageSchemaValue({ ...validSchema, logic: { states } });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues).toContainEqual(
+          expect.objectContaining({
+            code: 'INVALID_STATE_KEY',
+            path: ['logic', 'states', key],
+          }),
+        );
+      }
+    });
+
+    it('keeps valid nested legacy State writes when no declarations exist', () => {
+      const result = validatePageSchemaValue({
+        schemaVersion: 0,
+        rootId: 'root',
+        components: {
+          root: {
+            id: 'root',
+            type: 'Page',
+            events: {
+              onClick: [{ type: 'setValue', field: 'state.profile.name', value: 'Ada' }],
+            },
+          },
+        },
+      });
+
+      expect(result.ok).toBe(true);
+    });
+
+    it.each([
+      ['setValue nested path', { type: 'setValue', field: 'state.profile.name', value: 'Ada' }],
+      ['setValue forbidden key', { type: 'setValue', field: 'state.toJSON', value: 1 }],
+      [
+        'apiCall forbidden result target',
+        { type: 'apiCall', url: '/profile', resultTo: 'state.constructor' },
+      ],
+    ])('rejects an unsupported %s', (_label, action) => {
+      const result = validatePageSchemaValue({
+        schemaVersion: 0,
+        rootId: 'root',
+        logic: { states: {} },
+        components: {
+          root: { id: 'root', type: 'Page', events: { onClick: [action] } },
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((issue) => issue.code === 'INVALID_STATE_TARGET')).toBe(true);
+      }
+    });
+
+    it('applies the dedicated state entry budget before walking values', () => {
+      const result = validatePageSchemaValue(
+        {
+          ...validSchema,
+          logic: { states: { first: 1, second: 2 } },
+        },
+        { maxStateEntries: 1 },
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((issue) => issue.code === 'STATE_ENTRIES_BUDGET_EXCEEDED')).toBe(
+          true,
+        );
+      }
+    });
+
+    it('counts nested state values against the shared JSON budget', () => {
+      const result = validatePageSchemaValue(
+        {
+          ...validSchema,
+          logic: { states: { profile: { name: 'Ada' } } },
+        },
+        { maxJsonNodes: 2 },
+      );
+
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.issues.some((issue) => issue.code === 'SCHEMA_BUDGET_EXCEEDED')).toBe(true);
+      }
+    });
+
+    it('keeps schemas without logic backward compatible', () => {
+      const result = validatePageSchemaValue(validSchema);
+
+      expect(result.ok).toBe(true);
+      if (result.ok) {
+        expect(result.value.logic).toBeUndefined();
+      }
     });
   });
 
@@ -1123,7 +1273,8 @@ describe('@lowcode-platform/schema-contract', () => {
       expect(result.issues.every((i) => i.code === 'UNKNOWN_COMPONENT_FIELD')).toBe(true);
     });
 
-    it('keeps the explicit maxJsonNodes / maxIssues defaults', () => {
+    it('keeps the explicit State / JSON / issue budget defaults', () => {
+      expect(DEFAULT_SCHEMA_LIMITS.maxStateEntries).toBe(200);
       expect(DEFAULT_SCHEMA_LIMITS.maxJsonNodes).toBe(25_000);
       expect(DEFAULT_SCHEMA_LIMITS.maxIssues).toBe(500);
     });

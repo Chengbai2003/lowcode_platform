@@ -6,9 +6,11 @@ export interface SchemaValidationLimits {
   readonly maxBytes: number;
   /** 最大组件节点数量 (默认 500) */
   readonly maxComponents: number;
+  /** 最大 State 声明数量 (默认 200) */
+  readonly maxStateEntries: number;
   /** 最大 JSON 属性嵌套深度 (默认 32) */
   readonly maxDepth: number;
-  /** props/events 值内 JSON 节点（标量、对象、数组元素）总数上限 (默认 25 000) */
+  /** logic/props/events 值内 JSON 节点（标量、对象、数组元素）总数上限 (默认 25 000) */
   readonly maxJsonNodes: number;
   /** 单个组件允许的最大事件绑定数量 (默认 200) */
   readonly maxEventBindings: number;
@@ -23,6 +25,7 @@ export interface SchemaValidationLimits {
 export const DEFAULT_SCHEMA_LIMITS: SchemaValidationLimits = {
   maxBytes: 1024 * 1024, // 1 MiB
   maxComponents: 500,
+  maxStateEntries: 200,
   maxDepth: 32,
   maxJsonNodes: 25_000,
   maxEventBindings: 200,
@@ -37,6 +40,7 @@ export const DEFAULT_SCHEMA_LIMITS: SchemaValidationLimits = {
 const LIMIT_HARD_CAPS: Record<keyof SchemaValidationLimits, number> = {
   maxBytes: 16 * 1024 * 1024,
   maxComponents: 10_000,
+  maxStateEntries: 10_000,
   maxDepth: 128,
   maxJsonNodes: 5_000_000,
   maxEventBindings: 5_000,

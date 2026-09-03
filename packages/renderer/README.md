@@ -71,6 +71,24 @@ host.unmount();
 - 非 React 宿主可直接使用 `createRuntimeSession` / `getOrCreateRuntimeSession` /
   `disposeRuntimeSession`。
 
+### Page State（M1a-1 / S1）
+
+页面可在 Schema 中声明每个新 RuntimeSession 的初始 State：
+
+```ts
+const schema: PageSchema = {
+  schemaVersion: 0,
+  rootId: 'root',
+  logic: { states: { count: 1 } },
+  components: {
+    root: { id: 'root', type: 'Text', props: { children: '{{ state.count }}' } },
+  },
+};
+```
+
+`logic.states` 存在时优先于 legacy `eventContext.state`。运行期间对 `state.*`
+的修改只属于当前 Session，不修改 Schema，也不写回页面快照。
+
 ## ComponentRuntimeBridge（M0-4 Scope C）
 
 渲染树中的组件（如 Table）不得反向导入 Renderer 内部执行器（DSLExecutor / valueResolver /

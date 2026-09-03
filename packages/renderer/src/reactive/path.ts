@@ -7,14 +7,14 @@
  * @module renderer/reactive/path
  */
 
+import { isSafeDataPathKey } from '@lowcode-platform/schema-contract';
 import type { DataPath } from './types';
 
 /**
- * Canonical prototype-pollution guard. Must stay in sync with
- * backend compiler's BLOCKED_CALLEE_NAMES and frontend safeEvaluator.
+ * Canonical prototype-pollution guard shared through Schema Contract.
  */
 export function isSafeKey(key: string): boolean {
-  return key !== '__proto__' && key !== 'prototype' && key !== 'constructor';
+  return isSafeDataPathKey(key);
 }
 
 export function parsePath(path: DataPath): { namespace: string; rest: string } {
