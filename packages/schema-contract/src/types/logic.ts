@@ -33,6 +33,9 @@ export function isSafeLogicKey(value: unknown): value is string {
   );
 }
 
+/** 无 `{{ }}` 包装、由 Contract 统一分析的只读派生表达式。 */
+export type ComputedExpression = string;
+
 /**
  * 页面声明的逻辑初始值。
  *
@@ -40,4 +43,5 @@ export function isSafeLogicKey(value: unknown): value is string {
  */
 export interface PageLogic {
   readonly states?: Readonly<Record<string, JsonValue>>;
+  readonly computed?: Readonly<Record<string, ComputedExpression>>;
 }

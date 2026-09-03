@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-1 / S1 Page State` | **优先级**：`P0`
+> **当前阶段**：`M1a-1 / S2-S3 Computed` | **优先级**：`P0`
 
 ## 目标与边界
 
@@ -22,12 +22,14 @@ S1 Page State 纵向闭环
   ↓
 S2 安全 Computed + 依赖 DAG / 循环检测
   ↓
+S3 Computed Runtime + Compiler 等价实现
+  ↓
 M1a-2 具名 ActionFlow + 错误 / 取消 / 预算语义
   ↓
 M1a-3 六消费面固定语料与解释/编译一致性门禁
 ```
 
-### S1：Page State 纵向闭环（当前 PR）
+### S1：Page State 纵向闭环（已完成）
 
 - Contract：新增可选 `logic.states: Record<LogicKey, JsonValue>`，沿用 JSON 深度/节点预算并增加 State 条目预算；危险键与未知字段 fail-close。
 - Renderer：每个 RuntimeSession 深拷贝声明初值；没有声明时继续兼容宿主传入的 legacy state。
@@ -38,12 +40,18 @@ M1a-3 六消费面固定语料与解释/编译一致性门禁
 
 S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 State 写入在 Contract 中 fail-close，无声明的旧页面仍保留既有嵌套写入语义。已有组件字段若会生成 `state` / `setState` 绑定，Compiler 明确拒绝并要求先重命名，避免静默改义。同一事件内跨动作读取 State 的解释/编译顺序一致性必须在 #45 完成前明确并纳入 #47 语料，当前切片不扩大 Action 协议。
 
-### S2：Computed
+### S2：Computed Contract 与共享分析（当前 PR）
 
-- 在共享 Contract 中定义安全表达式声明，复用同一 AST 白名单与资源预算。
-- 构建确定性依赖 DAG，拒绝缺失引用、循环依赖、危险属性和超预算图。
-- RuntimeSession 按依赖失效并只读求值；Compiler 按同一拓扑生成等价代码。
-- Editor/Agent 提供结构化声明入口，Storage 只保存表达式，不保存求值结果。
+- `ComputedExpression` 是不带 `{{ }}` 的单一表达式；共享 Contract 唯一负责 AST 白名单、引用提取和资源预算。
+- Contract 输出依赖优先、同层按 Logic Key 稳定排序的 DAG；缺失引用、动态访问、危险属性、宿主/构造器、循环和超预算图全部 fail-close。
+- Editor JSON、组件 Patch、Agent 组件 Patch 与 Storage 显式保留 `logic.computed`；结构化声明入口和诊断 UI 留给 S4。
+
+### S3：Computed Runtime 与 Compiler 等价实现（当前 PR）
+
+- RuntimeSession 私有持有 Computed 缓存与反向依赖图；State 顶层 Logic Key 变更只失效直接和传递依赖，批量写入最多一次 flush。
+- `computed.*` 进入 Renderer 安全表达式上下文并保持只读；声明图热替换保留当前 Session State，dispose 清空图与缓存。
+- Compiler 复用 Contract 拓扑生成 React 代码，并用事件局部值与 ref 保证连续动作及跨 `await` 动作读取最新 State/Computed。
+- `test-fixtures/m1a-computed-conformance.json` 同时驱动 Contract、Renderer 与 Compiler，验证初始值及一次事件后的可观察状态一致。
 
 ### M1a-2：ActionFlow
 

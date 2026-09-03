@@ -64,12 +64,21 @@ function safeGet(
   return { exists: true, isAccessor: false, value: (desc as PropertyDescriptor).value };
 }
 
-function validateStateTarget(
+function validateLogicTarget(
   value: unknown,
   path: readonly (string | number)[],
   context: ActionValidationContext,
 ): void {
-  if (typeof value !== 'string' || !value.startsWith('state.')) return;
+  if (typeof value !== 'string') return;
+  if (value.startsWith('computed.')) {
+    pushActionIssue(context, {
+      code: 'COMPUTED_TARGET_READONLY',
+      path,
+      message: `Computed target "${value}" is read-only`,
+    });
+    return;
+  }
+  if (!value.startsWith('state.')) return;
 
   const stateKey = value.slice('state.'.length);
   const pathParts = stateKey.split('.');
@@ -360,7 +369,7 @@ export function validateActionItem(
           message: 'setValue action requires a non-empty string "field"',
         });
       } else {
-        validateStateTarget(fieldVal, [...path, 'field'], context);
+        validateLogicTarget(fieldVal, [...path, 'field'], context);
       }
       if (!valueRes.exists) {
         pushActionIssue(context, {
@@ -812,7 +821,7 @@ export function validateActionItem(
           message: 'apiCall "resultTo" must be a non-empty string if provided',
         });
       } else if (resultToRes.exists && resultToVal !== undefined) {
-        validateStateTarget(resultToVal, [...path, 'resultTo'], context);
+        validateLogicTarget(resultToVal, [...path, 'resultTo'], context);
       }
       if (onSuccessRes.exists) {
         if (!Array.isArray(onSuccessVal)) {

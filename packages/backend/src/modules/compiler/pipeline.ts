@@ -1,11 +1,15 @@
 import {
+  analyzeComputedDeclarations,
   FORBIDDEN_DATA_PATH_KEYS,
   isSafeDataPathKey,
   isSafeLogicKey,
+  SchemaValidationError,
+  type ComputedLogicAnalysis,
   type PageSchema,
   type ComponentNode,
   type JsonValue,
 } from '@lowcode-platform/schema-contract';
+import jsep from 'jsep';
 import { compileStyle } from './styleCompiler';
 import {
   type CompileOptions,
@@ -132,6 +136,8 @@ interface RootNode {
   handlers: HandlerDeclaration[];
   helpers: Set<string>;
   usesPageState: boolean;
+  usesComputed: boolean;
+  computedAnalysis?: ComputedLogicAnalysis;
 }
 
 interface JSXElementNode {
@@ -275,6 +281,7 @@ function getMergedStateValueCode(currentValueCode: string, valueCode: string): s
 
 const ALLOWED_FEEDBACK_LEVELS = new Set(['info', 'success', 'warning', 'error']);
 const ALLOWED_LOG_LEVELS = new Set(['info', 'success', 'warning', 'error', 'log', 'debug', 'warn']);
+const COMPUTED_RUNTIME_INTRINSICS = new Set(['Array', 'Symbol', 'WeakMap', 'WeakSet']);
 
 function sanitizeFeedbackLevel(level: string | undefined, fallback = 'info'): string {
   if (level && ALLOWED_FEEDBACK_LEVELS.has(level)) return level;
@@ -543,6 +550,13 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     ? [buildComponentTree(schema.rootId, componentMap, new Set<string>())]
     : [];
   const hasLegacyStateField = flatComponents.some(componentDeclaresLegacyStateField);
+  const usesComputed = schema.logic?.computed !== undefined;
+  let computedAnalysis: ComputedLogicAnalysis | undefined;
+  if (usesComputed) {
+    const result = analyzeComputedDeclarations(schema.logic);
+    if (!result.ok) throw new SchemaValidationError(result.issues);
+    computedAnalysis = result.value;
+  }
 
   return {
     type: 'root',
@@ -554,7 +568,10 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     fields: [],
     handlers: [],
     helpers: new Set(),
+    usesComputed,
+    ...(computedAnalysis ? { computedAnalysis } : {}),
     usesPageState:
+      usesComputed ||
       schema.logic?.states !== undefined ||
       flatComponents.some((component) => componentUsesPageState(component, !hasLegacyStateField)),
   };
@@ -713,6 +730,11 @@ function addImport(
   exportName: string,
   localName = exportName,
 ) {
+  if (ctx.root.usesComputed && COMPUTED_RUNTIME_INTRINSICS.has(localName)) {
+    throw new Error(
+      `Import binding "${localName}" conflicts with the reserved Computed runtime intrinsic`,
+    );
+  }
   if (!ctx.imports.has(source)) {
     ctx.imports.set(source, new Set());
   }
@@ -728,6 +750,10 @@ function addImport(
 function collectImports(ctx: TransformContext) {
   ctx.imports.set('react', new Set(['useState']));
   if (!ctx.registry.has('useState')) ctx.registry.reserveExact('useState', 'import:useState');
+  if (ctx.root.usesComputed) {
+    addImport(ctx, 'react', 'useMemo');
+    addImport(ctx, 'react', 'useRef');
+  }
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
   if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
@@ -791,6 +817,15 @@ function createTransformContext(root: RootNode): TransformContext {
     registry.reserveExact('state', 'page-state');
     registry.reserveExact('setState', 'page-state-setter');
   }
+  if (root.usesComputed) {
+    registry.reserveExact('computed', 'page-computed');
+    registry.reserveExact('computePageLogic', 'page-computed-evaluator');
+    registry.reserveExact('stateRef', 'page-state-ref');
+    registry.reserveExact('computedRef', 'page-computed-ref');
+    for (const name of COMPUTED_RUNTIME_INTRINSICS) {
+      registry.reserveExact(name, 'page-computed-intrinsic');
+    }
+  }
   const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
   for (const name of reservedHandlerNames) {
     if (!registry.has(name)) registry.reserveExact(name, `handler:${name}`);
@@ -848,10 +883,15 @@ function createHandlerCode(
   bodyCode: string,
   isAsync: boolean,
   params: string[],
+  usesComputed: boolean,
 ): string {
   const asyncKeyword = isAsync ? 'async ' : '';
   const parameterCode = params.join(', ');
-  return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(bodyCode)}\n};`;
+  const logicPrologue = usesComputed
+    ? 'let state = stateRef.current;\nlet computed = computedRef.current;'
+    : '';
+  const handlerBody = [logicPrologue, bodyCode].filter(Boolean).join('\n');
+  return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(handlerBody)}\n};`;
 }
 
 function registerHandler(
@@ -869,7 +909,13 @@ function registerHandler(
   ctx.handlers.push(handler);
 
   const built = build(handlerName);
-  handler.code = createHandlerCode(handlerName, built.code, built.async, params);
+  handler.code = createHandlerCode(
+    handlerName,
+    built.code,
+    built.async,
+    params,
+    ctx.root.usesComputed,
+  );
 
   return {
     name: handlerName,
@@ -1070,6 +1116,7 @@ function getExpressionContextFields(ctx: TransformContext): Set<string> {
   if (ctx.root.usesPageState) {
     fields.add('state');
   }
+  if (ctx.root.usesComputed) fields.add('computed');
   return fields;
 }
 
@@ -1491,10 +1538,7 @@ function resolveResultTarget(
     if (!statePath) {
       return `/* invalid resultTo discarded */`;
     }
-    if (statePath.length === 1) {
-      return `setState((state) => ({ ...state, ${toObjectKeyCode(statePath[0])}: ${valueCode} }));`;
-    }
-    return `setState((state) => ${getNestedStateUpdateCode(statePath, valueCode)});`;
+    return getStateWriteCode(statePath, valueCode, ctx);
   }
   return `/* invalid resultTo discarded */`;
 }
@@ -1508,13 +1552,35 @@ function buildActionBlock(
   const segments = actions.map((action) =>
     buildActionStatement(action, ctx, ownerHandlerName, localScope),
   );
+  const refreshCode = ctx.root.usesComputed
+    ? 'state = stateRef.current;\ncomputed = computedRef.current;'
+    : '';
   return {
     code: segments
-      .map((segment) => segment.code)
+      .map((segment) => [refreshCode, segment.code].filter(Boolean).join('\n'))
       .filter(Boolean)
       .join('\n'),
     async: segments.some((segment) => segment.async),
   };
+}
+
+function getStateWriteCode(
+  statePath: readonly string[],
+  valueCode: string,
+  ctx: TransformContext,
+): string {
+  const nextStateCode =
+    statePath.length === 1
+      ? `({ ...state, ${toObjectKeyCode(statePath[0])}: ${valueCode} })`
+      : getNestedStateUpdateCode(statePath, valueCode);
+  if (!ctx.root.usesComputed) {
+    return `setState((state) => ${nextStateCode});`;
+  }
+  return `state = ${nextStateCode};
+computed = computePageLogic(state);
+stateRef.current = state;
+computedRef.current = computed;
+setState(state);`;
 }
 
 function buildNotificationObject(
@@ -1574,14 +1640,8 @@ function buildActionStatement(
             const nextValueCode = action.merge
               ? getMergedStateValueCode(currentValueCode, valueCode)
               : valueCode;
-            if (statePath.length > 1) {
-              return {
-                code: `setState((state) => ${getNestedStateUpdateCode(statePath, nextValueCode)});`,
-                async: false,
-              };
-            }
             return {
-              code: `setState((state) => ({ ...state, ${toObjectKeyCode(statePath[0])}: ${nextValueCode} }));`,
+              code: getStateWriteCode(statePath, nextValueCode, ctx),
               async: false,
             };
           }
@@ -1817,6 +1877,13 @@ function buildActionStatement(
         }
       }
       for (const loopBinding of [safeItemVar, safeIndexVar]) {
+        if (
+          loopBinding &&
+          ctx.root.usesComputed &&
+          ['state', 'computed', 'stateRef', 'computedRef', 'computePageLogic'].includes(loopBinding)
+        ) {
+          throw new Error(`循环变量 "${loopBinding}" 与页面 Computed 运行时绑定冲突`);
+        }
         if (loopBinding && actionListUsesGeneratedBinding(action.actions ?? [], ctx, loopBinding)) {
           throw new Error(`循环变量 "${loopBinding}" 与循环体生成标识符冲突`);
         }
@@ -1961,6 +2028,249 @@ function genImports(imports: Map<string, Set<string>>): string {
   return statements.join('\n');
 }
 
+function genComputedValueHelpers(): string {
+  return `const computedSkip = Symbol("computed-skip");
+const readComputedMember = (target, key) => {
+  if (target === null || target === undefined) return undefined;
+  try {
+    const boxed = Object(target);
+    const ownDescriptor = Object.getOwnPropertyDescriptor(boxed, String(key));
+    if (ownDescriptor) {
+      if (ownDescriptor.get || ownDescriptor.set || typeof ownDescriptor.value === "function") {
+        return undefined;
+      }
+      return ownDescriptor.value;
+    }
+    let prototype = Object.getPrototypeOf(boxed);
+    while (prototype) {
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, String(key));
+      if (descriptor) {
+        if (descriptor.get || descriptor.set || typeof descriptor.value === "function") {
+          return undefined;
+        }
+        break;
+      }
+      prototype = Object.getPrototypeOf(prototype);
+    }
+    return target[key];
+  } catch {
+    return undefined;
+  }
+};
+const callComputed = (fn, receiver, args) => {
+  if (typeof fn !== "function") return undefined;
+  try {
+    return fn.apply(receiver, args);
+  } catch {
+    return undefined;
+  }
+};
+const callComputedMember = (target, key, args) => {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(target, String(key));
+    if (!descriptor || descriptor.get || descriptor.set || typeof descriptor.value !== "function") {
+      return undefined;
+    }
+    if (target === Math) {
+      for (const argument of args) {
+        if (argument !== null && typeof argument === "object") return undefined;
+      }
+    }
+    return descriptor.value.apply(target, args);
+  } catch {
+    return undefined;
+  }
+};
+const computeUnary = (operator, value) => {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    (operator === "+" || operator === "-")
+  ) {
+    return undefined;
+  }
+  switch (operator) {
+    case "!":
+      return !value;
+    case "+":
+      return +value;
+    case "-":
+      return -value;
+    default:
+      return undefined;
+  }
+};
+const computeBinary = (operator, left, right) => {
+  const hasObjectOperand =
+    (left !== null && typeof left === "object") ||
+    (right !== null && typeof right === "object");
+  if (hasObjectOperand && (operator === "==" || operator === "!=")) return undefined;
+  switch (operator) {
+    case "+":
+      return hasObjectOperand ? undefined : left + right;
+    case "-":
+      return hasObjectOperand ? undefined : left - right;
+    case "*":
+      return hasObjectOperand ? undefined : left * right;
+    case "/":
+      return hasObjectOperand ? undefined : left / right;
+    case "%":
+      return hasObjectOperand ? undefined : left % right;
+    case "<":
+      return hasObjectOperand ? undefined : left < right;
+    case "<=":
+      return hasObjectOperand ? undefined : left <= right;
+    case ">":
+      return hasObjectOperand ? undefined : left > right;
+    case ">=":
+      return hasObjectOperand ? undefined : left >= right;
+    case "==":
+      return left == right;
+    case "===":
+      return left === right;
+    case "!=":
+      return left != right;
+    case "!==":
+      return left !== right;
+    case "&&":
+      return left && right;
+    case "||":
+      return left || right;
+    default:
+      return undefined;
+  }
+};
+const cloneComputedInput = (value, seen = new WeakMap()) => {
+  if (value === null) return null;
+  if (typeof value !== "object") {
+    return typeof value === "function" || typeof value === "symbol" || typeof value === "bigint"
+      ? computedSkip
+      : value;
+  }
+  if (seen.has(value)) return seen.get(value);
+  if (Array.isArray(value)) {
+    const clone = [];
+    seen.set(value, clone);
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || descriptor.get || descriptor.set) {
+        clone[index] = undefined;
+        continue;
+      }
+      const child = cloneComputedInput(descriptor.value, seen);
+      clone[index] = child === computedSkip ? undefined : child;
+    }
+    return clone;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return computedSkip;
+  const clone = Object.create(null);
+  seen.set(value, clone);
+  for (const key of Object.keys(value)) {
+    if (key === "__proto__" || key === "prototype" || key === "constructor") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || descriptor.get || descriptor.set) continue;
+    const child = cloneComputedInput(descriptor.value, seen);
+    if (child !== computedSkip) clone[key] = child;
+  }
+  return clone;
+};
+const freezeComputedOutput = (
+  value,
+  seen = new WeakMap(),
+  active = new WeakSet(),
+) => {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : computedSkip;
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value !== "object") return computedSkip;
+  if (active.has(value)) return computedSkip;
+  if (seen.has(value)) return seen.get(value);
+  const isArray = Array.isArray(value);
+  if (!isArray) {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return computedSkip;
+  }
+  const clone = isArray ? [] : Object.create(null);
+  seen.set(value, clone);
+  active.add(value);
+  const keys = isArray
+    ? Array.from({ length: value.length }, (_, index) => String(index))
+    : Object.keys(value);
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || descriptor.get || descriptor.set) return computedSkip;
+    const child = freezeComputedOutput(descriptor.value, seen, active);
+    if (child === computedSkip) return computedSkip;
+    clone[key] = child;
+  }
+  active.delete(value);
+  return Object.freeze(clone);
+};`;
+}
+
+/**
+ * Contract 已完成唯一的语法与能力判断；Compiler 这里只把已验证 AST 降级为带
+ * fail-soft member/call 和对象运算保护的代码，避免原生 JS 隐式转换偏离 Renderer。
+ */
+function genValidatedComputedExpression(expression: string): string {
+  const generateNode = (node: jsep.Expression): string => {
+    switch (node.type) {
+      case 'Compound': {
+        const body = (node as jsep.Compound).body;
+        if (body.length !== 1) throw new Error('Validated Computed compound must contain one node');
+        return generateNode(body[0]);
+      }
+      case 'Literal':
+        return getJsonLiteralCode((node as jsep.Literal).value as JsonValue);
+      case 'Identifier':
+        return (node as jsep.Identifier).name;
+      case 'MemberExpression': {
+        const member = node as jsep.MemberExpression;
+        const property = member.computed
+          ? generateNode(member.property)
+          : toQuotedString((member.property as jsep.Identifier).name);
+        return `readComputedMember(${generateNode(member.object)}, ${property})`;
+      }
+      case 'BinaryExpression':
+      case 'LogicalExpression': {
+        const binary = node as jsep.BinaryExpression;
+        return `computeBinary(${toQuotedString(binary.operator)}, ${generateNode(binary.left)}, ${generateNode(binary.right)})`;
+      }
+      case 'UnaryExpression': {
+        const unary = node as jsep.UnaryExpression;
+        return `computeUnary(${toQuotedString(unary.operator)}, ${generateNode(unary.argument)})`;
+      }
+      case 'ConditionalExpression': {
+        const conditional = node as jsep.ConditionalExpression;
+        return `(${generateNode(conditional.test)} ? ${generateNode(conditional.consequent)} : ${generateNode(conditional.alternate)})`;
+      }
+      case 'ArrayExpression': {
+        const array = node as jsep.ArrayExpression;
+        return `[${array.elements.map((element) => generateNode(element as jsep.Expression)).join(', ')}]`;
+      }
+      case 'CallExpression': {
+        const call = node as jsep.CallExpression;
+        const args = `[${call.arguments.map((argument) => generateNode(argument)).join(', ')}]`;
+        if (call.callee.type === 'Identifier') {
+          return `callComputed(${(call.callee as jsep.Identifier).name}, undefined, ${args})`;
+        }
+        if (call.callee.type === 'MemberExpression') {
+          const member = call.callee as jsep.MemberExpression;
+          const property = member.computed
+            ? generateNode(member.property)
+            : toQuotedString((member.property as jsep.Identifier).name);
+          return `callComputedMember(${generateNode(member.object)}, ${property}, ${args})`;
+        }
+        break;
+      }
+    }
+    throw new Error(`Unsupported validated Computed AST node: ${node.type}`);
+  };
+
+  return generateNode(jsep(expression));
+}
+
 function genStateHooks(root: RootNode): string {
   const ctxFields = new Set(root.fields.map((field) => field.name));
   const hooks: string[] = [];
@@ -1970,6 +2280,48 @@ function genStateHooks(root: RootNode): string {
     const initialStateCode =
       Object.keys(initialState).length === 0 ? '{}' : getJsonLiteralCode(initialState);
     hooks.push(`const [state, setState] = useState(${initialStateCode});`);
+  }
+  if (root.usesComputed) {
+    ctxFields.add('computed');
+    const nodes = root.computedAnalysis?.nodes ?? [];
+    const assignments = nodes
+      .map(
+        (node) => `try {
+  const value = freezeComputedOutput(${genValidatedComputedExpression(node.expression)});
+  computed[${toQuotedString(node.key)}] = value === computedSkip ? undefined : value;
+} catch {
+  computed[${toQuotedString(node.key)}] = undefined;
+}`,
+      )
+      .join('\n');
+    const evaluatorBody = [
+      genComputedValueHelpers(),
+      'let state;',
+      `try {
+  const clonedState = cloneComputedInput(sourceState);
+  state = clonedState === computedSkip ? Object.create(null) : clonedState;
+} catch {
+  state = Object.create(null);
+}`,
+      'const computed = Object.create(null);',
+      assignments,
+      'return Object.freeze(computed);',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    hooks.push(`const computePageLogic = (sourceState) => {
+${indentBlock(evaluatorBody)}
+};`);
+
+    const stateDependencies = Array.from(
+      new Set(nodes.flatMap((node) => node.stateDependencies)),
+    ).sort();
+    const dependencyCode = stateDependencies.map((key) => getStatePathValueCode([key])).join(', ');
+    hooks.push(`const computed = useMemo(() => computePageLogic(state), [${dependencyCode}]);`);
+    hooks.push('const stateRef = useRef(state);');
+    hooks.push('const computedRef = useRef(computed);');
+    hooks.push('stateRef.current = state;');
+    hooks.push('computedRef.current = computed;');
   }
   hooks.push(
     ...root.fields.map(

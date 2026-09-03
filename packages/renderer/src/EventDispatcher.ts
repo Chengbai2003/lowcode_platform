@@ -92,6 +92,8 @@ export class EventDispatcher {
         return this.runtime.getData();
       case 'state':
         return this.runtime.getState();
+      case 'computed':
+        return this.runtime.getComputed();
       case 'formData':
         return this.runtime.getFormData();
       case 'components':
@@ -109,6 +111,9 @@ export class EventDispatcher {
    * 更新执行上下文（不可变更新）
    */
   setContext(key: string, value: any) {
+    if (key === 'computed') {
+      throw new Error('[EventDispatcher] Computed context is read-only');
+    }
     const currentValue = this.readNamespaceContextValue(key);
     if (Object.is(currentValue, value)) {
       return;
@@ -189,6 +194,7 @@ export class EventDispatcher {
       ...this.executionContext,
       data: { ...this.runtime.getData() },
       state: { ...this.runtime.getState() },
+      computed: this.runtime.getComputed(),
       formData: { ...this.runtime.getFormData() },
       components: { ...this.runtime.getComponents() },
       runtime: this.runtime,

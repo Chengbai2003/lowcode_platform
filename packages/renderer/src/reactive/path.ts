@@ -27,7 +27,7 @@ export function parsePath(path: DataPath): { namespace: string; rest: string } {
   const namespace = path.substring(0, dotIndex);
   const rest = path.substring(dotIndex + 1);
 
-  const validNamespaces = ['data', 'state', 'formData', 'components'];
+  const validNamespaces = ['data', 'state', 'computed', 'formData', 'components'];
   if (validNamespaces.includes(namespace)) {
     return { namespace, rest };
   }

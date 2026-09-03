@@ -146,6 +146,9 @@ describe('applyPatchToSchema', () => {
         states: {
           count: 1,
         },
+        computed: {
+          next: 'state.count + 1',
+        },
       },
     };
 
@@ -160,5 +163,6 @@ describe('applyPatchToSchema', () => {
     expect(result.logic).toEqual(schema.logic);
     expect(result.logic).not.toBe(schema.logic);
     expect(result.logic?.states).not.toBe(schema.logic?.states);
+    expect(result.logic?.computed).not.toBe(schema.logic?.computed);
   });
 });

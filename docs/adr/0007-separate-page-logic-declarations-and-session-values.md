@@ -9,10 +9,12 @@ State、Computed 与 ActionFlow 需要随页面保存，但运行期间产生的
 
 ## 决策
 
-- `PageSchema.logic` 只持久化声明；第一步加入 `logic.states` 作为 RuntimeSession 初始值，后续在同一命名空间加入 Computed 与 ActionFlow 声明。
+- `PageSchema.logic` 只持久化声明；`logic.states` 是 RuntimeSession 初始值，`logic.computed` 保存不带 `{{ }}` 的单一安全表达式，后续在同一命名空间加入 ActionFlow 声明。
 - 每个 RuntimeSession 从声明深拷贝自己的 Session State；运行时写入不得修改或回写 `PageSchema`。
-- Computed 是只读派生值，只持久化安全表达式，不持久化求值结果。
-- Contract 负责 Logic Key、JSON 资源预算和声明结构；Renderer 与 Compiler 必须对同一声明产生一致的可观察行为。
+- Computed 是只读派生值；求值结果、缓存、脏标记、依赖反向索引均归当前 RuntimeSession，不持久化且不跨 Session 共享。
+- Contract 是 Computed 语法白名单、资源预算、引用校验、依赖提取与稳定拓扑的唯一入口。缺失引用、动态访问、宿主能力、构造器、循环和超预算图均 fail-close；Renderer 与 Compiler 不复制或放宽这些判断。
+- Renderer 按 State 顶层 Logic Key 精确失效直接及传递依赖，并在一次批量写入后最多通知一次；替换声明图时保留 Session State，销毁 Session 时清空图和缓存。
+- Compiler 按 Contract 拓扑生成派生值，并通过事件内局部值与 ref 保证连续动作和跨 `await` 动作读取最新 State/Computed。固定语料同时验证解释执行与编译产物的可观察状态。
 
 ## 备选方案
 

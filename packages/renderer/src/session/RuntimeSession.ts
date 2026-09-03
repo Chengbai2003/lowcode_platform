@@ -1,5 +1,6 @@
 import { EventDispatcher } from '../EventDispatcher';
 import type { ReactiveRuntime } from '../reactive/runtime';
+import type { ComputedLogicAnalysis } from '@lowcode-platform/schema-contract';
 
 /**
  * RuntimeSession（Issue #19 / M0-4 Scope D, ADR-0003）
@@ -26,6 +27,8 @@ export interface RuntimeSessionOptions {
   dispatcher?: EventDispatcher;
   /** 自建执行栈时的初始上下文 */
   dispatcherInit?: Record<string, unknown>;
+  /** 经 Schema Contract 验证并拓扑排序的 Computed 声明。 */
+  computedAnalysis?: ComputedLogicAnalysis;
 }
 
 export class RuntimeSession {
@@ -52,6 +55,7 @@ export class RuntimeSession {
     this.documentSessionId = documentSessionId;
     this.dispatcher = options.dispatcher ?? new EventDispatcher(options.dispatcherInit ?? {});
     this.runtime = this.dispatcher.getRuntime();
+    this.runtime.configureComputed(options.computedAnalysis, { notify: false });
     this.dispatcher.setHostConfig('session', this);
   }
 
@@ -145,6 +149,12 @@ export class RuntimeSession {
     this.cleanups.add(cleanup);
   }
 
+  /** 替换当前 Session 的 Computed 声明；现有 State 保持不变。 */
+  configureComputed(analysis: ComputedLogicAnalysis | undefined): void {
+    this.throwIfDisposed();
+    this.runtime.configureComputed(analysis);
+  }
+
   /**
    * 销毁 Session：清除 timers、执行 cleanups、abort 全部 in-flight 请求。
    * 幂等；dispose 后旧异步回调不得再写回状态（见 asyncActions 守卫）。
@@ -170,6 +180,7 @@ export class RuntimeSession {
     }
     this.cleanups.clear();
 
+    this.runtime.clearComputed({ notify: false });
     this.controller.abort();
   }
 }

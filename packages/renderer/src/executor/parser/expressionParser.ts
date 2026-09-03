@@ -44,6 +44,7 @@ const RESERVED_CONTEXT_KEYS = new Set([
   'data',
   'formData',
   'state',
+  'computed',
   'route',
   'user',
   'ui',
@@ -76,6 +77,7 @@ function sanitizeContextEp(context: Record<string, any> | undefined): Record<str
 const ALLOWED_EXPRESSION_KEYS = [
   'data',
   'state',
+  'computed',
   'formData',
   'user',
   'route',
@@ -559,6 +561,7 @@ function buildExpressionContextWithProxy(
     ...allowed,
     data: proxy.data,
     state: proxy.state,
+    computed: proxy.computed,
     formData: proxy.formData,
     components: proxy.components,
   };

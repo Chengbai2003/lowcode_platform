@@ -8,6 +8,16 @@ export interface SchemaValidationLimits {
   readonly maxComponents: number;
   /** 最大 State 声明数量 (默认 200) */
   readonly maxStateEntries: number;
+  /** 最大 Computed 声明数量 (默认 200) */
+  readonly maxComputedEntries: number;
+  /** 单条 Computed 表达式最大字符数 (默认 10 000) */
+  readonly maxComputedExpressionLength: number;
+  /** 所有 Computed 表达式的 AST 节点总数上限 (默认 10 000) */
+  readonly maxComputedAstNodes: number;
+  /** 单条 Computed 表达式最大 AST 深度 (默认 32) */
+  readonly maxComputedAstDepth: number;
+  /** Computed 图最大唯一依赖边数 (默认 5 000) */
+  readonly maxComputedDependencies: number;
   /** 最大 JSON 属性嵌套深度 (默认 32) */
   readonly maxDepth: number;
   /** logic/props/events 值内 JSON 节点（标量、对象、数组元素）总数上限 (默认 25 000) */
@@ -26,6 +36,11 @@ export const DEFAULT_SCHEMA_LIMITS: SchemaValidationLimits = {
   maxBytes: 1024 * 1024, // 1 MiB
   maxComponents: 500,
   maxStateEntries: 200,
+  maxComputedEntries: 200,
+  maxComputedExpressionLength: 10_000,
+  maxComputedAstNodes: 10_000,
+  maxComputedAstDepth: 32,
+  maxComputedDependencies: 5_000,
   maxDepth: 32,
   maxJsonNodes: 25_000,
   maxEventBindings: 200,
@@ -41,6 +56,11 @@ const LIMIT_HARD_CAPS: Record<keyof SchemaValidationLimits, number> = {
   maxBytes: 16 * 1024 * 1024,
   maxComponents: 10_000,
   maxStateEntries: 10_000,
+  maxComputedEntries: 10_000,
+  maxComputedExpressionLength: 100_000,
+  maxComputedAstNodes: 100_000,
+  maxComputedAstDepth: 128,
+  maxComputedDependencies: 100_000,
   maxDepth: 128,
   maxJsonNodes: 5_000_000,
   maxEventBindings: 5_000,

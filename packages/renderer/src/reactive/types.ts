@@ -51,6 +51,9 @@ export interface RuntimeSnapshot {
    */
   readonly state: Record<string, unknown>;
 
+  /** 由页面 State 派生的只读 Computed 快照。 */
+  readonly computed: Readonly<Record<string, unknown>>;
+
   /**
    * 表单数据（为未来表单系统保留的命名空间）。
    * @remarks 当前为保留命名空间，v3 中未完全实现。
@@ -89,6 +92,9 @@ export interface RuntimeData {
    * DSL 运行时状态（loading、submitting、step、temp 等）。
    */
   state: Record<string, unknown>;
+
+  /** 会话内只读 Computed 值。 */
+  computed: Readonly<Record<string, unknown>>;
 
   /**
    * 表单数据（为未来表单系统保留的命名空间）。

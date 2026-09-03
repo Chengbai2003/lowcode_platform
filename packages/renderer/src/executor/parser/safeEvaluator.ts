@@ -234,7 +234,16 @@ function sanitizeContext(context: Record<string, any> | undefined): Record<strin
 /**
  * 安全计算 AST 节点
  */
-function evaluateNode(node: jsep.Expression, context: Record<string, any>): any {
+export interface SafeEvaluateOptions {
+  /** Computed 专用：拒绝对象经一元、宽松相等或 Math 运算触发隐式 ToPrimitive。 */
+  readonly rejectImplicitObjectCoercion?: boolean;
+}
+
+function evaluateNode(
+  node: jsep.Expression,
+  context: Record<string, any>,
+  options: SafeEvaluateOptions,
+): any {
   if (!node) return undefined;
 
   switch (node.type) {
@@ -256,7 +265,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'MemberExpression': {
       const memberNode = node as jsep.MemberExpression;
-      const obj = evaluateNode(memberNode.object, context);
+      const obj = evaluateNode(memberNode.object, context, options);
 
       if (obj === undefined || obj === null) {
         return undefined; // 防止 Cannot read properties of undefined
@@ -265,7 +274,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       let propertyName: string | number;
       if (memberNode.computed) {
         // [表达式] 访问，如 items[0] 或是 items[i]
-        propertyName = evaluateNode(memberNode.property, context);
+        propertyName = evaluateNode(memberNode.property, context, options);
       } else {
         // .属性 访问，如 user.name
         propertyName = (memberNode.property as jsep.Identifier).name;
@@ -311,15 +320,16 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'BinaryExpression': {
       const binaryNode = node as jsep.BinaryExpression;
-      const left = evaluateNode(binaryNode.left, context);
-      const right = evaluateNode(binaryNode.right, context);
+      const left = evaluateNode(binaryNode.left, context, options);
+      const right = evaluateNode(binaryNode.right, context, options);
 
       // P0-3: block implicit coercion via Symbol.toPrimitive / valueOf: object operands fail-close for arithmetic/comparison
       const isObj = (v: unknown) => v !== null && typeof v === 'object';
       const op = binaryNode.operator;
       if (
         (isObj(left) || isObj(right)) &&
-        ['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op)
+        (['+', '-', '*', '/', '%', '<', '>', '<=', '>='].includes(op) ||
+          (options.rejectImplicitObjectCoercion && (op === '==' || op === '!=')))
       ) {
         return undefined;
       }
@@ -363,14 +373,14 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
     case 'LogicalExpression': {
       // jsep 也可以将 && 和 || 解析为 LogicalExpression
       const logicalNode = node as jsep.BinaryExpression;
-      const left = evaluateNode(logicalNode.left, context);
+      const left = evaluateNode(logicalNode.left, context, options);
 
       // 短路求值
       if (logicalNode.operator === '&&') {
-        return left && evaluateNode(logicalNode.right, context);
+        return left && evaluateNode(logicalNode.right, context, options);
       }
       if (logicalNode.operator === '||') {
-        return left || evaluateNode(logicalNode.right, context);
+        return left || evaluateNode(logicalNode.right, context, options);
       }
       return undefined;
     }
@@ -391,11 +401,20 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
           return 'undefined';
         }
         // 非 Identifier 的 typeof 正常求值
-        const arg = evaluateNode(unaryNode.argument, context);
+        const arg = evaluateNode(unaryNode.argument, context, options);
         return typeof arg;
       }
 
-      const arg = evaluateNode(unaryNode.argument, context);
+      const arg = evaluateNode(unaryNode.argument, context, options);
+
+      if (
+        options.rejectImplicitObjectCoercion &&
+        arg !== null &&
+        typeof arg === 'object' &&
+        (unaryNode.operator === '+' || unaryNode.operator === '-')
+      ) {
+        return undefined;
+      }
 
       switch (unaryNode.operator) {
         case '!':
@@ -411,10 +430,10 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'ConditionalExpression': {
       const condNode = node as jsep.ConditionalExpression;
-      const test = evaluateNode(condNode.test, context);
+      const test = evaluateNode(condNode.test, context, options);
       return test
-        ? evaluateNode(condNode.consequent, context)
-        : evaluateNode(condNode.alternate, context);
+        ? evaluateNode(condNode.consequent, context, options)
+        : evaluateNode(condNode.alternate, context, options);
     }
 
     case 'CallExpression': {
@@ -425,10 +444,10 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
       if (callNode.callee.type === 'MemberExpression') {
         const memberNode = callNode.callee as jsep.MemberExpression;
-        targetObj = evaluateNode(memberNode.object, context);
+        targetObj = evaluateNode(memberNode.object, context, options);
         if (targetObj === undefined || targetObj === null) return undefined;
         if (memberNode.computed) {
-          funcName = evaluateNode(memberNode.property, context);
+          funcName = evaluateNode(memberNode.property, context, options);
         } else {
           funcName = (memberNode.property as jsep.Identifier).name;
         }
@@ -490,8 +509,15 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         }
         if (typeof func !== 'function') return undefined;
         // 仅在白名单校验通过后求值参数
-        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context, options));
         if (args.some((a) => typeof a === 'function')) return undefined;
+        if (
+          options.rejectImplicitObjectCoercion &&
+          t === Math &&
+          args.some((argument) => argument !== null && typeof argument === 'object')
+        ) {
+          return undefined;
+        }
         try {
           return func.apply(t, args);
         } catch {
@@ -517,7 +543,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
           return undefined;
         }
         if (typeof func !== 'function') return undefined;
-        const args = callNode.arguments.map((arg) => evaluateNode(arg, context));
+        const args = callNode.arguments.map((arg) => evaluateNode(arg, context, options));
         if (args.some((a) => typeof a === 'function')) return undefined;
         try {
           return func.apply(targetObj, args);
@@ -547,7 +573,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
       if (typeof Cls !== 'function') {
         return undefined;
       }
-      const args = newNode.arguments.map((arg) => evaluateNode(arg, context));
+      const args = newNode.arguments.map((arg) => evaluateNode(arg, context, options));
       try {
         return new Cls(...args);
       } catch (err) {
@@ -557,7 +583,9 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
 
     case 'ArrayExpression': {
       const arrNode = node as jsep.ArrayExpression;
-      return arrNode.elements.map((elem) => (elem ? evaluateNode(elem, context) : undefined));
+      return arrNode.elements.map((elem) =>
+        elem ? evaluateNode(elem, context, options) : undefined,
+      );
     }
 
     case 'Compound': {
@@ -566,7 +594,7 @@ function evaluateNode(node: jsep.Expression, context: Record<string, any>): any 
         return undefined;
       }
       // 仅允许单表达式，拒绝多语句逗号串联
-      return evaluateNode(compoundNode.body[0], context);
+      return evaluateNode(compoundNode.body[0], context, options);
     }
 
     default:
@@ -615,7 +643,11 @@ export function clearASTCache(): void {
  * @param context 上下文数据
  * @returns 表达式求值结果
  */
-export function safeEvaluate(expression: string, context: Record<string, any> = {}): any {
+export function safeEvaluate(
+  expression: string,
+  context: Record<string, any> = {},
+  options: SafeEvaluateOptions = {},
+): any {
   if (typeof expression !== 'string' || !expression.trim()) {
     return undefined;
   }
@@ -632,7 +664,7 @@ export function safeEvaluate(expression: string, context: Record<string, any> = 
   }
   try {
     const ast = getCachedAST(expression);
-    return evaluateNode(ast, sanitized);
+    return evaluateNode(ast, sanitized, options);
   } catch (error) {
     // 表达式语法报错，安全返回 undefined
     return undefined;

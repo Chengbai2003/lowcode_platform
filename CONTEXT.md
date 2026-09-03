@@ -5,7 +5,7 @@
 ## Language
 
 **Page Logic**:
-随 `PageSchema` 持久化的页面逻辑声明集合；当前从 State Declaration 开始，后续承载 Computed 与 ActionFlow 声明。
+随 `PageSchema` 持久化的页面逻辑声明集合；当前承载 State Declaration 与 Computed Declaration，后续承载 ActionFlow 声明。
 _Avoid_: Runtime data, page script
 
 **State Declaration**:
@@ -21,8 +21,12 @@ Page Logic 中具名声明的安全标识符，用于在表达式、ActionFlow �
 _Avoid_: Variable name, property path
 
 **Computed Declaration**:
-以安全表达式声明、由 State 或其他 Computed 派生的只读逻辑成员；运行值不持久化。
+`logic.computed` 中以不带 `{{ }}` 的单一安全表达式声明、由 State 或其他 Computed 派生的只读逻辑成员；依赖元数据由共享 Contract 分析得到，声明随 Schema 保存，运行值不持久化。
 _Avoid_: Formula result, computed state
+
+**Computed Analysis**:
+Contract 从 Computed Declaration 唯一派生的稳定拓扑与 State/Computed 直接依赖；它是运行和编译输入，不属于 PageSchema，也不持久化。
+_Avoid_: Stored dependency graph, renderer dependency parser
 
 **ActionFlow**:
 Page Logic 中具名、声明式且有明确错误和取消语义的动作流程。

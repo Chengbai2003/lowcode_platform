@@ -93,6 +93,9 @@ export interface ExecutionContext {
   // 全局状态
   state: Record<string, unknown>;
 
+  // 由 State 派生的只读 Computed 命名空间
+  computed: Readonly<Record<string, unknown>>;
+
   // Host dispatch hook（可选）
   dispatch?: (action: unknown) => void;
 

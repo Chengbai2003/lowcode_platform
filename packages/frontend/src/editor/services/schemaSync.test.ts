@@ -5,7 +5,10 @@ import { applyComponentSnapshot, serializePageSchema } from './schemaSync';
 const statefulSchema: PageSchema = {
   schemaVersion: 0,
   rootId: 'root',
-  logic: { states: { count: 1 } },
+  logic: {
+    states: { count: 1 },
+    computed: { next: 'state.count + 1' },
+  },
   components: {
     root: { id: 'root', type: 'Page', childrenIds: ['child'] },
     child: { id: 'child', type: 'Text', props: { children: 'before' } },
