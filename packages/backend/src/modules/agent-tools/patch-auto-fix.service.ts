@@ -1,28 +1,21 @@
 import { Injectable } from '@nestjs/common';
+import { isDeepStrictEqual } from 'node:util';
 import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './types/editor-patch.types';
 import { EditorAction } from './types/editor-action.types';
 
+export interface PatchAutoFixResult {
+  patch: EditorPatchOperation[];
+  warnings: string[];
+  /** 被 AutoFix 规范化而发生变化的顶层 Patch operation 数量。 */
+  repairCount: number;
+}
+
 @Injectable()
 export class PatchAutoFixService {
-  autoFix(patch: readonly EditorPatchOperation[]): {
-    patch: EditorPatchOperation[];
-    warnings: string[];
-  };
-  autoFix(
-    patch: readonly EditorPatchOperation[],
-    schema: PageSchema,
-  ): {
-    patch: EditorPatchOperation[];
-    warnings: string[];
-  };
-  autoFix(
-    patch: readonly EditorPatchOperation[],
-    schema?: PageSchema,
-  ): {
-    patch: EditorPatchOperation[];
-    warnings: string[];
-  } {
+  autoFix(patch: readonly EditorPatchOperation[]): PatchAutoFixResult;
+  autoFix(patch: readonly EditorPatchOperation[], schema: PageSchema): PatchAutoFixResult;
+  autoFix(patch: readonly EditorPatchOperation[], schema?: PageSchema): PatchAutoFixResult {
     const warnings: string[] = [];
     let workingSchema = schema ? this.cloneSchema(schema) : undefined;
 
@@ -119,6 +112,10 @@ export class PatchAutoFixService {
     return {
       patch: normalizedPatch,
       warnings,
+      repairCount: normalizedPatch.reduce(
+        (count, operation, index) => count + (isDeepStrictEqual(operation, patch[index]) ? 0 : 1),
+        0,
+      ),
     };
   }
 

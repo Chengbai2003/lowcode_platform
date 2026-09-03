@@ -440,7 +440,7 @@ describe('AgentRunnerService', () => {
         if (name === 'auto_fix_patch') {
           context.warnings = [...context.warnings, 'auto-fixed'];
           return {
-            data: { patch: input.patch },
+            data: { patch: input.patch, repairCount: 1 },
             warnings: ['auto-fixed'],
           };
         }
@@ -670,6 +670,7 @@ describe('AgentRunnerService', () => {
     expect(result.previewSchema.components.button.props?.children).toBe('提交');
     expect(result.changeGroups).toHaveLength(1);
     expect(result.warnings).toContain('auto-fixed');
+    expect(result.repairCount).toBe(0);
     expect(toolExecutionService.executeTool).toHaveBeenNthCalledWith(
       2,
       'auto_fix_patch',
@@ -716,6 +717,7 @@ describe('AgentRunnerService', () => {
       },
     ]);
     expect(result.retryCount).toBe(0);
+    expect(result.repairCount).toBe(0);
   });
 
   it('auto resolves a strong candidate before running the agent', async () => {
@@ -1135,6 +1137,7 @@ describe('AgentRunnerService', () => {
       targetCount: 2,
       changedTargetCount: 2,
     });
+    expect(result.repairCount).toBe(0);
   });
 
   it('invalidates scope confirmation when the selected container changes', async () => {

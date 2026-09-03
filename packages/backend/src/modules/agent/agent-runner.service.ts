@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { isDeepStrictEqual } from 'node:util';
 import { AIService, AIToolCallingError } from '../ai/ai.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
@@ -102,6 +103,8 @@ export class AgentRunnerService {
       reporter?: AgentProgressReporter;
       conversationContext?: AgentConversationContext;
       executionPath?: 'auto' | 'tool_call';
+      /** 仅供受控内部调用观测实际生效的预算 Profile，不进入 HTTP 协议。 */
+      onExecutionProfile?: (profile: AgentPatchRunProfile) => void;
     },
   ): Promise<
     | AgentEditPatchResponse
@@ -271,12 +274,18 @@ export class AgentRunnerService {
           traceId,
           reporter,
         ));
+      // fast_path 被强制走 Tool Calling 或自然快速路径未命中时，实际预算收敛为 simple_patch。
+      const effectiveProfile = fastPathApplied
+        ? selectedProfile
+        : selectedProfile === 'fast_path'
+          ? 'simple_patch'
+          : selectedProfile;
+      options?.onExecutionProfile?.(effectiveProfile);
 
       if (fastPathApplied) {
         metrics.stepCount = 1;
         metrics.toolCallCount = Math.max(metrics.toolCallCount, 1);
       } else {
-        const effectiveProfile = selectedProfile === 'fast_path' ? 'simple_patch' : selectedProfile;
         const limits = this.policyService.getLimits(effectiveProfile);
         const agentTools = this.toolRegistry.listDefinitions('agent');
 
@@ -360,17 +369,18 @@ export class AgentRunnerService {
         targetId: resolvedSelectedId,
       });
 
-      const { patch, previewSchema, previewSummary, changeGroups, risk } = await this.finalizePatch(
-        dto,
-        context,
-        traceId,
-        resolvedSelectedId,
-        selectedProfile,
-        reporter,
-        () => {
-          retryCount += 1;
-        },
-      );
+      const { patch, previewSchema, previewSummary, changeGroups, risk, repairCount } =
+        await this.finalizePatch(
+          dto,
+          context,
+          traceId,
+          resolvedSelectedId,
+          effectiveProfile,
+          reporter,
+          () => {
+            retryCount += 1;
+          },
+        );
 
       this.logger.log(
         `[${traceId}] finish reason=${finishReason} steps=${metrics.stepCount} toolCalls=${metrics.toolCallCount} patchOps=${patch.length}`,
@@ -404,6 +414,7 @@ export class AgentRunnerService {
           manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
         },
         retryCount,
+        repairCount,
       };
     } catch (error) {
       if (error instanceof AgentToolException) {
@@ -710,6 +721,7 @@ export class AgentRunnerService {
     previewSummary: string;
     changeGroups: ReturnType<typeof buildPatchPresentation>['changeGroups'];
     risk: ReturnType<typeof buildPatchPresentation>['risk'];
+    repairCount: number;
     scopeSummary?: AgentPatchScopeSummary;
   }> {
     const guardContext = this.createGuardContext(context);
@@ -726,9 +738,9 @@ export class AgentRunnerService {
       reporter,
       onRetry,
     );
-    const autoFixedPatch = (
-      (autoFixResult.data as { patch?: EditorPatchOperation[] } | undefined)?.patch ?? rawPatch
-    ).map((operation) => ({ ...operation }));
+    const autoFixData = autoFixResult.data as { patch?: EditorPatchOperation[] } | undefined;
+    const autoFixedPatch = (autoFixData?.patch ?? rawPatch).map((operation) => ({ ...operation }));
+    const repairCount = this.countChangedPatchOperations(rawPatch, autoFixedPatch);
     this.logger.log(
       `[${traceId}] auto-fix warnings=${autoFixResult.warnings?.length ?? 0} patchOps=${autoFixedPatch.length}`,
     );
@@ -801,8 +813,23 @@ export class AgentRunnerService {
       previewSummary: previewArtifacts.previewSummary,
       changeGroups: previewArtifacts.changeGroups,
       risk: previewArtifacts.risk,
+      repairCount,
       scopeSummary,
     };
+  }
+
+  private countChangedPatchOperations(
+    before: readonly EditorPatchOperation[],
+    after: readonly EditorPatchOperation[],
+  ): number {
+    const longestLength = Math.max(before.length, after.length);
+    let count = 0;
+    for (let index = 0; index < longestLength; index += 1) {
+      if (!isDeepStrictEqual(before[index], after[index])) {
+        count += 1;
+      }
+    }
+    return count;
   }
 
   private async createExecutionContextWithRecovery(

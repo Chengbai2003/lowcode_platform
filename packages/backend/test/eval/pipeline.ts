@@ -23,7 +23,10 @@ import { AgentScopeConfirmationService } from '../../src/modules/agent/agent-sco
 import { AgentTraceService } from '../../src/modules/agent/agent-trace.service';
 import { requireValidPageSchema } from '../../src/modules/page-schema/schema-validation';
 import { normalizeFinalPatch } from '../../src/modules/agent/agent-patch-normalizer.utils';
-import { AgentPolicyService } from '../../src/modules/agent/agent-policy.service';
+import {
+  AgentPolicyService,
+  type AgentPatchRunProfile,
+} from '../../src/modules/agent/agent-policy.service';
 import { isSafeInlineExpression } from '../../src/modules/compiler/security/validators';
 import { PageSchemaRepository } from '../../src/modules/page-schema/repositories/page-schema.repository';
 import { PageSchemaService } from '../../src/modules/page-schema/page-schema.service';
@@ -42,7 +45,14 @@ import { SchemaResolverService } from '../../src/modules/schema-context/schema-r
 import { SchemaSlicerService } from '../../src/modules/schema-context/schema-slicer.service';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { EditorPatchOperation } from '../../src/modules/agent-tools/types/editor-patch.types';
-import type { EvalCase, EvalCaseResult, ExpectedOutcome } from './eval-case.types';
+import type {
+  EvalCase,
+  EvalCaseResult,
+  EvalCaseTelemetry,
+  EvalExecutionProfile,
+  ExpectedOutcome,
+} from './eval-case.types';
+import { toObservedToolCalls } from './report-contract';
 
 /** 与 PageSchemaService 一致的可信运行时兼容元数据 */
 const DRAFT_RUNTIME_COMPATIBILITY = BUILTIN_ANTD_RUNTIME_PROFILE;
@@ -61,6 +71,8 @@ function makePatchValidationService(): PatchValidationService {
 
 const FIXTURE_PROVIDER = 'openai';
 const FIXTURE_REPLAY_INSTRUCTION = '执行录制的补丁工具调用';
+export const FIXTURE_REPLAY_INSTRUCTION_VERSION = 'fixture-tool-calls-v1';
+export const FIXTURE_TOOL_MANIFEST_VERSION = 'agent-tool-registry-v1';
 
 interface FixtureToolCall {
   name: string;
@@ -218,15 +230,21 @@ function alignAndCompare(
   return { aligned, matches: mismatches.length === 0, mismatches };
 }
 
-function makeResult(kase: EvalCase, actual: Record<string, unknown>): EvalCaseResult {
+function makeResult(
+  kase: EvalCase,
+  actual: Record<string, unknown>,
+  metadata: Pick<EvalCaseResult, 'executionProfile' | 'telemetry'> = {},
+): EvalCaseResult {
   const { aligned, matches, mismatches } = alignAndCompare(kase.expected, actual);
   return {
     id: kase.id,
     category: kase.category,
     title: kase.title,
+    status: matches ? 'passed' : 'failed',
     actual: aligned,
     matchesExpected: matches,
     mismatches,
+    ...metadata,
   };
 }
 
@@ -262,6 +280,8 @@ async function runDraftCase(kase: EvalCase): Promise<EvalCaseResult> {
 export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
   response: Awaited<ReturnType<AgentRunnerService['runEdit']>>;
   fixtureToolNames: readonly string[];
+  executionProfile: EvalExecutionProfile;
+  telemetry: EvalCaseTelemetry;
 }> {
   // ponytail: Repository 目前只从进程 env 读取存储路径；Eval Jest 因此固定 --runInBand。
   const tempDir = await mkdtemp(join(tmpdir(), 'agent-eval-runner-'));
@@ -302,6 +322,7 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
       patchValidationService,
     );
     const fixtureAI = new FixtureAIService(patch);
+    const traceService = new AgentTraceService();
     const runner = new AgentRunnerService(
       fixtureAI as unknown as AIService,
       new ToolExecutionService(pageSchemaService, contextAssembler, toolRegistry),
@@ -312,8 +333,10 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
       new AgentIntentNormalizationService(collectionTargetResolver),
       new AgentIntentConfirmationService(),
       new AgentScopeConfirmationService(),
-      new AgentTraceService(),
+      traceService,
     );
+    let policyProfile: AgentPatchRunProfile | undefined;
+    const startedAt = Date.now();
     const response = await runner.runEdit(
       {
         instruction: FIXTURE_REPLAY_INSTRUCTION,
@@ -324,9 +347,34 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
         provider: FIXTURE_PROVIDER,
       },
       `eval-${kase.id}`,
-      { executionPath: 'tool_call' },
+      {
+        executionPath: 'tool_call',
+        onExecutionProfile: (profile) => {
+          policyProfile = profile;
+        },
+      },
     );
-    return { response, fixtureToolNames: fixtureAI.executedToolNames };
+    if (!policyProfile) {
+      throw new Error(
+        `Eval case ${kase.id}: AgentRunner did not report an effective policy profile`,
+      );
+    }
+    const trace = traceService.getTrace(response.traceId);
+    return {
+      response,
+      fixtureToolNames: fixtureAI.executedToolNames,
+      executionProfile: {
+        replayInstructionVersion: FIXTURE_REPLAY_INSTRUCTION_VERSION,
+        policyProfile,
+      },
+      telemetry: {
+        latencyMs: Date.now() - startedAt,
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        cost: null,
+        toolCalls: toObservedToolCalls(trace?.toolCalls),
+        repairCount: response.mode === 'patch' ? (response.repairCount ?? null) : null,
+      },
+    };
   } finally {
     if (previousPath === undefined) delete process.env.PAGE_SCHEMA_FILE_PATH;
     else process.env.PAGE_SCHEMA_FILE_PATH = previousPath;
@@ -396,7 +444,10 @@ async function runPatchCase(kase: EvalCase): Promise<EvalCaseResult> {
     actual.events = actualEvents;
   }
 
-  return makeResult(kase, actual);
+  return makeResult(kase, actual, {
+    executionProfile: replay.executionProfile,
+    telemetry: replay.telemetry,
+  });
 }
 
 async function runValidationCase(kase: EvalCase): Promise<EvalCaseResult> {
@@ -548,8 +599,11 @@ export function serializeResult(result: EvalCaseResult): string {
     sortDeep({
       id: result.id,
       category: result.category,
+      status: result.status,
       actual: result.actual,
       matchesExpected: result.matchesExpected,
+      mismatches: result.mismatches,
+      executionProfile: result.executionProfile,
     }),
   );
 }

@@ -146,6 +146,8 @@ export interface AgentEditPatchResponse {
   traceId: string;
   route: AgentRouteInfo;
   retryCount?: number;
+  /** 被 AutoFix 规范化而发生变化的 Patch operation 数量；不包含上下文或工具调用重试。 */
+  repairCount?: number;
   scopeSummary?: AgentPatchScopeSummary;
 }
 

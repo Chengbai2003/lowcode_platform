@@ -4,7 +4,8 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import type { EvalCaseCategory, EvalRunReport } from './eval-case.types';
+import type { EvalCaseCategory } from './eval-case.types';
+import type { EvalRunReport } from './report-contract';
 
 // 默认写入仓库根的 .codex/artifacts（与 compiler:regression 产物一致）
 export const EVAL_ARTIFACT_DIR =
@@ -35,17 +36,65 @@ function pct(value: number | null): string {
   return `${(value * 100).toFixed(2)}%`;
 }
 
+function statusLabel(status: EvalRunReport['cases'][number]['status']): string {
+  switch (status) {
+    case 'passed':
+      return '✅ passed';
+    case 'failed':
+      return '❌ failed';
+    case 'unsupported':
+      return '⏭️ unsupported';
+    case 'infra_error':
+      return '⚠️ infra_error';
+    case 'not_selected':
+      return '⏸️ not_selected';
+  }
+}
+
+function runtimeLabel(
+  runtimeCompatibility: EvalRunReport['environment']['runtimeCompatibility'],
+): string {
+  if (!runtimeCompatibility) return 'unavailable (runtime metadata was not discovered)';
+  return `${runtimeCompatibility.componentPresetId}@${runtimeCompatibility.componentPresetVersion} / renderer@${runtimeCompatibility.rendererVersion}`;
+}
+
 export function renderMarkdown(report: EvalRunReport): string {
   const lines: string[] = [];
-  lines.push('# Agent Deterministic Eval Report');
-  lines.push('');
-  lines.push(`- Revision: \`${report.revision}\``);
-  lines.push(`- Contract package: v${report.contractPackageVersion}`);
   lines.push(
-    `- Eval harness: v${report.harnessVersion}（case schema v${report.caseSchemaVersion}）`,
+    `# Agent ${report.run.mode === 'deterministic' ? 'Deterministic' : 'Live'} Eval Report`,
   );
-  lines.push(`- Generated at: ${report.generatedAt}`);
-  lines.push(`- Cases: ${report.totalCases}`);
+  lines.push('');
+  lines.push(`- Report: v${report.reportVersion}`);
+  lines.push(`- Run: \`${report.run.runId}\` (${report.run.mode})`);
+  lines.push(`- Revision: \`${report.run.revision}\` (${report.run.revisionSource})`);
+  lines.push(`- Generated at: ${report.run.generatedAt}`);
+  lines.push(
+    `- Provider / Model: ${report.run.provider ?? 'n/a'} / ${report.run.model ?? 'n/a'} (${report.run.modelSelectionSource})`,
+  );
+  lines.push(
+    `- Contract: package v${report.environment.contract.packageVersion} (${report.environment.contract.packageVersionSource}) / PageSchema v${report.environment.contract.pageSchemaVersion} / Eval Case v${report.environment.contract.evalCaseSchemaVersion}`,
+  );
+  lines.push(`- Runtime: ${runtimeLabel(report.environment.runtimeCompatibility)}`);
+  lines.push(
+    `- Source versions: prompt=${report.environment.sourceVersions.prompt}, tool=${report.environment.sourceVersions.tool}, manifest=${report.environment.sourceVersions.manifest} (${report.environment.sourceVersions.source})`,
+  );
+  lines.push(`- Canonical results digest: \`${report.resultsDigest}\``);
+  lines.push('');
+  lines.push('## Coverage');
+  lines.push('');
+  lines.push('| 指标 | 值 |');
+  lines.push('| --- | --- |');
+  lines.push(
+    `| Total / Selected / Executed | ${report.coverage.totalCases} / ${report.coverage.selectedCases} / ${report.coverage.executedCases} |`,
+  );
+  lines.push(
+    `| Passed / Failed | ${report.coverage.passedCases} / ${report.coverage.failedCases} |`,
+  );
+  lines.push(
+    `| Unsupported / Infra Error / Not Selected | ${report.coverage.unsupportedCases} / ${report.coverage.infraErrorCases} / ${report.coverage.notSelectedCases} |`,
+  );
+  lines.push(`| Coverage Rate | ${pct(report.coverage.coverageRate)} |`);
+  lines.push(`| Quality Pass Rate | ${pct(report.coverage.qualityPassRate)} |`);
   lines.push('');
   lines.push('## Metrics');
   lines.push('');
@@ -60,15 +109,17 @@ export function renderMarkdown(report: EvalRunReport): string {
   lines.push('');
   lines.push('## Cases');
   lines.push('');
-  lines.push('| 类别 | 用例 | 结果 | 说明 |');
+  lines.push('| 类别 | 用例 | 状态 | 说明 |');
   lines.push('| --- | --- | --- | --- |');
   for (const result of report.cases) {
     const label = CATEGORY_LABELS[result.category];
-    const status = result.matchesExpected ? '✅' : '❌';
-    const detail = result.matchesExpected
-      ? JSON.stringify(result.actual)
-      : result.mismatches.join('; ');
-    lines.push(`| ${label} | ${result.id} | ${status} | ${detail.replace(/\|/g, '\\|')} |`);
+    const detail =
+      result.mismatchCount === undefined
+        ? result.status
+        : `${result.mismatchCount} field mismatch(es)`;
+    lines.push(
+      `| ${label} | ${result.id} | ${statusLabel(result.status)} | ${detail.replace(/\|/g, '\\|')} |`,
+    );
   }
   lines.push('');
   return lines.join('\n');

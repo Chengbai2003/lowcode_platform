@@ -11,17 +11,24 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { runEvalCase, serializeResult } from './pipeline';
-import { computeMetrics } from './metrics';
+import { CURRENT_DRAFT_SCHEMA_VERSION } from '@lowcode-platform/schema-contract';
+import { ANTD_MANIFEST_VERSION } from '@lowcode-platform/preset-antd';
+import { DEPLOYMENT_RUNTIME_PROFILE_REGISTRY } from '../../src/modules/runtime-profile/deployment-runtime-profile-registry';
+import {
+  FIXTURE_REPLAY_INSTRUCTION_VERSION,
+  FIXTURE_TOOL_MANIFEST_VERSION,
+  runEvalCase,
+  serializeResult,
+} from './pipeline';
+import { computeMetrics, type EvalReplayObservations } from './metrics';
 import { writeReports } from './report';
 import { validateEvalCase } from './case-contract';
+import { createEvalRunReport, type EvalRunReport, type EvalReportCase } from './report-contract';
 import {
   BASELINE_CASE_QUOTAS,
   EVAL_CASE_SCHEMA_VERSION,
-  EVAL_HARNESS_VERSION,
   type EvalCase,
   type EvalCaseResult,
-  type EvalRunReport,
 } from './eval-case.types';
 
 const CASES_DIR = join(__dirname, 'cases');
@@ -63,9 +70,104 @@ function contractPackageVersion(): string {
 async function runAll(cases: EvalCase[]): Promise<EvalCaseResult[]> {
   const results: EvalCaseResult[] = [];
   for (const kase of cases) {
-    results.push(await runEvalCase(kase));
+    const startedAt = Date.now();
+    try {
+      const result = await runEvalCase(kase);
+      results.push({
+        ...result,
+        telemetry: result.telemetry ?? unavailableTelemetry(Date.now() - startedAt),
+      });
+    } catch (error) {
+      results.push({
+        id: kase.id,
+        category: kase.category,
+        title: kase.title,
+        status: 'infra_error',
+        actual: {},
+        matchesExpected: false,
+        mismatches: [error instanceof Error ? error.message : String(error)],
+        telemetry: unavailableTelemetry(Date.now() - startedAt),
+      });
+    }
   }
   return results;
+}
+
+function unavailableTelemetry(latencyMs: number): EvalReportCase['telemetry'] {
+  return {
+    latencyMs,
+    usage: null,
+    cost: null,
+    toolCalls: null,
+    repairCount: null,
+  };
+}
+
+function uniqueResultsById(results: readonly EvalCaseResult[]): Map<string, EvalCaseResult> | null {
+  const byId = new Map<string, EvalCaseResult>();
+  for (const result of results) {
+    if (byId.has(result.id)) return null;
+    byId.set(result.id, result);
+  }
+  return byId;
+}
+
+function buildReplayObservations(
+  firstRun: readonly EvalCaseResult[],
+  secondRun: readonly EvalCaseResult[],
+): EvalReplayObservations {
+  if (firstRun.length !== secondRun.length) return null;
+  const firstById = uniqueResultsById(firstRun);
+  const secondById = uniqueResultsById(secondRun);
+  if (firstById === null || secondById === null) return null;
+  if (![...firstById.keys()].every((id) => secondById.has(id))) return null;
+
+  return firstRun.map((result) => ({
+    id: result.id,
+    reproducible:
+      serializeResult(result) === serializeResult(secondById.get(result.id) as EvalCaseResult),
+  }));
+}
+
+function buildReport(
+  cases: EvalCase[],
+  results: EvalCaseResult[],
+  replay: EvalReplayObservations,
+): EvalRunReport {
+  const runtimeProfile = DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveSystem('default');
+  return createEvalRunReport({
+    run: {
+      runId: `deterministic-${Date.now().toString(36)}`,
+      mode: 'deterministic',
+      generatedAt: new Date().toISOString(),
+      revision: revision(),
+      revisionSource: 'local_checkout',
+      provider: 'fixture',
+      model: null,
+      modelSelectionSource: 'fixture',
+    },
+    environment: {
+      contract: {
+        packageVersion: contractPackageVersion(),
+        packageVersionSource: 'local_checkout',
+        pageSchemaVersion: CURRENT_DRAFT_SCHEMA_VERSION,
+        evalCaseSchemaVersion: EVAL_CASE_SCHEMA_VERSION,
+      },
+      runtimeCompatibility: {
+        componentPresetId: runtimeProfile.componentPresetId,
+        componentPresetVersion: runtimeProfile.componentPresetVersion,
+        rendererVersion: runtimeProfile.rendererVersion,
+      },
+      sourceVersions: {
+        prompt: FIXTURE_REPLAY_INSTRUCTION_VERSION,
+        tool: FIXTURE_TOOL_MANIFEST_VERSION,
+        manifest: ANTD_MANIFEST_VERSION,
+        source: 'local_checkout',
+      },
+    },
+    metrics: computeMetrics(results, replay),
+    cases: results,
+  });
 }
 
 describe('Agent deterministic eval (M0-3)', () => {
@@ -96,38 +198,71 @@ describe('Agent deterministic eval (M0-3)', () => {
   });
 
   it('相同代码与 Fixtures 两次运行结果完全一致（Replay Reproducibility）', () => {
-    const first = firstRun.map(serializeResult);
-    const second = secondRun.map(serializeResult);
-    expect(second).toEqual(first);
+    const replay = buildReplayObservations(firstRun, secondRun);
+
+    expect(replay).not.toBeNull();
+    expect(replay?.every((result) => result.reproducible)).toBe(true);
+  });
+
+  it('两次运行的 Case ID 不能一一对应时，不计算 Replay Reproducibility', () => {
+    const missingCase = buildReplayObservations(firstRun, secondRun.slice(1));
+    const duplicateCase = buildReplayObservations(firstRun, [
+      ...secondRun.slice(1),
+      { ...secondRun[0], id: secondRun[1].id },
+    ]);
+    const reorderedCases = buildReplayObservations(firstRun, [...secondRun].reverse());
+
+    expect(missingCase).toBeNull();
+    expect(duplicateCase).toBeNull();
+    expect(reorderedCases?.every((result) => result.reproducible)).toBe(true);
+    expect(computeMetrics(firstRun, missingCase).replayReproducibility).toBeNull();
   });
 
   it('输出机器可读 JSON 与人类可读 Markdown 报告', async () => {
-    const replay = firstRun.map((r, index) => ({
-      id: r.id,
-      reproducible: serializeResult(r) === serializeResult(secondRun[index]),
-    }));
-    const report: EvalRunReport = {
-      harnessVersion: EVAL_HARNESS_VERSION,
-      caseSchemaVersion: EVAL_CASE_SCHEMA_VERSION,
-      contractPackageVersion: contractPackageVersion(),
-      revision: revision(),
-      generatedAt: new Date().toISOString(),
-      totalCases: cases.length,
-      metrics: computeMetrics(cases, firstRun, replay),
-      cases: firstRun,
-    };
+    const replay = buildReplayObservations(firstRun, secondRun);
+    const report = buildReport(cases, firstRun, replay);
     const { jsonPath, markdownPath } = await writeReports(report);
     expect(jsonPath).toContain('deterministic.json');
     expect(markdownPath).toContain('deterministic.md');
+    expect(report.reportVersion).toBe(1);
+    expect(report.coverage).toMatchObject({
+      totalCases: 20,
+      selectedCases: 20,
+      executedCases: 20,
+      passedCases: 20,
+      coverageRate: 1,
+      qualityPassRate: 1,
+    });
+    const runtimeProfile = DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveSystem('default');
+    expect(report.environment.runtimeCompatibility).toEqual({
+      componentPresetId: runtimeProfile.componentPresetId,
+      componentPresetVersion: runtimeProfile.componentPresetVersion,
+      rendererVersion: runtimeProfile.rendererVersion,
+    });
+    expect(report.cases.filter((result) => result.category === 'patch')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          executionProfile: expect.objectContaining({
+            replayInstructionVersion: FIXTURE_REPLAY_INSTRUCTION_VERSION,
+            policyProfile: 'simple_patch',
+          }),
+        }),
+      ]),
+    );
+    expect(report.cases).toHaveLength(20);
+    expect(report.cases.every((result) => result.telemetry !== undefined)).toBe(true);
+    expect(
+      report.cases
+        .filter((result) => result.category !== 'patch')
+        .every((result) => result.telemetry.usage === null && result.telemetry.toolCalls === null),
+    ).toBe(true);
   });
 
   it('确定性门禁：Expected Outcome Rate 与 Replay Reproducibility 均为 100%', () => {
-    const replay = firstRun.map((r, index) => ({
-      id: r.id,
-      reproducible: serializeResult(r) === serializeResult(secondRun[index]),
-    }));
-    const metrics = computeMetrics(cases, firstRun, replay);
+    const replay = buildReplayObservations(firstRun, secondRun);
+    const metrics = computeMetrics(firstRun, replay);
     expect(metrics.expectedOutcomeRate).toBe(1);
     expect(metrics.replayReproducibility).toBe(1);
+    expect(firstRun.every((result) => result.status === 'passed')).toBe(true);
   });
 });

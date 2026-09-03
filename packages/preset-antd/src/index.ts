@@ -11,7 +11,7 @@
  */
 
 export { antdRuntime } from './runtime';
-export { antdManifest } from './manifest';
+export { antdManifest, ANTD_MANIFEST_VERSION } from './manifest';
 export { antdValidation, isUnsafeResourceUrl } from './validation';
 export { antdCompilerBindings } from './compiler';
 export {

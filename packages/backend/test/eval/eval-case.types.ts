@@ -1,3 +1,5 @@
+import type { AgentPatchRunProfile } from '../../src/modules/agent/agent-policy.service';
+
 /**
  * Agent Eval — 版本化用例定义（Issue #18 / M0-3）
  *
@@ -8,9 +10,34 @@
  */
 
 export const EVAL_CASE_SCHEMA_VERSION = 1;
-export const EVAL_HARNESS_VERSION = 1;
 
 export type EvalCaseCategory = 'draft' | 'patch' | 'validation' | 'conflict' | 'safety';
+
+/**
+ * 报告层的执行状态。`unsupported` 与 `not_selected` 不等同于通过；
+ * `infra_error` 用于把执行环境故障与模型/契约质量失败分开呈现。
+ */
+export type EvalCaseStatus = 'passed' | 'failed' | 'unsupported' | 'infra_error' | 'not_selected';
+
+export interface EvalExecutionProfile {
+  replayInstructionVersion: string;
+  policyProfile: AgentPatchRunProfile;
+}
+
+export interface EvalCaseTelemetry {
+  latencyMs: number | null;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  } | null;
+  cost: number | null;
+  /** 只记录工具名与成功状态；不得包含 Prompt、工具输入或输出。 */
+  /** `null` 表示 Trace 不可用；空数组只表示 Trace 明确记录了零次调用。 */
+  toolCalls: ReadonlyArray<{ toolName: string; success: boolean }> | null;
+  /** 被 Patch AutoFix 规范化的 operation 数；不包含上下文或工具调用重试。 */
+  repairCount: number | null;
+}
 
 /** 20 个基线用例的类别配额（M0） */
 export const BASELINE_CASE_QUOTAS: Record<EvalCaseCategory, number> = {
@@ -88,27 +115,11 @@ export interface EvalCaseResult {
   id: string;
   category: EvalCaseCategory;
   title: string;
+  status: EvalCaseStatus;
   /** runner 产出的实际结果（键集与 expected 对齐后比较） */
   actual: Record<string, unknown>;
   matchesExpected: boolean;
   mismatches: string[];
-}
-
-export interface EvalRunReport {
-  harnessVersion: number;
-  caseSchemaVersion: number;
-  contractPackageVersion: string;
-  /** 生成报告时的 git 提交（复现锚点） */
-  revision: string;
-  generatedAt: string;
-  totalCases: number;
-  metrics: {
-    expectedOutcomeRate: number;
-    schemaValidRate: number | null;
-    patchMinimality: number | null;
-    safetyBlockRate: number | null;
-    versionConflictIntegrity: number | null;
-    replayReproducibility: number;
-  };
-  cases: EvalCaseResult[];
+  executionProfile?: EvalExecutionProfile;
+  telemetry?: EvalCaseTelemetry;
 }
