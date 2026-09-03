@@ -72,7 +72,6 @@ function makePatchValidationService(): PatchValidationService {
 const FIXTURE_PROVIDER = 'openai';
 const FIXTURE_REPLAY_INSTRUCTION = '执行录制的补丁工具调用';
 export const FIXTURE_REPLAY_INSTRUCTION_VERSION = 'fixture-tool-calls-v1';
-export const FIXTURE_TOOL_MANIFEST_VERSION = 'agent-tool-registry-v1';
 
 interface FixtureToolCall {
   name: string;

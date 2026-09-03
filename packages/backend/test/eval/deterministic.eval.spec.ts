@@ -14,12 +14,9 @@ import { join } from 'node:path';
 import { CURRENT_DRAFT_SCHEMA_VERSION } from '@lowcode-platform/schema-contract';
 import { ANTD_MANIFEST_VERSION } from '@lowcode-platform/preset-antd';
 import { DEPLOYMENT_RUNTIME_PROFILE_REGISTRY } from '../../src/modules/runtime-profile/deployment-runtime-profile-registry';
-import {
-  FIXTURE_REPLAY_INSTRUCTION_VERSION,
-  FIXTURE_TOOL_MANIFEST_VERSION,
-  runEvalCase,
-  serializeResult,
-} from './pipeline';
+import { AGENT_PROMPT_VERSION } from '../../src/modules/agent/agent-prompt.builder';
+import { AGENT_TOOL_REGISTRY_VERSION } from '../../src/modules/agent-tools/tool-registry.service';
+import { FIXTURE_REPLAY_INSTRUCTION_VERSION, runEvalCase, serializeResult } from './pipeline';
 import { computeMetrics, type EvalReplayObservations } from './metrics';
 import { writeReports } from './report';
 import { validateEvalCase } from './case-contract';
@@ -159,8 +156,8 @@ function buildReport(
         rendererVersion: runtimeProfile.rendererVersion,
       },
       sourceVersions: {
-        prompt: FIXTURE_REPLAY_INSTRUCTION_VERSION,
-        tool: FIXTURE_TOOL_MANIFEST_VERSION,
+        prompt: AGENT_PROMPT_VERSION,
+        tool: AGENT_TOOL_REGISTRY_VERSION,
         manifest: ANTD_MANIFEST_VERSION,
         source: 'local_checkout',
       },
@@ -239,6 +236,13 @@ describe('Agent deterministic eval (M0-3)', () => {
       componentPresetVersion: runtimeProfile.componentPresetVersion,
       rendererVersion: runtimeProfile.rendererVersion,
     });
+    expect(report.environment.sourceVersions).toEqual({
+      prompt: AGENT_PROMPT_VERSION,
+      tool: AGENT_TOOL_REGISTRY_VERSION,
+      manifest: ANTD_MANIFEST_VERSION,
+      source: 'local_checkout',
+    });
+    expect(AGENT_PROMPT_VERSION).not.toBe(FIXTURE_REPLAY_INSTRUCTION_VERSION);
     expect(report.cases.filter((result) => result.category === 'patch')).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

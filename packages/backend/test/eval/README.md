@@ -90,6 +90,10 @@ Report v1 是稳定契约：新增破坏性字段或语义时新建 `reportVersi
 语义时必须递增，不能拿 ComponentPreset 版本替代。Live 的 `AGENT_EVAL_MANIFEST_VERSION` 必须是
 目标部署的实际值，不能省略或从本地 Preset 推断。
 
+确定性报告的 Prompt 与 Tool 版本分别读取生产代码旁的 `AGENT_PROMPT_VERSION` 和
+`AGENT_TOOL_REGISTRY_VERSION`；修改生产 Prompt 语义，或工具名称、Schema、语义时必须递增对应版本。
+Fixture 回放指令使用独立的 `FIXTURE_REPLAY_INSTRUCTION_VERSION`，不能替代生产 Prompt 版本。
+
 `eval:live` 当前只适配此报告外壳；用例 mode 声明、100% Live 覆盖、多样本趋势和 P50/P95
 仍属于 A3，不能把 `unsupported` 误报为已验证。
 

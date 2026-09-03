@@ -313,7 +313,7 @@ describe('Live Eval report summary', () => {
     }
   });
 
-  it('marks unverifiable expected rejections as infra errors', async () => {
+  it('separates observable rejection failures from missing trace infrastructure', async () => {
     const server = createServer(async (request, response) => {
       const url = new URL(request.url ?? '/', 'http://localhost');
       const send = (status: number, body: unknown) => {
@@ -337,10 +337,22 @@ describe('Live Eval report summary', () => {
         let rawBody = '';
         for await (const chunk of request) rawBody += chunk;
         const payload = JSON.parse(rawBody) as { pageId: string };
+        if (payload.pageId.endsWith('validation-missing-root-id')) {
+          return send(200, {
+            data: {
+              traceId: 'trace-unexpected-success',
+              mode: 'schema',
+              requiresConfirmation: false,
+            },
+          });
+        }
         if (payload.pageId.endsWith('validation-custom-script-action')) {
           return send(400, { code: 'UNEXPECTED_ERROR', traceId: 'trace-unexpected-error' });
         }
         return send(400, { code: 'SCHEMA_INVALID' });
+      }
+      if (url.pathname === '/api/v1/agent/traces/trace-unexpected-success') {
+        return send(200, { data: { success: true, toolCalls: [] } });
       }
       if (url.pathname === '/api/v1/agent/traces/trace-unexpected-error') {
         return send(200, { data: { success: false, toolCalls: [] } });
@@ -379,8 +391,9 @@ describe('Live Eval report summary', () => {
         report.cases.map((evalCase) => [evalCase.id, evalCase.status]),
       );
 
-      expect(statusById['validation-missing-root-id']).toBe('infra_error');
-      expect(statusById['validation-custom-script-action']).toBe('infra_error');
+      expect(statusById['validation-missing-root-id']).toBe('failed');
+      expect(statusById['validation-custom-script-action']).toBe('failed');
+      expect(statusById['validation-legacy-version-field']).toBe('infra_error');
     } finally {
       await rm(artifactDir, { recursive: true, force: true });
       await new Promise<void>((resolve, reject) =>

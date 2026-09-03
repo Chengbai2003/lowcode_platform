@@ -290,13 +290,18 @@ for (const evalCase of cases) {
   const latencyMs = Date.now() - startedAt;
   const errorCode = data?.code ?? data?.error?.code ?? null;
   const completed = !error && completedRequestedMode(data, trace, mode);
-  const rejectedAsExpected =
+  const expectedRejectionObserved =
     responseRejected && (errorCode === 'SCHEMA_INVALID' || errorCode === 'AGENT_POLICY_BLOCKED');
-  if (strategy.expectsRejection && (!rejectedAsExpected || trace?.success !== false)) {
-    infraError = true;
+  if (strategy.expectsRejection) {
+    const rejectionTraceIsUnverifiable =
+      expectedRejectionObserved && trace?.success !== false && trace?.success !== true;
+
+    if (rejectionTraceIsUnverifiable) {
+      infraError = true;
+    }
   }
   const firstPassSuccess = strategy.expectsRejection
-    ? rejectedAsExpected && trace?.success === false
+    ? expectedRejectionObserved && trace?.success === false
     : completed;
   const status = infraError ? 'infra_error' : firstPassSuccess ? 'passed' : 'failed';
 

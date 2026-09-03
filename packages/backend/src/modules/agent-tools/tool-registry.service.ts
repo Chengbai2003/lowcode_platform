@@ -9,6 +9,9 @@ import { createInternalDefinitions } from './definitions/internal.tools';
 import { createReadDefinitions } from './definitions/read.tools';
 import { createWriteDefinitions } from './definitions/write.tools';
 
+/** Increment whenever exposed production tool names, schemas, or semantics change. */
+export const AGENT_TOOL_REGISTRY_VERSION = 'agent-tool-registry-v1';
+
 /**
  * ToolRegistryService — thin facade.
  *

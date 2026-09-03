@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { isDeepStrictEqual } from 'node:util';
 import { AIService, AIToolCallingError } from '../ai/ai.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
@@ -738,9 +737,11 @@ export class AgentRunnerService {
       reporter,
       onRetry,
     );
-    const autoFixData = autoFixResult.data as { patch?: EditorPatchOperation[] } | undefined;
+    const autoFixData = autoFixResult.data as
+      | { patch?: EditorPatchOperation[]; repairCount?: number }
+      | undefined;
     const autoFixedPatch = (autoFixData?.patch ?? rawPatch).map((operation) => ({ ...operation }));
-    const repairCount = this.countChangedPatchOperations(rawPatch, autoFixedPatch);
+    const repairCount = autoFixData?.repairCount ?? 0;
     this.logger.log(
       `[${traceId}] auto-fix warnings=${autoFixResult.warnings?.length ?? 0} patchOps=${autoFixedPatch.length}`,
     );
@@ -816,20 +817,6 @@ export class AgentRunnerService {
       repairCount,
       scopeSummary,
     };
-  }
-
-  private countChangedPatchOperations(
-    before: readonly EditorPatchOperation[],
-    after: readonly EditorPatchOperation[],
-  ): number {
-    const longestLength = Math.max(before.length, after.length);
-    let count = 0;
-    for (let index = 0; index < longestLength; index += 1) {
-      if (!isDeepStrictEqual(before[index], after[index])) {
-        count += 1;
-      }
-    }
-    return count;
   }
 
   private async createExecutionContextWithRecovery(
