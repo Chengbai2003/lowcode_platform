@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AIService } from '../../src/modules/ai/ai.service';
+import { AgentTraceService } from '../../src/modules/agent/agent-trace.service';
 import type { EditorPatchOperation } from '../../src/modules/agent-tools/types/editor-patch.types';
 import type { EvalCase } from './eval-case.types';
 import { FixtureAIService, replayPatchThroughAgent } from './pipeline';
@@ -39,6 +40,14 @@ describe('Agent production replay', () => {
     const replay = await replayPatchThroughAgent(evalCase);
 
     expect(replay.fixtureToolNames).toEqual(['insert_component']);
+    expect(replay.executionProfile).toEqual({
+      replayInstructionVersion: 'fixture-tool-calls-v1',
+      policyProfile: 'simple_patch',
+    });
+    expect(replay.response).not.toHaveProperty('policyProfile');
+    expect(replay.telemetry.toolCalls).toEqual(
+      expect.arrayContaining([{ toolName: 'insert_component', success: true }]),
+    );
     expect(replay.response.mode).toBe('patch');
     if (replay.response.mode !== 'patch') {
       throw new Error(`Expected patch response, got ${replay.response.mode}`);
@@ -59,6 +68,47 @@ describe('Agent production replay', () => {
       throw new Error(`Expected patch response, got ${replay.response.mode}`);
     }
     expect(replay.response.patch).toHaveLength(1);
+  });
+
+  it('reports actual AutoFix repairs independently from retry attempts', async () => {
+    const evalCase = loadCase('patch-insert-component');
+    const patch = evalCase.fixtures.patch as EditorPatchOperation[];
+    const operation = patch[0];
+    if (!operation || operation.op !== 'insertComponent') {
+      throw new Error('Expected insertComponent fixture operation');
+    }
+    const props = operation.component.props;
+    operation.component.props = {
+      ...(props && typeof props === 'object' && !Array.isArray(props) ? props : {}),
+      type: 'danger',
+    };
+
+    const replay = await replayPatchThroughAgent(evalCase);
+
+    expect(replay.response.mode).toBe('patch');
+    if (replay.response.mode !== 'patch') {
+      throw new Error(`Expected patch response, got ${replay.response.mode}`);
+    }
+    expect(replay.response.retryCount).toBe(0);
+    expect(replay.response.repairCount).toBe(1);
+    expect(replay.telemetry.repairCount).toBe(1);
+    expect(replay.response.patch[0]).toMatchObject({
+      op: 'insertComponent',
+      component: { props: { danger: true } },
+    });
+  });
+
+  it('keeps tool-call telemetry unavailable when the production Trace cannot be observed', async () => {
+    const traceSpy = jest.spyOn(AgentTraceService.prototype, 'getTrace').mockReturnValue(undefined);
+
+    try {
+      const replay = await replayPatchThroughAgent(loadCase('patch-insert-component'));
+
+      expect(replay.fixtureToolNames).toEqual(['insert_component']);
+      expect(replay.telemetry.toolCalls).toBeNull();
+    } finally {
+      traceSpy.mockRestore();
+    }
   });
 
   it('replays recorded tools even when a live intent would enter collection planning', async () => {

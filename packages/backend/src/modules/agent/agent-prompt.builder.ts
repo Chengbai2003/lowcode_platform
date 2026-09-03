@@ -16,6 +16,9 @@ import type { AgentCollectionScope, AgentRouteDecision } from './types/agent-edi
 import type { FocusContextResult } from '../schema-context';
 import type { AgentEditRequestDto } from './dto/agent-edit-request.dto';
 
+/** Increment whenever production Agent prompt semantics change. */
+export const AGENT_PROMPT_VERSION = 'agent-prompt-v1';
+
 export function buildSystemPrompt(componentList: readonly string[]): string {
   const allowedActionTypes = getCoreActionTypes().filter((type) => type !== 'customScript');
   return [

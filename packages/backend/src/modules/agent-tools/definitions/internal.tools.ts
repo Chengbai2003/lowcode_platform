@@ -43,7 +43,10 @@ export function createInternalDefinitions(deps: InternalToolsDeps): ToolDefiniti
       execute: async (input, context) => {
         const patch = asPatchArray(input.patch);
         const result = patchAutoFixService.autoFix(patch, context.workingSchema);
-        return { data: { patch: result.patch }, warnings: result.warnings };
+        return {
+          data: { patch: result.patch, repairCount: result.repairCount },
+          warnings: result.warnings,
+        };
       },
     },
     {

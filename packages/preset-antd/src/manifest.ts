@@ -1,6 +1,12 @@
 import { antdRuntime } from './runtime';
 import type { ComponentManifestRegistry } from '@lowcode-platform/renderer';
 
+/**
+ * Manifest 的独立修订号。变更 Props 白名单或 Manifest 语义时必须同步递增；
+ * 它不能由 ComponentPreset 版本代替，因为两者可以独立演进。
+ */
+export const ANTD_MANIFEST_VERSION = '1';
+
 const COMMON = [
   'children',
   'className',

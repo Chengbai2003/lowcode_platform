@@ -1,44 +1,12 @@
 import { computeMetrics } from './metrics';
-import type { EvalCase, EvalCaseResult } from './eval-case.types';
-
-const cases: EvalCase[] = [
-  {
-    id: 'valid-schema',
-    caseSchemaVersion: 1,
-    category: 'draft',
-    title: 'valid schema',
-    capabilities: ['schema_validation'],
-    intent: '',
-    fixtures: { modelOutputSchema: {} },
-    expected: { schemaValid: true },
-  },
-  {
-    id: 'blocked-schema',
-    caseSchemaVersion: 1,
-    category: 'validation',
-    title: 'blocked schema',
-    capabilities: ['schema_validation'],
-    intent: '',
-    fixtures: { schema: {} },
-    expected: { schemaValid: false, blocked: true },
-  },
-  {
-    id: 'safety-not-blocked',
-    caseSchemaVersion: 1,
-    category: 'safety',
-    title: 'safety not blocked',
-    capabilities: ['security_validation'],
-    intent: '',
-    fixtures: { expression: 'true' },
-    expected: { blocked: true },
-  },
-];
+import type { EvalCaseResult } from './eval-case.types';
 
 const results: EvalCaseResult[] = [
   {
     id: 'valid-schema',
     category: 'draft',
     title: '',
+    status: 'passed',
     actual: { schemaValid: true },
     matchesExpected: true,
     mismatches: [],
@@ -47,6 +15,7 @@ const results: EvalCaseResult[] = [
     id: 'blocked-schema',
     category: 'validation',
     title: '',
+    status: 'passed',
     actual: { schemaValid: false, blocked: true },
     matchesExpected: true,
     mismatches: [],
@@ -55,6 +24,7 @@ const results: EvalCaseResult[] = [
     id: 'safety-not-blocked',
     category: 'safety',
     title: '',
+    status: 'failed',
     actual: { blocked: false },
     matchesExpected: false,
     mismatches: ['blocked'],
@@ -63,8 +33,91 @@ const results: EvalCaseResult[] = [
 
 describe('Eval metrics', () => {
   it('derives schema and safety rates from actual outcomes, not expected matches', () => {
-    const metrics = computeMetrics(cases, results, []);
+    const metrics = computeMetrics(results, []);
     expect(metrics.schemaValidRate).toBe(0.5);
     expect(metrics.safetyBlockRate).toBe(0);
+  });
+
+  it('uses null rather than zero for metrics without comparable samples', () => {
+    const metrics = computeMetrics([], null);
+
+    expect(metrics.expectedOutcomeRate).toBeNull();
+    expect(metrics.replayReproducibility).toBeNull();
+  });
+
+  it('keeps infrastructure errors out of the quality denominator', () => {
+    const metrics = computeMetrics(
+      [
+        {
+          ...results[0],
+          status: 'infra_error',
+          matchesExpected: false,
+        },
+      ],
+      [{ id: results[0].id, reproducible: true }],
+    );
+
+    expect(metrics.expectedOutcomeRate).toBeNull();
+    expect(metrics.replayReproducibility).toBeNull();
+  });
+
+  it('requires exactly one replay observation for every comparable Case', () => {
+    const partialReplay = computeMetrics(
+      [results[0], results[1]],
+      [{ id: results[0].id, reproducible: true }],
+    );
+    const duplicateReplay = computeMetrics(
+      [results[0]],
+      [
+        { id: results[0].id, reproducible: true },
+        { id: results[0].id, reproducible: true },
+      ],
+    );
+    const unknownReplay = computeMetrics(
+      [results[0]],
+      [{ id: 'not-a-result', reproducible: true }],
+    );
+    const unavailableReplay = computeMetrics([results[0]], null);
+
+    expect(partialReplay.replayReproducibility).toBeNull();
+    expect(duplicateReplay.replayReproducibility).toBeNull();
+    expect(unknownReplay.replayReproducibility).toBeNull();
+    expect(unavailableReplay.replayReproducibility).toBeNull();
+  });
+
+  it('does not turn unavailable patch, safety, or conflict results into quality measurements', () => {
+    const unavailableResults: EvalCaseResult[] = [
+      {
+        ...results[0],
+        category: 'patch',
+        status: 'infra_error',
+        actual: {},
+        matchesExpected: false,
+      },
+      {
+        ...results[1],
+        category: 'safety',
+        status: 'infra_error',
+        actual: {},
+        matchesExpected: false,
+      },
+      {
+        ...results[2],
+        category: 'conflict',
+        status: 'infra_error',
+        actual: {},
+        matchesExpected: false,
+      },
+    ];
+
+    const metrics = computeMetrics(unavailableResults, []);
+
+    expect(metrics).toMatchObject({
+      expectedOutcomeRate: null,
+      schemaValidRate: null,
+      patchMinimality: null,
+      safetyBlockRate: null,
+      versionConflictIntegrity: null,
+    });
   });
 });

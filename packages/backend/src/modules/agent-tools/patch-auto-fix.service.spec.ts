@@ -41,6 +41,7 @@ describe('PatchAutoFixService', () => {
       },
     });
     expect(result.warnings).toContain('Normalized insert index for component under form');
+    expect(result.repairCount).toBe(1);
   });
 
   it('normalizes negative move indexes to zero', () => {
@@ -62,6 +63,7 @@ describe('PatchAutoFixService', () => {
       newIndex: 0,
     });
     expect(result.warnings).toContain('Normalized move index for button_submit');
+    expect(result.repairCount).toBe(1);
   });
 
   it('normalizes bindEvent actions to an empty array when malformed', () => {
@@ -83,6 +85,7 @@ describe('PatchAutoFixService', () => {
       actions: [],
     });
     expect(result.warnings).toContain('Normalized action payloads for button_submit.onClick');
+    expect(result.repairCount).toBe(1);
   });
 
   it('normalizes feedback alias fields to renderer-compatible keys', () => {
@@ -117,6 +120,7 @@ describe('PatchAutoFixService', () => {
       ],
     });
     expect(result.warnings).toContain('Normalized action payloads for button_submit.onClick');
+    expect(result.repairCount).toBe(1);
   });
 
   it('normalizes Button danger alias in updateProps with schema context', () => {
@@ -148,6 +152,7 @@ describe('PatchAutoFixService', () => {
       props: { danger: true },
     });
     expect(result.warnings).toContain('Normalized Button danger prop for button_submit');
+    expect(result.repairCount).toBe(1);
   });
 
   it('normalizes Button danger alias in inserted components', () => {
@@ -179,6 +184,7 @@ describe('PatchAutoFixService', () => {
     expect(result.warnings).toContain(
       'Normalized Button danger prop for inserted component button_delete',
     );
+    expect(result.repairCount).toBe(1);
   });
 
   it('leaves already valid patch operations unchanged', () => {
@@ -194,5 +200,6 @@ describe('PatchAutoFixService', () => {
 
     expect(result.patch).toEqual(patch);
     expect(result.warnings).toEqual([]);
+    expect(result.repairCount).toBe(0);
   });
 });

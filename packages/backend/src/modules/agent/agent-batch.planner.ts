@@ -570,7 +570,7 @@ export async function runConfirmedBatchPatch(
     targetId: resolvedSelectedId,
   });
 
-  const { patch, previewSchema, previewSummary, changeGroups, risk, scopeSummary } =
+  const { patch, previewSchema, previewSummary, changeGroups, risk, repairCount, scopeSummary } =
     await host.finalizePatch(
       dto,
       context,
@@ -611,6 +611,7 @@ export async function runConfirmedBatchPatch(
       manualOverride: (dto.responseMode ?? 'patch') !== 'auto',
     },
     retryCount,
+    repairCount,
     scopeSummary,
   };
 }

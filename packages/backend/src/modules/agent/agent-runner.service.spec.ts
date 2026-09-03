@@ -355,6 +355,7 @@ describe('AgentRunnerService', () => {
     baseContext?: ToolExecutionContext;
     focusContextResult?: FocusContextResult;
     traceService?: AgentTraceService;
+    autoFixRepairCount?: number;
   }) {
     const baseContext = options?.baseContext ?? createBaseContext();
     const focusContextResult = options?.focusContextResult ?? createFocusedResult();
@@ -440,7 +441,7 @@ describe('AgentRunnerService', () => {
         if (name === 'auto_fix_patch') {
           context.warnings = [...context.warnings, 'auto-fixed'];
           return {
-            data: { patch: input.patch },
+            data: { patch: input.patch, repairCount: options?.autoFixRepairCount ?? 0 },
             warnings: ['auto-fixed'],
           };
         }
@@ -620,7 +621,7 @@ describe('AgentRunnerService', () => {
   }
 
   it('returns a patch when selectedId resolves exactly', async () => {
-    const { runner, aiService, toolExecutionService } = createRunner();
+    const { runner, aiService, toolExecutionService } = createRunner({ autoFixRepairCount: 1 });
     aiService.runToolCalling.mockImplementation(async (input) => {
       await input.executeTool('update_component_props', {
         componentId: 'button',
@@ -670,6 +671,7 @@ describe('AgentRunnerService', () => {
     expect(result.previewSchema.components.button.props?.children).toBe('提交');
     expect(result.changeGroups).toHaveLength(1);
     expect(result.warnings).toContain('auto-fixed');
+    expect(result.repairCount).toBe(1);
     expect(toolExecutionService.executeTool).toHaveBeenNthCalledWith(
       2,
       'auto_fix_patch',
@@ -716,6 +718,7 @@ describe('AgentRunnerService', () => {
       },
     ]);
     expect(result.retryCount).toBe(0);
+    expect(result.repairCount).toBe(0);
   });
 
   it('auto resolves a strong candidate before running the agent', async () => {
@@ -1135,6 +1138,7 @@ describe('AgentRunnerService', () => {
       targetCount: 2,
       changedTargetCount: 2,
     });
+    expect(result.repairCount).toBe(0);
   });
 
   it('invalidates scope confirmation when the selected container changes', async () => {

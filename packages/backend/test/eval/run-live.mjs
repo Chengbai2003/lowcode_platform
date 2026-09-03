@@ -1,18 +1,12 @@
 #!/usr/bin/env node
 /**
- * Agent Live Eval（Issue #18 / M0-3 Scope B）
+ * Agent Live Eval（Issue #38 / A2）
  *
- * 真实模型趋势评测：对**本地运行中的后端**发起与 deterministic 基线
- * 相同情录的 agent 请求，记录延迟、路由结果与 Patch 规模，产出趋势
- * 报告。仅用于手动/定时观测——不进入 CI，绝不以 Token/延迟/总分阻断 PR。
- *
- * 用法：
- *   1. 启动后端（pnpm dev:backend），并配置真实的 AI Provider 凭据；
- *   2. AGENT_EVAL_BASE_URL=http://localhost:3000/api/v1 \
- *      AGENT_EVAL_TOKEN=<API_SECRET> pnpm eval:live
+ * 真实模型趋势评测：不进 CI，只写 Report v1。A3 才负责声明用例 mode、
+ * 全覆盖执行、多次采样与 P50/P95。
  */
 
-import { readdirSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import liveReport from './live-report.cjs';
 
@@ -29,10 +23,39 @@ if (!TOKEN) {
   process.exit(1);
 }
 
+function requiredEnvironmentValue(name) {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(
+      `[eval:live] 缺少 ${name}。Live 不能从本地 checkout 推断目标部署的版本或模型身份。`,
+    );
+  }
+  return value;
+}
+
+// 目标服务目前不暴露完整 provenance endpoint；因此版本与模型选择必须由发起
+// Live run 的部署配置显式声明。严禁读取本地 checkout 作为远端运行事实。
+const targetMetadata = {
+  revision: requiredEnvironmentValue('AGENT_EVAL_TARGET_REVISION'),
+  contractPackageVersion: requiredEnvironmentValue('AGENT_EVAL_CONTRACT_PACKAGE_VERSION'),
+  promptVersion: requiredEnvironmentValue('AGENT_EVAL_PROMPT_VERSION'),
+  toolVersion: requiredEnvironmentValue('AGENT_EVAL_TOOL_VERSION'),
+  manifestVersion: requiredEnvironmentValue('AGENT_EVAL_MANIFEST_VERSION'),
+  provider: requiredEnvironmentValue('AGENT_EVAL_PROVIDER'),
+  model: requiredEnvironmentValue('AGENT_EVAL_MODEL_ID'),
+};
+
 const cases = readdirSync(CASES_DIR)
-  .filter((f) => f.endsWith('.case.json'))
+  .filter((file) => file.endsWith('.case.json'))
   .sort()
-  .map((f) => JSON.parse(readFileSync(join(CASES_DIR, f), 'utf-8')));
+  .map((file) => JSON.parse(readFileSync(join(CASES_DIR, file), 'utf-8')));
+const evalCaseSchemaVersion = cases[0]?.caseSchemaVersion;
+if (
+  !Number.isInteger(evalCaseSchemaVersion) ||
+  cases.some((evalCase) => evalCase.caseSchemaVersion !== evalCaseSchemaVersion)
+) {
+  throw new Error('[eval:live] cases must share one integer caseSchemaVersion');
+}
 
 const headers = {
   'Content-Type': 'application/json',
@@ -45,6 +68,52 @@ const defaultSchema = {
 };
 const unwrap = (body) => body?.data ?? body;
 
+function httpError(stage, response, body) {
+  const code = body?.code ?? body?.error?.code;
+  return `${stage} HTTP ${response.status}${typeof code === 'string' ? ` (${code})` : ''}`;
+}
+
+function sameRuntimeCompatibility(left, right) {
+  return (
+    left.componentPresetId === right.componentPresetId &&
+    left.componentPresetVersion === right.componentPresetVersion &&
+    left.rendererVersion === right.rendererVersion
+  );
+}
+
+function isRuntimeCompatibility(value) {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    typeof value.componentPresetId === 'string' &&
+    value.componentPresetId.length > 0 &&
+    typeof value.componentPresetVersion === 'string' &&
+    value.componentPresetVersion.length > 0 &&
+    typeof value.rendererVersion === 'string' &&
+    value.rendererVersion.length > 0
+  );
+}
+
+function isPageSchemaVersion(value) {
+  return Number.isInteger(value) && value >= 0;
+}
+
+function isInfrastructureHttpStatus(status) {
+  return (
+    status === 401 ||
+    status === 403 ||
+    status === 404 ||
+    status === 408 ||
+    status === 429 ||
+    status >= 500
+  );
+}
+
+function runtimeLabel(runtimeCompatibility) {
+  if (!runtimeCompatibility) return 'unavailable (infrastructure error before runtime discovery)';
+  return `${runtimeCompatibility.componentPresetId}@${runtimeCompatibility.componentPresetVersion} / renderer@${runtimeCompatibility.rendererVersion}`;
+}
+
 function responseMode(category) {
   return category === 'draft' || category === 'validation' || category === 'safety'
     ? 'schema'
@@ -53,6 +122,12 @@ function responseMode(category) {
 
 function liveStrategy(evalCase) {
   const invalidSchema = evalCase.fixtures?.schema ?? evalCase.fixtures?.modelOutputSchema;
+  if (evalCase.category === 'conflict') {
+    return {
+      supported: false,
+      reason: 'Repository CAS fixtures are not representable by agent/edit; deferred to A3',
+    };
+  }
   if (evalCase.category === 'safety' && !invalidSchema)
     return { supported: false, reason: 'expression fixtures are not representable by agent/edit' };
   if (evalCase.category === 'validation' && !invalidSchema)
@@ -66,49 +141,84 @@ function liveStrategy(evalCase) {
     draftSchema: ['validation', 'safety'].includes(evalCase.category) ? invalidSchema : undefined,
     expectsRejection:
       Boolean(evalCase.expected?.blocked) && ['validation', 'safety'].includes(evalCase.category),
-    staleVersion: evalCase.category === 'conflict',
   };
 }
 
-async function createPage(pageId, schema, basePageVersion) {
+async function getPage(pageId) {
+  const response = await fetch(`${BASE_URL}/pages/${encodeURIComponent(pageId)}/schema`, {
+    headers,
+  });
+  const body = unwrap(await response.json().catch(() => null));
+  if (!response.ok) throw new Error(httpError('page read', response, body));
+  return body;
+}
+
+async function createPage(pageId, schema) {
   const response = await fetch(`${BASE_URL}/pages/${encodeURIComponent(pageId)}/schema`, {
     method: 'PUT',
     headers,
-    body: JSON.stringify({ schema, ...(basePageVersion ? { basePageVersion } : {}) }),
+    body: JSON.stringify({ schema }),
   });
   const body = unwrap(await response.json().catch(() => null));
-  if (!response.ok) throw new Error(`page setup HTTP ${response.status}: ${JSON.stringify(body)}`);
-  return body?.pageVersion ?? body?.page?.currentPageVersion ?? null;
+  if (!response.ok) throw new Error(httpError('page setup', response, body));
+  const savedVersion = body?.pageVersion ?? body?.page?.currentPageVersion ?? null;
+  if (!Number.isSafeInteger(savedVersion) || savedVersion <= 0) {
+    throw new Error('page setup did not return a positive integer pageVersion');
+  }
+  const page = await getPage(pageId);
+  return {
+    pageVersion: savedVersion,
+    runtimeCompatibility: page?.runtimeCompatibility ?? null,
+    pageSchemaVersion: page?.schema?.schemaVersion ?? null,
+  };
 }
 
 async function getTrace(traceId) {
-  if (!traceId) return null;
+  if (typeof traceId !== 'string' || traceId.length === 0) {
+    throw new Error('agent edit response did not contain a traceId');
+  }
   const response = await fetch(`${BASE_URL}/agent/traces/${encodeURIComponent(traceId)}`, {
     headers,
   });
-  return response.ok ? unwrap(await response.json().catch(() => null)) : null;
+  const body = unwrap(await response.json().catch(() => null));
+  if (!response.ok) throw new Error(httpError('trace read', response, body));
+  if (body === null || typeof body !== 'object') {
+    throw new Error('trace read returned an invalid response body');
+  }
+  return body;
+}
+
+function completedRequestedMode(data, trace, mode) {
+  return trace?.success === true && data?.mode === mode && !data?.requiresConfirmation;
 }
 
 const results = [];
+let runtimeCompatibility = null;
+let pageSchemaVersion = null;
+
 for (const evalCase of cases) {
   const startedAt = Date.now();
   let error = null;
-
+  let infraError = false;
   const pageId = `eval-live-${Date.now().toString(36)}-${evalCase.id}`;
   const strategy = liveStrategy(evalCase);
   if (!strategy.supported) {
     results.push({
       id: evalCase.id,
       category: evalCase.category,
+      title: evalCase.title,
+      status: 'unsupported',
       skipped: true,
       skipReason: strategy.reason,
     });
     continue;
   }
+
   const mode = strategy.mode;
   let pageVersion = null;
   let data = null;
   let trace = null;
+  let responseRejected = false;
   const requestBody = {
     instruction: evalCase.intent,
     pageId,
@@ -122,14 +232,32 @@ for (const evalCase of cases) {
             defaultSchema,
         }
       : {}),
-    ...(process.env.AGENT_EVAL_PROVIDER ? { provider: process.env.AGENT_EVAL_PROVIDER } : {}),
-    ...(process.env.AGENT_EVAL_MODEL_ID ? { modelId: process.env.AGENT_EVAL_MODEL_ID } : {}),
+    provider: targetMetadata.provider,
+    modelId: targetMetadata.model,
   };
 
   try {
-    pageVersion = await createPage(pageId, evalCase.fixtures?.baseSchema ?? defaultSchema);
-    if (strategy.staleVersion)
-      await createPage(pageId, evalCase.fixtures?.baseSchema ?? defaultSchema, pageVersion);
+    const initialPage = await createPage(pageId, evalCase.fixtures?.baseSchema ?? defaultSchema);
+    pageVersion = initialPage.pageVersion;
+    if (
+      !isRuntimeCompatibility(initialPage.runtimeCompatibility) ||
+      !isPageSchemaVersion(initialPage.pageSchemaVersion)
+    ) {
+      throw new Error('page setup did not return runtimeCompatibility and schemaVersion');
+    }
+    if (
+      runtimeCompatibility &&
+      !sameRuntimeCompatibility(runtimeCompatibility, initialPage.runtimeCompatibility)
+    ) {
+      throw new Error(
+        'page setup returned a runtime compatibility tuple inconsistent with this run',
+      );
+    }
+    if (pageSchemaVersion !== null && pageSchemaVersion !== initialPage.pageSchemaVersion) {
+      throw new Error('page setup returned a schemaVersion inconsistent with this run');
+    }
+    runtimeCompatibility ??= initialPage.runtimeCompatibility;
+    pageSchemaVersion ??= initialPage.pageSchemaVersion;
     requestBody.pageVersion = pageVersion;
     const response = await fetch(`${BASE_URL}/agent/edit`, {
       method: 'POST',
@@ -138,80 +266,125 @@ for (const evalCase of cases) {
     });
 
     data = unwrap(await response.json().catch(() => null));
-    if (!response.ok) error = `HTTP ${response.status}: ${JSON.stringify(data)}`;
-    trace = await getTrace(data?.traceId);
-  } catch (e) {
-    error = e instanceof Error ? e.message : String(e);
+    if (!response.ok) {
+      responseRejected = true;
+      error = httpError('agent edit', response, data);
+      infraError = isInfrastructureHttpStatus(response.status);
+      if (typeof data?.traceId === 'string' && data.traceId.length > 0) {
+        try {
+          trace = await getTrace(data.traceId);
+        } catch (caught) {
+          const traceError = caught instanceof Error ? caught.message : String(caught);
+          error = `${error}; ${traceError}`;
+          infraError = true;
+        }
+      }
+    } else {
+      trace = await getTrace(data?.traceId);
+    }
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : String(caught);
+    infraError = true;
   }
 
   const latencyMs = Date.now() - startedAt;
   const errorCode = data?.code ?? data?.error?.code ?? null;
+  const completed = !error && completedRequestedMode(data, trace, mode);
+  const expectedRejectionObserved =
+    responseRejected && (errorCode === 'SCHEMA_INVALID' || errorCode === 'AGENT_POLICY_BLOCKED');
+  if (strategy.expectsRejection) {
+    const rejectionTraceIsUnverifiable =
+      expectedRejectionObserved && trace?.success !== false && trace?.success !== true;
+
+    if (rejectionTraceIsUnverifiable) {
+      infraError = true;
+    }
+  }
   const firstPassSuccess = strategy.expectsRejection
-    ? Boolean(error && (errorCode === 'SCHEMA_INVALID' || errorCode === 'AGENT_POLICY_BLOCKED'))
-    : strategy.staleVersion
-      ? Boolean(error && errorCode === 'PAGE_VERSION_CONFLICT')
-      : !error && trace?.success === true && data?.mode === mode && !data?.requiresConfirmation;
+    ? expectedRejectionObserved && trace?.success === false
+    : completed;
+  const status = infraError ? 'infra_error' : firstPassSuccess ? 'passed' : 'failed';
+
   results.push({
     id: evalCase.id,
     category: evalCase.category,
+    title: evalCase.title,
+    status,
     pageId,
     pageVersion,
     responseMode: mode,
-    skipped: false,
     firstPassSuccess,
     route: data?.route ?? null,
     traceId: data?.traceId ?? null,
-    model: data?.model ?? data?.modelConfig?.modelName ?? process.env.AGENT_EVAL_MODEL_ID ?? null,
-    provider: data?.provider ?? process.env.AGENT_EVAL_PROVIDER ?? null,
     usage: data?.usage ?? null,
     cost: data?.cost ?? data?.usage?.cost ?? null,
-    repairCount: data?.retryCount ?? null,
-    toolCalls: trace?.toolCalls ?? [],
-    versions: {
-      prompt: process.env.AGENT_EVAL_PROMPT_VERSION ?? null,
-      tool: process.env.AGENT_EVAL_TOOL_VERSION ?? null,
-      manifest: process.env.AGENT_EVAL_MANIFEST_VERSION ?? null,
-    },
+    repairCount: data?.repairCount ?? null,
+    toolCalls: trace?.toolCalls ?? null,
     error,
     latencyMs,
   });
 
   console.log(
-    `[eval:live] ${evalCase.id}: ${firstPassSuccess ? 'ok' : `failed (${error ?? 'not completed'})`} ${latencyMs}ms`,
+    `[eval:live] ${evalCase.id}: ${status === 'passed' ? 'ok' : `${status} (${error ?? 'not completed'})`} ${latencyMs}ms`,
   );
 }
 
 const summary = liveReport.summarizeLiveResults(results);
-const report = {
-  generatedAt: new Date().toISOString(),
-  baseUrl: BASE_URL,
-  contractPackageVersion: JSON.parse(
-    readFileSync(join(process.cwd(), '../schema-contract/package.json'), 'utf-8'),
-  ).version,
-  ...summary,
+const report = liveReport.buildLiveReport({
+  run: {
+    runId: `live-${Date.now().toString(36)}`,
+    mode: 'live',
+    generatedAt: new Date().toISOString(),
+    revision: targetMetadata.revision,
+    revisionSource: 'target_declaration',
+    provider: targetMetadata.provider,
+    model: targetMetadata.model,
+    modelSelectionSource: 'requested',
+  },
+  environment: {
+    contract: {
+      packageVersion: targetMetadata.contractPackageVersion,
+      packageVersionSource: 'target_declaration',
+      pageSchemaVersion,
+      evalCaseSchemaVersion,
+    },
+    runtimeCompatibility,
+    sourceVersions: {
+      prompt: targetMetadata.promptVersion,
+      tool: targetMetadata.toolVersion,
+      manifest: targetMetadata.manifestVersion,
+      source: 'target_declaration',
+    },
+  },
   results,
-};
+});
 
 mkdirSync(OUT_DIR, { recursive: true });
 writeFileSync(join(OUT_DIR, 'live.json'), JSON.stringify(report, null, 2));
 writeFileSync(
   join(OUT_DIR, 'live.md'),
   [
-    '# Agent Live Eval Trend',
+    '# Agent Live Eval Report',
     '',
-    `- Generated at: ${report.generatedAt}`,
-    `- Cases: ${report.totalCases} total / ${report.executedCases} executed / ${report.skippedCases} skipped`,
-    `- Coverage Rate: ${report.coverageRate ?? 'n/a'}`,
-    `- First-pass Success Rate: ${report.firstPassSuccessRate ?? 'n/a'}`,
-    `- Average Latency: ${report.averageLatencyMs ?? 'n/a'}ms`,
+    `- Report: v${report.reportVersion}`,
+    `- Run: \`${report.run.runId}\``,
+    `- Revision: \`${report.run.revision}\` (${report.run.revisionSource})`,
+    `- Provider / Model: ${report.run.provider} / ${report.run.model} ` +
+      `(${report.run.modelSelectionSource})`,
+    `- Runtime: ${runtimeLabel(report.environment.runtimeCompatibility)}`,
+    `- Cases: ${report.coverage.totalCases} total / ${report.coverage.executedCases} executed / ${report.coverage.unsupportedCases} unsupported / ${report.coverage.infraErrorCases} infra error`,
+    `- Coverage Rate: ${report.coverage.coverageRate ?? 'n/a'}`,
+    `- First-pass Success Rate: ${summary.firstPassSuccessRate ?? 'n/a'}`,
+    `- Average Latency: ${summary.averageLatencyMs ?? 'n/a'}ms`,
+    `- Canonical results digest: \`${report.resultsDigest}\``,
     '',
-    '| 用例 | 首轮完成 | 延迟(ms) | 路由 | Tool calls | Trace ID |',
-    '| --- | --- | --- | --- | --- | --- |',
-    ...results.map(
-      (r) =>
-        `| ${r.id} | ${r.skipped ? `⏭️ ${r.skipReason}` : r.firstPassSuccess ? '✅' : `❌ ${r.error ?? ''}`} | ${r.latencyMs ?? '-'} | ${r.route ?? '-'} | ${r.toolCalls?.length ?? '-'} | ${r.traceId ?? '-'} |`,
+    '| 用例 | 状态 | 延迟(ms) | Tool calls |',
+    '| --- | --- | --- | --- |',
+    ...report.cases.map(
+      (result) =>
+        `| ${result.id} | ${result.status} | ${result.telemetry?.latencyMs ?? '-'} | ${result.telemetry?.toolCalls?.length ?? '-'} |`,
     ),
     '',
   ].join('\n'),
 );
-console.log(`[eval:live] 报告已写入 ${OUT_DIR}`);
+console.log(`[eval:live] Report v${report.reportVersion} 已写入 ${OUT_DIR}`);
