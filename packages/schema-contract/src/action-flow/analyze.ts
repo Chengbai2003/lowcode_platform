@@ -328,7 +328,8 @@ export function analyzeActionFlowDeclarations(
   }
 
   // 3. 第二轮：校验每个 Flow 对象及其 steps / onError，并收集 runFlow 依赖
-  let currentDeps = new Set<string>();
+  let currentLocalActionDepth = 0;
+  let currentReferenceDepths = new Map<string, number>();
   const actionValidationContext: ActionValidationContext = {
     issues,
     inspectionContext,
@@ -339,8 +340,16 @@ export function analyzeActionFlowDeclarations(
     actionBudgetReported: false,
     flowValidation: {
       declaredFlowKeys,
-      onFlowReference(targetFlow) {
-        currentDeps.add(targetFlow);
+      onActionDepth(depth) {
+        if (depth > currentLocalActionDepth) {
+          currentLocalActionDepth = depth;
+        }
+      },
+      onFlowReference(targetFlow, _path, depth) {
+        const prev = currentReferenceDepths.get(targetFlow) ?? 0;
+        if (depth > prev) {
+          currentReferenceDepths.set(targetFlow, depth);
+        }
       },
     },
   };
@@ -349,6 +358,8 @@ export function analyzeActionFlowDeclarations(
     key: string;
     flow: ActionFlow;
     flowDependencies: string[];
+    localActionDepth: number;
+    referenceDepths: Map<string, number>;
   }> = [];
 
   for (const flowKey of flowKeys) {
@@ -456,7 +467,8 @@ export function analyzeActionFlowDeclarations(
     }
 
     // 校验 steps 与 onError 内的 Action，并收录 runFlow 依赖
-    currentDeps = new Set<string>();
+    currentLocalActionDepth = 0;
+    currentReferenceDepths = new Map<string, number>();
 
     validateActionList(stepsVal, [...basePath, flowKey, 'steps'], 1, actionValidationContext);
     if (inspectionContext.aborted) break;
@@ -466,7 +478,7 @@ export function analyzeActionFlowDeclarations(
       if (inspectionContext.aborted) break;
     }
 
-    const flowDependencies = Array.from(currentDeps).sort(compareLogicKeys);
+    const flowDependencies = Array.from(currentReferenceDepths.keys()).sort(compareLogicKeys);
     // 构造独立的 canonical tree，防止 deepFreeze 反向污染/冻结调用方入参
     const cleanFlow: ActionFlow = {
       steps: cloneCanonicalActionList(stepsVal),
@@ -479,6 +491,8 @@ export function analyzeActionFlowDeclarations(
       key: flowKey,
       flow: cleanFlow,
       flowDependencies,
+      localActionDepth: currentLocalActionDepth,
+      referenceDepths: currentReferenceDepths,
     });
   }
 
@@ -552,24 +566,28 @@ export function analyzeActionFlowDeclarations(
     return { ok: false, issues: Object.freeze(issues) };
   }
 
-  // 5. 跨 Flow 引用链深度检查 (复用 maxActionDepth)
-  // 在无环 DAG 中，按拓扑序 (依赖优先) 递推最长引用深度
-  const chainDepths = new Map<string, number>();
+  // 5. 合并 Action 嵌套深度与跨 Flow 引用深度 (复用 maxActionDepth)
+  // 在无环 DAG 中，按拓扑序 (依赖优先) 递推有效组合深度：
+  // effectiveDepth(flow) = max(localActionDepth(flow), max_{dep}(refDepth(flow -> dep) + effectiveDepth(dep)))
+  const effectiveDepths = new Map<string, number>();
   for (const key of order) {
     if (inspectionContext.aborted) break;
-    const deps = nodesMap.get(key)!.flowDependencies;
-    let maxDepDepth = 0;
-    for (const dep of deps) {
-      const d = chainDepths.get(dep) ?? 1;
-      if (d > maxDepDepth) maxDepDepth = d;
+    const node = nodesMap.get(key)!;
+    let maxCombinedDepth = node.localActionDepth;
+    for (const dep of node.flowDependencies) {
+      const refDepth = node.referenceDepths.get(dep) ?? 1;
+      const depEffectiveDepth = effectiveDepths.get(dep) ?? 0;
+      const combined = refDepth + depEffectiveDepth;
+      if (combined > maxCombinedDepth) {
+        maxCombinedDepth = combined;
+      }
     }
-    const depth = maxDepDepth + 1;
-    chainDepths.set(key, depth);
-    if (depth > limits.maxActionDepth) {
+    effectiveDepths.set(key, maxCombinedDepth);
+    if (maxCombinedDepth > limits.maxActionDepth) {
       pushIssue(inspectionContext, {
         code: 'ACTION_DEPTH_EXCEEDED',
         path: [...basePath, key],
-        message: `ActionFlow reference chain depth (${depth}) exceeded limit of ${limits.maxActionDepth}`,
+        message: `ActionFlow effective action depth (${maxCombinedDepth}) exceeded limit of ${limits.maxActionDepth}`,
       });
     }
   }

@@ -610,4 +610,137 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       expect(issue.code).toBe('FLOW_REFERENCE_CYCLE');
     }
   });
+
+  it('29. combined depth: fails close when nested action + cross-flow depth exceeds maxActionDepth', () => {
+    const result = analyzeActionFlowDeclarations(
+      {
+        flowA: {
+          steps: [
+            {
+              type: 'if',
+              condition: 'true',
+              then: [
+                {
+                  type: 'if',
+                  condition: 'true',
+                  then: [{ type: 'runFlow', flow: 'flowB' }],
+                },
+              ],
+            },
+          ],
+        },
+        flowB: {
+          steps: [{ type: 'log', value: 'leaf' }],
+        },
+      },
+      { maxActionDepth: 3 },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'ACTION_DEPTH_EXCEEDED',
+        path: ['logic', 'flows', 'flowA'],
+      }),
+    ]);
+  });
+
+  it('30. combined depth: succeeds when combined depth is exactly equal to maxActionDepth', () => {
+    const result = analyzeActionFlowDeclarations(
+      {
+        flowA: {
+          steps: [
+            {
+              type: 'if',
+              condition: 'true',
+              then: [{ type: 'runFlow', flow: 'flowB' }],
+            },
+          ],
+        },
+        flowB: {
+          steps: [{ type: 'log', value: 'leaf' }],
+        },
+      },
+      { maxActionDepth: 3 },
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.order).toEqual(['flowB', 'flowA']);
+  });
+
+  it('31. combined depth: adopts deepest reference when same dependency is referenced at different depths', () => {
+    const result = analyzeActionFlowDeclarations(
+      {
+        flowA: {
+          steps: [
+            {
+              type: 'runFlow',
+              flow: 'flowB',
+            },
+            {
+              type: 'if',
+              condition: 'true',
+              then: [
+                {
+                  type: 'if',
+                  condition: 'true',
+                  then: [{ type: 'runFlow', flow: 'flowB' }],
+                },
+              ],
+            },
+          ],
+        },
+        flowB: {
+          steps: [{ type: 'log', value: 'leaf' }],
+        },
+      },
+      { maxActionDepth: 3 },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'ACTION_DEPTH_EXCEEDED',
+        path: ['logic', 'flows', 'flowA'],
+      }),
+    ]);
+  });
+
+  it('32. combined depth: leaf flow with nested actions counts toward total effective depth', () => {
+    const result = analyzeActionFlowDeclarations(
+      {
+        flowA: {
+          steps: [
+            {
+              type: 'if',
+              condition: 'true',
+              then: [{ type: 'runFlow', flow: 'flowB' }],
+            },
+          ],
+        },
+        flowB: {
+          steps: [
+            {
+              type: 'if',
+              condition: 'true',
+              then: [{ type: 'log', value: 'nested leaf action' }],
+            },
+          ],
+        },
+      },
+      { maxActionDepth: 3 },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'ACTION_DEPTH_EXCEEDED',
+        path: ['logic', 'flows', 'flowA'],
+      }),
+    ]);
+  });
 });
