@@ -10,7 +10,7 @@ import type { ApiRequestConfig } from '../../dsl/context';
 import type { RuntimeSession } from '../../session/RuntimeSession';
 import { isCapabilityGranted, type HostCapabilities } from '../../host/HostCapabilities';
 import { resolveValue, resolveValues } from '../parser';
-import { getFlowRunContext, withFlowRunPath } from '../../session/FlowRun';
+import { FlowExecutionError, getFlowRunContext, withFlowRunPath } from '../../session/FlowRun';
 
 /** 读取执行上下文中的 Session（M0-4 Scope D；存在时启用 abort/写回守卫） */
 function getSession(context: Record<string, unknown>): RuntimeSession | undefined {
@@ -247,9 +247,16 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // Flow 模式处理
     if (flowContext) {
-      if (flowContext.signal.aborted || errorObj.name === 'AbortError') {
+      if (flowContext.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
         flowContext.throwIfAborted();
-        throw errorObj;
+        throw error;
+      }
+
+      // 不可恢复错误必须原样向外抛，不能由 apiCall.onError 或 Flow 级 onError 恢复
+      if (error instanceof FlowExecutionError) {
+        if (error.code !== 'FLOW_STEP_FAILED') {
+          throw error;
+        }
       }
 
       // apiCall.onError 成功后 Flow 继续；自身失败则向外传播
@@ -271,8 +278,8 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
         return { success: false, handled: true, error: errorObj.message };
       }
 
-      // 没有 apiCall.onError：错误交给 Flow 级 onError
-      throw errorObj;
+      // 没有 apiCall.onError：抛出原始 error，让 FlowRun / Engine 区分 Error 与 primitive
+      throw error;
     }
 
     // Legacy 模式：dispose/abort 不是业务错误，静默返回且不写回

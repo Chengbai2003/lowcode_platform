@@ -1060,4 +1060,189 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
     expect(() => normalizeFlowExecutionLimits({ maxDurationMs: 0 })).toThrow(/maxDurationMs/);
     expect(() => normalizeFlowExecutionLimits({ maxDurationMs: 300001 })).toThrow(/maxDurationMs/);
   });
+
+  it('28. modal 或 host api 永不 settle 时及时取消并释放槽位', async () => {
+    let unhandledRejectionFired = false;
+    const onUnhandled = () => {
+      unhandledRejectionFired = true;
+    };
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      let hangingReject: any;
+      const hangingPromise = new Promise((_resolve, reject) => {
+        hangingReject = reject;
+      });
+
+      const { session } = createTestSession(
+        {
+          hangingApiFlow: {
+            steps: [{ type: 'apiCall', url: 'https://api.example.com/hang' }],
+          },
+          hangingModalFlow: {
+            steps: [{ type: 'dialog', title: 'Confirm', content: 'msg', kind: 'confirm' }],
+          },
+          quickFlow: {
+            steps: [{ type: 'setValue', field: 'state.done', value: true }],
+          },
+        },
+        {
+          flowLimits: { maxDurationMs: 40, maxConcurrentRuns: 1 },
+          api: {
+            get: () => hangingPromise,
+          },
+          modal: {
+            confirm: () => hangingPromise,
+          },
+        },
+      );
+
+      const start = Date.now();
+      await expect(session.executeFlow('hangingApiFlow')).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(FlowExecutionError);
+        expect((err as FlowExecutionError).code).toBe('FLOW_DURATION_EXCEEDED');
+        return true;
+      });
+      const elapsed = Date.now() - start;
+      // 立即 reject，不等待挂起的 Promise
+      expect(elapsed).toBeLessThan(200);
+
+      // activeRootRuns 并发槽立即释放，随后可执行另一个 Flow
+      const quickRes = await session.executeFlow('quickFlow');
+      expect(quickRes.status).toBe('success');
+      expect(session.runtime.getState().done).toBe(true);
+
+      // 随后让 hanging promise reject，验证不触发 unhandled rejection
+      hangingReject(new Error('late rejection'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(unhandledRejectionFired).toBe(false);
+
+      // 1b. dispose 后及时 reject FLOW_ABORTED
+      const p = session.executeFlow('hangingModalFlow');
+      session.dispose();
+      await expect(p).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(FlowExecutionError);
+        expect((err as FlowExecutionError).code).toBe('FLOW_ABORTED');
+        return true;
+      });
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
+  it('29. 宿主同步/微任务占用超过 deadline 必须失败为 FLOW_DURATION_EXCEEDED', async () => {
+    const { session } = createTestSession(
+      {
+        blockingFlow: {
+          steps: [
+            { type: 'apiCall', url: 'https://api.example.com/block' },
+            { type: 'setValue', field: 'state.afterBlock', value: 'should-not-run' },
+          ],
+        },
+      },
+      {
+        flowLimits: { maxDurationMs: 30 },
+        api: {
+          get: async () => {
+            // 同步阻塞超过 deadline (忙等待 50ms)
+            const start = Date.now();
+            while (Date.now() - start < 50) {
+              // busy wait
+            }
+            return { ok: true };
+          },
+        },
+      },
+    );
+
+    await expect(session.executeFlow('blockingFlow')).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(FlowExecutionError);
+      expect((err as FlowExecutionError).code).toBe('FLOW_DURATION_EXCEEDED');
+      return true;
+    });
+
+    expect(session.runtime.getState().afterBlock).toBeUndefined();
+  });
+
+  it('30. apiCall.onSuccess 内 runFlow 触发 maxFlowDepth 不得被 apiCall.onError 或 Flow.onError 吞没', async () => {
+    const { session } = createTestSession(
+      {
+        rootFlow: {
+          steps: [
+            {
+              type: 'apiCall',
+              url: 'https://api.example.com/trigger-depth',
+              onSuccess: [{ type: 'runFlow', flow: 'deepFlow1' }],
+              onError: [{ type: 'setValue', field: 'state.apiOnErrorRan', value: true }],
+            },
+            { type: 'setValue', field: 'state.subsequentStepRan', value: true },
+          ],
+          onError: [{ type: 'setValue', field: 'state.flowOnErrorRan', value: true }],
+        },
+        deepFlow1: {
+          steps: [{ type: 'runFlow', flow: 'deepFlow2' }],
+        },
+        deepFlow2: {
+          steps: [{ type: 'setValue', field: 'state.deepRan', value: true }],
+        },
+      },
+      {
+        flowLimits: { maxFlowDepth: 2 }, // rootFlow (depth 1) -> deepFlow1 (depth 2) -> deepFlow2 exceeds!
+        api: {
+          get: async () => ({ success: true }),
+        },
+      },
+    );
+
+    await expect(session.executeFlow('rootFlow')).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(FlowExecutionError);
+      expect((err as FlowExecutionError).code).toBe('FLOW_DEPTH_EXCEEDED');
+      return true;
+    });
+
+    const state = session.runtime.getState();
+    expect(state.apiOnErrorRan).toBeUndefined();
+    expect(state.flowOnErrorRan).toBeUndefined();
+    expect(state.subsequentStepRan).toBeUndefined();
+  });
+
+  it('31. 根包收紧导出：不导出 FlowRun 及内部 Symbol 与 helper', async () => {
+    const rootExports = await import('../../index');
+    expect((rootExports as any).FlowRun).toBeUndefined();
+    expect((rootExports as any).FlowRunContext).toBeUndefined();
+    expect((rootExports as any).FLOW_RUN_CONTEXT).toBeUndefined();
+    expect((rootExports as any).getFlowRunContext).toBeUndefined();
+    expect((rootExports as any).withFlowRunPath).toBeUndefined();
+
+    // 验证确实导出了公开的错误类与辅助工具
+    expect(rootExports.FlowExecutionError).toBeDefined();
+    expect(rootExports.isNonRecoverableFlowErrorCode).toBeDefined();
+    expect(rootExports.DEFAULT_FLOW_EXECUTION_LIMITS).toBeDefined();
+    expect(rootExports.HARD_FLOW_EXECUTION_LIMITS).toBeDefined();
+    expect(rootExports.normalizeFlowExecutionLimits).toBeDefined();
+  });
+
+  it('32. primitive rejection 仅用于生成 message，不得产生 primitive cause', async () => {
+    const { session } = createTestSession(
+      {
+        primitiveErrorFlow: {
+          steps: [{ type: 'apiCall', url: 'https://api.example.com/reject-string' }],
+        },
+      },
+      {
+        api: {
+          get: () => Promise.reject('string rejection reason'),
+        },
+      },
+    );
+
+    await expect(session.executeFlow('primitiveErrorFlow')).rejects.toSatisfy((err: unknown) => {
+      expect(err).toBeInstanceOf(FlowExecutionError);
+      const flowErr = err as FlowExecutionError;
+      expect(flowErr.code).toBe('FLOW_STEP_FAILED');
+      expect(flowErr.message).toContain('string rejection reason');
+      expect(flowErr.cause).toBeUndefined();
+      return true;
+    });
+  });
 });

@@ -266,6 +266,21 @@ export class DSLExecutor {
       ...(flowContext ? { [FLOW_RUN_CONTEXT]: flowContext } : {}),
     };
     try {
+      if (flowContext) {
+        let actionPromise: Promise<unknown>;
+        try {
+          actionPromise = Promise.resolve(handler(action, liveContext, this));
+        } catch (handlerErr) {
+          actionPromise = Promise.reject(handlerErr);
+        }
+        actionPromise.catch(() => {});
+        return await flowContext.flowRun.executeWithAbortRace(
+          actionPromise,
+          flowContext.flowKey,
+          flowContext.topStepIndex,
+          flowContext.stepPath,
+        );
+      }
       return await handler(action, liveContext, this);
     } catch (err) {
       if (flowContext) {

@@ -32,7 +32,22 @@ export * from './bridge/createComponentRuntimeBridge';
 export * from './preset/createSealedPreset';
 export * from './preset/createComponentPreset';
 export * from './session/RuntimeSession';
-export * from './session/FlowRun';
+export {
+  FlowExecutionError,
+  isNonRecoverableFlowErrorCode,
+  DEFAULT_FLOW_EXECUTION_LIMITS,
+  HARD_FLOW_EXECUTION_LIMITS,
+  normalizeFlowExecutionLimits,
+} from './session/FlowRun';
+export type {
+  FlowErrorCode,
+  FlowTraceFrame,
+  FlowDiagnostic,
+  FlowRunResult,
+  FlowRunSuccessResult,
+  FlowRunRecoveredResult,
+  FlowExecutionLimits,
+} from './session/FlowRun';
 export * from './host/HostCapabilities';
 export * from './preset/sanitizePropsByManifest';
 export type { ComponentRuntimeBridge, DataResourceState } from './bridge/ComponentRuntimeBridge';

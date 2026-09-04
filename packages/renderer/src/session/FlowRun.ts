@@ -105,7 +105,7 @@ export interface FlowDiagnostic {
  */
 export class FlowExecutionError extends Error {
   readonly diagnostic: FlowDiagnostic;
-  cause?: unknown;
+  cause?: Error;
 
   constructor(diagnostic: FlowDiagnostic, cause?: unknown) {
     super(diagnostic.message);
@@ -121,7 +121,7 @@ export class FlowExecutionError extends Error {
       ),
       message: diagnostic.message,
     });
-    if (cause !== undefined) {
+    if (cause instanceof Error) {
       this.cause = cause;
     }
   }
@@ -230,6 +230,7 @@ export class FlowRun {
   private readonly runController = new AbortController();
   private durationTimedOut = false;
   private durationTimer?: ReturnType<typeof setTimeout>;
+  private deadline?: number;
   private sessionAbortListener?: () => void;
   private executor: DSLExecutor;
 
@@ -248,16 +249,50 @@ export class FlowRun {
     return this.runController.signal;
   }
 
+  abort(): void {
+    if (!this.runController.signal.aborted) {
+      this.runController.abort();
+    }
+  }
+
   /**
-   * 检查并抛出中止异常
+   * 检查并抛出中止异常（除 signal/session 外主动比较当前时间与 deadline）
    */
   throwIfAborted(
     flowKey: string = this.currentFlowKey,
     stepIndex: number | null = this.currentTopStep,
     stepPath: readonly (string | number)[] = this.currentStepPath,
   ): void {
-    if (this.runController.signal.aborted || this.session.isDisposed()) {
-      throw this.createAbortError(flowKey, stepIndex, stepPath);
+    if (this.durationTimedOut || (this.deadline !== undefined && Date.now() > this.deadline)) {
+      this.durationTimedOut = true;
+      if (!this.runController.signal.aborted) {
+        this.runController.abort();
+      }
+      throw this.createError(
+        'FLOW_DURATION_EXCEEDED',
+        flowKey,
+        stepIndex,
+        stepPath,
+        `Flow duration exceeded: maximum ${this.limits.maxDurationMs}ms allowed`,
+      );
+    }
+    if (this.session.isDisposed()) {
+      throw this.createError(
+        'FLOW_ABORTED',
+        flowKey,
+        stepIndex,
+        stepPath,
+        'RuntimeSession is disposed',
+      );
+    }
+    if (this.runController.signal.aborted) {
+      throw this.createError(
+        'FLOW_ABORTED',
+        flowKey,
+        stepIndex,
+        stepPath,
+        'Flow execution aborted',
+      );
     }
   }
 
@@ -269,11 +304,69 @@ export class FlowRun {
     stepIndex: number | null = this.currentTopStep,
     stepPath: readonly (string | number)[] = this.currentStepPath,
   ): FlowExecutionError {
-    const code: FlowErrorCode = this.durationTimedOut ? 'FLOW_DURATION_EXCEEDED' : 'FLOW_ABORTED';
-    const message = this.durationTimedOut
+    const isDuration =
+      this.durationTimedOut || (this.deadline !== undefined && Date.now() > this.deadline);
+    const code: FlowErrorCode = isDuration ? 'FLOW_DURATION_EXCEEDED' : 'FLOW_ABORTED';
+    const message = isDuration
       ? `Flow duration exceeded: maximum ${this.limits.maxDurationMs}ms allowed`
       : 'Flow execution aborted';
     return this.createError(code, flowKey, stepIndex, stepPath, message);
+  }
+
+  /**
+   * 内部 abortable-await 辅助方法：
+   * 将动作 Promise 与 FlowRun signal/deadline 进行 race。
+   * - Action Promise 与 signal race。
+   * - abort/dispose/timeout 时立即 reject，不等待 actionPromise settle。
+   * - 成功返回后再次检查 deadline/signal。
+   * - 无论哪条完成路径，都移除 abort 监听器。
+   * - losing Promise 后续 reject 时不会产生 unhandled rejection。
+   */
+  async executeWithAbortRace<T>(
+    actionPromise: Promise<T>,
+    flowKey: string = this.currentFlowKey,
+    stepIndex: number | null = this.currentTopStep,
+    stepPath: readonly (string | number)[] = this.currentStepPath,
+  ): Promise<T> {
+    // 附加静默 catch，防止 actionPromise 在输掉 race 之后才发生 reject 导致 unhandled rejection
+    actionPromise.catch(() => {});
+
+    this.throwIfAborted(flowKey, stepIndex, stepPath);
+
+    let cleanup: (() => void) | undefined;
+
+    const abortPromise = new Promise<never>((_, reject) => {
+      const onAbort = () => {
+        try {
+          this.throwIfAborted(flowKey, stepIndex, stepPath);
+          reject(this.createAbortError(flowKey, stepIndex, stepPath));
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      if (
+        this.runController.signal.aborted ||
+        this.session.isDisposed() ||
+        (this.deadline !== undefined && Date.now() > this.deadline)
+      ) {
+        onAbort();
+        return;
+      }
+
+      this.runController.signal.addEventListener('abort', onAbort, { once: true });
+      cleanup = () => {
+        this.runController.signal.removeEventListener('abort', onAbort);
+      };
+    });
+
+    try {
+      const result = await Promise.race([actionPromise, abortPromise]);
+      this.throwIfAborted(flowKey, stepIndex, stepPath);
+      return result;
+    } finally {
+      cleanup?.();
+    }
   }
 
   /**
@@ -370,7 +463,10 @@ export class FlowRun {
       throw this.createError('FLOW_NOT_FOUND', flowId, null, [], `Flow not found: "${flowId}"`);
     }
 
-    // 设置耗时定时器与 Session abort 监听
+    // 记录单调 deadline 与设置耗时定时器
+    this.deadline =
+      this.limits.maxDurationMs > 0 ? Date.now() + this.limits.maxDurationMs : undefined;
+
     if (this.limits.maxDurationMs > 0) {
       this.durationTimer = setTimeout(() => {
         this.durationTimedOut = true;

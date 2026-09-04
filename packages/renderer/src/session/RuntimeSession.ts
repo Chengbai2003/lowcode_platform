@@ -234,6 +234,9 @@ export class RuntimeSession {
     this.disposed = true;
     this.generationValue += 1;
 
+    for (const run of this.activeRootRuns) {
+      run.abort();
+    }
     this.activeRootRuns.clear();
 
     for (const timer of this.timers) {
