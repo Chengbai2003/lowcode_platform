@@ -1245,4 +1245,165 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
       return true;
     });
   });
+
+  it('33. 确定性测试：deadline 已过期、timer 尚未执行、宿主 Action 此时 reject 必须抛出 FLOW_DURATION_EXCEEDED 且不执行任何 onError 及后续步骤', async () => {
+    let mockTime = 1000;
+    const nowSpy = vi.spyOn(performance, 'now').mockImplementation(() => mockTime);
+
+    try {
+      let rejectApiCall!: (err: Error) => void;
+      const hostPromise = new Promise((_, reject) => {
+        rejectApiCall = reject;
+      });
+
+      const { session } = createTestSession(
+        {
+          expiredRejectFlow: {
+            steps: [
+              {
+                type: 'apiCall',
+                url: 'https://api.example.com/reject-on-timeout',
+                onError: [{ type: 'setValue', field: 'state.apiOnErrorRan', value: true }],
+              },
+              { type: 'setValue', field: 'state.subsequentStepRan', value: true },
+            ],
+            onError: [{ type: 'setValue', field: 'state.flowOnErrorRan', value: true }],
+          },
+        },
+        {
+          flowLimits: { maxDurationMs: 50 },
+          api: {
+            get: () => hostPromise,
+          },
+        },
+      );
+
+      const flowPromise = session.executeFlow('expiredRejectFlow');
+
+      // 确定性将时钟推进到超限 (1000 + 50 = 1050, 设为 1060)，此时 timer 定时器尚未触发
+      mockTime = 1060;
+
+      // 宿主 Action 发生 reject
+      rejectApiCall(new Error('host network failure'));
+
+      await expect(flowPromise).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(FlowExecutionError);
+        const flowErr = err as FlowExecutionError;
+        expect(flowErr.code).toBe('FLOW_DURATION_EXCEEDED');
+        expect(flowErr.message).toContain('Flow duration exceeded');
+        return true;
+      });
+
+      const state = session.runtime.getState();
+      expect(state.apiOnErrorRan).toBeUndefined();
+      expect(state.flowOnErrorRan).toBeUndefined();
+      expect(state.subsequentStepRan).toBeUndefined();
+
+      // 验证未声明 Action 级 onError 的异步 Action 在 deadline 过期后 reject，executeWithAbortRace catch 分支同样抛出 FLOW_DURATION_EXCEEDED
+      mockTime = 2000;
+      let rejectNoOnErrorCall!: (err: Error) => void;
+      const noOnErrorPromise = new Promise((_, reject) => {
+        rejectNoOnErrorCall = reject;
+      });
+
+      const { session: noOnErrorSession } = createTestSession(
+        {
+          noOnErrorExpiredFlow: {
+            steps: [
+              { type: 'apiCall', url: 'https://api.example.com/no-action-on-error' },
+              { type: 'setValue', field: 'state.afterNoOnError', value: true },
+            ],
+            onError: [{ type: 'setValue', field: 'state.flowCatchRan', value: true }],
+          },
+        },
+        {
+          flowLimits: { maxDurationMs: 40 },
+          api: {
+            get: () => noOnErrorPromise,
+          },
+        },
+      );
+
+      const noOnErrorFlowPromise = noOnErrorSession.executeFlow('noOnErrorExpiredFlow');
+      mockTime = 2050; // 超出 2000 + 40
+      rejectNoOnErrorCall(new Error('raw network error'));
+
+      await expect(noOnErrorFlowPromise).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(FlowExecutionError);
+        expect((err as FlowExecutionError).code).toBe('FLOW_DURATION_EXCEEDED');
+        return true;
+      });
+      expect(noOnErrorSession.runtime.getState().afterNoOnError).toBeUndefined();
+      expect(noOnErrorSession.runtime.getState().flowCatchRan).toBeUndefined();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('34. 确定性测试：session.dispose() 后宿主 Action 发生 reject，断言抛出 FLOW_ABORTED 且不会触发未捕获 rejection', async () => {
+    let unhandledRejectionFired = false;
+    let unhandledReason: unknown;
+    const onUnhandled = (reason: unknown) => {
+      unhandledRejectionFired = true;
+      unhandledReason = reason;
+    };
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      let rejectHostAction!: (err: Error) => void;
+      const hostPromise = new Promise((_, reject) => {
+        rejectHostAction = reject;
+      });
+
+      const { session } = createTestSession(
+        {
+          disposeRejectFlow: {
+            steps: [
+              {
+                type: 'apiCall',
+                url: 'https://api.example.com/hang',
+                onError: [{ type: 'setValue', field: 'state.actionOnErrorRan', value: true }],
+              },
+              { type: 'setValue', field: 'state.subsequentStepRan', value: true },
+            ],
+            onError: [{ type: 'setValue', field: 'state.flowOnErrorRan', value: true }],
+          },
+        },
+        {
+          api: {
+            get: () => hostPromise,
+          },
+        },
+      );
+
+      const flowPromise = session.executeFlow('disposeRejectFlow');
+
+      // 宿主 Action 进行中，外部主动销毁 Session
+      session.dispose();
+
+      // Session dispose 后宿主 Action 发生 reject
+      rejectHostAction(new Error('late host failure after session disposed'));
+
+      await expect(flowPromise).rejects.toSatisfy((err: unknown) => {
+        expect(err).toBeInstanceOf(FlowExecutionError);
+        const flowErr = err as FlowExecutionError;
+        expect(flowErr.code).toBe('FLOW_ABORTED');
+        expect(flowErr.message).toContain('RuntimeSession is disposed');
+        return true;
+      });
+
+      // 验证未产生全局未捕获 Promise rejection
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(unhandledRejectionFired).toBe(false);
+      expect(unhandledReason).toBeUndefined();
+
+      // 验证 Action.onError、Flow.onError 以及后续步骤均未执行
+      const state = session.runtime.getState();
+      expect(state.actionOnErrorRan).toBeUndefined();
+      expect(state.flowOnErrorRan).toBeUndefined();
+      expect(state.subsequentStepRan).toBeUndefined();
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

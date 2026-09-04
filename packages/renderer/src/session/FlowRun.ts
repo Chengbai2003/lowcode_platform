@@ -263,7 +263,10 @@ export class FlowRun {
     stepIndex: number | null = this.currentTopStep,
     stepPath: readonly (string | number)[] = this.currentStepPath,
   ): void {
-    if (this.durationTimedOut || (this.deadline !== undefined && Date.now() > this.deadline)) {
+    if (
+      this.durationTimedOut ||
+      (this.deadline !== undefined && performance.now() > this.deadline)
+    ) {
       this.durationTimedOut = true;
       if (!this.runController.signal.aborted) {
         this.runController.abort();
@@ -305,7 +308,7 @@ export class FlowRun {
     stepPath: readonly (string | number)[] = this.currentStepPath,
   ): FlowExecutionError {
     const isDuration =
-      this.durationTimedOut || (this.deadline !== undefined && Date.now() > this.deadline);
+      this.durationTimedOut || (this.deadline !== undefined && performance.now() > this.deadline);
     const code: FlowErrorCode = isDuration ? 'FLOW_DURATION_EXCEEDED' : 'FLOW_ABORTED';
     const message = isDuration
       ? `Flow duration exceeded: maximum ${this.limits.maxDurationMs}ms allowed`
@@ -348,7 +351,7 @@ export class FlowRun {
       if (
         this.runController.signal.aborted ||
         this.session.isDisposed() ||
-        (this.deadline !== undefined && Date.now() > this.deadline)
+        (this.deadline !== undefined && performance.now() > this.deadline)
       ) {
         onAbort();
         return;
@@ -364,6 +367,9 @@ export class FlowRun {
       const result = await Promise.race([actionPromise, abortPromise]);
       this.throwIfAborted(flowKey, stepIndex, stepPath);
       return result;
+    } catch (error) {
+      this.throwIfAborted(flowKey, stepIndex, stepPath);
+      throw error;
     } finally {
       cleanup?.();
     }
@@ -465,7 +471,7 @@ export class FlowRun {
 
     // 记录单调 deadline 与设置耗时定时器
     this.deadline =
-      this.limits.maxDurationMs > 0 ? Date.now() + this.limits.maxDurationMs : undefined;
+      this.limits.maxDurationMs > 0 ? performance.now() + this.limits.maxDurationMs : undefined;
 
     if (this.limits.maxDurationMs > 0) {
       this.durationTimer = setTimeout(() => {
