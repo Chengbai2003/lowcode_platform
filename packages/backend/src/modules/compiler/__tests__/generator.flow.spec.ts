@@ -140,12 +140,19 @@ describe('compiler ActionFlow runtime generation', () => {
     const fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('nested failure'));
     try {
       const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }');
-      await expect(harness.value.executeFlow('main')).rejects.toMatchObject({
+      let caughtError: unknown;
+      try {
+        await harness.value.executeFlow('main');
+      } catch (error) {
+        caughtError = error;
+      }
+      expect(caughtError).toMatchObject({
         code: 'FLOW_STEP_FAILED',
         flow: 'main',
         step: 0,
         stepPath,
         path: ['logic', 'flows', 'main', ...stepPath],
+        cause: expect.objectContaining({ message: 'nested failure' }),
       });
     } finally {
       fetchMock.mockRestore();
@@ -218,11 +225,21 @@ describe('compiler ActionFlow runtime generation', () => {
         mockModal: modal,
       });
       await expect(harness.value.executeFlow('success')).rejects.toMatchObject({
+        code: 'FLOW_STEP_FAILED',
+        flow: 'success',
+        step: 0,
         stepPath: ['steps', 0, 'onSuccess', 0],
+        path: ['logic', 'flows', 'success', 'steps', 0, 'onSuccess', 0],
       });
       const pending = harness.value.executeFlow('dialog');
       await onOk?.();
-      await expect(pending).rejects.toMatchObject({ stepPath: ['steps', 0, 'onOk', 0] });
+      await expect(pending).rejects.toMatchObject({
+        code: 'FLOW_STEP_FAILED',
+        flow: 'dialog',
+        step: 0,
+        stepPath: ['steps', 0, 'onOk', 0],
+        path: ['logic', 'flows', 'dialog', 'steps', 0, 'onOk', 0],
+      });
     } finally {
       fetchMock.mockRestore();
     }
@@ -427,8 +444,7 @@ describe('compiler ActionFlow runtime generation', () => {
     }
   });
 
-  it('enforces action execution budget (> 200 actions)', async () => {
-    // 45 loop iterations * 5 inner actions = 225 runtime actions
+  it('enforces a trusted custom action execution budget through executeFlow', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -441,24 +457,19 @@ describe('compiler ActionFlow runtime generation', () => {
           budgetFlow: {
             steps: [
               {
-                type: 'loop',
-                over: Array.from({ length: 45 }, (_, i) => i),
-                itemVar: 'i',
-                actions: [
-                  { type: 'setValue', field: 'state.count', value: 1 },
-                  { type: 'setValue', field: 'state.count', value: 2 },
-                  { type: 'setValue', field: 'state.count', value: 3 },
-                  { type: 'setValue', field: 'state.count', value: 4 },
-                  { type: 'setValue', field: 'state.count', value: 5 },
-                ],
+                type: 'setValue',
+                field: 'state.count',
+                value: 1,
               },
+              { type: 'setValue', field: 'state.count', value: 2 },
+              { type: 'setValue', field: 'state.count', value: 3 },
             ],
           },
         },
       },
     };
 
-    const code = compileToCode(schema);
+    const code = compileToCode(schema, { flowExecutionLimits: { maxExecutedActions: 2 } });
     const harness = createFlowHarness(code, `{ executeFlow }`);
 
     await expect(harness.value.executeFlow('budgetFlow')).rejects.toMatchObject({
@@ -468,8 +479,7 @@ describe('compiler ActionFlow runtime generation', () => {
     });
   });
 
-  it('enforces loop iteration budget (> 200 iterations)', async () => {
-    const largeArray = Array.from({ length: 205 }, (_, i) => i);
+  it('enforces a trusted custom loop iteration budget through executeFlow', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -483,7 +493,7 @@ describe('compiler ActionFlow runtime generation', () => {
             steps: [
               {
                 type: 'loop',
-                over: largeArray,
+                over: [1, 2, 3],
                 itemVar: 'item',
                 actions: [{ type: 'feedback', kind: 'message', content: 'tick' }],
               },
@@ -493,7 +503,9 @@ describe('compiler ActionFlow runtime generation', () => {
       },
     };
 
-    const code = compileToCode(schema, { flowExecutionLimits: { maxExecutedActions: 100000 } });
+    const code = compileToCode(schema, {
+      flowExecutionLimits: { maxExecutedActions: 10, maxLoopIterations: 2 },
+    });
     const harness = createFlowHarness(code, `{ executeFlow }`);
 
     await expect(harness.value.executeFlow('loopBudgetFlow')).rejects.toMatchObject({
@@ -502,7 +514,7 @@ describe('compiler ActionFlow runtime generation', () => {
     });
   });
 
-  it('enforces call depth budget (> 16 depth)', async () => {
+  it('enforces a trusted custom call depth budget through executeFlow', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -512,35 +524,23 @@ describe('compiler ActionFlow runtime generation', () => {
       logic: {
         states: { done: false },
         flows: {
-          targetFlow: {
-            steps: [{ type: 'setValue', field: 'state.done', value: true }],
-          },
+          first: { steps: [{ type: 'runFlow', flow: 'second' }] },
+          second: { steps: [{ type: 'runFlow', flow: 'third' }] },
+          third: { steps: [{ type: 'setValue', field: 'state.done', value: true }] },
         },
       },
     };
 
-    const code = compileToCode(schema);
-    const harness = createFlowHarness(code, `{ executeChildFlow, executeFlow }`);
+    const code = compileToCode(schema, { flowExecutionLimits: { maxFlowDepth: 2 } });
+    const harness = createFlowHarness(code, `{ executeFlow }`);
 
-    // Simulate 16 active callStack frames
-    const mockContext = {
-      callStack: Array.from({ length: 16 }, (_, i) => ({ flow: `flow_${i}`, step: 0 })),
-      throwIfAborted: jest.fn(),
-      createError: (code: string) => ({ name: 'FlowExecutionError', code }),
-    };
-
-    await expect(
-      harness.value.executeChildFlow('targetFlow', undefined, mockContext, 'caller', 0, [
-        'steps',
-        0,
-      ]),
-    ).rejects.toMatchObject({
+    await expect(harness.value.executeFlow('first')).rejects.toMatchObject({
       name: 'FlowExecutionError',
       code: 'FLOW_DEPTH_EXCEEDED',
     });
   });
 
-  it('enforces concurrency budget (> 8 concurrent flows)', async () => {
+  it('enforces a trusted custom concurrency budget through executeFlow', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -557,24 +557,21 @@ describe('compiler ActionFlow runtime generation', () => {
       },
     };
 
-    const code = compileToCode(schema);
+    const code = compileToCode(schema, { flowExecutionLimits: { maxConcurrentRuns: 1 } });
     const harness = createFlowHarness(code, `{ executeFlow }`);
 
-    const promises: Promise<unknown>[] = [];
-    for (let i = 0; i < 8; i++) {
-      promises.push(harness.value.executeFlow('slowFlow'));
-    }
+    const firstRun = harness.value.executeFlow('slowFlow');
 
-    // 9th concurrent flow should immediately reject with FLOW_CONCURRENCY_EXCEEDED
+    // The second root run should immediately reject while the first delay is pending.
     await expect(harness.value.executeFlow('slowFlow')).rejects.toMatchObject({
       name: 'FlowExecutionError',
       code: 'FLOW_CONCURRENCY_EXCEEDED',
     });
 
-    await Promise.all(promises);
+    await firstRun;
   });
 
-  it('enforces duration budget using monotonic performance.now()', async () => {
+  it('enforces a trusted custom duration budget using monotonic performance.now()', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -594,7 +591,7 @@ describe('compiler ActionFlow runtime generation', () => {
       },
     };
 
-    const code = compileToCode(schema);
+    const code = compileToCode(schema, { flowExecutionLimits: { maxDurationMs: 1 } });
     const harness = createFlowHarness(code, `{ executeFlow }`);
 
     const realNow = performance.now;
@@ -603,8 +600,8 @@ describe('compiler ActionFlow runtime generation', () => {
 
     try {
       const flowPromise = harness.value.executeFlow('timeoutFlow');
-      // Advance mocked monotonic clock past 30000ms deadline
-      mockedTime += 31000;
+      // Advance mocked monotonic clock past the trusted one-millisecond deadline.
+      mockedTime += 2;
 
       await expect(flowPromise).rejects.toMatchObject({
         name: 'FlowExecutionError',
@@ -612,6 +609,30 @@ describe('compiler ActionFlow runtime generation', () => {
       });
     } finally {
       jest.spyOn(performance, 'now').mockImplementation(realNow);
+    }
+  });
+
+  it('clears a pending delay timer when unmount aborts its public flow run', async () => {
+    jest.useFakeTimers();
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: { flows: { delayed: { steps: [{ type: 'delay', ms: 1_000 }] } } },
+    };
+
+    try {
+      const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }');
+      const pendingRun = harness.value.executeFlow('delayed');
+
+      expect(jest.getTimerCount()).toBeGreaterThan(0);
+      harness.unmount();
+
+      await expect(pendingRun).rejects.toMatchObject({ code: 'FLOW_ABORTED' });
+      await Promise.resolve();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
     }
   });
 
