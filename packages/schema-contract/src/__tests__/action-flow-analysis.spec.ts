@@ -1074,15 +1074,11 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
     expect(entries).toHaveLength(9);
 
     for (const [, testCase] of entries) {
-      const parseRes = validatePageSchemaValue(testCase.schema);
-      const flowRes = testCase.schema.logic?.flows
-        ? analyzeActionFlowDeclarations(testCase.schema.logic.flows)
-        : { ok: true, issues: [] };
-      const issues = [
-        ...(parseRes.ok ? [] : parseRes.issues),
-        ...(flowRes.ok ? [] : flowRes.issues),
-      ];
-      const matched = issues.find((issue) => issue.code === testCase.expectedCode);
+      const result = validatePageSchemaValue(testCase.schema);
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+
+      const matched = result.issues.find((issue) => issue.code === testCase.expectedCode);
       expect(matched).toBeDefined();
       expect(matched?.path).toEqual(testCase.expectedPath);
     }

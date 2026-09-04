@@ -196,16 +196,25 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
   });
 
   it('handles delay cancellation scenario with no state write-back after unmount', async () => {
+    let activeSession: RuntimeSession | undefined;
+    const sessionSpy = vi
+      .spyOn(RuntimeSessionModule, 'createRuntimeSession')
+      .mockImplementation((options) => {
+        const s = new RuntimeSessionModule.RuntimeSession(options);
+        activeSession = s;
+        return s;
+      });
     vi.useFakeTimers();
+
     try {
-      let activeSession: RuntimeSession | undefined;
-      const sessionSpy = vi
-        .spyOn(RuntimeSessionModule, 'createRuntimeSession')
-        .mockImplementation((options) => {
-          const s = new RuntimeSessionModule.RuntimeSession(options);
-          activeSession = s;
-          return s;
-        });
+      const cancellation = pageLogicConformance.expected.cancellation;
+      const cancelComponent = Object.values(pageLogicConformance.schema.components).find((comp) =>
+        comp.events?.onClick?.some(
+          (action) => action.type === 'runFlow' && action.flow === cancellation.flow,
+        ),
+      );
+      expect(cancelComponent).toBeDefined();
+      const buttonLabel = String(cancelComponent?.props?.children ?? '');
 
       const rendered = render(
         <Renderer
@@ -217,32 +226,32 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
       );
 
       expect(activeSession).toBeDefined();
+      expect(activeSession?.runtime.getState()).toMatchObject(cancellation.initialState);
       expect(
         screen.getByText(pageLogicConformance.expected.initialVisibleText.delayed),
       ).toBeTruthy();
 
+      const inFlightAdvanceMs = Math.max(1, Math.floor(cancellation.delayMs / 2));
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Cancel Delay' }));
-        await vi.advanceTimersByTimeAsync(20);
+        fireEvent.click(screen.getByRole('button', { name: buttonLabel }));
+        await vi.advanceTimersByTimeAsync(inFlightAdvanceMs);
       });
 
       // Unmount the component while flow delay is pending
       rendered.unmount();
       expect(activeSession?.isDisposed()).toBe(true);
 
-      // Advance timers well beyond the 100ms delay
+      // Advance timers past delayMs
+      const postUnmountAdvanceMs = cancellation.delayMs * 2;
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(200);
+        await vi.advanceTimersByTimeAsync(postUnmountAdvanceMs);
       });
 
       // Observe the SAME RuntimeSession instance: state must remain initial with zero write-back
-      expect(activeSession?.runtime.getState().delayedState).toBe(
-        pageLogicConformance.expected.cancellation.noWriteBackState.delayedState,
-      );
-
+      expect(activeSession?.runtime.getState()).toMatchObject(cancellation.noWriteBackState);
+    } finally {
       sessionSpy.mockRestore();
       cleanup();
-    } finally {
       vi.useRealTimers();
     }
   });
