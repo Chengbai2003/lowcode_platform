@@ -5,7 +5,7 @@ import { compileToCode } from '../generator';
 
 const conformanceFixture = JSON.parse(
   readFileSync(
-    path.resolve(process.cwd(), '../../test-fixtures/m1a-computed-conformance.json'),
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
     'utf8',
   ),
 ) as {
@@ -50,14 +50,18 @@ function createHookHarness(code: string, returnedCode: string) {
   };
   const useMemo = (factory: () => unknown) => factory();
   const useRef = <T>(value: T) => ({ current: value });
+  const useEffect = (effect: () => void | (() => void)) => {
+    effect();
+  };
   const factory = new Function(
     'useState',
     'useMemo',
     'useRef',
+    'useEffect',
     `${extractGeneratedComponentBody(code)}\nreturn ${returnedCode};`,
   );
   return {
-    value: factory(useState, useMemo, useRef),
+    value: factory(useState, useMemo, useRef, useEffect),
     getRenderedState: () => renderedState,
   };
 }

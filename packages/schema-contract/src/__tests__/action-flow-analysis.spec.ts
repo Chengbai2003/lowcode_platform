@@ -1,11 +1,39 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   analyzeActionFlowDeclarations,
+  createCanonicalPageSchema,
   DEFAULT_FLOW_EXECUTION_LIMITS,
   HARD_FLOW_EXECUTION_LIMITS,
   normalizeFlowExecutionLimits,
   validatePageSchemaValue,
+  type PageSchema,
 } from '../index';
+
+interface ConformanceCorpus {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly expected: {
+    readonly canonicalLogic: Record<string, unknown>;
+  };
+  readonly negativeCases: Record<
+    string,
+    {
+      readonly schema: PageSchema;
+      readonly expectedCode: string;
+      readonly expectedPath: ReadonlyArray<string | number>;
+    }
+  >;
+}
+
+const conformanceFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+    'utf8',
+  ),
+) as ConformanceCorpus;
 
 describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
   it('1. accepts a single valid Flow declaration and produces topology', () => {
@@ -1013,5 +1041,46 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
         maxExecutedActions: HARD_FLOW_EXECUTION_LIMITS.maxExecutedActions + 1,
       }),
     ).toThrow();
+  });
+
+  it('39. accepts the shared conformance corpus flows and produces a valid topological order', () => {
+    expect(conformanceFixture.corpusVersion).toBe('1.0.0');
+    expect(typeof conformanceFixture.reviewReason).toBe('string');
+    expect(conformanceFixture.reviewReason.trim().length).toBeGreaterThan(0);
+
+    const canonicalSchema = createCanonicalPageSchema(conformanceFixture.schema);
+    expect(canonicalSchema.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+
+    const canonical = validatePageSchemaValue(conformanceFixture.schema);
+    expect(canonical.ok).toBe(true);
+    if (!canonical.ok) return;
+
+    const flows = canonical.value.logic?.flows;
+    expect(flows).toBeDefined();
+    if (!flows) return;
+
+    const analysis = analyzeActionFlowDeclarations(flows);
+    expect(analysis.ok).toBe(true);
+    if (!analysis.ok) return;
+
+    const recordIndex = analysis.value.order.indexOf('recordSource');
+    const submitIndex = analysis.value.order.indexOf('submitOrder');
+    expect(recordIndex).toBeGreaterThanOrEqual(0);
+    expect(submitIndex).toBeGreaterThan(recordIndex);
+  });
+
+  it('40. validates all 9 negative conformance cases with exact code and path', () => {
+    const entries = Object.entries(conformanceFixture.negativeCases);
+    expect(entries).toHaveLength(9);
+
+    for (const [, testCase] of entries) {
+      const result = validatePageSchemaValue(testCase.schema);
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+
+      const matched = result.issues.find((issue) => issue.code === testCase.expectedCode);
+      expect(matched).toBeDefined();
+      expect(matched?.path).toEqual(testCase.expectedPath);
+    }
   });
 });

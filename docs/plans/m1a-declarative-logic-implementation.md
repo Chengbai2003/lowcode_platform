@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-2 / F3 已实施，Draft PR #52 待审核；#47 仍为后续六消费面门禁` | **优先级**：`P0`
+> **当前阶段**：`M1a-3 / C1 进行中（统一版本化语料）；#46 已完成，#47 进行中（待 C2/C3 实施六消费面能力门禁）` | **优先级**：`P0`
 
 ## 目标与边界
 
@@ -53,7 +53,7 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
 - RuntimeSession 私有持有 Computed 缓存与反向依赖图；State 顶层 Logic Key 变更只失效直接和传递依赖，批量写入最多一次 flush。
 - `computed.*` 进入 Renderer 安全表达式上下文并保持只读；声明图热替换保留当前 Session State，dispose 清空图与缓存。
 - Compiler 复用 Contract 拓扑生成 React 代码，并用事件局部值与 ref 保证连续动作及跨 `await` 动作读取最新 State/Computed。
-- `test-fixtures/m1a-computed-conformance.json` 同时驱动 Contract、Renderer 与 Compiler，验证初始值及一次事件后的可观察状态一致。
+- `test-fixtures/m1a-page-logic-conformance.json` 统一语料同时驱动 Contract、Renderer 与 Compiler，验证初始值及一次事件后的可观察状态一致。
 
 ### S4：页面逻辑 Authoring 与结构化诊断闭环（已完成）
 
@@ -70,12 +70,12 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
 - **实施状态**：
   - **F1 / F1.1 已完成**：建立具名 ActionFlow Schema Contract、独立静态分析器与综合深度预算；
   - **F2 已完成**：实现 Renderer 内部 ActionFlow Runtime 语义（默认遇错停止、flow 级 `onError`、AbortSignal 全链路贯穿、session dispose 后写回阻断、结构化诊断 trace、多维运行时预算边界校验与矩阵测试守护）；
-  - **F3 已实施（待 PR 审核）**：生产 `PageSchema.logic.flows`、组件事件 `runFlow`、Renderer/Compiler 执行、Editor/Agent authoring 与 Repository 往返已接通；保留 Legacy ActionList，不做自动迁移。跨六消费面固定语料门禁仍属 #47。
+  - **F3 已完成（PR #52 已合并）**：生产 `PageSchema.logic.flows`、组件事件 `runFlow`、Renderer/Compiler 执行、Editor/Agent authoring 与 Repository 往返已完整贯通并合并主线；保留 Legacy ActionList，不做自动迁移。
 
-### M1a-3：一致性门禁
+### M1a-3：六消费面一致性门禁（#47 进行中）
 
-- 维护一份固定 Page Logic 语料，驱动六个 Consumer Surface。
-- 比较 Renderer 与 Compiler 的可观察状态、渲染、错误和取消行为；发现差异即阻断发布。
+- **C1 进行中**：建立唯一统一版本化语料 `test-fixtures/m1a-page-logic-conformance.json`，合并并替代旧的独立语料，统一覆盖 State、Computed、ActionFlow、Legacy inline ActionList、取消写回守卫、边界超限与负向诊断用例。迁移 Contract/Renderer/Compiler 现有测试对旧语料的依赖并彻底移除旧文件。
+- **C2/C3 待实施**：实施六消费面能力门禁（Capability Gate），比较 Renderer 与 Compiler 的可观察状态、渲染、错误和取消行为；发现差异即阻断发布。注意：#47 尚未完成，C1 仅交付统一语料基座。
 
 ## 阶段门槛
 
