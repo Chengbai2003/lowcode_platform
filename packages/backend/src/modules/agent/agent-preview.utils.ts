@@ -205,16 +205,22 @@ function buildPatchChangeEntry(
       };
     case 'replacePageLogic': {
       const logic = operation.logic as
-        | { states?: Record<string, unknown>; computed?: Record<string, unknown> }
+        | {
+            states?: Record<string, unknown>;
+            computed?: Record<string, unknown>;
+            flows?: Record<string, unknown>;
+          }
         | undefined;
       const statesCount = Object.keys(logic?.states ?? {}).length;
       const computedCount = Object.keys(logic?.computed ?? {}).length;
+      const flowCount = Object.keys(logic?.flows ?? {}).length;
       const prevStatesCount = Object.keys(baseSchema.logic?.states ?? {}).length;
       const prevComputedCount = Object.keys(baseSchema.logic?.computed ?? {}).length;
+      const prevFlowCount = Object.keys(baseSchema.logic?.flows ?? {}).length;
       return {
         op: operation.op,
         targetId: 'page.logic',
-        summary: `修改页面逻辑声明 (State: ${prevStatesCount} -> ${statesCount}, Computed: ${prevComputedCount} -> ${computedCount})`,
+        summary: `修改页面逻辑声明 (State: ${prevStatesCount} -> ${statesCount}, Computed: ${prevComputedCount} -> ${computedCount}, Flow: ${prevFlowCount} -> ${flowCount})`,
       };
     }
   }

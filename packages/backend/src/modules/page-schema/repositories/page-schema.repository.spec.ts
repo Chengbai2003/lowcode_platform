@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { PageSchemaRepository } from './page-schema.repository';
 
 const runtimeCompatibility = {
@@ -144,15 +145,21 @@ describe('PageSchemaRepository', () => {
     expect(Object.prototype.hasOwnProperty.call(onDisk.snapshots[0].schema, 'version')).toBe(false);
   });
 
-  it('round-trips declared Page State and Computed through snapshots and disk reload', async () => {
+  it('round-trips declared Page Logic including ActionFlows through snapshots and disk reload', async () => {
     const repo = createRepo();
     await repo.onModuleInit();
-    const schema = {
-      ...createSchema('stateful'),
-      logic: {
-        states: { count: 1, profile: { name: 'Ada' } },
-        computed: { label: 'state.profile.name + ":" + String(state.count)' },
+    const logic = {
+      states: { count: 1, profile: { name: 'Ada' } },
+      computed: { label: 'state.profile.name + ":" + String(state.count)' },
+      flows: {
+        saveProfile: {
+          steps: [{ type: 'setValue' as const, field: 'state.count', value: 2 }],
+        },
       },
+    };
+    const schema: PageSchema = {
+      ...createSchema('stateful'),
+      logic,
     };
 
     const { snapshot } = await repo.saveSchema({
@@ -162,18 +169,22 @@ describe('PageSchemaRepository', () => {
       runtimeCompatibility,
     });
 
-    expect(snapshot.schema.logic?.states).toEqual(schema.logic.states);
-    expect(snapshot.schema.logic?.computed).toEqual(schema.logic.computed);
+    expect(snapshot.schema.logic?.states).toEqual(logic.states);
+    expect(snapshot.schema.logic?.computed).toEqual(logic.computed);
+    expect(snapshot.schema.logic?.flows).toEqual(logic.flows);
     expect(Object.isFrozen(snapshot.schema.logic?.states?.profile)).toBe(true);
     expect(Object.isFrozen(snapshot.schema.logic?.computed)).toBe(true);
 
     const reloaded = createRepo();
     await reloaded.onModuleInit();
     expect(reloaded.getSnapshotByVersion('p-stateful', 1)?.schema.logic?.states).toEqual(
-      schema.logic.states,
+      logic.states,
     );
     expect(reloaded.getSnapshotByVersion('p-stateful', 1)?.schema.logic?.computed).toEqual(
-      schema.logic.computed,
+      logic.computed,
+    );
+    expect(reloaded.getSnapshotByVersion('p-stateful', 1)?.schema.logic?.flows).toEqual(
+      logic.flows,
     );
   });
 

@@ -4,6 +4,11 @@
 export { FeedbackActionEditor, DialogActionEditor } from './uiActionEditors';
 export { SetValueActionEditor, ApiCallActionEditor } from './dataActionEditors';
 export { NavigateActionEditor } from './navActionEditors';
-export { IfActionEditor, LoopActionEditor, DelayActionEditor } from './flowActionEditors';
+export {
+  IfActionEditor,
+  LoopActionEditor,
+  DelayActionEditor,
+  RunFlowActionEditor,
+} from './flowActionEditors';
 export { LogActionEditor, CustomScriptActionEditor } from './debugActionEditors';
 export { UnsupportedActionEditor } from './UnsupportedActionEditor';

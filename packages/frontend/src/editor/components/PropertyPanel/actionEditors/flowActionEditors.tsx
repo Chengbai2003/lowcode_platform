@@ -7,6 +7,7 @@ import {
   IfActionItem,
   LoopActionItem,
   DelayActionItem,
+  RunFlowActionItem,
   formatValue,
   parseValueInput,
   parseNumberInput,
@@ -96,6 +97,44 @@ export const DelayActionEditor = ({
           const next = parseNumberInput(event.target.value);
           updateAction(next === undefined ? { ms: undefined } : { ms: next });
         }}
+      />
+    </div>
+  </div>
+);
+
+/** RunFlow 动作编辑器：只允许选择当前页面已经声明的流程。 */
+export const RunFlowActionEditor = ({
+  action,
+  flowKeys,
+  updateAction,
+}: {
+  action: RunFlowActionItem;
+  flowKeys: readonly string[];
+  updateAction: ActionUpdate;
+}) => (
+  <div className={styles.actionEditor}>
+    <div className={styles.actionField}>
+      <label>页面流程</label>
+      <select
+        aria-label="页面流程"
+        value={action.flow}
+        onChange={(event) => updateAction({ flow: event.target.value })}
+      >
+        {flowKeys.map((flowKey) => (
+          <option key={flowKey} value={flowKey}>
+            {flowKey}
+          </option>
+        ))}
+      </select>
+    </div>
+    <div className={styles.actionField}>
+      <label>输入（可选 JSON）</label>
+      <input
+        aria-label="流程输入"
+        value={formatValue(action.input)}
+        onChange={(event) =>
+          updateAction({ input: parseValueInput(event.target.value) as JsonValue })
+        }
       />
     </div>
   </div>
