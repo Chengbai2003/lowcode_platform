@@ -486,4 +486,85 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       }),
     ]);
   });
+
+  it('24. regression: aborts immediately on maxIssues when single flow carries numerous unknown fields', () => {
+    const maliciousFlow: Record<string, unknown> = {
+      steps: [{ type: 'log', value: 'hello' }],
+    };
+    for (let i = 0; i < 20; i++) {
+      maliciousFlow[`extraField_${i}`] = i;
+    }
+
+    const result = analyzeActionFlowDeclarations(
+      {
+        main: maliciousFlow,
+      },
+      { maxIssues: 3 },
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.length).toBe(3);
+    for (const issue of result.issues) {
+      expect(issue.code).toBe('UNKNOWN_FLOW_FIELD');
+    }
+  });
+
+  it('25. regression: safely handles own __proto__ property in JSON without prototype pollution or inheritance loss', () => {
+    const jsonWithProto = JSON.parse('{"__proto__": {"polluted": true}, "normal": 42}');
+    const result = analyzeActionFlowDeclarations({
+      main: {
+        steps: [
+          {
+            type: 'setValue',
+            field: 'state.data',
+            value: jsonWithProto,
+          },
+        ],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const action = result.value.flows.main.steps[0] as any;
+    expect(action.type).toBe('setValue');
+    const cleanValue = action.value;
+
+    // 1. Prototype must be null (no prototype pollution)
+    expect(Object.getPrototypeOf(cleanValue)).toBeNull();
+
+    // 2. __proto__ must exist as an own property
+    expect(Object.prototype.hasOwnProperty.call(cleanValue, '__proto__')).toBe(true);
+
+    // 3. Must not inherit polluted properties
+    expect((cleanValue as any).polluted).toBeUndefined();
+
+    // 4. __proto__ own value must be preserved and deep-frozen
+    const protoVal = (cleanValue as any)['__proto__'];
+    expect(protoVal.polluted).toBe(true);
+    expect(Object.isFrozen(cleanValue)).toBe(true);
+    expect(Object.isFrozen(protoVal)).toBe(true);
+
+    // 5. Global Object.prototype must NOT be polluted
+    expect(({} as any).polluted).toBeUndefined();
+  });
+
+  it('26. regression: fails close when explicit onError: undefined is provided', () => {
+    const result = analyzeActionFlowDeclarations({
+      main: {
+        steps: [{ type: 'log', value: 'hello' }],
+        onError: undefined,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'INVALID_FLOW_ON_ERROR',
+        path: ['logic', 'flows', 'main', 'onError'],
+      }),
+    ]);
+  });
 });
