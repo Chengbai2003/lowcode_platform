@@ -1,8 +1,8 @@
 # Schema Contract 设计原则
 
-> Status: Implemented for M0; M1a State and Computed in progress
-> Last Updated: 2026-09-03
-> Target Milestone: M1a-1
+> Status: Implemented for M0; M1a State, Computed, and ActionFlow Contract in progress
+> Last Updated: 2026-09-04
+> Target Milestone: M1a-2
 
 ## 当前决策
 
@@ -69,12 +69,12 @@ type ActionList = Action[];
 M1a-1 已将 State Declaration 与 Computed Declaration 纳入 Draft Contract：
 `logic.states` 只保存 RuntimeSession 初值，Session State 变化不回写 Schema；
 `logic.computed` 只保存不带 `{{ }}` 的安全表达式，不保存求值结果或依赖元数据。
-ActionFlow 与 DataSource 尚未进入 Contract；在对应切片完成六消费面闭环时再加入。
+M1a-2 F1 进一步建立了具名 ActionFlow 规范 (`ActionFlow`、`RunFlowAction`、`ActionFlowDeclarations`) 与独立纯函数分析器 (`analyzeActionFlowDeclarations`)；
+但为防止破坏“全消费面一致性”原则，在 F2 (Renderer 执行) 与 F3 (Compiler 与 Authoring) 完成六消费面接入闭环前，
+生产解析入口 (`validatePageSchemaValue`) 仍对 `logic.flows` 和组件事件内的 `runFlow` 保持 fail-close，禁止提前出现“保存成功但静默忽略”的状态。
+DataSource 尚未进入 Contract；在对应切片完成六消费面闭环时再加入。
 
-Computed 的唯一共享分析入口负责解析受限 AST、校验命名空间/运算符/纯函数、提取顶层
-State 与直接 Computed 依赖，并输出稳定拓扑。缺失引用、动态成员、危险原型字段、宿主或
-构造器访问、循环、表达式/AST/依赖图超预算均 fail-close。Renderer 与 Compiler 只消费该
-分析结果，不自行建立更宽松的语法或依赖规则。
+Computed 与 ActionFlow 的唯一共享分析入口分别负责解析受限 AST/流程引用图、校验命名空间/运算符/纯函数/Flow Key、提取依赖并输出稳定拓扑。缺失引用、动态成员、危险原型字段、宿主或构造器访问、循环、流程/表达式/AST/依赖图超预算均 fail-close。Renderer 与 Compiler 只消费该分析结果，不自行建立更宽松的语法或依赖规则。
 
 ## 统一组件协议与 Props
 

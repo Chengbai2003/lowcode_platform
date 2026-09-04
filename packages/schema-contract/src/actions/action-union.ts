@@ -1,5 +1,5 @@
 import type { SetValueAction } from './data';
-import type { IfAction, LoopAction } from './flow';
+import type { IfAction, LoopAction, RunFlowAction } from './flow';
 import type { NavigateAction } from './navigation';
 import type { ApiCallAction, DelayAction } from './async';
 import type { FeedbackAction, DialogAction } from './ui';
@@ -18,7 +18,8 @@ export type Action =
   | IfAction
   | LoopAction
   | DelayAction
-  | LogAction;
+  | LogAction
+  | RunFlowAction;
 
 export type ActionList = readonly Action[];
 
@@ -39,3 +40,5 @@ export type CoreActionType = (typeof CORE_ACTION_TYPES)[number];
 export function isCoreActionType(type: string): type is CoreActionType {
   return (CORE_ACTION_TYPES as readonly string[]).includes(type);
 }
+
+export type { RunFlowAction };

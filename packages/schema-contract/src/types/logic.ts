@@ -1,4 +1,5 @@
 import type { JsonValue } from './json';
+import type { ActionList } from '../actions/action-union';
 
 export const FORBIDDEN_DATA_PATH_KEYS = Object.freeze([
   '__proto__',
@@ -35,6 +36,22 @@ export function isSafeLogicKey(value: unknown): value is string {
 
 /** 无 `{{ }}` 包装、由 Contract 统一分析的只读派生表达式。 */
 export type ComputedExpression = string;
+
+/**
+ * 具名、持久化的声明式 ActionFlow 流程。
+ *
+ * `steps` 为严格串行执行的动作列表；
+ * `onError` 为可选的 flow 级错误恢复动作列表。
+ */
+export interface ActionFlow {
+  readonly steps: ActionList;
+  readonly onError?: ActionList;
+}
+
+/**
+ * 页面逻辑中声明的具名 ActionFlow 字典。
+ */
+export type ActionFlowDeclarations = Readonly<Record<string, ActionFlow>>;
 
 /**
  * 页面声明的逻辑初始值。

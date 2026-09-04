@@ -1,7 +1,7 @@
 # A2UI 平台演进路线图
 
 > Status: Active
-> Last Updated: 2026-09-03
+> Last Updated: 2026-09-04
 > Current Stage: M1 Foundation / M1a
 > Execution Source of Truth: GitHub Issues（创建后在本文登记链接）
 
@@ -113,8 +113,8 @@ M1F-2 只阻断外部 Preset 正式开放，不是 M1a-1 State & Computed 的技
 
 | Epic                                                                                 | 优先级 | 目标                                                                           | 状态        |
 | ------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------ | ----------- |
-| [M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) | P0     | 引入 `logic.states`、安全 computed、依赖 DAG 与循环检测                        | In Progress |
-| [M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46)       | P0     | 用具名 Flow 替代内联 ActionList，定义错误、取消与预算语义                      | Planned     |
+| [M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) | P0     | 引入 `logic.states`、安全 computed、依赖 DAG 与循环检测                        | Completed   |
+| [M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46)       | P0     | 用具名 Flow 替代内联 ActionList，定义错误、取消与预算语义                      | In Progress |
 | [M1a-3 一致性套件](https://github.com/Chengbai2003/lowcode_platform/issues/47)       | P0     | 验证 Contract、Validator、Editor/Agent、Renderer、Compiler、Storage 六个消费面 | Planned     |
 
 M1a 发布门槛：

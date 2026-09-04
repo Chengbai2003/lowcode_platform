@@ -28,3 +28,14 @@ export interface LoopAction {
   /** 每次迭代执行的 Actions */
   readonly actions: ActionList;
 }
+
+/**
+ * 运行具名 ActionFlow 的 Action
+ */
+export interface RunFlowAction {
+  readonly type: 'runFlow';
+  /** 目标 Flow 的 Logic Key */
+  readonly flow: string;
+  /** 可选静态入参数据 (纯 JSON) */
+  readonly input?: JsonValue;
+}
