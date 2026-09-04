@@ -4,6 +4,11 @@ import { inspectAndSanitizeJsonValue } from './inspector';
 import { describeValue } from './describe';
 import { isSafeDataPathKey, isSafeLogicKey } from '../types/logic';
 
+export interface FlowValidationContext {
+  readonly declaredFlowKeys: ReadonlySet<string>;
+  readonly onFlowReference?: (targetFlow: string, path: readonly (string | number)[]) => void;
+}
+
 export interface ActionValidationContext {
   readonly issues: SchemaContractIssue[];
   readonly inspectionContext: InspectionContext;
@@ -13,6 +18,7 @@ export interface ActionValidationContext {
   actionCount: number;
   /** ACTION_BUDGET_EXCEEDED 只报告一次 */
   actionBudgetReported: boolean;
+  readonly flowValidation?: FlowValidationContext;
 }
 
 /**
@@ -851,6 +857,49 @@ export function validateActionItem(
           path: [...path, 'showError'],
           message: 'apiCall "showError" must be a boolean if provided',
         });
+      }
+      break;
+    }
+
+    case 'runFlow': {
+      if (!context.flowValidation) {
+        pushActionIssue(context, {
+          code: 'UNSUPPORTED_ACTION_TYPE',
+          path: [...path, 'type'],
+          message: 'Unsupported action type: "runFlow"',
+        });
+        return;
+      }
+      checkUnknownActionFields(actionObj, ['type', 'flow', 'input'], path, context);
+      const flowRes = safeGet(actionObj, 'flow');
+      const inputRes = safeGet(actionObj, 'input');
+      const flowVal = flowRes.exists ? flowRes.value : undefined;
+      const inputVal = inputRes.exists ? inputRes.value : undefined;
+
+      if (!flowRes.exists || typeof flowVal !== 'string' || !flowVal.trim()) {
+        pushActionIssue(context, {
+          code: 'INVALID_FLOW_KEY',
+          path: [...path, 'flow'],
+          message: 'runFlow action requires a non-empty string "flow"',
+        });
+      } else if (!isSafeLogicKey(flowVal)) {
+        pushActionIssue(context, {
+          code: 'INVALID_FLOW_KEY',
+          path: [...path, 'flow'],
+          message: `Flow reference "${describeValue(flowVal)}" must be a safe Logic Key`,
+        });
+      } else if (!context.flowValidation.declaredFlowKeys.has(flowVal)) {
+        pushActionIssue(context, {
+          code: 'FLOW_REFERENCE_MISSING',
+          path: [...path, 'flow'],
+          message: `Referenced ActionFlow "${flowVal}" does not exist`,
+        });
+      } else {
+        context.flowValidation.onFlowReference?.(flowVal, [...path, 'flow']);
+      }
+
+      if (inputRes.exists && inputVal !== undefined) {
+        inspectAndSanitizeJsonValue(inputVal, [...path, 'input'], 0, context.inspectionContext);
       }
       break;
     }
