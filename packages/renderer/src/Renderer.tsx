@@ -5,6 +5,7 @@
 
 import React, { useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import {
+  analyzeActionFlowDeclarations,
   analyzeComputedDeclarations,
   requireSupportedPageSchema,
   SchemaValidationError,
@@ -85,6 +86,20 @@ export function Renderer({
     return result.value;
   }, [canonicalSchema]);
 
+  const flowAnalysis = useMemo(() => {
+    if (canonicalSchema?.logic?.flows === undefined) return undefined;
+    const result = analyzeActionFlowDeclarations(
+      canonicalSchema.logic.flows,
+      undefined,
+      ['logic', 'flows'],
+      {
+        allowLegacyNestedStateTargets: canonicalSchema?.logic?.states === undefined,
+      },
+    );
+    if (!result.ok) throw new SchemaValidationError(result.issues);
+    return result.value;
+  }, [canonicalSchema]);
+
   // 稳定 flatComponents 引用：仅在内容实际变化时更新。
   // 注意：这里必须使用 canonicalSchema（而非原始 schema prop），
   // 否则同引用原地变异可绕过 Contract 边界进入渲染树。
@@ -115,6 +130,7 @@ export function Renderer({
       pageId,
       documentSessionId,
       computedAnalysis,
+      flowAnalysis,
       dispatcherInit: {
         ...eventContext,
         data: runtimeInitialData,
@@ -132,10 +148,14 @@ export function Renderer({
     };
   }, [session]);
 
-  // 同一文档 Session 的 Schema 热更新只替换 Computed 图，不重置运行中 State。
+  // 同一文档 Session 的 Schema 热更新只替换 Computed 图与 ActionFlow 定义，不重置运行中 State。
   useLayoutEffect(() => {
     session.configureComputed(computedAnalysis);
   }, [computedAnalysis, session]);
+
+  useLayoutEffect(() => {
+    session.configureFlows(flowAnalysis);
+  }, [flowAnalysis, session]);
 
   // M0-4 Scope E：宿主能力显式授予，默认全 deny；注入后运行时不可变。
   const hostCapabilities = useMemo(

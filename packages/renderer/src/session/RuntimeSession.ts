@@ -48,7 +48,7 @@ export class RuntimeSession {
   readonly dispatcher: EventDispatcher;
   readonly runtime: ReactiveRuntime;
 
-  private readonly flowAnalysis?: ActionFlowAnalysis;
+  private flowAnalysis?: ActionFlowAnalysis;
   private readonly flowLimits: FlowExecutionLimits;
   private readonly activeRootRuns = new Set<FlowRun>();
 
@@ -170,6 +170,12 @@ export class RuntimeSession {
   configureComputed(analysis: ComputedLogicAnalysis | undefined): void {
     this.throwIfDisposed();
     this.runtime.configureComputed(analysis);
+  }
+
+  /** 替换当前 Session 的 ActionFlow 声明分析结果；现有 State 保持不变。 */
+  configureFlows(analysis: ActionFlowAnalysis | undefined): void {
+    this.throwIfDisposed();
+    this.flowAnalysis = analysis;
   }
 
   /**
