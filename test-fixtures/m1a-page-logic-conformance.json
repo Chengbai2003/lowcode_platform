@@ -1,0 +1,874 @@
+{
+  "corpusVersion": "1.0.0",
+  "reviewReason": "Consolidated M1a-3 C1 Page Logic conformance baseline covering State, chained Computed, ActionFlow (success, nested call, onError recovery, unhandled failure), cancellation/no-write-back, legacy inline ActionList without logic, comprehensive edge computed operations, small limits budget exhaustion, and negative schema validation cases across Contract, Renderer, and Compiler surfaces.",
+  "schema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "childrenIds": [
+          "computed-value",
+          "seen-value",
+          "change-price",
+          "submit",
+          "status",
+          "cancel-btn",
+          "delayed-value"
+        ]
+      },
+      "computed-value": {
+        "id": "computed-value",
+        "type": "Text",
+        "props": {
+          "children": "{{ computed.label }}"
+        }
+      },
+      "seen-value": {
+        "id": "seen-value",
+        "type": "Text",
+        "props": {
+          "children": "{{ state.seen }}"
+        }
+      },
+      "change-price": {
+        "id": "change-price",
+        "type": "Button",
+        "props": {
+          "children": "change price"
+        },
+        "events": {
+          "onClick": [
+            {
+              "type": "setValue",
+              "field": "state.price",
+              "value": 5
+            },
+            {
+              "type": "setValue",
+              "field": "state.seen",
+              "value": "{{ computed.total }}"
+            }
+          ]
+        }
+      },
+      "submit": {
+        "id": "submit",
+        "type": "Button",
+        "props": {
+          "children": "Submit"
+        },
+        "events": {
+          "onClick": [
+            {
+              "type": "runFlow",
+              "flow": "submitOrder",
+              "input": {
+                "source": "fixture"
+              }
+            }
+          ]
+        }
+      },
+      "status": {
+        "id": "status",
+        "type": "Text",
+        "props": {
+          "children": "{{state.source + ':' + state.count}}"
+        }
+      },
+      "cancel-btn": {
+        "id": "cancel-btn",
+        "type": "Button",
+        "props": {
+          "children": "Cancel Delay"
+        },
+        "events": {
+          "onClick": [
+            {
+              "type": "runFlow",
+              "flow": "cancelDelayFlow"
+            }
+          ]
+        }
+      },
+      "delayed-value": {
+        "id": "delayed-value",
+        "type": "Text",
+        "props": {
+          "children": "{{state.delayedState}}"
+        }
+      }
+    },
+    "logic": {
+      "states": {
+        "price": 2,
+        "quantity": 3,
+        "freight": 4,
+        "seen": 0,
+        "count": 0,
+        "source": "",
+        "recovered": false,
+        "delayedState": "initial"
+      },
+      "computed": {
+        "label": "String(computed.total)",
+        "subtotal": "state.price * state.quantity",
+        "total": "computed.subtotal + state.freight"
+      },
+      "flows": {
+        "recordSource": {
+          "steps": [
+            {
+              "type": "setValue",
+              "field": "state.source",
+              "value": "{{input.source}}"
+            }
+          ]
+        },
+        "submitOrder": {
+          "steps": [
+            {
+              "type": "runFlow",
+              "flow": "recordSource",
+              "input": {
+                "source": "fixture"
+              }
+            },
+            {
+              "type": "setValue",
+              "field": "state.count",
+              "value": "{{state.count + 1}}"
+            }
+          ]
+        },
+        "recoverFailure": {
+          "steps": [
+            {
+              "type": "apiCall",
+              "url": "/fail"
+            }
+          ],
+          "onError": [
+            {
+              "type": "setValue",
+              "field": "state.recovered",
+              "value": true
+            }
+          ]
+        },
+        "unhandledFailure": {
+          "steps": [
+            {
+              "type": "apiCall",
+              "url": "/fail"
+            }
+          ]
+        },
+        "cancelDelayFlow": {
+          "steps": [
+            {
+              "type": "delay",
+              "ms": 100
+            },
+            {
+              "type": "setValue",
+              "field": "state.delayedState",
+              "value": "late_finish"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "expected": {
+    "topology": ["subtotal", "total", "label"],
+    "canonicalLogic": {
+      "states": {
+        "count": 0,
+        "delayedState": "initial",
+        "freight": 4,
+        "price": 2,
+        "quantity": 3,
+        "recovered": false,
+        "seen": 0,
+        "source": ""
+      },
+      "computed": {
+        "label": "String(computed.total)",
+        "subtotal": "state.price * state.quantity",
+        "total": "computed.subtotal + state.freight"
+      },
+      "flows": {
+        "cancelDelayFlow": {
+          "steps": [
+            {
+              "type": "delay",
+              "ms": 100
+            },
+            {
+              "type": "setValue",
+              "field": "state.delayedState",
+              "value": "late_finish"
+            }
+          ]
+        },
+        "recordSource": {
+          "steps": [
+            {
+              "type": "setValue",
+              "field": "state.source",
+              "value": "{{input.source}}"
+            }
+          ]
+        },
+        "recoverFailure": {
+          "onError": [
+            {
+              "type": "setValue",
+              "field": "state.recovered",
+              "value": true
+            }
+          ],
+          "steps": [
+            {
+              "type": "apiCall",
+              "url": "/fail"
+            }
+          ]
+        },
+        "submitOrder": {
+          "steps": [
+            {
+              "type": "runFlow",
+              "flow": "recordSource",
+              "input": {
+                "source": "fixture"
+              }
+            },
+            {
+              "type": "setValue",
+              "field": "state.count",
+              "value": "{{state.count + 1}}"
+            }
+          ]
+        },
+        "unhandledFailure": {
+          "steps": [
+            {
+              "type": "apiCall",
+              "url": "/fail"
+            }
+          ]
+        }
+      }
+    },
+    "initial": {
+      "state": {
+        "price": 2,
+        "quantity": 3,
+        "freight": 4,
+        "seen": 0,
+        "count": 0,
+        "source": "",
+        "recovered": false,
+        "delayedState": "initial"
+      },
+      "computed": {
+        "subtotal": 6,
+        "total": 10,
+        "label": "10"
+      }
+    },
+    "initialVisibleText": {
+      "status": ":0",
+      "computed": "10",
+      "seen": "0",
+      "delayed": "initial"
+    },
+    "afterClick": {
+      "state": {
+        "count": 1,
+        "source": "fixture",
+        "recovered": false
+      }
+    },
+    "afterClickVisibleText": {
+      "status": "fixture:1"
+    },
+    "afterChange": {
+      "state": {
+        "price": 5,
+        "quantity": 3,
+        "freight": 4,
+        "seen": 19,
+        "count": 0,
+        "source": "",
+        "recovered": false,
+        "delayedState": "initial"
+      },
+      "computed": {
+        "subtotal": 15,
+        "total": 19,
+        "label": "19"
+      }
+    },
+    "afterChangeVisibleText": {
+      "computed": "19",
+      "seen": "19"
+    },
+    "recovery": {
+      "state": {
+        "recovered": true
+      },
+      "result": {
+        "status": "recovered",
+        "flow": "recoverFailure",
+        "recovered": true
+      }
+    },
+    "unhandledDiagnostic": {
+      "code": "FLOW_STEP_FAILED",
+      "flow": "unhandledFailure",
+      "step": 0,
+      "stepPath": ["steps", 0],
+      "trace": [
+        {
+          "flow": "unhandledFailure",
+          "step": 0
+        }
+      ]
+    },
+    "cancellation": {
+      "flow": "cancelDelayFlow",
+      "delayMs": 100,
+      "initialState": {
+        "delayedState": "initial"
+      },
+      "noWriteBackState": {
+        "delayedState": "initial"
+      }
+    }
+  },
+  "legacySchema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "childrenIds": ["legacy-btn", "legacy-text"]
+      },
+      "legacy-btn": {
+        "id": "legacy-btn",
+        "type": "Button",
+        "props": {
+          "children": "Legacy Trigger"
+        },
+        "events": {
+          "onClick": [
+            {
+              "type": "setValue",
+              "field": "data.legacyKey",
+              "value": "legacySuccess"
+            }
+          ]
+        }
+      },
+      "legacy-text": {
+        "id": "legacy-text",
+        "type": "Text",
+        "props": {
+          "children": "{{ data.legacyKey || 'legacyDefault' }}"
+        }
+      }
+    }
+  },
+  "legacyExpected": {
+    "initialVisibleText": "legacyDefault",
+    "afterClickVisibleText": "legacySuccess",
+    "afterClickState": {
+      "legacyKey": "legacySuccess"
+    }
+  },
+  "edgeSchema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "logic": {
+      "states": {
+        "one": 1,
+        "zero": 0,
+        "items": [2],
+        "optional": null,
+        "profile": {
+          "name": "Ada"
+        }
+      },
+      "computed": {
+        "arrayAdd": "state.items + state.one",
+        "arraySubtract": "state.items - state.one",
+        "arrayMultiply": "state.items * state.one",
+        "arrayDivide": "state.items / state.one",
+        "arrayModulo": "state.items % state.one",
+        "arrayLess": "state.items < state.one",
+        "arrayLessEqual": "state.items <= state.one",
+        "arrayGreater": "state.items > state.one",
+        "arrayGreaterEqual": "state.items >= state.one",
+        "arrayLooseEqual": "state.items == 2",
+        "arrayLooseUnequal": "state.items != 2",
+        "arrayUnaryMinus": "-state.items",
+        "arrayUnaryPlus": "+state.items",
+        "callFallback": "Number(state.profile) || 5",
+        "eagerLogical": "true || +state.profile",
+        "invalid": "state.one / state.zero",
+        "mathArray": "Math.max(state.items, state.one)",
+        "mathFallback": "Math.abs(state.profile) || 7",
+        "memberFallback": "state.optional.name || 'fallback'",
+        "nullableView": "[state.optional.name]",
+        "prototypeMemberFallback": "state.items.join || 'fallback'",
+        "rounded": "Math.round(state.one + 0.4)",
+        "view": "[state.profile]"
+      }
+    },
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page"
+      }
+    }
+  },
+  "edgeExpected": {
+    "undefinedKeys": [
+      "arrayAdd",
+      "arraySubtract",
+      "arrayMultiply",
+      "arrayDivide",
+      "arrayModulo",
+      "arrayLess",
+      "arrayLessEqual",
+      "arrayGreater",
+      "arrayGreaterEqual",
+      "arrayLooseEqual",
+      "arrayLooseUnequal",
+      "arrayUnaryMinus",
+      "arrayUnaryPlus",
+      "invalid",
+      "mathArray"
+    ],
+    "values": {
+      "callFallback": 5,
+      "eagerLogical": true,
+      "mathFallback": 7,
+      "memberFallback": "fallback",
+      "prototypeMemberFallback": "fallback",
+      "rounded": 1
+    },
+    "arraysWithUndefinedItem": ["nullableView"],
+    "view": [
+      {
+        "name": "Ada"
+      }
+    ]
+  },
+  "smallLimits": {
+    "maxExecutedActions": 2,
+    "maxLoopIterations": 1,
+    "maxFlowDepth": 1,
+    "maxConcurrentRuns": 1,
+    "maxDurationMs": 20
+  },
+  "budgetExceededSchemas": {
+    "actionBudget": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page"
+        }
+      },
+      "logic": {
+        "states": {
+          "x": 0
+        },
+        "flows": {
+          "overflowActions": {
+            "steps": [
+              {
+                "type": "setValue",
+                "field": "state.x",
+                "value": 1
+              },
+              {
+                "type": "setValue",
+                "field": "state.x",
+                "value": 2
+              },
+              {
+                "type": "setValue",
+                "field": "state.x",
+                "value": 3
+              }
+            ]
+          }
+        }
+      },
+      "flow": "overflowActions",
+      "expectedError": {
+        "code": "FLOW_ACTION_BUDGET_EXCEEDED",
+        "flow": "overflowActions"
+      }
+    },
+    "iterationBudget": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page"
+        }
+      },
+      "logic": {
+        "states": {
+          "items": [1, 2],
+          "x": 0
+        },
+        "flows": {
+          "overflowLoop": {
+            "steps": [
+              {
+                "type": "loop",
+                "over": "{{state.items}}",
+                "itemVar": "item",
+                "actions": [
+                  {
+                    "type": "setValue",
+                    "field": "state.x",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "flow": "overflowLoop",
+      "expectedError": {
+        "code": "FLOW_ITERATION_BUDGET_EXCEEDED",
+        "flow": "overflowLoop"
+      }
+    },
+    "depthBudget": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page"
+        }
+      },
+      "logic": {
+        "states": {
+          "x": 0
+        },
+        "flows": {
+          "callerFlow": {
+            "steps": [
+              {
+                "type": "runFlow",
+                "flow": "calleeFlow"
+              }
+            ]
+          },
+          "calleeFlow": {
+            "steps": [
+              {
+                "type": "setValue",
+                "field": "state.x",
+                "value": 1
+              }
+            ]
+          }
+        }
+      },
+      "flow": "callerFlow",
+      "expectedError": {
+        "code": "FLOW_DEPTH_EXCEEDED",
+        "flow": "calleeFlow"
+      }
+    },
+    "durationBudget": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page"
+        }
+      },
+      "logic": {
+        "states": {},
+        "flows": {
+          "slowFlow": {
+            "steps": [
+              {
+                "type": "delay",
+                "ms": 50
+              }
+            ]
+          }
+        }
+      },
+      "flow": "slowFlow",
+      "expectedError": {
+        "code": "FLOW_DURATION_EXCEEDED",
+        "flow": "slowFlow"
+      }
+    },
+    "concurrencyBudget": {
+      "schemaVersion": 0,
+      "rootId": "root",
+      "components": {
+        "root": {
+          "id": "root",
+          "type": "Page"
+        }
+      },
+      "logic": {
+        "states": {},
+        "flows": {
+          "slowFlow": {
+            "steps": [
+              {
+                "type": "delay",
+                "ms": 50
+              }
+            ]
+          }
+        }
+      },
+      "flow": "slowFlow",
+      "expectedError": {
+        "code": "FLOW_CONCURRENCY_EXCEEDED",
+        "flow": "slowFlow"
+      }
+    }
+  },
+  "negativeCases": {
+    "illegalStateKey": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "invalid-state-key": 1
+          }
+        }
+      },
+      "expectedCode": "INVALID_STATE_KEY"
+    },
+    "illegalComputedKey": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "a": 1
+          },
+          "computed": {
+            "invalid-computed-key": "state.a"
+          }
+        }
+      },
+      "expectedCode": "INVALID_COMPUTED_KEY"
+    },
+    "illegalFlowKey": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {},
+          "flows": {
+            "invalid-flow-key": {
+              "steps": [
+                {
+                  "type": "delay",
+                  "ms": 10
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_FLOW_KEY"
+    },
+    "missingFlowRef": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {},
+          "flows": {
+            "caller": {
+              "steps": [
+                {
+                  "type": "runFlow",
+                  "flow": "missingTargetFlow"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expectedCode": "FLOW_REFERENCE_MISSING"
+    },
+    "missingComputedRef": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "a": 1
+          },
+          "computed": {
+            "b": "state.missingKey"
+          }
+        }
+      },
+      "expectedCode": "COMPUTED_REFERENCE_MISSING"
+    },
+    "computedCycle": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "a": 1
+          },
+          "computed": {
+            "c1": "computed.c2",
+            "c2": "computed.c1"
+          }
+        }
+      },
+      "expectedCode": "COMPUTED_CYCLE"
+    },
+    "flowCycle": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {},
+          "flows": {
+            "f1": {
+              "steps": [
+                {
+                  "type": "runFlow",
+                  "flow": "f2"
+                }
+              ]
+            },
+            "f2": {
+              "steps": [
+                {
+                  "type": "runFlow",
+                  "flow": "f1"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expectedCode": "FLOW_REFERENCE_CYCLE"
+    },
+    "dangerousExpression": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "x": 1
+          },
+          "computed": {
+            "evil": "new Object()"
+          }
+        }
+      },
+      "expectedCode": "COMPUTED_CONSTRUCTOR_FORBIDDEN"
+    },
+    "unknownAction": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {},
+          "flows": {
+            "badFlow": {
+              "steps": [
+                {
+                  "type": "unknownActionType"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expectedCode": "UNSUPPORTED_ACTION_TYPE"
+    }
+  }
+}

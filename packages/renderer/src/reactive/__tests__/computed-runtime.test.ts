@@ -13,7 +13,7 @@ import { ReactiveRuntime } from '../runtime';
 
 const conformanceFixture = JSON.parse(
   readFileSync(
-    path.resolve(process.cwd(), '../../test-fixtures/m1a-computed-conformance.json'),
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
     'utf8',
   ),
 ) as {

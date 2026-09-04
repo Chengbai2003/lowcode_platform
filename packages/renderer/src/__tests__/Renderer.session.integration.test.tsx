@@ -3,39 +3,120 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, act, cleanup, fireEvent } from '@testing-library/react';
 import React, { useState } from 'react';
-import { analyzeActionFlowDeclarations, type PageSchema } from '@lowcode-platform/schema-contract';
+import {
+  analyzeActionFlowDeclarations,
+  type ActionFlowMap,
+  type FlowExecutionLimits,
+  type PageSchema,
+} from '@lowcode-platform/schema-contract';
 import { Renderer } from '../Renderer';
 import { EventDispatcher } from '../EventDispatcher';
 import { createRuntimeSession } from '../session/RuntimeSession';
 import { testPreset } from './fixtures/testPreset';
 
-const conformanceFixture = JSON.parse(
-  readFileSync(
-    path.resolve(process.cwd(), '../../test-fixtures/m1a-computed-conformance.json'),
-    'utf8',
-  ),
-) as {
-  schema: PageSchema;
-  expected: {
-    initial: { computed: { label: string } };
-    afterChange: { state: { seen: number }; computed: { label: string } };
+interface ConformanceExpected {
+  readonly topology: readonly string[];
+  readonly canonicalLogic: unknown;
+  readonly initial: {
+    readonly state: Record<string, unknown>;
+    readonly computed: {
+      readonly subtotal: number;
+      readonly total: number;
+      readonly label: string;
+    };
   };
-};
+  readonly initialVisibleText: {
+    readonly status: string;
+    readonly computed: string;
+    readonly seen: string;
+    readonly delayed: string;
+  };
+  readonly afterClick: {
+    readonly state: {
+      readonly count: number;
+      readonly source: string;
+      readonly recovered: boolean;
+    };
+  };
+  readonly afterClickVisibleText: {
+    readonly status: string;
+  };
+  readonly afterChange: {
+    readonly state: {
+      readonly price: number;
+      readonly quantity: number;
+      readonly freight: number;
+      readonly seen: number;
+    };
+    readonly computed: {
+      readonly subtotal: number;
+      readonly total: number;
+      readonly label: string;
+    };
+  };
+  readonly afterChangeVisibleText: {
+    readonly computed: string;
+    readonly seen: string;
+  };
+  readonly recovery: {
+    readonly state: { readonly recovered: boolean };
+    readonly result: {
+      readonly status: string;
+      readonly flow: string;
+      readonly recovered: boolean;
+    };
+  };
+  readonly unhandledDiagnostic: {
+    readonly code: string;
+    readonly flow: string;
+    readonly step: number;
+    readonly stepPath: readonly (string | number)[];
+    readonly trace: ReadonlyArray<{ readonly flow: string; readonly step: number }>;
+  };
+  readonly cancellation: {
+    readonly flow: string;
+    readonly delayMs: number;
+    readonly initialState: { readonly delayedState: string };
+    readonly noWriteBackState: { readonly delayedState: string };
+  };
+}
 
-const actionFlowFixture = JSON.parse(
+interface BudgetCase {
+  readonly schemaVersion: number;
+  readonly rootId: string;
+  readonly components: Record<string, unknown>;
+  readonly logic: {
+    readonly states?: Record<string, unknown>;
+    readonly flows: ActionFlowMap;
+  };
+  readonly flow: string;
+  readonly expectedError: {
+    readonly code: string;
+    readonly flow: string;
+  };
+}
+
+interface PageLogicConformanceCorpus {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly expected: ConformanceExpected;
+  readonly legacySchema: PageSchema;
+  readonly legacyExpected: {
+    readonly initialVisibleText: string;
+    readonly afterClickVisibleText: string;
+    readonly afterClickState: Record<string, unknown>;
+  };
+  readonly smallLimits: FlowExecutionLimits;
+  readonly budgetExceededSchemas: Record<string, BudgetCase>;
+}
+
+const pageLogicConformance = JSON.parse(
   readFileSync(
-    path.resolve(process.cwd(), '../../test-fixtures/m1a-action-flow-conformance.json'),
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
     'utf8',
   ),
-) as {
-  schema: PageSchema;
-  expected: {
-    initial: { visibleStatus: string };
-    afterClick: { visibleStatus: string };
-    recovery: { state: { recovered: boolean }; result: { status: string; flow: string } };
-    unhandledDiagnostic: { code: string; flow: string; step: number; stepPath: string[] };
-  };
-};
+) as PageLogicConformanceCorpus;
 
 const simpleSchema: PageSchema = {
   schemaVersion: 0,
@@ -47,7 +128,7 @@ const simpleSchema: PageSchema = {
 };
 
 function createFixtureSession() {
-  const flows = actionFlowFixture.schema.logic?.flows;
+  const flows = pageLogicConformance.schema.logic?.flows;
   if (!flows) throw new Error('ActionFlow fixture must declare flows');
   const analysis = analyzeActionFlowDeclarations(flows);
   if (!analysis.ok) throw new Error('ActionFlow fixture must pass Contract analysis');
@@ -68,27 +149,29 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
         preset={testPreset}
         pageId="action-flow-conformance-page"
         documentSessionId="action-flow-conformance-session"
-        schema={actionFlowFixture.schema}
+        schema={pageLogicConformance.schema}
       />,
     );
 
-    expect(screen.getByText(actionFlowFixture.expected.initial.visibleStatus)).toBeTruthy();
+    expect(screen.getByText(pageLogicConformance.expected.initialVisibleText.status)).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
       await Promise.resolve();
     });
-    expect(screen.getByText(actionFlowFixture.expected.afterClick.visibleStatus)).toBeTruthy();
+    expect(
+      screen.getByText(pageLogicConformance.expected.afterClickVisibleText.status),
+    ).toBeTruthy();
   });
 
   it('executes fixture recovery and reports its unhandled diagnostic through RuntimeSession', async () => {
     const session = createFixtureSession();
     const recovered = await session.executeFlow('recoverFailure');
-    expect(recovered).toMatchObject(actionFlowFixture.expected.recovery.result);
-    expect(session.runtime.getState()).toMatchObject(actionFlowFixture.expected.recovery.state);
+    expect(recovered).toMatchObject(pageLogicConformance.expected.recovery.result);
+    expect(session.runtime.getState()).toMatchObject(pageLogicConformance.expected.recovery.state);
 
     await expect(session.executeFlow('unhandledFailure')).rejects.toMatchObject(
-      actionFlowFixture.expected.unhandledDiagnostic,
+      pageLogicConformance.expected.unhandledDiagnostic,
     );
   });
 
@@ -98,11 +181,11 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
         preset={testPreset}
         pageId="computed-conformance-page"
         documentSessionId="computed-conformance-session"
-        schema={conformanceFixture.schema}
+        schema={pageLogicConformance.schema}
       />,
     );
 
-    expect(screen.getByText(conformanceFixture.expected.initial.computed.label)).toBeTruthy();
+    expect(screen.getByText(pageLogicConformance.expected.initial.computed.label)).toBeTruthy();
     expect(screen.getByText('0')).toBeTruthy();
 
     await act(async () => {
@@ -110,9 +193,104 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
       await Promise.resolve();
     });
 
-    const expectedValue = String(conformanceFixture.expected.afterChange.state.seen);
-    expect(conformanceFixture.expected.afterChange.computed.label).toBe(expectedValue);
+    const expectedValue = String(pageLogicConformance.expected.afterChange.state.seen);
+    expect(pageLogicConformance.expected.afterChange.computed.label).toBe(expectedValue);
     expect(screen.getAllByText(expectedValue)).toHaveLength(2);
+  });
+
+  it('handles delay cancellation scenario with no state write-back after unmount', async () => {
+    const rendered = render(
+      <Renderer
+        preset={testPreset}
+        pageId="delay-cancel-page"
+        documentSessionId="delay-cancel-session"
+        schema={pageLogicConformance.schema}
+      />,
+    );
+
+    expect(screen.getByText(pageLogicConformance.expected.initialVisibleText.delayed)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel Delay' }));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    rendered.unmount();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    });
+
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="delay-cancel-page-verify"
+        documentSessionId="delay-cancel-session-verify"
+        schema={pageLogicConformance.schema}
+      />,
+    );
+    expect(
+      screen.getByText(pageLogicConformance.expected.cancellation.noWriteBackState.delayedState),
+    ).toBeTruthy();
+    cleanup();
+  });
+
+  it('executes legacy schema inline ActionList without logic declaration', async () => {
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="legacy-schema-page"
+        documentSessionId="legacy-schema-session"
+        schema={pageLogicConformance.legacySchema}
+      />,
+    );
+
+    expect(screen.getByText(pageLogicConformance.legacyExpected.initialVisibleText)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Legacy Trigger' }));
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText(pageLogicConformance.legacyExpected.afterClickVisibleText),
+    ).toBeTruthy();
+    cleanup();
+  });
+
+  it('enforces small limits budget exceptions using conformance corpus without bloated nodes', async () => {
+    const { smallLimits, budgetExceededSchemas } = pageLogicConformance;
+
+    for (const [budgetType, caseConfig] of Object.entries(budgetExceededSchemas)) {
+      const flows = caseConfig.logic.flows;
+      const analysis = analyzeActionFlowDeclarations(flows);
+      expect(analysis.ok).toBe(true);
+      if (!analysis.ok) continue;
+
+      const session = createRuntimeSession({
+        pageId: `budget-${budgetType}`,
+        documentSessionId: `session-${budgetType}`,
+        dispatcher: new EventDispatcher(),
+        flowAnalysis: analysis.value,
+        flowExecutionLimits: smallLimits,
+      });
+      if (caseConfig.logic.states) {
+        session.runtime.initialize({ state: caseConfig.logic.states });
+      }
+
+      if (budgetType === 'concurrencyBudget') {
+        const p1 = session.executeFlow(caseConfig.flow);
+        const p2 = session.executeFlow(caseConfig.flow);
+        await expect(Promise.all([p1, p2])).rejects.toMatchObject({
+          code: caseConfig.expectedError.code,
+          flow: caseConfig.expectedError.flow,
+        });
+      } else {
+        await expect(session.executeFlow(caseConfig.flow)).rejects.toMatchObject({
+          code: caseConfig.expectedError.code,
+          flow: caseConfig.expectedError.flow,
+        });
+      }
+    }
   });
 
   it('renders named Computed and hot-replaces its graph without resetting Session State', async () => {

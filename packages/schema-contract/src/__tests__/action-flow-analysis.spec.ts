@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   analyzeActionFlowDeclarations,
@@ -5,7 +7,25 @@ import {
   HARD_FLOW_EXECUTION_LIMITS,
   normalizeFlowExecutionLimits,
   validatePageSchemaValue,
+  type PageSchema,
 } from '../index';
+
+interface ConformanceCorpus {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly negativeCases: Record<
+    string,
+    { readonly schema: PageSchema; readonly expectedCode: string }
+  >;
+}
+
+const conformanceFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+    'utf8',
+  ),
+) as ConformanceCorpus;
 
 describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
   it('1. accepts a single valid Flow declaration and produces topology', () => {
@@ -1013,5 +1033,40 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
         maxExecutedActions: HARD_FLOW_EXECUTION_LIMITS.maxExecutedActions + 1,
       }),
     ).toThrow();
+  });
+
+  it('39. accepts the shared conformance corpus flows and produces a valid topological order', () => {
+    const canonical = validatePageSchemaValue(conformanceFixture.schema);
+    expect(canonical.ok).toBe(true);
+    if (!canonical.ok) return;
+
+    const flows = canonical.value.logic?.flows;
+    expect(flows).toBeDefined();
+    if (!flows) return;
+
+    const analysis = analyzeActionFlowDeclarations(flows);
+    expect(analysis.ok).toBe(true);
+    if (!analysis.ok) return;
+
+    const recordIndex = analysis.value.order.indexOf('recordSource');
+    const submitIndex = analysis.value.order.indexOf('submitOrder');
+    expect(recordIndex).toBeGreaterThanOrEqual(0);
+    expect(submitIndex).toBeGreaterThan(recordIndex);
+  });
+
+  it('40. validates Flow-related negative cases from the shared conformance corpus', () => {
+    const { illegalFlowKey, missingFlowRef, flowCycle, unknownAction } =
+      conformanceFixture.negativeCases;
+    for (const testCase of [illegalFlowKey, missingFlowRef, flowCycle, unknownAction]) {
+      const parseRes = validatePageSchemaValue(testCase.schema);
+      const flowRes = testCase.schema.logic?.flows
+        ? analyzeActionFlowDeclarations(testCase.schema.logic.flows)
+        : { ok: true, issues: [] };
+      const issues = [
+        ...(parseRes.ok ? [] : parseRes.issues),
+        ...(flowRes.ok ? [] : flowRes.issues),
+      ];
+      expect(issues.some((issue) => issue.code === testCase.expectedCode)).toBe(true);
+    }
   });
 });
