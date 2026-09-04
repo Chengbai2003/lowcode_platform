@@ -5,13 +5,16 @@ import { render, screen, act, cleanup, fireEvent } from '@testing-library/react'
 import React, { useState } from 'react';
 import {
   analyzeActionFlowDeclarations,
+  createCanonicalPageSchema,
+  validatePageSchemaValue,
   type ActionFlowMap,
   type FlowExecutionLimits,
   type PageSchema,
 } from '@lowcode-platform/schema-contract';
 import { Renderer } from '../Renderer';
 import { EventDispatcher } from '../EventDispatcher';
-import { createRuntimeSession } from '../session/RuntimeSession';
+import * as RuntimeSessionModule from '../session/RuntimeSession';
+import { createRuntimeSession, type RuntimeSession } from '../session/RuntimeSession';
 import { testPreset } from './fixtures/testPreset';
 
 interface ConformanceExpected {
@@ -82,13 +85,7 @@ interface ConformanceExpected {
 }
 
 interface BudgetCase {
-  readonly schemaVersion: number;
-  readonly rootId: string;
-  readonly components: Record<string, unknown>;
-  readonly logic: {
-    readonly states?: Record<string, unknown>;
-    readonly flows: ActionFlowMap;
-  };
+  readonly schema: PageSchema;
   readonly flow: string;
   readonly expectedError: {
     readonly code: string;
@@ -108,7 +105,7 @@ interface PageLogicConformanceCorpus {
     readonly afterClickState: Record<string, unknown>;
   };
   readonly smallLimits: FlowExecutionLimits;
-  readonly budgetExceededSchemas: Record<string, BudgetCase>;
+  readonly budgetExceededCases: Record<string, BudgetCase>;
 }
 
 const pageLogicConformance = JSON.parse(
@@ -199,39 +196,55 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
   });
 
   it('handles delay cancellation scenario with no state write-back after unmount', async () => {
-    const rendered = render(
-      <Renderer
-        preset={testPreset}
-        pageId="delay-cancel-page"
-        documentSessionId="delay-cancel-session"
-        schema={pageLogicConformance.schema}
-      />,
-    );
+    vi.useFakeTimers();
+    try {
+      let activeSession: RuntimeSession | undefined;
+      const sessionSpy = vi
+        .spyOn(RuntimeSessionModule, 'createRuntimeSession')
+        .mockImplementation((options) => {
+          const s = new RuntimeSessionModule.RuntimeSession(options);
+          activeSession = s;
+          return s;
+        });
 
-    expect(screen.getByText(pageLogicConformance.expected.initialVisibleText.delayed)).toBeTruthy();
+      const rendered = render(
+        <Renderer
+          preset={testPreset}
+          pageId="delay-cancel-page"
+          documentSessionId="delay-cancel-session"
+          schema={pageLogicConformance.schema}
+        />,
+      );
 
-    await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: 'Cancel Delay' }));
-      await new Promise((resolve) => setTimeout(resolve, 10));
-    });
+      expect(activeSession).toBeDefined();
+      expect(
+        screen.getByText(pageLogicConformance.expected.initialVisibleText.delayed),
+      ).toBeTruthy();
 
-    rendered.unmount();
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel Delay' }));
+        await vi.advanceTimersByTimeAsync(20);
+      });
 
-    render(
-      <Renderer
-        preset={testPreset}
-        pageId="delay-cancel-page-verify"
-        documentSessionId="delay-cancel-session-verify"
-        schema={pageLogicConformance.schema}
-      />,
-    );
-    expect(
-      screen.getByText(pageLogicConformance.expected.cancellation.noWriteBackState.delayedState),
-    ).toBeTruthy();
-    cleanup();
+      // Unmount the component while flow delay is pending
+      rendered.unmount();
+      expect(activeSession?.isDisposed()).toBe(true);
+
+      // Advance timers well beyond the 100ms delay
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+
+      // Observe the SAME RuntimeSession instance: state must remain initial with zero write-back
+      expect(activeSession?.runtime.getState().delayedState).toBe(
+        pageLogicConformance.expected.cancellation.noWriteBackState.delayedState,
+      );
+
+      sessionSpy.mockRestore();
+      cleanup();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('executes legacy schema inline ActionList without logic declaration', async () => {
@@ -258,10 +271,20 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
   });
 
   it('enforces small limits budget exceptions using conformance corpus without bloated nodes', async () => {
-    const { smallLimits, budgetExceededSchemas } = pageLogicConformance;
+    const { smallLimits, budgetExceededCases } = pageLogicConformance;
 
-    for (const [budgetType, caseConfig] of Object.entries(budgetExceededSchemas)) {
-      const flows = caseConfig.logic.flows;
+    for (const [budgetType, caseConfig] of Object.entries(budgetExceededCases)) {
+      const validation = validatePageSchemaValue(caseConfig.schema);
+      expect(validation.ok).toBe(true);
+      if (!validation.ok) continue;
+
+      const canonical = createCanonicalPageSchema(caseConfig.schema);
+      expect(canonical).toBeDefined();
+
+      const flows = canonical.logic?.flows;
+      expect(flows).toBeDefined();
+      if (!flows) continue;
+
       const analysis = analyzeActionFlowDeclarations(flows);
       expect(analysis.ok).toBe(true);
       if (!analysis.ok) continue;
@@ -269,13 +292,12 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
       const session = createRuntimeSession({
         pageId: `budget-${budgetType}`,
         documentSessionId: `session-${budgetType}`,
-        dispatcher: new EventDispatcher(),
+        dispatcherInit: {
+          state: canonical.logic?.states ? { ...canonical.logic.states } : {},
+        },
         flowAnalysis: analysis.value,
         flowExecutionLimits: smallLimits,
       });
-      if (caseConfig.logic.states) {
-        session.runtime.initialize({ state: caseConfig.logic.states });
-      }
 
       if (budgetType === 'concurrencyBudget') {
         const p1 = session.executeFlow(caseConfig.flow);

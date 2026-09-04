@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   analyzeActionFlowDeclarations,
+  createCanonicalPageSchema,
   DEFAULT_FLOW_EXECUTION_LIMITS,
   HARD_FLOW_EXECUTION_LIMITS,
   normalizeFlowExecutionLimits,
@@ -14,9 +15,16 @@ interface ConformanceCorpus {
   readonly corpusVersion: string;
   readonly reviewReason: string;
   readonly schema: PageSchema;
+  readonly expected: {
+    readonly canonicalLogic: Record<string, unknown>;
+  };
   readonly negativeCases: Record<
     string,
-    { readonly schema: PageSchema; readonly expectedCode: string }
+    {
+      readonly schema: PageSchema;
+      readonly expectedCode: string;
+      readonly expectedPath: ReadonlyArray<string | number>;
+    }
   >;
 }
 
@@ -1036,6 +1044,13 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
   });
 
   it('39. accepts the shared conformance corpus flows and produces a valid topological order', () => {
+    expect(conformanceFixture.corpusVersion).toBe('1.0.0');
+    expect(typeof conformanceFixture.reviewReason).toBe('string');
+    expect(conformanceFixture.reviewReason.trim().length).toBeGreaterThan(0);
+
+    const canonicalSchema = createCanonicalPageSchema(conformanceFixture.schema);
+    expect(canonicalSchema.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+
     const canonical = validatePageSchemaValue(conformanceFixture.schema);
     expect(canonical.ok).toBe(true);
     if (!canonical.ok) return;
@@ -1054,10 +1069,11 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
     expect(submitIndex).toBeGreaterThan(recordIndex);
   });
 
-  it('40. validates Flow-related negative cases from the shared conformance corpus', () => {
-    const { illegalFlowKey, missingFlowRef, flowCycle, unknownAction } =
-      conformanceFixture.negativeCases;
-    for (const testCase of [illegalFlowKey, missingFlowRef, flowCycle, unknownAction]) {
+  it('40. validates all 9 negative conformance cases with exact code and path', () => {
+    const entries = Object.entries(conformanceFixture.negativeCases);
+    expect(entries).toHaveLength(9);
+
+    for (const [, testCase] of entries) {
       const parseRes = validatePageSchemaValue(testCase.schema);
       const flowRes = testCase.schema.logic?.flows
         ? analyzeActionFlowDeclarations(testCase.schema.logic.flows)
@@ -1066,7 +1082,9 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
         ...(parseRes.ok ? [] : parseRes.issues),
         ...(flowRes.ok ? [] : flowRes.issues),
       ];
-      expect(issues.some((issue) => issue.code === testCase.expectedCode)).toBe(true);
+      const matched = issues.find((issue) => issue.code === testCase.expectedCode);
+      expect(matched).toBeDefined();
+      expect(matched?.path).toEqual(testCase.expectedPath);
     }
   });
 });

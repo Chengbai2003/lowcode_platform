@@ -478,183 +478,6 @@
     "maxConcurrentRuns": 1,
     "maxDurationMs": 20
   },
-  "budgetExceededSchemas": {
-    "actionBudget": {
-      "schemaVersion": 0,
-      "rootId": "root",
-      "components": {
-        "root": {
-          "id": "root",
-          "type": "Page"
-        }
-      },
-      "logic": {
-        "states": {
-          "x": 0
-        },
-        "flows": {
-          "overflowActions": {
-            "steps": [
-              {
-                "type": "setValue",
-                "field": "state.x",
-                "value": 1
-              },
-              {
-                "type": "setValue",
-                "field": "state.x",
-                "value": 2
-              },
-              {
-                "type": "setValue",
-                "field": "state.x",
-                "value": 3
-              }
-            ]
-          }
-        }
-      },
-      "flow": "overflowActions",
-      "expectedError": {
-        "code": "FLOW_ACTION_BUDGET_EXCEEDED",
-        "flow": "overflowActions"
-      }
-    },
-    "iterationBudget": {
-      "schemaVersion": 0,
-      "rootId": "root",
-      "components": {
-        "root": {
-          "id": "root",
-          "type": "Page"
-        }
-      },
-      "logic": {
-        "states": {
-          "items": [1, 2],
-          "x": 0
-        },
-        "flows": {
-          "overflowLoop": {
-            "steps": [
-              {
-                "type": "loop",
-                "over": "{{state.items}}",
-                "itemVar": "item",
-                "actions": [
-                  {
-                    "type": "setValue",
-                    "field": "state.x",
-                    "value": 1
-                  }
-                ]
-              }
-            ]
-          }
-        }
-      },
-      "flow": "overflowLoop",
-      "expectedError": {
-        "code": "FLOW_ITERATION_BUDGET_EXCEEDED",
-        "flow": "overflowLoop"
-      }
-    },
-    "depthBudget": {
-      "schemaVersion": 0,
-      "rootId": "root",
-      "components": {
-        "root": {
-          "id": "root",
-          "type": "Page"
-        }
-      },
-      "logic": {
-        "states": {
-          "x": 0
-        },
-        "flows": {
-          "callerFlow": {
-            "steps": [
-              {
-                "type": "runFlow",
-                "flow": "calleeFlow"
-              }
-            ]
-          },
-          "calleeFlow": {
-            "steps": [
-              {
-                "type": "setValue",
-                "field": "state.x",
-                "value": 1
-              }
-            ]
-          }
-        }
-      },
-      "flow": "callerFlow",
-      "expectedError": {
-        "code": "FLOW_DEPTH_EXCEEDED",
-        "flow": "calleeFlow"
-      }
-    },
-    "durationBudget": {
-      "schemaVersion": 0,
-      "rootId": "root",
-      "components": {
-        "root": {
-          "id": "root",
-          "type": "Page"
-        }
-      },
-      "logic": {
-        "states": {},
-        "flows": {
-          "slowFlow": {
-            "steps": [
-              {
-                "type": "delay",
-                "ms": 50
-              }
-            ]
-          }
-        }
-      },
-      "flow": "slowFlow",
-      "expectedError": {
-        "code": "FLOW_DURATION_EXCEEDED",
-        "flow": "slowFlow"
-      }
-    },
-    "concurrencyBudget": {
-      "schemaVersion": 0,
-      "rootId": "root",
-      "components": {
-        "root": {
-          "id": "root",
-          "type": "Page"
-        }
-      },
-      "logic": {
-        "states": {},
-        "flows": {
-          "slowFlow": {
-            "steps": [
-              {
-                "type": "delay",
-                "ms": 50
-              }
-            ]
-          }
-        }
-      },
-      "flow": "slowFlow",
-      "expectedError": {
-        "code": "FLOW_CONCURRENCY_EXCEEDED",
-        "flow": "slowFlow"
-      }
-    }
-  },
   "negativeCases": {
     "illegalStateKey": {
       "schema": {
@@ -672,7 +495,8 @@
           }
         }
       },
-      "expectedCode": "INVALID_STATE_KEY"
+      "expectedCode": "INVALID_STATE_KEY",
+      "expectedPath": ["logic", "states", "invalid-state-key"]
     },
     "illegalComputedKey": {
       "schema": {
@@ -693,7 +517,8 @@
           }
         }
       },
-      "expectedCode": "INVALID_COMPUTED_KEY"
+      "expectedCode": "INVALID_COMPUTED_KEY",
+      "expectedPath": ["logic", "computed", "invalid-computed-key"]
     },
     "illegalFlowKey": {
       "schema": {
@@ -719,7 +544,8 @@
           }
         }
       },
-      "expectedCode": "INVALID_FLOW_KEY"
+      "expectedCode": "INVALID_FLOW_KEY",
+      "expectedPath": ["logic", "flows", "invalid-flow-key"]
     },
     "missingFlowRef": {
       "schema": {
@@ -745,7 +571,8 @@
           }
         }
       },
-      "expectedCode": "FLOW_REFERENCE_MISSING"
+      "expectedCode": "FLOW_REFERENCE_MISSING",
+      "expectedPath": ["logic", "flows", "caller", "steps", 0, "flow"]
     },
     "missingComputedRef": {
       "schema": {
@@ -766,7 +593,8 @@
           }
         }
       },
-      "expectedCode": "COMPUTED_REFERENCE_MISSING"
+      "expectedCode": "COMPUTED_REFERENCE_MISSING",
+      "expectedPath": ["logic", "computed", "b"]
     },
     "computedCycle": {
       "schema": {
@@ -788,7 +616,8 @@
           }
         }
       },
-      "expectedCode": "COMPUTED_CYCLE"
+      "expectedCode": "COMPUTED_CYCLE",
+      "expectedPath": ["logic", "computed"]
     },
     "flowCycle": {
       "schema": {
@@ -822,7 +651,8 @@
           }
         }
       },
-      "expectedCode": "FLOW_REFERENCE_CYCLE"
+      "expectedCode": "FLOW_REFERENCE_CYCLE",
+      "expectedPath": ["logic", "flows", "f1"]
     },
     "dangerousExpression": {
       "schema": {
@@ -843,7 +673,8 @@
           }
         }
       },
-      "expectedCode": "COMPUTED_CONSTRUCTOR_FORBIDDEN"
+      "expectedCode": "COMPUTED_CONSTRUCTOR_FORBIDDEN",
+      "expectedPath": ["logic", "computed", "evil"]
     },
     "unknownAction": {
       "schema": {
@@ -868,7 +699,195 @@
           }
         }
       },
-      "expectedCode": "UNSUPPORTED_ACTION_TYPE"
+      "expectedCode": "UNSUPPORTED_ACTION_TYPE",
+      "expectedPath": ["logic", "flows", "badFlow", "steps", 0, "type"]
+    }
+  },
+  "budgetExceededCases": {
+    "actionBudget": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "x": 0
+          },
+          "flows": {
+            "overflowActions": {
+              "steps": [
+                {
+                  "type": "setValue",
+                  "field": "state.x",
+                  "value": 1
+                },
+                {
+                  "type": "setValue",
+                  "field": "state.x",
+                  "value": 2
+                },
+                {
+                  "type": "setValue",
+                  "field": "state.x",
+                  "value": 3
+                }
+              ]
+            }
+          }
+        }
+      },
+      "flow": "overflowActions",
+      "expectedError": {
+        "code": "FLOW_ACTION_BUDGET_EXCEEDED",
+        "flow": "overflowActions"
+      }
+    },
+    "iterationBudget": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "items": [1, 2],
+            "x": 0
+          },
+          "flows": {
+            "overflowLoop": {
+              "steps": [
+                {
+                  "type": "loop",
+                  "over": "{{state.items}}",
+                  "itemVar": "item",
+                  "actions": [
+                    {
+                      "type": "setValue",
+                      "field": "state.x",
+                      "value": 1
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "flow": "overflowLoop",
+      "expectedError": {
+        "code": "FLOW_ITERATION_BUDGET_EXCEEDED",
+        "flow": "overflowLoop"
+      }
+    },
+    "depthBudget": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {
+            "x": 0
+          },
+          "flows": {
+            "callerFlow": {
+              "steps": [
+                {
+                  "type": "runFlow",
+                  "flow": "calleeFlow"
+                }
+              ]
+            },
+            "calleeFlow": {
+              "steps": [
+                {
+                  "type": "setValue",
+                  "field": "state.x",
+                  "value": 1
+                }
+              ]
+            }
+          }
+        }
+      },
+      "flow": "callerFlow",
+      "expectedError": {
+        "code": "FLOW_DEPTH_EXCEEDED",
+        "flow": "calleeFlow"
+      }
+    },
+    "durationBudget": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {},
+          "flows": {
+            "slowFlow": {
+              "steps": [
+                {
+                  "type": "delay",
+                  "ms": 50
+                }
+              ]
+            }
+          }
+        }
+      },
+      "flow": "slowFlow",
+      "expectedError": {
+        "code": "FLOW_DURATION_EXCEEDED",
+        "flow": "slowFlow"
+      }
+    },
+    "concurrencyBudget": {
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page"
+          }
+        },
+        "logic": {
+          "states": {},
+          "flows": {
+            "slowFlow": {
+              "steps": [
+                {
+                  "type": "delay",
+                  "ms": 50
+                }
+              ]
+            }
+          }
+        }
+      },
+      "flow": "slowFlow",
+      "expectedError": {
+        "code": "FLOW_CONCURRENCY_EXCEEDED",
+        "flow": "slowFlow"
+      }
     }
   }
 }
