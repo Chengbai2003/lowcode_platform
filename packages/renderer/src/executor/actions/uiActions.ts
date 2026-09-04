@@ -7,6 +7,7 @@ import type { ActionHandler } from '../../dsl';
 import { isCapabilityGranted, type HostCapabilities } from '../../host/HostCapabilities';
 import type { FeedbackAction, DialogAction } from '../../dsl/actions/ui';
 import { resolveValue } from '../parser';
+import { getFlowRunContext, withFlowRunPath } from '../../session/FlowRun';
 
 /**
  * 反馈提示
@@ -21,6 +22,11 @@ import { resolveValue } from '../parser';
  * }
  */
 export const feedback: ActionHandler = async (action, context) => {
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
+
   const feedbackAction = action as FeedbackAction;
   const {
     kind = 'message',
@@ -76,6 +82,11 @@ export const feedback: ActionHandler = async (action, context) => {
  * }
  */
 export const dialog: ActionHandler = async (action, context, executor) => {
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
+
   const dialogAction = action as DialogAction;
   const { kind, title, content, onOk, onCancel } = dialogAction;
 
@@ -121,11 +132,42 @@ export const dialog: ActionHandler = async (action, context, executor) => {
     }
   }
 
+  // 每次 await 返回后重新检查 signal（dispose 后 resolve 则抛出中止）
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
+
   // 执行回调
   if (confirmed && onOk && executor) {
-    await (executor as any).execute(onOk, context);
+    if (flowContext) {
+      for (let a = 0; a < onOk.length; a++) {
+        flowContext.throwIfAborted();
+        const act = onOk[a];
+        const childContext = withFlowRunPath(context, flowContext, [
+          ...flowContext.stepPath,
+          'onOk',
+          a,
+        ]);
+        await (executor as any).executeSingle(act, childContext);
+      }
+    } else {
+      await (executor as any).execute(onOk, context);
+    }
   } else if (!confirmed && onCancel && executor) {
-    await (executor as any).execute(onCancel, context);
+    if (flowContext) {
+      for (let a = 0; a < onCancel.length; a++) {
+        flowContext.throwIfAborted();
+        const act = onCancel[a];
+        const childContext = withFlowRunPath(context, flowContext, [
+          ...flowContext.stepPath,
+          'onCancel',
+          a,
+        ]);
+        await (executor as any).executeSingle(act, childContext);
+      }
+    } else {
+      await (executor as any).execute(onCancel, context);
+    }
   }
 
   return { kind, confirmed };

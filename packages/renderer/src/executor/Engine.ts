@@ -22,9 +22,10 @@ import asyncActions from './actions/asyncActions';
 import debugActions from './actions/debugActions';
 import { ReactiveRuntime } from '../reactive/runtime';
 import { buildNavigationTarget } from '../utils/sanitizeUrl';
+import { getFlowRunContext, FLOW_RUN_CONTEXT, FlowExecutionError } from '../session/FlowRun';
 
 /**
- * 内置Action处理器 (8种精简方案)
+ * 内置Action处理器 (8种精简方案 + Flow 运行动作)
  *
  * | 分类 | Action | 用途 |
  * |-----|--------|------|
@@ -33,7 +34,7 @@ import { buildNavigationTarget } from '../utils/sanitizeUrl';
  * | 路由 | navigate | 页面跳转 |
  * | 交互 | feedback | 消息/通知 |
  * | 弹窗 | dialog | 模态框/确认框 |
- * | 控制 | if, loop | 条件分支/循环 |
+ * | 控制 | if, loop, runFlow | 条件分支/循环/流程调度 |
  * | 工具 | delay, log | 延迟/日志 |
  */
 const BUILTIN_HANDLERS: ActionRegistry = {
@@ -55,6 +56,7 @@ const BUILTIN_HANDLERS: ActionRegistry = {
   // 流程控制
   if: flowActions.if,
   loop: flowActions.loop,
+  runFlow: flowActions.runFlow,
 
   // 工具
   delay: asyncActions.delay,
@@ -157,6 +159,11 @@ export class DSLExecutor {
           action,
           error: errorObj,
         });
+
+        // Flow 模式严格停止
+        if (getFlowRunContext(context)) {
+          throw errorObj;
+        }
       }
     }
 
@@ -180,17 +187,30 @@ export class DSLExecutor {
    * 执行单个Action
    */
   async executeSingle(action: Action, context: ExecutionContext): Promise<any> {
-    // 检查执行超时
+    const flowContext = getFlowRunContext(context);
+    // Flow 模式不要叠加旧的 per-action timeout
+    if (flowContext) {
+      return this._executeAction(action, context);
+    }
+
+    // 检查执行超时（Legacy 模式；并在 Promise settle 后清除 timer，杜绝泄漏）
     if (this.options.maxExecutionTime > 0) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => {
+        timer = setTimeout(() => {
           reject(new Error(`Action execution timeout (${this.options.maxExecutionTime}ms)`));
         }, this.options.maxExecutionTime);
       });
 
       const executionPromise = this._executeAction(action, context);
 
-      return Promise.race([executionPromise, timeoutPromise]);
+      try {
+        return await Promise.race([executionPromise, timeoutPromise]);
+      } finally {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+        }
+      }
     }
 
     return this._executeAction(action, context);
@@ -200,9 +220,19 @@ export class DSLExecutor {
    * 内部Action执行逻辑
    */
   private async _executeAction(action: Action, context: ExecutionContext): Promise<any> {
+    const flowContext = getFlowRunContext(context);
     const actionType = action.type as string;
 
     if (actionType === 'customScript') {
+      if (flowContext) {
+        throw flowContext.flowRun.createError(
+          'FLOW_UNSUPPORTED_STEP',
+          flowContext.flowKey,
+          flowContext.topStepIndex,
+          flowContext.stepPath,
+          'customScript is unavailable because in-realm execution is unsafe',
+        );
+      }
       // 历史类型已从 Schema 联合移除；此处兜底拦截，防止任何残留输入被执行
       throw new Error('customScript is unavailable because in-realm execution is unsafe');
     }
@@ -210,7 +240,20 @@ export class DSLExecutor {
     const handler = this.handlers[actionType as Action['type']];
 
     if (!handler) {
+      if (flowContext) {
+        throw flowContext.flowRun.createError(
+          'FLOW_UNSUPPORTED_STEP',
+          flowContext.flowKey,
+          flowContext.topStepIndex,
+          flowContext.stepPath,
+          `Unknown action type: ${actionType}`,
+        );
+      }
       throw new Error(`Unknown action type: ${actionType}`);
+    }
+
+    if (flowContext) {
+      flowContext.flowRun.incrementActionCount(flowContext, action);
     }
 
     const liveContext: ExecutionContext = {
@@ -220,8 +263,26 @@ export class DSLExecutor {
       computed: context.runtime.getComputed(),
       formData: context.runtime.getFormData(),
       components: context.runtime.getComponents(),
+      ...(flowContext ? { [FLOW_RUN_CONTEXT]: flowContext } : {}),
     };
-    return handler(action, liveContext, this);
+    try {
+      return await handler(action, liveContext, this);
+    } catch (err) {
+      if (flowContext) {
+        if (err instanceof FlowExecutionError) {
+          throw err;
+        }
+        throw flowContext.flowRun.createError(
+          'FLOW_STEP_FAILED',
+          flowContext.flowKey,
+          flowContext.topStepIndex,
+          flowContext.stepPath,
+          err instanceof Error ? err.message : String(err),
+          err,
+        );
+      }
+      throw err;
+    }
   }
 
   /**

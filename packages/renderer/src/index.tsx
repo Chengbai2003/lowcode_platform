@@ -32,6 +32,7 @@ export * from './bridge/createComponentRuntimeBridge';
 export * from './preset/createSealedPreset';
 export * from './preset/createComponentPreset';
 export * from './session/RuntimeSession';
+export * from './session/FlowRun';
 export * from './host/HostCapabilities';
 export * from './preset/sanitizePropsByManifest';
 export type { ComponentRuntimeBridge, DataResourceState } from './bridge/ComponentRuntimeBridge';

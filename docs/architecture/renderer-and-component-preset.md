@@ -222,3 +222,5 @@ M1F-2 B2 已建立部署期静态 `SystemRuntimeProfileRegistry` 与 Frontend
 `RendererPresetCatalog`：二者在 Bootstrap 时完成配置校验并冻结，未知、禁用、重复或
 版本不匹配均 fail-close，且不会从数据库或网络动态加载可执行模块。页面、Editor、
 Renderer、Compiler 与 Agent Manifest 统一消费同一 Profile 的接线仍属于 B3。
+
+M1a-2 F2 ActionFlow Runtime 已落地：在 `packages/renderer` 内部建立声明式 ActionFlow 运行语义与会话调度能力（`RuntimeSession.executeFlow`、`FlowRun`、预算控制、`onError` 恢复、`AbortSignal` 级联与结构化 `FlowExecutionError` 诊断）；生产 Schema `PageSchema.logic.flows` 与组件事件 `runFlow` 继续保持 fail-close，留待 F3 开放。
