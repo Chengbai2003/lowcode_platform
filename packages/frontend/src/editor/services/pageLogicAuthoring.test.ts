@@ -310,4 +310,43 @@ describe('pageLogicAuthoring', () => {
 
     expect(screen.queryByTestId('schema-error-panel')).toBeNull();
   });
+
+  it('preserves ordered ActionFlow steps and onError while rejecting a removed referenced flow', () => {
+    const logic = {
+      states: { count: 0 },
+      flows: {
+        save: {
+          steps: [
+            { type: 'setValue', field: 'state.count', value: 1 },
+            { type: 'setValue', field: 'state.count', value: 2 },
+          ],
+          onError: [{ type: 'setValue', field: 'state.count', value: -1 }],
+        },
+      },
+    };
+    const accepted = parseAndValidatePageLogic(JSON.stringify(logic), baseSchema, whitelist);
+    expect(accepted.success).toBe(true);
+    if (!accepted.success) return;
+    expect(accepted.data.logic?.flows?.save.steps).toEqual(logic.flows.save.steps);
+    expect(accepted.data.logic?.flows?.save.onError).toEqual(logic.flows.save.onError);
+
+    const referencedSchema: PageSchema = {
+      ...accepted.data,
+      components: {
+        ...accepted.data.components,
+        child: {
+          ...accepted.data.components.child,
+          events: { onClick: [{ type: 'runFlow', flow: 'save' }] },
+        },
+      },
+    };
+    const rejected = parseAndValidatePageLogic(
+      JSON.stringify({ states: { count: 0 }, flows: {} }),
+      referencedSchema,
+      whitelist,
+    );
+    expect(rejected.success).toBe(false);
+    if (rejected.success) return;
+    expect(rejected.issues.some((issue) => issue.code === 'FLOW_REFERENCE_MISSING')).toBe(true);
+  });
 });

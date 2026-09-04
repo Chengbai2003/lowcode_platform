@@ -1,36 +1,61 @@
 {
-  "schemaVersion": 0,
-  "rootId": "submit",
-  "components": {
-    "submit": {
-      "id": "submit",
-      "type": "Button",
-      "props": { "children": "Submit" },
-      "events": {
-        "onClick": [{ "type": "runFlow", "flow": "submitOrder", "input": { "source": "fixture" } }]
+  "schema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": { "id": "root", "type": "Page", "childrenIds": ["submit", "status"] },
+      "submit": {
+        "id": "submit",
+        "type": "Button",
+        "props": { "children": "Submit" },
+        "events": {
+          "onClick": [
+            { "type": "runFlow", "flow": "submitOrder", "input": { "source": "fixture" } }
+          ]
+        }
+      },
+      "status": {
+        "id": "status",
+        "type": "Text",
+        "props": { "children": "{{state.source + ':' + state.count}}" }
+      }
+    },
+    "logic": {
+      "states": { "count": 0, "source": "", "recovered": false },
+      "flows": {
+        "recordSource": {
+          "steps": [{ "type": "setValue", "field": "state.source", "value": "{{input.source}}" }]
+        },
+        "submitOrder": {
+          "steps": [
+            { "type": "runFlow", "flow": "recordSource", "input": { "source": "fixture" } },
+            { "type": "setValue", "field": "state.count", "value": "{{state.count + 1}}" }
+          ]
+        },
+        "recoverFailure": {
+          "steps": [{ "type": "apiCall", "url": "/fail" }],
+          "onError": [{ "type": "setValue", "field": "state.recovered", "value": true }]
+        },
+        "unhandledFailure": { "steps": [{ "type": "apiCall", "url": "/fail" }] }
       }
     }
   },
-  "logic": {
-    "states": { "count": 0, "source": "" },
-    "flows": {
-      "recordSource": {
-        "steps": [{ "type": "setValue", "field": "state.source", "value": "{{input.source}}" }]
-      },
-      "submitOrder": {
-        "steps": [
-          { "type": "runFlow", "flow": "recordSource", "input": { "source": "fixture" } },
-          { "type": "setValue", "field": "state.count", "value": "{{state.count + 1}}" }
-        ],
-        "onError": [
-          {
-            "type": "feedback",
-            "kind": "message",
-            "level": "error",
-            "content": "Submission failed"
-          }
-        ]
-      }
+  "expected": {
+    "initial": { "visibleStatus": ":0", "state": { "count": 0, "source": "", "recovered": false } },
+    "afterClick": {
+      "visibleStatus": "fixture:1",
+      "state": { "count": 1, "source": "fixture", "recovered": false }
+    },
+    "recovery": {
+      "state": { "recovered": true },
+      "result": { "status": "recovered", "flow": "recoverFailure", "recovered": true }
+    },
+    "unhandledDiagnostic": {
+      "code": "FLOW_STEP_FAILED",
+      "flow": "unhandledFailure",
+      "step": 0,
+      "stepPath": ["steps", 0],
+      "trace": [{ "flow": "unhandledFailure", "step": 0 }]
     }
   }
 }

@@ -8,7 +8,14 @@ const actionFlowFixture = JSON.parse(
     path.resolve(process.cwd(), '../../test-fixtures/m1a-action-flow-conformance.json'),
     'utf8',
   ),
-) as PageSchema;
+) as {
+  schema: PageSchema;
+  expected: {
+    afterClick: { state: { count: number; source: string } };
+    recovery: { state: { recovered: boolean }; result: { status: string; flow: string } };
+    unhandledDiagnostic: { code: string; flow: string; step: number; stepPath: string[] };
+  };
+};
 
 function extractGeneratedComponentBody(code: string): string {
   const functionStart = 'export default function GeneratedPage() {\n';
@@ -93,8 +100,28 @@ function createFlowHarness(
 }
 
 describe('compiler ActionFlow runtime generation', () => {
-  it('compiles the shared ActionFlow conformance fixture', () => {
-    expect(compileToCode(actionFlowFixture)).toContain('executeFlow');
+  it('executes the shared ActionFlow conformance fixture through its generated event handler', async () => {
+    const code = compileToCode(actionFlowFixture.schema);
+    const harness = createFlowHarness(
+      code,
+      '{ handleSubmitClick, executeFlow, read: () => stateRef.current }',
+    );
+
+    await harness.value.handleSubmitClick();
+    expect(harness.value.read()).toMatchObject(actionFlowFixture.expected.afterClick.state);
+
+    const fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('fixture failure'));
+    try {
+      await expect(harness.value.executeFlow('recoverFailure')).resolves.toMatchObject(
+        actionFlowFixture.expected.recovery.result,
+      );
+      expect(harness.value.read()).toMatchObject(actionFlowFixture.expected.recovery.state);
+      await expect(harness.value.executeFlow('unhandledFailure')).rejects.toMatchObject(
+        actionFlowFixture.expected.unhandledDiagnostic,
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it('strictly executes steps sequentially and reads latest State/Computed across await ticks', async () => {

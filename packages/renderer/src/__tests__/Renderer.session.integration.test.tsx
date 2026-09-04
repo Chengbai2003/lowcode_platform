@@ -3,8 +3,10 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, act, cleanup, fireEvent } from '@testing-library/react';
 import React, { useState } from 'react';
-import type { PageSchema } from '@lowcode-platform/schema-contract';
+import { analyzeActionFlowDeclarations, type PageSchema } from '@lowcode-platform/schema-contract';
 import { Renderer } from '../Renderer';
+import { EventDispatcher } from '../EventDispatcher';
+import { createRuntimeSession } from '../session/RuntimeSession';
 import { testPreset } from './fixtures/testPreset';
 
 const conformanceFixture = JSON.parse(
@@ -25,7 +27,15 @@ const actionFlowFixture = JSON.parse(
     path.resolve(process.cwd(), '../../test-fixtures/m1a-action-flow-conformance.json'),
     'utf8',
   ),
-) as PageSchema;
+) as {
+  schema: PageSchema;
+  expected: {
+    initial: { visibleStatus: string };
+    afterClick: { visibleStatus: string };
+    recovery: { state: { recovered: boolean }; result: { status: string; flow: string } };
+    unhandledDiagnostic: { code: string; flow: string; step: number; stepPath: string[] };
+  };
+};
 
 const simpleSchema: PageSchema = {
   schemaVersion: 0,
@@ -36,6 +46,21 @@ const simpleSchema: PageSchema = {
   },
 };
 
+function createFixtureSession() {
+  const flows = actionFlowFixture.schema.logic?.flows;
+  if (!flows) throw new Error('ActionFlow fixture must declare flows');
+  const analysis = analyzeActionFlowDeclarations(flows);
+  if (!analysis.ok) throw new Error('ActionFlow fixture must pass Contract analysis');
+  return createRuntimeSession({
+    pageId: 'action-flow-fixture',
+    documentSessionId: 'fixture-session',
+    dispatcher: new EventDispatcher({
+      api: { get: vi.fn().mockRejectedValue(new Error('failed')) },
+    }),
+    flowAnalysis: analysis.value,
+  });
+}
+
 describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
   it('loads the shared ActionFlow conformance fixture', async () => {
     render(
@@ -43,14 +68,28 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
         preset={testPreset}
         pageId="action-flow-conformance-page"
         documentSessionId="action-flow-conformance-session"
-        schema={actionFlowFixture}
+        schema={actionFlowFixture.schema}
       />,
     );
+
+    expect(screen.getByText(actionFlowFixture.expected.initial.visibleStatus)).toBeTruthy();
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
       await Promise.resolve();
     });
+    expect(screen.getByText(actionFlowFixture.expected.afterClick.visibleStatus)).toBeTruthy();
+  });
+
+  it('executes fixture recovery and reports its unhandled diagnostic through RuntimeSession', async () => {
+    const session = createFixtureSession();
+    const recovered = await session.executeFlow('recoverFailure');
+    expect(recovered).toMatchObject(actionFlowFixture.expected.recovery.result);
+    expect(session.runtime.getState()).toMatchObject(actionFlowFixture.expected.recovery.state);
+
+    await expect(session.executeFlow('unhandledFailure')).rejects.toMatchObject(
+      actionFlowFixture.expected.unhandledDiagnostic,
+    );
   });
 
   it('matches the shared Computed conformance corpus before and after one event', async () => {
