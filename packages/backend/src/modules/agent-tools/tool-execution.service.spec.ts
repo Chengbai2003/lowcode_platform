@@ -374,4 +374,161 @@ describe('ToolExecutionService', () => {
     expect(response.schema.components.button.props?.type).toBeUndefined();
     expect(response.warnings).toContain('Normalized Button danger prop for button');
   });
+
+  it('executes replace_page_logic tool successfully', async () => {
+    const context = await createContext();
+
+    await service.executeTool(
+      'replace_page_logic',
+      {
+        logic: {
+          states: { count: 42 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+      context,
+    );
+
+    expect(context.accumulatedPatch).toEqual([
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 42 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+    ]);
+    expect(context.workingSchema.logic).toEqual({
+      states: { count: 42 },
+      computed: { double: 'state.count * 2' },
+    });
+  });
+
+  it.each([
+    ['null', null],
+    ['string', 'not-an-object'],
+    ['array', [1, 2]],
+    ['number', 42],
+    ['undefined', undefined],
+  ])('rejects replace_page_logic with non-plain-object logic (%s)', async (_, invalidLogic) => {
+    const context = await createContext();
+    await expectToolError(
+      () =>
+        service.executeTool(
+          'replace_page_logic',
+          { logic: invalidLogic } as unknown as Record<string, unknown>,
+          context,
+        ),
+      'PATCH_INVALID',
+      'replacePageLogic requires logic object',
+    );
+  });
+
+  it('normalizes expression whitespace via Contract in executeTool and previewPatch', async () => {
+    const context = await createContext();
+
+    await service.executeTool(
+      'replace_page_logic',
+      {
+        logic: {
+          states: { count: 5 },
+          computed: { double: '  state.count * 2  ' },
+        },
+      },
+      context,
+    );
+
+    expect(context.accumulatedPatch).toEqual([
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 5 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+    ]);
+    expect(context.workingSchema.logic?.computed?.double).toBe('state.count * 2');
+
+    const previewResponse = await service.previewPatch(
+      {
+        draftSchema: createSchema() as unknown as Record<string, unknown>,
+        patch: [
+          {
+            op: 'replacePageLogic',
+            logic: {
+              states: { active: true },
+              computed: { status: "  'Active: ' + state.active  " },
+            },
+          },
+        ],
+      },
+      'trace-whitespace-trim',
+    );
+
+    expect(previewResponse.patch[0]).toEqual({
+      op: 'replacePageLogic',
+      logic: {
+        states: { active: true },
+        computed: { status: "'Active: ' + state.active" },
+      },
+    });
+    expect(previewResponse.schema.logic?.computed?.status).toBe("'Active: ' + state.active");
+  });
+
+  it('clears page logic when passing empty logic object', async () => {
+    const schemaWithLogic = {
+      ...createSchema(),
+      logic: {
+        states: { count: 10 },
+        computed: { double: 'state.count * 2' },
+      },
+    };
+    const context = await service.createExecutionContext(
+      { draftSchema: schemaWithLogic as unknown as Record<string, unknown> },
+      'trace-clear-logic',
+    );
+
+    await service.executeTool('replace_page_logic', { logic: {} }, context);
+
+    expect(context.accumulatedPatch).toEqual([
+      {
+        op: 'replacePageLogic',
+        logic: {},
+      },
+    ]);
+    expect(context.workingSchema.logic).toEqual({});
+  });
+
+  it('preserves structured issues when draftSchema has Contract validation failure', async () => {
+    const invalidDraftSchema = {
+      ...createSchema(),
+      logic: {
+        states: {},
+        computed: { broken: 'state.nonexistent + 1' },
+      },
+    };
+
+    try {
+      await service.createExecutionContext(
+        { draftSchema: invalidDraftSchema as unknown as Record<string, unknown> },
+        'trace-structured-issues',
+      );
+      throw new Error('Expected createExecutionContext to throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolException);
+      const response = (error as AgentToolException).getResponse() as {
+        code: string;
+        details?: { issues?: Array<{ code: string; path: (string | number)[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      expect(response.details?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'COMPUTED_REFERENCE_MISSING',
+            path: ['logic', 'computed', 'broken'],
+          }),
+        ]),
+      );
+    }
+  });
 });

@@ -2,12 +2,14 @@ import type { SchemaContractIssue } from './issues';
 import type { InspectionContext } from './inspector';
 import { inspectAndSanitizeJsonValue } from './inspector';
 import { describeValue } from './describe';
+import { isSafeDataPathKey, isSafeLogicKey } from '../types/logic';
 
 export interface ActionValidationContext {
   readonly issues: SchemaContractIssue[];
   readonly inspectionContext: InspectionContext;
   readonly maxActionNodes: number;
   readonly maxActionDepth: number;
+  allowLegacyNestedStateTargets: boolean;
   actionCount: number;
   /** ACTION_BUDGET_EXCEEDED 只报告一次 */
   actionBudgetReported: boolean;
@@ -60,6 +62,37 @@ function safeGet(
   if (!desc) return { exists: false, isAccessor: false, value: undefined };
   if (desc.get || desc.set) return { exists: true, isAccessor: true, value: undefined };
   return { exists: true, isAccessor: false, value: (desc as PropertyDescriptor).value };
+}
+
+function validateLogicTarget(
+  value: unknown,
+  path: readonly (string | number)[],
+  context: ActionValidationContext,
+): void {
+  if (typeof value !== 'string') return;
+  if (value.startsWith('computed.')) {
+    pushActionIssue(context, {
+      code: 'COMPUTED_TARGET_READONLY',
+      path,
+      message: `Computed target "${value}" is read-only`,
+    });
+    return;
+  }
+  if (!value.startsWith('state.')) return;
+
+  const stateKey = value.slice('state.'.length);
+  const pathParts = stateKey.split('.');
+  const isSafeLegacyPath =
+    context.allowLegacyNestedStateTargets && pathParts.every(isSafeDataPathKey);
+  if (isSafeLegacyPath || isSafeLogicKey(stateKey)) {
+    return;
+  }
+
+  pushActionIssue(context, {
+    code: 'INVALID_STATE_TARGET',
+    path,
+    message: `State target "${value}" must reference one safe top-level Logic Key`,
+  });
 }
 
 function checkUnknownActionFields(
@@ -335,6 +368,8 @@ export function validateActionItem(
           path: [...path, 'field'],
           message: 'setValue action requires a non-empty string "field"',
         });
+      } else {
+        validateLogicTarget(fieldVal, [...path, 'field'], context);
       }
       if (!valueRes.exists) {
         pushActionIssue(context, {
@@ -785,6 +820,8 @@ export function validateActionItem(
           path: [...path, 'resultTo'],
           message: 'apiCall "resultTo" must be a non-empty string if provided',
         });
+      } else if (resultToRes.exists && resultToVal !== undefined) {
+        validateLogicTarget(resultToVal, [...path, 'resultTo'], context);
       }
       if (onSuccessRes.exists) {
         if (!Array.isArray(onSuccessVal)) {

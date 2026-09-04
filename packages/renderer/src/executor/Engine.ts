@@ -213,7 +213,15 @@ export class DSLExecutor {
       throw new Error(`Unknown action type: ${actionType}`);
     }
 
-    return handler(action, context, this);
+    const liveContext: ExecutionContext = {
+      ...context,
+      data: context.runtime.getData(),
+      state: context.runtime.getState(),
+      computed: context.runtime.getComputed(),
+      formData: context.runtime.getFormData(),
+      components: context.runtime.getComponents(),
+    };
+    return handler(action, liveContext, this);
   }
 
   /**
@@ -291,6 +299,7 @@ export class DSLExecutor {
       data: _data,
       formData: _formData,
       state: _state,
+      computed: _computed,
       components: _components,
       runtime: _runtime,
       user,
@@ -398,6 +407,7 @@ export class DSLExecutor {
       data: runtime.getData(),
       formData: runtime.getFormData(),
       state: runtime.getState(),
+      computed: runtime.getComputed(),
       components: runtime.getComponents(),
       runtime,
     };

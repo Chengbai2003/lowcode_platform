@@ -77,6 +77,19 @@ const READ_RETRYABLE_TOOLS = new Set([
 ]);
 const COLLECTION_INTENT_REGEX = /所有|全部|每个|当前.+(?:下|内|中)/;
 
+export function isPageLogicInstruction(instruction: string): boolean {
+  const normalized = instruction.trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized.includes('page state') ||
+    normalized.includes('computed') ||
+    normalized.includes('页面逻辑') ||
+    normalized.includes('状态声明') ||
+    normalized.includes('计算声明') ||
+    normalized.includes('计算值')
+  );
+}
+
 @Injectable()
 export class AgentRunnerService {
   private readonly logger = new Logger(AgentRunnerService.name);
@@ -116,7 +129,9 @@ export class AgentRunnerService {
     const reporter = options?.reporter ?? NOOP_AGENT_PROGRESS_REPORTER;
     let retryCount = 0;
     const hasConfirmedIntent = Boolean(dto.confirmedIntentId?.trim());
-    const isCollectionIntent = hasConfirmedIntent || this.hasCollectionIntent(dto.instruction);
+    const isLogicInstruction = isPageLogicInstruction(dto.instruction);
+    const isCollectionIntent =
+      !isLogicInstruction && (hasConfirmedIntent || this.hasCollectionIntent(dto.instruction));
 
     this.policyService.assertPatchRequestAllowed(dto, traceId);
 
@@ -157,27 +172,44 @@ export class AgentRunnerService {
       }
     }
 
-    await reporter.emitStatus({
-      stage: 'resolving_target',
-      label: '正在解析编辑目标',
-    });
+    let resolvedSelectedId: string | undefined;
+    let focusContextResult: FocusContextResult;
 
-    const targetResolution = await this.resolveTarget(
-      dto,
-      context,
-      traceId,
-      recoveredContext.retryCount > 0 ? undefined : options?.routeDecision?.prefetchedFocusContext,
-      options?.routeDecision,
-    );
-    if ('clarificationResponse' in targetResolution) {
+    if (isLogicInstruction) {
+      // 页面级 Logic 指令：跳过集合意图分支与普通组件候选澄清；
+      // 用页面 rootId 组装只读 focus context，但保持 resolvedSelectedId 为 undefined，防止组件 fast path 误改 root props
+      focusContextResult = await this.toolExecutionService.getFocusContext(
+        context,
+        context.workingSchema.rootId,
+        dto.instruction,
+      );
+      resolvedSelectedId = undefined;
+    } else {
       await reporter.emitStatus({
-        stage: 'completed',
-        label: '需要用户澄清目标组件',
+        stage: 'resolving_target',
+        label: '正在解析编辑目标',
       });
-      return targetResolution.clarificationResponse;
-    }
 
-    const { resolvedSelectedId, focusContextResult } = targetResolution;
+      const targetResolution = await this.resolveTarget(
+        dto,
+        context,
+        traceId,
+        recoveredContext.retryCount > 0
+          ? undefined
+          : options?.routeDecision?.prefetchedFocusContext,
+        options?.routeDecision,
+      );
+      if ('clarificationResponse' in targetResolution) {
+        await reporter.emitStatus({
+          stage: 'completed',
+          label: '需要用户澄清目标组件',
+        });
+        return targetResolution.clarificationResponse;
+      }
+
+      resolvedSelectedId = targetResolution.resolvedSelectedId;
+      focusContextResult = targetResolution.focusContextResult;
+    }
     if (dto.confirmedScopeId?.trim()) {
       return this.runConfirmedBatchPatch(
         dto,
@@ -1084,7 +1116,8 @@ export class AgentRunnerService {
       name === 'update_components_props' ||
       name === 'bind_event' ||
       name === 'remove_component' ||
-      name === 'move_component'
+      name === 'move_component' ||
+      name === 'replace_page_logic'
     );
   }
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { FORBIDDEN_LOGIC_KEYS } from '@lowcode-platform/schema-contract';
 import { parseAndEvaluate } from '../executor/parser';
 
 describe('expression context aliases', () => {
@@ -43,4 +44,18 @@ describe('expression context aliases', () => {
 
     expect(parseAndEvaluate('{{ user.name }}', context)).toBe('ctx-user');
   });
+
+  it.each(FORBIDDEN_LOGIC_KEYS)('does not expose forbidden Logic Key %s', (key) => {
+    const state = Object.create(null) as Record<string, unknown>;
+    state[key] = 'blocked';
+
+    expect(parseAndEvaluate(`{{ state.${key} }}`, { state })).toBeUndefined();
+  });
+
+  it.each(['assign', 'freeze', 'eval'])(
+    'reads non-call JSON Logic member %s without invoking it',
+    (key) => {
+      expect(parseAndEvaluate(`{{ state.${key} }}`, { state: { [key]: 'value' } })).toBe('value');
+    },
+  );
 });

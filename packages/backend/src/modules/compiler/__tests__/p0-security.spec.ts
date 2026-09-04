@@ -87,6 +87,26 @@ describe('P0 compiler security', () => {
     }
   });
 
+  it.each([
+    ['{{ globalThis.location }}', 'globalThis.location'],
+    ['{{ window.location }}', 'window.location'],
+    ['{{ document.cookie }}', 'document.cookie'],
+    ['{{ process.env }}', 'process.env'],
+    ["{{ require('node:fs') }}", "require('node:fs')"],
+    ['{{ XMLHttpRequest }}', 'XMLHttpRequest'],
+    ["{{ Function('return 1') }}", "Function('return 1')"],
+    ["{{ import('unsafe') }}", "import('unsafe')"],
+    ['{{ state.assign() }}', 'state.assign()'],
+    ["{{ state['assign']() }}", "state['assign']()"],
+  ])('rejects blocked expression %s through the AST boundary', (expression, blockedCode) => {
+    const schema = makeSchema({
+      page_root: { id: 'page_root', type: 'Page', childrenIds: ['text'] },
+      text: { id: 'text', type: 'Text', props: { children: expression }, childrenIds: [] },
+    });
+
+    expect(compileToCode(schema)).not.toContain(blockedCode);
+  });
+
   it('allows whitelisted calls', () => {
     // direct sanity: Math.max allowed, String allowed, Date.now allowed; fetch blocked
     const schema = makeSchema({

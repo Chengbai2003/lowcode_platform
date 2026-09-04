@@ -30,6 +30,7 @@ export function buildSystemPrompt(componentList: readonly string[]): string {
     `允许的事件 Action 类型: ${allowedActionTypes.join(', ')}`,
     "feedback 动作必须使用 content/level 字段，例如 { type: 'feedback', kind: 'message', content: '操作成功', level: 'success' }；不要使用 message/type_/messageType。",
     'Button 的红色/危险样式请设置 props.danger=true；不要把 Button.props.type 写成 danger，type 仅用于 default/primary/dashed/link/text。',
+    '如需修改页面逻辑（State 或 Computed），必须先用 get_page_schema 读取当前 schema.logic，再调用 replace_page_logic 提交完整 logic 对象，保留未要求修改的声明。',
     '如果你已经完成修改，就停止继续调用工具。',
   ].join('\n');
 }
@@ -56,6 +57,7 @@ export function buildPrompt(
       '2. 绑定事件使用 bind_event，并只替换目标 trigger 的 action 列表。',
       '3. 新增组件使用 insert_component，组件需带 id/type。',
       '4. 删除或移动前确认目标组件明确。',
+      '5. 修改页面逻辑（State 或 Computed）必须先调用 get_page_schema 读取当前值，再用 replace_page_logic 提交完整 logic，保留未要求修改的声明。',
     ].join('\n'),
   );
   return chunks.join('\n\n');

@@ -1,7 +1,7 @@
 # A2UI 平台演进路线图
 
 > Status: Active
-> Last Updated: 2026-09-01
+> Last Updated: 2026-09-03
 > Current Stage: M1 Foundation / M1a
 > Execution Source of Truth: GitHub Issues（创建后在本文登记链接）
 
@@ -111,11 +111,11 @@ M1F-2 只阻断外部 Preset 正式开放，不是 M1a-1 State & Computed 的技
 
 目标：让页面从静态 UI 升级为具备安全状态和完整业务流程的可执行页面。
 
-| Epic                   | 优先级 | 目标                                                                           | 状态    |
-| ---------------------- | ------ | ------------------------------------------------------------------------------ | ------- |
-| M1a-1 State & Computed | P0     | 引入 `logic.states`、安全 computed、依赖 DAG 与循环检测                        | Planned |
-| M1a-2 ActionFlow       | P0     | 用具名 Flow 替代内联 ActionList，定义错误、取消与预算语义                      | Planned |
-| M1a-3 一致性套件       | P0     | 验证 Contract、Validator、Editor/Agent、Renderer、Compiler、Storage 六个消费面 | Planned |
+| Epic                                                                                 | 优先级 | 目标                                                                           | 状态        |
+| ------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------ | ----------- |
+| [M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) | P0     | 引入 `logic.states`、安全 computed、依赖 DAG 与循环检测                        | In Progress |
+| [M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46)       | P0     | 用具名 Flow 替代内联 ActionList，定义错误、取消与预算语义                      | Planned     |
+| [M1a-3 一致性套件](https://github.com/Chengbai2003/lowcode_platform/issues/47)       | P0     | 验证 Contract、Validator、Editor/Agent、Renderer、Compiler、Storage 六个消费面 | Planned     |
 
 M1a 发布门槛：
 
@@ -186,9 +186,9 @@ M4 初期只输出报告；规则稳定后再选择低误报规则进入阻断�
 4. `[M0-4] [Architecture] 抽离独立 Renderer Package、单系统 ComponentPreset 与 RuntimeSession 隔离`
 5. `[M1F-1] [Eval] 接通生产 Agent Replay 与 Live Trend Contract`（[#38](https://github.com/Chengbai2003/lowcode_platform/issues/38)）
 6. `[M1F-2] [Architecture] 建立 SystemRuntimeProfile Registry 与可信 Preset 部署链路`（[#39](https://github.com/Chengbai2003/lowcode_platform/issues/39)）
-7. `[M1a-1] [Logic] 引入 logic.states 与安全 computed`
-8. `[M1a-2] [ActionFlow] 将内联 ActionList 重构为具名声明式 ActionFlow`
-9. `[M1a-3] [Consistency] 建立六个消费面的一致性测试套件`
+7. `[M1a-1] [Logic] 引入 logic.states 与安全 computed`（[#45](https://github.com/Chengbai2003/lowcode_platform/issues/45)）
+8. `[M1a-2] [ActionFlow] 将内联 ActionList 重构为具名声明式 ActionFlow`（[#46](https://github.com/Chengbai2003/lowcode_platform/issues/46)）
+9. `[M1a-3] [Consistency] 建立六个消费面的一致性测试套件`（[#47](https://github.com/Chengbai2003/lowcode_platform/issues/47)）
 10. `[M1b-1] [DataSource] 引入 OperationRef、OperationResolver 与 DataSourceExecutor`
 11. `[M1b-2] [DataSource] 建立查询资源状态机及 Table/Form 标准绑定`
 12. `[M1.5-1] [Storage] 页面、快照与版本存储数据库化`

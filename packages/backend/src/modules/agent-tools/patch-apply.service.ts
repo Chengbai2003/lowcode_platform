@@ -1,4 +1,4 @@
-import type { JsonObject } from '@lowcode-platform/schema-contract';
+import type { JsonObject, PageLogic } from '@lowcode-platform/schema-contract';
 import { Injectable } from '@nestjs/common';
 import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './types/editor-patch.types';
@@ -15,6 +15,7 @@ type MutableSchema = {
   schemaVersion: 0;
   rootId: string;
   components: Record<string, MutableComponent>;
+  logic?: PageLogic;
 };
 
 @Injectable()
@@ -49,10 +50,17 @@ export class PatchApplyService {
             operation.newIndex,
           );
           break;
+        case 'replacePageLogic':
+          this.replacePageLogic(nextSchema, operation.logic);
+          break;
       }
     }
 
     return this.freezeSchema(nextSchema);
+  }
+
+  private replacePageLogic(schema: MutableSchema, logic?: Record<string, unknown>) {
+    schema.logic = logic ? (JSON.parse(JSON.stringify(logic)) as PageLogic) : undefined;
   }
 
   private insertComponent(
@@ -173,6 +181,7 @@ export class PatchApplyService {
       schemaVersion: schema.schemaVersion,
       rootId: schema.rootId,
       components,
+      logic: schema.logic ? structuredClone(schema.logic) : undefined,
     };
   }
 
@@ -197,6 +206,7 @@ export class PatchApplyService {
       schemaVersion: schema.schemaVersion,
       rootId: schema.rootId,
       components,
+      ...(schema.logic ? { logic: schema.logic } : {}),
     };
   }
 }

@@ -10,6 +10,10 @@
 
 import type { ComponentNode, PageSchema, AIMessageActionResult } from '../../types';
 
+export function serializePageSchema(schema: PageSchema | null): string {
+  return JSON.stringify(schema ?? {}, null, 2);
+}
+
 export function isA2UISchema(value: unknown): value is PageSchema {
   if (!value || typeof value !== 'object') return false;
   return 'rootId' in value && 'components' in value;

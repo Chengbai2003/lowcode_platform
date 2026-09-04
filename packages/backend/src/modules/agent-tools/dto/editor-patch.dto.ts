@@ -55,4 +55,8 @@ export class EditorPatchOperationDto {
   @Min(0)
   @IsOptional()
   newIndex?: number;
+
+  @IsObject()
+  @IsOptional()
+  logic?: Record<string, unknown>;
 }

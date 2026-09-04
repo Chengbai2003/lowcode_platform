@@ -45,10 +45,13 @@ describe('dataActions - setValue', () => {
 
   it('sets values in state and formData namespaces', async () => {
     await setValue({ type: 'setValue', field: 'state.loading', value: true }, context);
+    await setValue({ type: 'setValue', field: 'state.profile.name', value: 'Ada' }, context);
     await setValue({ type: 'setValue', field: 'formData.user.name', value: 'Alice' }, context);
 
     expect(context.runtime.get('state.loading')).toBe(true);
     expect(context.state.loading).toBe(true);
+    expect(context.runtime.get('state.profile.name')).toBe('Ada');
+    expect(context.state.profile).toEqual({ name: 'Ada' });
     expect(context.runtime.get('formData.user.name')).toBe('Alice');
     expect((context.formData.user as Record<string, unknown>).name).toBe('Alice');
   });

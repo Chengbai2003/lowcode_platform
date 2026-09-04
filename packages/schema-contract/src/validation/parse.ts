@@ -1,6 +1,9 @@
 import { isSupportedSchemaVersion } from '../types/versions';
 import type { PageSchema } from '../types/schema';
+import { isSafeLogicKey, type ComputedExpression, type PageLogic } from '../types/logic';
+import { analyzeComputedDeclarations, type ComputedLogicAnalysis } from '../computed';
 import type { ComponentNode } from '../types/node';
+import type { JsonValue } from '../types/json';
 import type { SchemaValidationLimits } from '../types/limits';
 import { normalizeValidationLimits } from '../types/limits';
 import type { ParsePageSchemaResult, SchemaContractIssue } from './issues';
@@ -10,8 +13,9 @@ import type { InspectionContext, IssueSink } from './inspector';
 import { inspectAndSanitizeJsonValue, pushIssue } from './inspector';
 import { describeValue } from './describe';
 
-const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components']);
+const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components', 'logic']);
 const ALLOWED_COMPONENT_KEYS = new Set(['id', 'type', 'props', 'childrenIds', 'events']);
+const ALLOWED_LOGIC_KEYS = new Set(['states', 'computed']);
 
 const hasOwn = (target: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(target, key);
@@ -203,6 +207,7 @@ export function validatePageSchemaValue(
     inspectionContext,
     maxActionNodes: limits.maxActionNodes,
     maxActionDepth: limits.maxActionDepth,
+    allowLegacyNestedStateTargets: true,
     actionCount: 0,
     actionBudgetReported: false,
   };
@@ -257,14 +262,16 @@ export function validatePageSchemaValue(
     return { ok: false, issues };
   }
 
-  // 3. schemaVersion / rootId / components 读取必须走 descriptor
+  // 3. schemaVersion / rootId / components / logic 读取必须走 descriptor
   const schemaVersionRes = safeGetValue(schemaObj, 'schemaVersion');
   const rootIdRes = safeGetValue(schemaObj, 'rootId');
   const componentsRes = safeGetValue(schemaObj, 'components');
+  const logicRes = safeGetValue(schemaObj, 'logic');
 
   const schemaVersion = schemaVersionRes.exists ? schemaVersionRes.value : undefined;
   const rootId = rootIdRes.exists ? rootIdRes.value : undefined;
   const components = componentsRes.exists ? componentsRes.value : undefined;
+  const logic = logicRes.exists ? logicRes.value : undefined;
 
   // schemaVersion 校验
   if (schemaVersion === undefined) {
@@ -317,6 +324,196 @@ export function validatePageSchemaValue(
   if (issues.length > 0) {
     return { ok: false, issues };
   }
+
+  let logicObj: object | undefined;
+  let statesObj: object | undefined;
+  let computedObj: object | undefined;
+  let computedAnalysis: ComputedLogicAnalysis | undefined;
+
+  if (logicRes.exists && logic !== undefined) {
+    if (!logic || typeof logic !== 'object' || Array.isArray(logic)) {
+      pushIssue(inspectionContext, {
+        code: 'INVALID_LOGIC_OBJECT',
+        path: ['logic'],
+        message: 'Schema logic must be an object',
+      });
+    } else {
+      logicObj = logic as object;
+      if (!isPlainPrototype(logicObj)) {
+        pushIssue(inspectionContext, {
+          code: 'INVALID_OBJECT_PROTOTYPE',
+          path: ['logic'],
+          message: 'Schema logic must be a plain object',
+        });
+      } else {
+        pushSymbolIssue(logicObj, ['logic'], inspectionContext);
+        const hasLogicAccessor = pushAccessorIssues(logicObj, ['logic'], inspectionContext);
+
+        for (const key of Object.getOwnPropertyNames(logicObj)) {
+          if (budgetStop()) break;
+          if (!ALLOWED_LOGIC_KEYS.has(key)) {
+            pushIssue(inspectionContext, {
+              code: 'UNKNOWN_LOGIC_FIELD',
+              path: ['logic', key],
+              message: `Unknown field "${key}" on PageLogic (fail-close)`,
+            });
+          }
+        }
+
+        if (!hasLogicAccessor) {
+          const statesRes = safeGetValue(logicObj, 'states');
+          const states = statesRes.exists ? statesRes.value : undefined;
+          const computedRes = safeGetValue(logicObj, 'computed');
+          const computed = computedRes.exists ? computedRes.value : undefined;
+          if (statesRes.exists && states !== undefined) {
+            if (!states || typeof states !== 'object' || Array.isArray(states)) {
+              pushIssue(inspectionContext, {
+                code: 'INVALID_STATES_OBJECT',
+                path: ['logic', 'states'],
+                message: 'PageLogic states must be an object',
+              });
+            } else {
+              statesObj = states as object;
+              if (!isPlainPrototype(statesObj)) {
+                pushIssue(inspectionContext, {
+                  code: 'INVALID_OBJECT_PROTOTYPE',
+                  path: ['logic', 'states'],
+                  message: 'PageLogic states must be a plain object',
+                });
+              } else {
+                pushSymbolIssue(statesObj, ['logic', 'states'], inspectionContext);
+                const hasStatesAccessor = pushAccessorIssues(
+                  statesObj,
+                  ['logic', 'states'],
+                  inspectionContext,
+                );
+                const stateKeys = Object.getOwnPropertyNames(statesObj);
+
+                if (stateKeys.length > limits.maxStateEntries) {
+                  pushIssue(inspectionContext, {
+                    code: 'STATE_ENTRIES_BUDGET_EXCEEDED',
+                    path: ['logic', 'states'],
+                    message: `State entry count (${stateKeys.length}) exceeded limit of ${limits.maxStateEntries}`,
+                  });
+                } else {
+                  for (const stateKey of stateKeys) {
+                    if (budgetStop()) break;
+                    if (!isSafeLogicKey(stateKey)) {
+                      pushIssue(inspectionContext, {
+                        code: 'INVALID_STATE_KEY',
+                        path: ['logic', 'states', stateKey],
+                        message: `State key "${stateKey}" must be a safe identifier`,
+                      });
+                    }
+                  }
+                }
+
+                if (!hasStatesAccessor && issues.length === 0) {
+                  inspectAndSanitizeJsonValue(statesObj, ['logic', 'states'], 0, inspectionContext);
+                }
+              }
+            }
+          }
+
+          if (computedRes.exists && computed !== undefined) {
+            if (!computed || typeof computed !== 'object' || Array.isArray(computed)) {
+              pushIssue(inspectionContext, {
+                code: 'INVALID_COMPUTED_OBJECT',
+                path: ['logic', 'computed'],
+                message: 'PageLogic computed must be an object',
+              });
+            } else {
+              computedObj = computed as object;
+              if (!isPlainPrototype(computedObj)) {
+                pushIssue(inspectionContext, {
+                  code: 'INVALID_OBJECT_PROTOTYPE',
+                  path: ['logic', 'computed'],
+                  message: 'PageLogic computed must be a plain object',
+                });
+              } else {
+                pushSymbolIssue(computedObj, ['logic', 'computed'], inspectionContext);
+                const hasComputedAccessor = pushAccessorIssues(
+                  computedObj,
+                  ['logic', 'computed'],
+                  inspectionContext,
+                );
+                const computedKeys = Object.getOwnPropertyNames(computedObj);
+
+                if (computedKeys.length > limits.maxComputedEntries) {
+                  pushIssue(inspectionContext, {
+                    code: 'COMPUTED_ENTRIES_BUDGET_EXCEEDED',
+                    path: ['logic', 'computed'],
+                    message: `Computed entry count (${computedKeys.length}) exceeded limit of ${limits.maxComputedEntries}`,
+                  });
+                } else if (!hasComputedAccessor) {
+                  for (const computedKey of computedKeys) {
+                    if (budgetStop()) break;
+                    if (!isSafeLogicKey(computedKey)) {
+                      pushIssue(inspectionContext, {
+                        code: 'INVALID_COMPUTED_KEY',
+                        path: ['logic', 'computed', computedKey],
+                        message: `Computed key "${computedKey}" must be a safe identifier`,
+                      });
+                      continue;
+                    }
+                    const expressionRes = safeGetValue(computedObj, computedKey);
+                    if (
+                      !expressionRes.exists ||
+                      typeof expressionRes.value !== 'string' ||
+                      expressionRes.value.trim().length === 0
+                    ) {
+                      pushIssue(inspectionContext, {
+                        code: 'COMPUTED_EXPRESSION_REQUIRED',
+                        path: ['logic', 'computed', computedKey],
+                        message: 'Computed declaration must be a non-empty expression string',
+                      });
+                    }
+                  }
+                  if (issues.length === 0) {
+                    // Computed 仍是 Schema JSON 的一部分：对象和每条表达式都计入共享节点预算。
+                    inspectAndSanitizeJsonValue(
+                      computedObj,
+                      ['logic', 'computed'],
+                      0,
+                      inspectionContext,
+                    );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (issues.length > 0 || inspectionContext.aborted) {
+    return { ok: false, issues };
+  }
+
+  const computedResult = analyzeComputedDeclarations(
+    {
+      ...(statesObj ? { states: statesObj as Readonly<Record<string, JsonValue>> } : {}),
+      ...(computedObj
+        ? { computed: computedObj as Readonly<Record<string, ComputedExpression>> }
+        : {}),
+    },
+    limits,
+  );
+  if (!computedResult.ok) {
+    for (const computedIssue of computedResult.issues) {
+      pushIssue(inspectionContext, computedIssue);
+      if (inspectionContext.aborted) break;
+    }
+  } else {
+    computedAnalysis = computedResult.value;
+  }
+
+  if (issues.length > 0 || inspectionContext.aborted) {
+    return { ok: false, issues };
+  }
+
+  actionValidationContext.allowLegacyNestedStateTargets = statesObj === undefined;
 
   const componentKeys = Object.getOwnPropertyNames(componentsObj);
 
@@ -682,6 +879,51 @@ export function validatePageSchemaValue(
     nodeBudgetReported: false,
     aborted: false,
   };
+
+  let cleanLogic: PageLogic | undefined;
+  if (logicObj) {
+    const cleanLogicObject: Record<string, unknown> = Object.create(null);
+    if (statesObj) {
+      const cleanStates = inspectAndSanitizeJsonValue(
+        statesObj,
+        ['logic', 'states'],
+        0,
+        canonicalInspectionContext,
+      );
+      if (cleanStates !== undefined) {
+        Object.defineProperty(cleanLogicObject, 'states', {
+          value: cleanStates,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+    }
+    if (computedObj && computedAnalysis) {
+      const cleanComputed: Record<string, ComputedExpression> = Object.create(null);
+      const expressionsByKey = new Map(
+        computedAnalysis.nodes.map((node) => [node.key, node.expression]),
+      );
+      for (const computedKey of Object.getOwnPropertyNames(computedObj).sort()) {
+        const expression = expressionsByKey.get(computedKey);
+        if (expression === undefined) continue;
+        Object.defineProperty(cleanComputed, computedKey, {
+          value: expression,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+      Object.defineProperty(cleanLogicObject, 'computed', {
+        value: cleanComputed,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    cleanLogic = cleanLogicObject as PageLogic;
+  }
+
   for (const cid of Object.getOwnPropertyNames(componentsObj)) {
     const cDesc = Object.getOwnPropertyDescriptor(componentsObj, cid);
     if (!cDesc || !('value' in cDesc)) continue;
@@ -809,6 +1051,7 @@ export function validatePageSchemaValue(
     schemaVersion: schemaVersion as PageSchema['schemaVersion'],
     rootId: rootId as string,
     components: cleanComponents,
+    ...(cleanLogic ? { logic: cleanLogic } : {}),
   } as PageSchema;
 
   return {

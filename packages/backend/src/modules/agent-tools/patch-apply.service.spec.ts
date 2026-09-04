@@ -86,6 +86,28 @@ describe('PatchApplyService', () => {
     });
   });
 
+  it('preserves Page Logic while applying component-only Agent patches', () => {
+    const schema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: { count: 1 },
+        computed: { next: 'state.count + 1' },
+      },
+    };
+
+    const result = service.applyPatch(schema, [
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: { children: 'New' },
+      },
+    ]);
+
+    expect(result.logic).toEqual(schema.logic);
+    expect(result.logic).not.toBe(schema.logic);
+    expect(result.logic?.computed).not.toBe(schema.logic?.computed);
+  });
+
   it('applies bindEvent with replace semantics', () => {
     const result = service.applyPatch(createSchema(), [
       {
@@ -126,5 +148,44 @@ describe('PatchApplyService', () => {
 
     expect(result.components.container.childrenIds).not.toContain('button');
     expect(result.components.sidebar.childrenIds).toEqual(['button']);
+  });
+
+  it('applies replacePageLogic atomically', () => {
+    const schema = createSchema();
+    const result = service.applyPatch(schema, [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 10 },
+          computed: { doubleCount: 'state.count * 2' },
+        },
+      },
+    ]);
+
+    expect(result.logic).toEqual({
+      states: { count: 10 },
+      computed: { doubleCount: 'state.count * 2' },
+    });
+    expect(Object.keys(result.components)).toEqual(Object.keys(schema.components));
+    expect(result.components.button.props).toMatchObject({ children: 'Old' });
+  });
+
+  it('clears Page Logic with replacePageLogic using empty object', () => {
+    const schema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: { active: true },
+        computed: { title: "'Status: ' + state.active" },
+      },
+    };
+
+    const result = service.applyPatch(schema, [
+      {
+        op: 'replacePageLogic',
+        logic: {},
+      },
+    ]);
+
+    expect(result.logic).toEqual({});
   });
 });

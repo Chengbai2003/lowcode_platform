@@ -1,5 +1,5 @@
 import { PatchAutoFixService } from '../patch-auto-fix.service';
-import { PatchValidationService } from '../patch-validation.service';
+import { PatchValidationService, canonicalizePatchOperations } from '../patch-validation.service';
 import { ToolDefinition } from '../types/tool.types';
 import { asPatchArray, createObjectSchema } from '../tool-input.coerce';
 
@@ -66,7 +66,8 @@ export function createInternalDefinitions(deps: InternalToolsDeps): ToolDefiniti
           patch,
           context.traceId,
         );
-        return { data: { patch }, updatedWorkingSchema: nextSchema };
+        const normalizedPatch = canonicalizePatchOperations(patch, nextSchema);
+        return { data: { patch: normalizedPatch }, updatedWorkingSchema: nextSchema };
       },
     },
   ];

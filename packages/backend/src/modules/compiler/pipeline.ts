@@ -1,4 +1,15 @@
-import type { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  analyzeComputedDeclarations,
+  FORBIDDEN_DATA_PATH_KEYS,
+  isSafeDataPathKey,
+  isSafeLogicKey,
+  SchemaValidationError,
+  type ComputedLogicAnalysis,
+  type PageSchema,
+  type ComponentNode,
+  type JsonValue,
+} from '@lowcode-platform/schema-contract';
+import jsep from 'jsep';
 import { compileStyle } from './styleCompiler';
 import {
   type CompileOptions,
@@ -124,6 +135,9 @@ interface RootNode {
   fields: FieldInfo[];
   handlers: HandlerDeclaration[];
   helpers: Set<string>;
+  usesPageState: boolean;
+  usesComputed: boolean;
+  computedAnalysis?: ComputedLogicAnalysis;
 }
 
 interface JSXElementNode {
@@ -193,12 +207,27 @@ function isSafeEventName(name: string): boolean {
   return isValidIdentifier(name) && /^on[A-Z]/.test(name) && isSafeGeneratedIdentifier(name);
 }
 
+function hasDeclaredPageState(ctx: TransformContext): boolean {
+  return ctx.root.schema.logic?.states !== undefined;
+}
+
+function sanitizeStatePath(
+  statePath: string,
+  allowLegacyNestedPath: boolean,
+): readonly string[] | undefined {
+  const parts = statePath.split('.');
+  if (allowLegacyNestedPath) {
+    return parts.every(isSafeDataPathKey) ? parts : undefined;
+  }
+  return parts.length === 1 && isSafeLogicKey(parts[0]) ? parts : undefined;
+}
+
 function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): string | undefined {
   if (!resultTo) return undefined;
   if (ctx.fieldByName.has(resultTo)) return resultTo;
   if (resultTo.startsWith('state.')) {
     const suffix = resultTo.slice(6);
-    if (isSafeGeneratedIdentifier(suffix)) {
+    if (sanitizeStatePath(suffix, !hasDeclaredPageState(ctx))) {
       return resultTo;
     }
     return undefined;
@@ -206,12 +235,53 @@ function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): 
   return undefined;
 }
 
-function sanitizeStateKey(stateKey: string): string | undefined {
-  return isSafeGeneratedIdentifier(stateKey) ? stateKey : undefined;
+function getStatePathValueCode(path: readonly string[]): string {
+  return `state${path.map((part) => `?.[${toQuotedString(part)}]`).join('')}`;
+}
+
+function getNestedStateUpdateCode(path: readonly string[], valueCode: string): string {
+  const pathCode = JSON.stringify(path);
+  return `((source, path, value) => {
+  const root = source !== null && typeof source === 'object'
+    ? Array.isArray(source) ? [...source] : { ...source }
+    : {};
+  let sourceCursor = source;
+  let targetCursor = root;
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const nextSource = sourceCursor !== null && typeof sourceCursor === 'object'
+      ? sourceCursor[path[index]]
+      : undefined;
+    const nextTarget = nextSource !== null && typeof nextSource === 'object'
+      ? Array.isArray(nextSource) ? [...nextSource] : { ...nextSource }
+      : {};
+    targetCursor[path[index]] = nextTarget;
+    sourceCursor = nextSource;
+    targetCursor = nextTarget;
+  }
+  targetCursor[path[path.length - 1]] = value;
+  return root;
+})(state, ${pathCode}, ${valueCode})`;
+}
+
+function getMergedStateValueCode(currentValueCode: string, valueCode: string): string {
+  const forbiddenKeysCode = JSON.stringify(FORBIDDEN_DATA_PATH_KEYS);
+  return `((currentValue, resolvedValue) => {
+  if (resolvedValue !== null && typeof resolvedValue === 'object') {
+    const safeValue = Object.fromEntries(
+      Object.entries(resolvedValue).filter(([key]) => !${forbiddenKeysCode}.includes(key)),
+    );
+    const base = currentValue !== null && typeof currentValue === 'object' && !Array.isArray(currentValue)
+      ? currentValue
+      : {};
+    return { ...base, ...safeValue };
+  }
+  return resolvedValue;
+})(${currentValueCode}, ${valueCode})`;
 }
 
 const ALLOWED_FEEDBACK_LEVELS = new Set(['info', 'success', 'warning', 'error']);
 const ALLOWED_LOG_LEVELS = new Set(['info', 'success', 'warning', 'error', 'log', 'debug', 'warn']);
+const COMPUTED_RUNTIME_INTRINSICS = new Set(['Array', 'Symbol', 'WeakMap', 'WeakSet']);
 
 function sanitizeFeedbackLevel(level: string | undefined, fallback = 'info'): string {
   if (level && ALLOWED_FEEDBACK_LEVELS.has(level)) return level;
@@ -319,6 +389,99 @@ function parseEvents(events: ComponentNode['events']): EventBindingNode[] {
   }));
 }
 
+function valueNodeUsesPageState(value: ValueNode | undefined): boolean {
+  if (!value) return false;
+
+  switch (value.kind) {
+    case 'expression':
+      return collectInlineExpressionIdentifiers(value.code).has('state');
+    case 'template':
+      return value.parts.some(
+        (part) => part.kind === 'expression' && valueNodeUsesPageState(part.value),
+      );
+    case 'array':
+      return value.items.some(valueNodeUsesPageState);
+    case 'object':
+      return value.properties.some((property) => valueNodeUsesPageState(property.value));
+    default:
+      return false;
+  }
+}
+
+function actionUsesPageState(action: ActionNode, includeExpressionReferences: boolean): boolean {
+  if (action.field?.startsWith('state.') || action.resultTo?.startsWith('state.')) {
+    return true;
+  }
+
+  if (includeExpressionReferences) {
+    for (const value of [
+      action.value,
+      action.url,
+      action.to,
+      action.content,
+      action.title,
+      action.condition,
+      action.over,
+      action.body,
+    ]) {
+      if (valueNodeUsesPageState(value)) return true;
+    }
+
+    for (const values of [action.headers, action.params]) {
+      if (Object.values(values ?? {}).some(valueNodeUsesPageState)) return true;
+    }
+  }
+
+  return [
+    action.actions,
+    action.then,
+    action.else,
+    action.onSuccess,
+    action.onError,
+    action.onOk,
+    action.onCancel,
+  ].some(
+    (actions) =>
+      actions?.some((nestedAction) =>
+        actionUsesPageState(nestedAction, includeExpressionReferences),
+      ) ?? false,
+  );
+}
+
+function componentUsesPageState(
+  component: FlatComponentNode,
+  includeExpressionReferences: boolean,
+): boolean {
+  return (
+    (includeExpressionReferences &&
+      component.props.some((prop) => valueNodeUsesPageState(prop.value))) ||
+    component.events.some((event) =>
+      event.actions.some((action) => actionUsesPageState(action, includeExpressionReferences)),
+    )
+  );
+}
+
+function componentDeclaresLegacyStateField(component: FlatComponentNode): boolean {
+  const fieldProp = component.props.find((prop) => prop.name === 'field');
+  if (
+    fieldProp?.value.kind === 'literal' &&
+    typeof fieldProp.value.value === 'string' &&
+    resolveFieldName(fieldProp.value.value, 'field') === 'state'
+  ) {
+    return true;
+  }
+
+  const initialValue = component.props.find((prop) => prop.name === 'initialValue')?.value;
+  const visibleProp = component.props.find((prop) => prop.name === 'visible')?.value;
+  return Boolean(
+    initialValue &&
+    visibleProp?.kind === 'literal' &&
+    visibleProp.value === false &&
+    component.childIds.length === 0 &&
+    resolveFieldName(component.id, 'hiddenData') === 'state',
+  );
+}
+
 function parseFlatComponent(componentId: string, component: ComponentNode): FlatComponentNode {
   return {
     id: componentId,
@@ -386,6 +549,14 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
   const children = schema.rootId
     ? [buildComponentTree(schema.rootId, componentMap, new Set<string>())]
     : [];
+  const hasLegacyStateField = flatComponents.some(componentDeclaresLegacyStateField);
+  const usesComputed = schema.logic?.computed !== undefined;
+  let computedAnalysis: ComputedLogicAnalysis | undefined;
+  if (usesComputed) {
+    const result = analyzeComputedDeclarations(schema.logic);
+    if (!result.ok) throw new SchemaValidationError(result.issues);
+    computedAnalysis = result.value;
+  }
 
   return {
     type: 'root',
@@ -397,6 +568,12 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     fields: [],
     handlers: [],
     helpers: new Set(),
+    usesComputed,
+    ...(computedAnalysis ? { computedAnalysis } : {}),
+    usesPageState:
+      usesComputed ||
+      schema.logic?.states !== undefined ||
+      flatComponents.some((component) => componentUsesPageState(component, !hasLegacyStateField)),
   };
 }
 
@@ -481,6 +658,26 @@ function resolveFieldName(sourceKey: string, source: FieldInfo['source']): strin
   return candidate;
 }
 
+function resolveFieldNameForContext(
+  ctx: TransformContext,
+  sourceKey: string,
+  source: FieldInfo['source'],
+): string {
+  const preferredName = resolveFieldName(sourceKey, source);
+  if (
+    !ctx.root.usesPageState ||
+    (preferredName !== 'state' &&
+      preferredName !== 'setState' &&
+      createSetterName(preferredName) !== 'setState')
+  ) {
+    return preferredName;
+  }
+
+  throw new Error(
+    `Field "${sourceKey}" conflicts with the reserved Page State binding; rename the field before enabling logic.states`,
+  );
+}
+
 function collectFields(ctx: TransformContext) {
   for (const component of ctx.root.flatComponents) {
     const fieldProp = findProp(component, 'field');
@@ -497,7 +694,7 @@ function collectFields(ctx: TransformContext) {
       registerField(
         ctx,
         createFieldInfo(
-          resolveFieldName(rawFieldName, 'field'),
+          resolveFieldNameForContext(ctx, rawFieldName, 'field'),
           rawFieldName,
           'field',
           initialValue,
@@ -517,7 +714,7 @@ function collectFields(ctx: TransformContext) {
       registerField(
         ctx,
         createFieldInfo(
-          resolveFieldName(component.id, 'hiddenData'),
+          resolveFieldNameForContext(ctx, component.id, 'hiddenData'),
           component.id,
           'hiddenData',
           initialValue,
@@ -533,6 +730,11 @@ function addImport(
   exportName: string,
   localName = exportName,
 ) {
+  if (ctx.root.usesComputed && COMPUTED_RUNTIME_INTRINSICS.has(localName)) {
+    throw new Error(
+      `Import binding "${localName}" conflicts with the reserved Computed runtime intrinsic`,
+    );
+  }
   if (!ctx.imports.has(source)) {
     ctx.imports.set(source, new Set());
   }
@@ -548,6 +750,10 @@ function addImport(
 function collectImports(ctx: TransformContext) {
   ctx.imports.set('react', new Set(['useState']));
   if (!ctx.registry.has('useState')) ctx.registry.reserveExact('useState', 'import:useState');
+  if (ctx.root.usesComputed) {
+    addImport(ctx, 'react', 'useMemo');
+    addImport(ctx, 'react', 'useRef');
+  }
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
   if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
@@ -607,6 +813,19 @@ function createTransformContext(root: RootNode): TransformContext {
     // avoid double-reserve if already in RESERVED (none overlap but keep safe)
     if (!registry.has(name)) registry.reserveExact(name, `builtin:${name}`);
   }
+  if (root.usesPageState) {
+    registry.reserveExact('state', 'page-state');
+    registry.reserveExact('setState', 'page-state-setter');
+  }
+  if (root.usesComputed) {
+    registry.reserveExact('computed', 'page-computed');
+    registry.reserveExact('computePageLogic', 'page-computed-evaluator');
+    registry.reserveExact('stateRef', 'page-state-ref');
+    registry.reserveExact('computedRef', 'page-computed-ref');
+    for (const name of COMPUTED_RUNTIME_INTRINSICS) {
+      registry.reserveExact(name, 'page-computed-intrinsic');
+    }
+  }
   const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
   for (const name of reservedHandlerNames) {
     if (!registry.has(name)) registry.reserveExact(name, `handler:${name}`);
@@ -664,10 +883,15 @@ function createHandlerCode(
   bodyCode: string,
   isAsync: boolean,
   params: string[],
+  usesComputed: boolean,
 ): string {
   const asyncKeyword = isAsync ? 'async ' : '';
   const parameterCode = params.join(', ');
-  return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(bodyCode)}\n};`;
+  const logicPrologue = usesComputed
+    ? 'let state = stateRef.current;\nlet computed = computedRef.current;'
+    : '';
+  const handlerBody = [logicPrologue, bodyCode].filter(Boolean).join('\n');
+  return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(handlerBody)}\n};`;
 }
 
 function registerHandler(
@@ -685,7 +909,13 @@ function registerHandler(
   ctx.handlers.push(handler);
 
   const built = build(handlerName);
-  handler.code = createHandlerCode(handlerName, built.code, built.async, params);
+  handler.code = createHandlerCode(
+    handlerName,
+    built.code,
+    built.async,
+    params,
+    ctx.root.usesComputed,
+  );
 
   return {
     name: handlerName,
@@ -881,6 +1111,15 @@ function getFieldInfo(ctx: TransformContext, sourceKey: string): FieldInfo | und
   return ctx.fieldBySourceKey.get(sourceKey) ?? ctx.fieldByName.get(sourceKey);
 }
 
+function getExpressionContextFields(ctx: TransformContext): Set<string> {
+  const fields = new Set(ctx.fieldByName.keys());
+  if (ctx.root.usesPageState) {
+    fields.add('state');
+  }
+  if (ctx.root.usesComputed) fields.add('computed');
+  return fields;
+}
+
 function getExpressionCode(
   value: ValueNode | undefined,
   fallback = 'undefined',
@@ -923,6 +1162,22 @@ function getExpressionCode(
     default:
       return fallback;
   }
+}
+
+function getJsonLiteralCode(value: JsonValue): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string') return toQuotedString(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => getJsonLiteralCode(item)).join(', ')}]`;
+  }
+
+  return `{ ${Object.entries(value)
+    .map(([key, nestedValue]) => {
+      const keyCode = key === '__proto__' ? `[${toQuotedString(key)}]` : toObjectKeyCode(key);
+      return `${keyCode}: ${getJsonLiteralCode(nestedValue)}`;
+    })
+    .join(', ')} }`;
 }
 
 function canCompileStaticStyle(value: ValueNode): value is ObjectValueNode {
@@ -1098,7 +1353,7 @@ function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode
     };
   }
 
-  const ctxFields = new Set(ctx.fieldByName.keys());
+  const ctxFields = getExpressionContextFields(ctx);
   const fieldProp = findProp(node, 'field');
   const labelProp = findProp(node, 'label');
   const styleProp = findProp(node, 'style');
@@ -1276,12 +1531,14 @@ function resolveResultTarget(
     return `${fieldInfo.setterName}(${valueCode});`;
   }
   if (sanitized.startsWith('state.')) {
-    const stateKey = sanitized.slice(6);
-    const safeKey = sanitizeStateKey(stateKey);
-    if (!safeKey) {
+    const statePath = sanitizeStatePath(
+      sanitized.slice('state.'.length),
+      !hasDeclaredPageState(ctx),
+    );
+    if (!statePath) {
       return `/* invalid resultTo discarded */`;
     }
-    return `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`;
+    return getStateWriteCode(statePath, valueCode, ctx);
   }
   return `/* invalid resultTo discarded */`;
 }
@@ -1295,13 +1552,35 @@ function buildActionBlock(
   const segments = actions.map((action) =>
     buildActionStatement(action, ctx, ownerHandlerName, localScope),
   );
+  const refreshCode = ctx.root.usesComputed
+    ? 'state = stateRef.current;\ncomputed = computedRef.current;'
+    : '';
   return {
     code: segments
-      .map((segment) => segment.code)
+      .map((segment) => [refreshCode, segment.code].filter(Boolean).join('\n'))
       .filter(Boolean)
       .join('\n'),
     async: segments.some((segment) => segment.async),
   };
+}
+
+function getStateWriteCode(
+  statePath: readonly string[],
+  valueCode: string,
+  ctx: TransformContext,
+): string {
+  const nextStateCode =
+    statePath.length === 1
+      ? `({ ...state, ${toObjectKeyCode(statePath[0])}: ${valueCode} })`
+      : getNestedStateUpdateCode(statePath, valueCode);
+  if (!ctx.root.usesComputed) {
+    return `setState((state) => ${nextStateCode});`;
+  }
+  return `state = ${nextStateCode};
+computed = computePageLogic(state);
+stateRef.current = state;
+computedRef.current = computed;
+setState(state);`;
 }
 
 function buildNotificationObject(
@@ -1330,7 +1609,7 @@ function buildActionStatement(
   ownerHandlerName: string,
   localScope: Set<string> = new Set(),
 ): { code: string; async: boolean } {
-  const ctxFields = new Set(ctx.fieldByName.keys());
+  const ctxFields = getExpressionContextFields(ctx);
   switch (action.type) {
     case 'setValue': {
       const valueCode = getExpressionCode(
@@ -1352,11 +1631,17 @@ function buildActionStatement(
         }
 
         if (action.field.startsWith('state.')) {
-          const stateKey = action.field.slice(6);
-          const safeKey = sanitizeStateKey(stateKey);
-          if (safeKey) {
+          const statePath = sanitizeStatePath(
+            action.field.slice('state.'.length),
+            !hasDeclaredPageState(ctx),
+          );
+          if (statePath) {
+            const currentValueCode = getStatePathValueCode(statePath);
+            const nextValueCode = action.merge
+              ? getMergedStateValueCode(currentValueCode, valueCode)
+              : valueCode;
             return {
-              code: `setState({ ${toObjectKeyCode(safeKey)}: ${valueCode} });`,
+              code: getStateWriteCode(statePath, nextValueCode, ctx),
               async: false,
             };
           }
@@ -1592,6 +1877,13 @@ function buildActionStatement(
         }
       }
       for (const loopBinding of [safeItemVar, safeIndexVar]) {
+        if (
+          loopBinding &&
+          ctx.root.usesComputed &&
+          ['state', 'computed', 'stateRef', 'computedRef', 'computePageLogic'].includes(loopBinding)
+        ) {
+          throw new Error(`循环变量 "${loopBinding}" 与页面 Computed 运行时绑定冲突`);
+        }
         if (loopBinding && actionListUsesGeneratedBinding(action.actions ?? [], ctx, loopBinding)) {
           throw new Error(`循环变量 "${loopBinding}" 与循环体生成标识符冲突`);
         }
@@ -1736,14 +2028,308 @@ function genImports(imports: Map<string, Set<string>>): string {
   return statements.join('\n');
 }
 
-function genStateHooks(fields: FieldInfo[]): string {
-  const ctxFields = new Set(fields.map((field) => field.name));
-  return fields
-    .map(
+function genComputedValueHelpers(): string {
+  return `const computedSkip = Symbol("computed-skip");
+const readComputedMember = (target, key) => {
+  if (target === null || target === undefined) return undefined;
+  try {
+    const boxed = Object(target);
+    const ownDescriptor = Object.getOwnPropertyDescriptor(boxed, String(key));
+    if (ownDescriptor) {
+      if (ownDescriptor.get || ownDescriptor.set || typeof ownDescriptor.value === "function") {
+        return undefined;
+      }
+      return ownDescriptor.value;
+    }
+    let prototype = Object.getPrototypeOf(boxed);
+    while (prototype) {
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, String(key));
+      if (descriptor) {
+        if (descriptor.get || descriptor.set || typeof descriptor.value === "function") {
+          return undefined;
+        }
+        break;
+      }
+      prototype = Object.getPrototypeOf(prototype);
+    }
+    return target[key];
+  } catch {
+    return undefined;
+  }
+};
+const callComputed = (fn, receiver, args) => {
+  if (typeof fn !== "function") return undefined;
+  try {
+    return fn.apply(receiver, args);
+  } catch {
+    return undefined;
+  }
+};
+const callComputedMember = (target, key, args) => {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(target, String(key));
+    if (!descriptor || descriptor.get || descriptor.set || typeof descriptor.value !== "function") {
+      return undefined;
+    }
+    if (target === Math) {
+      for (const argument of args) {
+        if (argument !== null && typeof argument === "object") return undefined;
+      }
+    }
+    return descriptor.value.apply(target, args);
+  } catch {
+    return undefined;
+  }
+};
+const computeUnary = (operator, value) => {
+  if (
+    value !== null &&
+    typeof value === "object" &&
+    (operator === "+" || operator === "-")
+  ) {
+    return undefined;
+  }
+  switch (operator) {
+    case "!":
+      return !value;
+    case "+":
+      return +value;
+    case "-":
+      return -value;
+    default:
+      return undefined;
+  }
+};
+const computeBinary = (operator, left, right) => {
+  const hasObjectOperand =
+    (left !== null && typeof left === "object") ||
+    (right !== null && typeof right === "object");
+  if (hasObjectOperand && (operator === "==" || operator === "!=")) return undefined;
+  switch (operator) {
+    case "+":
+      return hasObjectOperand ? undefined : left + right;
+    case "-":
+      return hasObjectOperand ? undefined : left - right;
+    case "*":
+      return hasObjectOperand ? undefined : left * right;
+    case "/":
+      return hasObjectOperand ? undefined : left / right;
+    case "%":
+      return hasObjectOperand ? undefined : left % right;
+    case "<":
+      return hasObjectOperand ? undefined : left < right;
+    case "<=":
+      return hasObjectOperand ? undefined : left <= right;
+    case ">":
+      return hasObjectOperand ? undefined : left > right;
+    case ">=":
+      return hasObjectOperand ? undefined : left >= right;
+    case "==":
+      return left == right;
+    case "===":
+      return left === right;
+    case "!=":
+      return left != right;
+    case "!==":
+      return left !== right;
+    case "&&":
+      return left && right;
+    case "||":
+      return left || right;
+    default:
+      return undefined;
+  }
+};
+const cloneComputedInput = (value, seen = new WeakMap()) => {
+  if (value === null) return null;
+  if (typeof value !== "object") {
+    return typeof value === "function" || typeof value === "symbol" || typeof value === "bigint"
+      ? computedSkip
+      : value;
+  }
+  if (seen.has(value)) return seen.get(value);
+  if (Array.isArray(value)) {
+    const clone = [];
+    seen.set(value, clone);
+    for (let index = 0; index < value.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      if (!descriptor || descriptor.get || descriptor.set) {
+        clone[index] = undefined;
+        continue;
+      }
+      const child = cloneComputedInput(descriptor.value, seen);
+      clone[index] = child === computedSkip ? undefined : child;
+    }
+    return clone;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return computedSkip;
+  const clone = Object.create(null);
+  seen.set(value, clone);
+  for (const key of Object.keys(value)) {
+    if (key === "__proto__" || key === "prototype" || key === "constructor") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || descriptor.get || descriptor.set) continue;
+    const child = cloneComputedInput(descriptor.value, seen);
+    if (child !== computedSkip) clone[key] = child;
+  }
+  return clone;
+};
+const freezeComputedOutput = (
+  value,
+  seen = new WeakMap(),
+  active = new WeakSet(),
+) => {
+  if (value === null || value === undefined) return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : computedSkip;
+  if (typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value !== "object") return computedSkip;
+  if (active.has(value)) return computedSkip;
+  if (seen.has(value)) return seen.get(value);
+  const isArray = Array.isArray(value);
+  if (!isArray) {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return computedSkip;
+  }
+  const clone = isArray ? [] : Object.create(null);
+  seen.set(value, clone);
+  active.add(value);
+  const keys = isArray
+    ? Array.from({ length: value.length }, (_, index) => String(index))
+    : Object.keys(value);
+  for (const key of keys) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || descriptor.get || descriptor.set) return computedSkip;
+    const child = freezeComputedOutput(descriptor.value, seen, active);
+    if (child === computedSkip) return computedSkip;
+    clone[key] = child;
+  }
+  active.delete(value);
+  return Object.freeze(clone);
+};`;
+}
+
+/**
+ * Contract 已完成唯一的语法与能力判断；Compiler 这里只把已验证 AST 降级为带
+ * fail-soft member/call 和对象运算保护的代码，避免原生 JS 隐式转换偏离 Renderer。
+ */
+function genValidatedComputedExpression(expression: string): string {
+  const generateNode = (node: jsep.Expression): string => {
+    switch (node.type) {
+      case 'Compound': {
+        const body = (node as jsep.Compound).body;
+        if (body.length !== 1) throw new Error('Validated Computed compound must contain one node');
+        return generateNode(body[0]);
+      }
+      case 'Literal':
+        return getJsonLiteralCode((node as jsep.Literal).value as JsonValue);
+      case 'Identifier':
+        return (node as jsep.Identifier).name;
+      case 'MemberExpression': {
+        const member = node as jsep.MemberExpression;
+        const property = member.computed
+          ? generateNode(member.property)
+          : toQuotedString((member.property as jsep.Identifier).name);
+        return `readComputedMember(${generateNode(member.object)}, ${property})`;
+      }
+      case 'BinaryExpression':
+      case 'LogicalExpression': {
+        const binary = node as jsep.BinaryExpression;
+        return `computeBinary(${toQuotedString(binary.operator)}, ${generateNode(binary.left)}, ${generateNode(binary.right)})`;
+      }
+      case 'UnaryExpression': {
+        const unary = node as jsep.UnaryExpression;
+        return `computeUnary(${toQuotedString(unary.operator)}, ${generateNode(unary.argument)})`;
+      }
+      case 'ConditionalExpression': {
+        const conditional = node as jsep.ConditionalExpression;
+        return `(${generateNode(conditional.test)} ? ${generateNode(conditional.consequent)} : ${generateNode(conditional.alternate)})`;
+      }
+      case 'ArrayExpression': {
+        const array = node as jsep.ArrayExpression;
+        return `[${array.elements.map((element) => generateNode(element as jsep.Expression)).join(', ')}]`;
+      }
+      case 'CallExpression': {
+        const call = node as jsep.CallExpression;
+        const args = `[${call.arguments.map((argument) => generateNode(argument)).join(', ')}]`;
+        if (call.callee.type === 'Identifier') {
+          return `callComputed(${(call.callee as jsep.Identifier).name}, undefined, ${args})`;
+        }
+        if (call.callee.type === 'MemberExpression') {
+          const member = call.callee as jsep.MemberExpression;
+          const property = member.computed
+            ? generateNode(member.property)
+            : toQuotedString((member.property as jsep.Identifier).name);
+          return `callComputedMember(${generateNode(member.object)}, ${property}, ${args})`;
+        }
+        break;
+      }
+    }
+    throw new Error(`Unsupported validated Computed AST node: ${node.type}`);
+  };
+
+  return generateNode(jsep(expression));
+}
+
+function genStateHooks(root: RootNode): string {
+  const ctxFields = new Set(root.fields.map((field) => field.name));
+  const hooks: string[] = [];
+  if (root.usesPageState) {
+    ctxFields.add('state');
+    const initialState = root.schema.logic?.states ?? {};
+    const initialStateCode =
+      Object.keys(initialState).length === 0 ? '{}' : getJsonLiteralCode(initialState);
+    hooks.push(`const [state, setState] = useState(${initialStateCode});`);
+  }
+  if (root.usesComputed) {
+    ctxFields.add('computed');
+    const nodes = root.computedAnalysis?.nodes ?? [];
+    const assignments = nodes
+      .map(
+        (node) => `try {
+  const value = freezeComputedOutput(${genValidatedComputedExpression(node.expression)});
+  computed[${toQuotedString(node.key)}] = value === computedSkip ? undefined : value;
+} catch {
+  computed[${toQuotedString(node.key)}] = undefined;
+}`,
+      )
+      .join('\n');
+    const evaluatorBody = [
+      genComputedValueHelpers(),
+      'let state;',
+      `try {
+  const clonedState = cloneComputedInput(sourceState);
+  state = clonedState === computedSkip ? Object.create(null) : clonedState;
+} catch {
+  state = Object.create(null);
+}`,
+      'const computed = Object.create(null);',
+      assignments,
+      'return Object.freeze(computed);',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    hooks.push(`const computePageLogic = (sourceState) => {
+${indentBlock(evaluatorBody)}
+};`);
+
+    const stateDependencies = Array.from(
+      new Set(nodes.flatMap((node) => node.stateDependencies)),
+    ).sort();
+    const dependencyCode = stateDependencies.map((key) => getStatePathValueCode([key])).join(', ');
+    hooks.push(`const computed = useMemo(() => computePageLogic(state), [${dependencyCode}]);`);
+    hooks.push('const stateRef = useRef(state);');
+    hooks.push('const computedRef = useRef(computed);');
+    hooks.push('stateRef.current = state;');
+    hooks.push('computedRef.current = computed;');
+  }
+  hooks.push(
+    ...root.fields.map(
       (field) =>
         `const [${field.name}, ${field.setterName}] = useState(${getExpressionCode(field.initialValue, 'undefined', ctxFields)});`,
-    )
-    .join('\n');
+    ),
+  );
+  return hooks.join('\n');
 }
 
 function genHandlers(handlers: HandlerDeclaration[]): string {
@@ -1752,7 +2338,7 @@ function genHandlers(handlers: HandlerDeclaration[]): string {
 
 export function generate(root: RootNode): string {
   const importsCode = genImports(root.imports);
-  const stateHooksCode = genStateHooks(root.fields);
+  const stateHooksCode = genStateHooks(root);
   const handlersCode = genHandlers(root.handlers);
   const rootNode = root.children[0];
   const jsxCode =

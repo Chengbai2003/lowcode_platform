@@ -71,6 +71,44 @@ host.unmount();
 - 非 React 宿主可直接使用 `createRuntimeSession` / `getOrCreateRuntimeSession` /
   `disposeRuntimeSession`。
 
+### Page State（M1a-1 / S1）
+
+页面可在 Schema 中声明每个新 RuntimeSession 的初始 State：
+
+```ts
+const schema: PageSchema = {
+  schemaVersion: 0,
+  rootId: 'root',
+  logic: { states: { count: 1 } },
+  components: {
+    root: { id: 'root', type: 'Text', props: { children: '{{ state.count }}' } },
+  },
+};
+```
+
+`logic.states` 存在时优先于 legacy `eventContext.state`。运行期间对 `state.*`
+的修改只属于当前 Session，不修改 Schema，也不写回页面快照。
+
+### Named Computed（M1a-1 / S2-S3）
+
+`logic.computed` 声明不带 `{{ }}` 的只读安全表达式。Contract 统一完成语法校验、依赖
+提取与稳定拓扑；Renderer 只消费分析结果，在当前 RuntimeSession 内缓存求值结果：
+
+```ts
+logic: {
+  states: { price: 2, quantity: 3 },
+  computed: {
+    subtotal: 'state.price * state.quantity',
+    label: 'String(computed.subtotal)',
+  },
+}
+```
+
+表达式和 Action 可通过 `computed.subtotal` 读取；对宿主顶层 Computed 上下文或
+`computed.*` 路径的写入一律失败。为保持旧 Schema 行为，无点路径 `computed` 仍表示
+legacy `data.computed` 字段。State 顶层 key 变化会同步失效直接及传递依赖，React 通知仍
+按一次 batch 最多 flush 一次；Schema 热替换 Computed 声明图不会重置当前 Session State。
+
 ## ComponentRuntimeBridge（M0-4 Scope C）
 
 渲染树中的组件（如 Table）不得反向导入 Renderer 内部执行器（DSLExecutor / valueResolver /

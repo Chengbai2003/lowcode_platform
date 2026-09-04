@@ -104,6 +104,12 @@
   flex-direction: column;
 }
 
+.monacoContainer {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
 .jsonEditorHeader {
   padding: $spacing-xs $spacing-md;
   background: $bg-elevated;
@@ -321,4 +327,72 @@
 :global(.lowcode-json-selection-glyph) {
   border-left: 3px solid #10b981;
   margin-left: 2px;
+}
+
+// Structured Diagnostics Error Panel
+.errorPanel {
+  flex-shrink: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  background: #fff2f0;
+  border-top: 1px solid #ffccc7;
+  padding: $spacing-xs $spacing-md;
+  font-family: $font-family-mono;
+  font-size: $font-size-xs;
+  line-height: $line-height-normal;
+}
+
+.errorPanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: $spacing-xs;
+  font-weight: $font-weight-semibold;
+  color: #cf1322;
+}
+
+.errorPanelClose {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: $text-secondary;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+
+  &:hover {
+    color: $text-primary;
+  }
+}
+
+.errorList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.errorItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: $text-primary;
+  word-break: break-word;
+}
+
+.issueCode {
+  font-weight: $font-weight-bold;
+  color: #cf1322;
+}
+
+.issueDivider {
+  color: $text-tertiary;
+}
+
+.issuePath {
+  color: $primary;
+  font-weight: $font-weight-medium;
+}
+
+.issueMessage {
+  color: $text-secondary;
 }

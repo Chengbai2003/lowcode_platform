@@ -333,6 +333,10 @@ importers:
         version: 1.6.1(@types/node@20.19.37)(@vitest/ui@1.6.1)(jsdom@23.2.0)(lightningcss@1.31.1)(sass@1.97.3)
 
   packages/schema-contract:
+    dependencies:
+      jsep:
+        specifier: ^1.4.0
+        version: 1.4.0
     devDependencies:
       rimraf:
         specifier: ^5.0.5

@@ -106,6 +106,7 @@ export class SnapshotManager {
    * @param formData - 表单数据（保留命名空间）
    * @param components - Schema 组件池引用
    * @param version - 当前版本号
+   * @param computed - 只读派生值
    * @returns 一个不可变的 RuntimeSnapshot
    */
   createSnapshot(
@@ -114,6 +115,7 @@ export class SnapshotManager {
     formData: Record<string, unknown>,
     components: Record<string, unknown>,
     version: number,
+    computed: Readonly<Record<string, unknown>> = {},
   ): RuntimeSnapshot {
     // 如果版本未变更，返回缓存的快照
     if (this.cachedSnapshot !== null && this.cachedVersion === version) {
@@ -123,9 +125,11 @@ export class SnapshotManager {
     // data/state/formData: try { structuredClone } catch 抛错，再 deepFreeze
     const dataClone = cloneOrThrow(data, 'data');
     const stateClone = cloneOrThrow(state, 'state');
+    const computedClone = cloneOrThrow(computed, 'computed');
     const formDataClone = cloneOrThrow(formData, 'formData');
     deepFreeze(dataClone);
     deepFreeze(stateClone);
+    deepFreeze(computedClone);
     deepFreeze(formDataClone);
 
     // components 保持浅拷贝浅冻结
@@ -135,6 +139,7 @@ export class SnapshotManager {
     const snapshot: RuntimeSnapshot = {
       data: dataClone,
       state: stateClone,
+      computed: computedClone,
       formData: formDataClone,
       components: componentsClone,
       version,

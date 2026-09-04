@@ -12,4 +12,5 @@ export type {
   SharedSchemaError,
   SharedSchemaSuccess,
   SharedSchemaFailure,
+  SharedSchemaIssue,
 } from '@lowcode-platform/renderer';

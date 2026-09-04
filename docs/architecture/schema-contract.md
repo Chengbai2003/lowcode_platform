@@ -1,8 +1,8 @@
 # Schema Contract 设计原则
 
-> Status: Implemented for M0
-> Last Updated: 2026-09-01
-> Target Milestone: M0-1
+> Status: Implemented for M0; M1a State and Computed in progress
+> Last Updated: 2026-09-03
+> Target Milestone: M1a-1
 
 ## 当前决策
 
@@ -16,6 +16,12 @@ interface PageSchema {
   schemaVersion: 0;
   rootId: string;
   components: Record<string, ComponentNode>;
+  logic?: PageLogic;
+}
+
+interface PageLogic {
+  states?: Record<string, JsonValue>;
+  computed?: Record<string, string>;
 }
 
 interface StoredPageRecord {
@@ -60,8 +66,15 @@ interface ComponentNode {
 type ActionList = Action[];
 ```
 
-> M1（未来）：State、Computed、ActionFlow 与 DataSource 的类型和持久化语义尚未进入
-> M0 Contract；在对应 Milestone 实施时再冻结，不能将其当作当前 `PageSchema` 字段。
+M1a-1 已将 State Declaration 与 Computed Declaration 纳入 Draft Contract：
+`logic.states` 只保存 RuntimeSession 初值，Session State 变化不回写 Schema；
+`logic.computed` 只保存不带 `{{ }}` 的安全表达式，不保存求值结果或依赖元数据。
+ActionFlow 与 DataSource 尚未进入 Contract；在对应切片完成六消费面闭环时再加入。
+
+Computed 的唯一共享分析入口负责解析受限 AST、校验命名空间/运算符/纯函数、提取顶层
+State 与直接 Computed 依赖，并输出稳定拓扑。缺失引用、动态成员、危险原型字段、宿主或
+构造器访问、循环、表达式/AST/依赖图超预算均 fail-close。Renderer 与 Compiler 只消费该
+分析结果，不自行建立更宽松的语法或依赖规则。
 
 ## 统一组件协议与 Props
 
@@ -90,6 +103,8 @@ parse raw JSON
   ↓
 验证 schemaVersion
   ↓
+验证 Page Logic 结构、Logic Key、State/Computed 资源预算与 Computed DAG
+  ↓
 验证 Schema 结构和组件图
   ↓
 按 SystemProfile 解析 ComponentPreset
@@ -109,6 +124,8 @@ parse raw JSON
 
 - 不支持的 `schemaVersion`
 - 未知顶层字段或非法命名空间
+- 非法 Page Logic 字段、危险 Logic Key 或超出 State/Computed/JSON 资源预算
+- Computed 缺失引用、动态访问、宿主/构造器能力、循环依赖或只读命名空间写入
 - 组件图成环、多父、重复 child 或孤儿节点
 - 组件类型不在当前 System Preset 中
 - Props 不符合 Manifest 或包含危险值

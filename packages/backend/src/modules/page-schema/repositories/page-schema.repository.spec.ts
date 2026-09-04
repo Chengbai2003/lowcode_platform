@@ -144,6 +144,39 @@ describe('PageSchemaRepository', () => {
     expect(Object.prototype.hasOwnProperty.call(onDisk.snapshots[0].schema, 'version')).toBe(false);
   });
 
+  it('round-trips declared Page State and Computed through snapshots and disk reload', async () => {
+    const repo = createRepo();
+    await repo.onModuleInit();
+    const schema = {
+      ...createSchema('stateful'),
+      logic: {
+        states: { count: 1, profile: { name: 'Ada' } },
+        computed: { label: 'state.profile.name + ":" + String(state.count)' },
+      },
+    };
+
+    const { snapshot } = await repo.saveSchema({
+      pageId: 'p-stateful',
+      systemId: 'default',
+      schema,
+      runtimeCompatibility,
+    });
+
+    expect(snapshot.schema.logic?.states).toEqual(schema.logic.states);
+    expect(snapshot.schema.logic?.computed).toEqual(schema.logic.computed);
+    expect(Object.isFrozen(snapshot.schema.logic?.states?.profile)).toBe(true);
+    expect(Object.isFrozen(snapshot.schema.logic?.computed)).toBe(true);
+
+    const reloaded = createRepo();
+    await reloaded.onModuleInit();
+    expect(reloaded.getSnapshotByVersion('p-stateful', 1)?.schema.logic?.states).toEqual(
+      schema.logic.states,
+    );
+    expect(reloaded.getSnapshotByVersion('p-stateful', 1)?.schema.logic?.computed).toEqual(
+      schema.logic.computed,
+    );
+  });
+
   it('rename 失败内存不变（失败自动回滚）', async () => {
     const repo = createRepo();
     await repo.onModuleInit();

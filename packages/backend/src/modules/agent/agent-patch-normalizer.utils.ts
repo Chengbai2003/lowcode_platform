@@ -4,6 +4,8 @@
  * Extracted from agent-runner.service.ts to keep the runner thin.
  */
 
+import { isDeepStrictEqual } from 'node:util';
+import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
 import { buildParentMap } from '../schema-context/utils/parent-map.builder';
 import type { PageSchema } from '../schema-context';
 import type { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
@@ -16,7 +18,19 @@ export function normalizeFinalPatch(
   const deduped: EditorPatchOperation[] = [];
   const seen = new Set<string>();
 
-  for (const operation of patch) {
+  let lastReplacePageLogicIndex = -1;
+  for (let i = 0; i < patch.length; i++) {
+    if (patch[i].op === 'replacePageLogic') {
+      lastReplacePageLogicIndex = i;
+    }
+  }
+
+  for (let i = 0; i < patch.length; i++) {
+    const operation = patch[i];
+    if (operation.op === 'replacePageLogic' && i !== lastReplacePageLogicIndex) {
+      continue;
+    }
+
     const normalized = { ...operation };
     const key = JSON.stringify(normalized);
     if (seen.has(key)) continue;
@@ -56,6 +70,27 @@ export function normalizeFinalPatch(
               );
         if (currentParentId === normalized.newParentId && currentIndex === normalized.newIndex)
           continue;
+        break;
+      }
+      case 'replacePageLogic': {
+        let canonicalNewLogic = (normalized.logic ?? {}) as Record<string, unknown>;
+        try {
+          const candidate = requireSupportedPageSchema({
+            ...baseSchema,
+            logic: normalized.logic,
+          });
+          canonicalNewLogic = (candidate.logic ?? {}) as Record<string, unknown>;
+        } catch {
+          // Invalid logic will fail downstream validation
+        }
+        normalized.logic = canonicalNewLogic;
+        const currentLogic = baseSchema.logic ?? {};
+        if (
+          isDeepStrictEqual(currentLogic, canonicalNewLogic) ||
+          JSON.stringify(currentLogic) === JSON.stringify(canonicalNewLogic)
+        ) {
+          continue;
+        }
         break;
       }
     }

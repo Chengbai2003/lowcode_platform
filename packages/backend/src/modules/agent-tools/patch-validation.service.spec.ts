@@ -311,4 +311,191 @@ describe('PatchValidationService', () => {
       'descendant',
     );
   });
+
+  it('accepts valid replacePageLogic operations', () => {
+    const baseSchema = createSchema();
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 0 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+    ];
+    const candidate = applyService.applyPatch(baseSchema, patch);
+
+    expect(() =>
+      service.validatePatchAgainstSchema(baseSchema, patch, candidate, 'trace-logic-valid'),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ['null', null],
+    ['string', 'not-an-object'],
+    ['array', [1, 2, 3]],
+    ['number', 123],
+    ['undefined', undefined],
+  ])('rejects replacePageLogic with non-plain-object logic (%s)', async (_, invalidLogic) => {
+    const patch = [
+      {
+        op: 'replacePageLogic',
+        logic: invalidLogic,
+      },
+    ] as unknown as EditorPatchOperation[];
+
+    await expectToolError(
+      () => {
+        service.validatePatchAgainstSchema(createSchema(), patch, createSchema(), 'trace-1');
+      },
+      'PATCH_INVALID',
+      'replacePageLogic requires logic object',
+    );
+
+    await expectToolError(
+      () => {
+        service.previewValidatedSchema(createSchema(), patch, 'trace-1');
+      },
+      'PATCH_INVALID',
+      'replacePageLogic requires logic object',
+    );
+  });
+
+  it('rejects replacePageLogic with missing computed reference and preserves structured issues', () => {
+    const baseSchema = createSchema();
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: {},
+          computed: { double: 'state.count * 2' },
+        },
+      },
+    ];
+    const candidate = applyService.applyPatch(baseSchema, patch);
+
+    try {
+      service.validatePatchAgainstSchema(baseSchema, patch, candidate, 'trace-logic-missing');
+      throw new Error('Expected validation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolException);
+      const response = (error as AgentToolException).getResponse() as {
+        code: string;
+        details?: { issues?: Array<{ code: string; path: (string | number)[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      expect(response.details?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'COMPUTED_REFERENCE_MISSING',
+            path: ['logic', 'computed', 'double'],
+          }),
+        ]),
+      );
+    }
+  });
+
+  it('rejects replacePageLogic with circular computed references', () => {
+    const baseSchema = createSchema();
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: {},
+          computed: {
+            a: 'computed.b',
+            b: 'computed.a',
+          },
+        },
+      },
+    ];
+    const candidate = applyService.applyPatch(baseSchema, patch);
+
+    try {
+      service.validatePatchAgainstSchema(baseSchema, patch, candidate, 'trace-logic-cycle');
+      throw new Error('Expected validation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolException);
+      const response = (error as AgentToolException).getResponse() as {
+        code: string;
+        details?: { issues?: Array<{ code: string; path: (string | number)[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      expect(response.details?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'COMPUTED_CYCLE',
+          }),
+        ]),
+      );
+    }
+  });
+
+  it('rejects replacePageLogic with syntax error in expression', () => {
+    const baseSchema = createSchema();
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 1 },
+          computed: { bad: 'state.count +' },
+        },
+      },
+    ];
+    const candidate = applyService.applyPatch(baseSchema, patch);
+
+    try {
+      service.validatePatchAgainstSchema(baseSchema, patch, candidate, 'trace-logic-parse');
+      throw new Error('Expected validation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolException);
+      const response = (error as AgentToolException).getResponse() as {
+        code: string;
+        details?: { issues?: Array<{ code: string; path: (string | number)[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      expect(response.details?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'COMPUTED_EXPRESSION_PARSE_ERROR',
+            path: ['logic', 'computed', 'bad'],
+          }),
+        ]),
+      );
+    }
+  });
+
+  it('rejects replacePageLogic with expression exceeding budget length', () => {
+    const baseSchema = createSchema();
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: {},
+          computed: { long: '1'.repeat(10001) },
+        },
+      },
+    ];
+    const candidate = applyService.applyPatch(baseSchema, patch);
+
+    try {
+      service.validatePatchAgainstSchema(baseSchema, patch, candidate, 'trace-logic-budget');
+      throw new Error('Expected validation to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolException);
+      const response = (error as AgentToolException).getResponse() as {
+        code: string;
+        details?: { issues?: Array<{ code: string; path: (string | number)[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      expect(response.details?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'COMPUTED_EXPRESSION_TOO_LONG',
+            path: ['logic', 'computed', 'long'],
+          }),
+        ]),
+      );
+    }
+  });
 });

@@ -1,4 +1,5 @@
 import type { ComponentNode } from './node';
+import type { PageLogic } from './logic';
 import type { SupportedSchemaVersion } from './versions';
 
 /**
@@ -9,4 +10,5 @@ export interface PageSchema {
   readonly schemaVersion: SupportedSchemaVersion;
   readonly rootId: string;
   readonly components: Readonly<Record<string, ComponentNode>>;
+  readonly logic?: PageLogic;
 }

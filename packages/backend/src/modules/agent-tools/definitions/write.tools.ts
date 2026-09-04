@@ -1,5 +1,5 @@
 import { AgentToolException } from '../agent-tool.exception';
-import { PatchValidationService } from '../patch-validation.service';
+import { PatchValidationService, canonicalizePatchOperations } from '../patch-validation.service';
 import { ToolDefinition, ToolExecutionContext, ToolExecutionResult } from '../types/tool.types';
 import {
   asActionList,
@@ -26,7 +26,8 @@ function executeWriteTools(
     operations,
     context.traceId,
   );
-  return { patchDelta: operations, updatedWorkingSchema: nextSchema };
+  const normalizedOperations = canonicalizePatchOperations(operations, nextSchema);
+  return { patchDelta: normalizedOperations, updatedWorkingSchema: nextSchema };
 }
 
 function executeWriteTool(
@@ -193,6 +194,27 @@ export function createWriteDefinitions(deps: WriteToolsDeps): ToolDefinition[] {
           componentId: asRequiredString(input.componentId),
           newParentId: asRequiredString(input.newParentId),
           newIndex: asRequiredNumber(input.newIndex),
+        }),
+    },
+    {
+      name: 'replace_page_logic',
+      description:
+        '原子替换整块页面逻辑声明（states 与 computed）。调用前必须先用 get_page_schema 读取当前 schema.logic，提交时传入完整 logic 对象，保留未要求修改的声明。',
+      inputSchema: createObjectSchema(
+        '原子替换页面逻辑声明。',
+        {
+          logic: {
+            type: 'object',
+            description: '完整的页面逻辑声明对象，包含 states 和 computed。',
+          },
+        },
+        ['logic'],
+      ),
+      visibility: 'agent',
+      execute: async (input, context) =>
+        executeWriteTool(patchValidationService, context, {
+          op: 'replacePageLogic',
+          logic: input.logic as Record<string, unknown>,
         }),
     },
   ];

@@ -5,13 +5,14 @@ import {
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { autoFixSchema, UnsafeSchemaInputError } from './utils/schema-auto-fix';
 
-type ValidationIssueLike = {
+export interface SharedSchemaIssue {
+  code: string;
+  path: Array<string | number>;
   message: string;
-  path?: Array<string | number>;
-};
+}
 
 export type SharedSchemaError = {
-  issues: ValidationIssueLike[];
+  issues: SharedSchemaIssue[];
 };
 
 export type SharedSchemaSuccess = {
@@ -37,8 +38,9 @@ function toSharedError(error: unknown): SharedSchemaError {
   if (error instanceof SchemaValidationError) {
     return {
       issues: error.issues.map((issue) => ({
-        message: `[${issue.path.join('.')}] ${issue.message}`,
+        code: issue.code,
         path: [...issue.path],
+        message: issue.message,
       })),
     };
   }
@@ -46,6 +48,8 @@ function toSharedError(error: unknown): SharedSchemaError {
   return {
     issues: [
       {
+        code: 'SCHEMA_VALIDATION_ERROR',
+        path: [],
         message: error instanceof Error ? error.message : 'Unknown schema validation error',
       },
     ],
@@ -57,26 +61,26 @@ function validateWhitelist(schema: PageSchema, whitelist: string[]): SharedSchem
     return null;
   }
 
-  const unknownTypes: string[] = [];
+  const unknownComponents: Array<{ id: string; type: string }> = [];
 
   for (const comp of Object.values(schema.components)) {
     if (!whitelist.includes(comp.type)) {
-      unknownTypes.push(`${comp.id} → ${comp.type}`);
+      unknownComponents.push({ id: comp.id, type: comp.type });
     }
   }
 
-  if (unknownTypes.length === 0) {
+  if (unknownComponents.length === 0) {
     return null;
   }
 
   return {
     success: false,
     error: {
-      issues: [
-        {
-          message: `未注册的组件类型: ${unknownTypes.join(', ')}`,
-        },
-      ],
+      issues: unknownComponents.map(({ id, type }) => ({
+        code: 'UNKNOWN_COMPONENT_TYPE',
+        path: ['components', id, 'type'],
+        message: `未注册的组件类型: ${id} → ${type}`,
+      })),
     },
   };
 }
@@ -130,7 +134,15 @@ export function validateAndAutoFixA2UISchema(
       success: false,
       data: null,
       fixes: [],
-      error: { issues: [{ message: 'Schema must be an object' }] },
+      error: {
+        issues: [
+          {
+            code: 'INVALID_SCHEMA_OBJECT',
+            path: [],
+            message: 'Schema must be an object',
+          },
+        ],
+      },
     };
   }
 
@@ -146,7 +158,15 @@ export function validateAndAutoFixA2UISchema(
         success: false,
         data: null,
         fixes: [],
-        error: { issues: [{ message: error.message }] },
+        error: {
+          issues: [
+            {
+              code: 'UNSAFE_SCHEMA_INPUT',
+              path: [],
+              message: error.message,
+            },
+          ],
+        },
       };
     }
     throw error;

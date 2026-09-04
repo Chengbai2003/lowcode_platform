@@ -18,6 +18,9 @@
     "type-check": "tsc --noEmit",
     "clean": "rimraf dist"
   },
+  "dependencies": {
+    "jsep": "^1.4.0"
+  },
   "devDependencies": {
     "rimraf": "^5.0.5",
     "typescript": "^5.3.3",

@@ -22,6 +22,8 @@ import { FlushScheduler } from './flush';
 import { SnapshotManager } from './snapshot';
 import { getValueByPath, normalizeDeps, normalizePath, parsePath, setValueByPath } from './path';
 import { assertSafePath } from './guards';
+import type { ComputedLogicAnalysis } from '@lowcode-platform/schema-contract';
+import { ComputedStore } from './computedStore';
 
 // 保持向后兼容：历史入口 `import { isSafeKey } from './runtime'` 仍可用
 export { isSafeKey } from './guards';
@@ -44,6 +46,7 @@ export class ReactiveRuntime {
   private state: Record<string, unknown> = {};
   private formData: Record<string, unknown> = {};
   private components: Record<string, unknown> = {};
+  private computedStore = new ComputedStore();
 
   private dirtyPaths: DirtyPaths = new Set<DataPath>();
   private version = 0;
@@ -87,6 +90,9 @@ export class ReactiveRuntime {
       case 'state':
         target = this.state;
         break;
+      case 'computed':
+        target = this.getComputed() as Record<string, unknown>;
+        break;
       case 'formData':
         target = this.formData;
         break;
@@ -107,6 +113,9 @@ export class ReactiveRuntime {
    * @param value - 要设置的值
    */
   set(path: DataPath, value: unknown): void {
+    if (path.startsWith('computed.')) {
+      throw new Error(`[ReactiveRuntime] Computed path "${path}" is read-only`);
+    }
     assertSafePath(path);
     const { namespace, rest } = parsePath(path);
 
@@ -133,6 +142,9 @@ export class ReactiveRuntime {
 
     // 标记脏路径
     this.markDirty(path);
+    if (namespace === 'state') {
+      this.markComputedDirty(this.computedStore.invalidateStateKey(rest.split('.')[0]));
+    }
 
     // 调度 flush
     this.scheduleFlush();
@@ -242,6 +254,7 @@ export class ReactiveRuntime {
       this.formData,
       this.components,
       this.version,
+      this.getComputed(),
     );
   }
 
@@ -288,6 +301,9 @@ export class ReactiveRuntime {
     const proxyData = {
       data: createTrackingProxy(this.data, (p) => tracker(`data.${p}`)),
       state: createTrackingProxy(this.state, (p) => tracker(`state.${p}`)),
+      computed: createTrackingProxy(this.getComputed() as Record<string, unknown>, (p) =>
+        tracker(`computed.${p}`),
+      ),
       formData: createTrackingProxy(this.formData, (p) => tracker(`formData.${p}`)),
       components: createTrackingProxy(this.components, (p) => tracker(`components.${p}`)),
     };
@@ -527,6 +543,7 @@ export class ReactiveRuntime {
         break;
       case 'state':
         this.state = nextValue;
+        this.computedStore.invalidateAll();
         break;
       case 'formData':
         this.formData = nextValue;
@@ -564,6 +581,7 @@ export class ReactiveRuntime {
     this.state = state ? { ...state } : {};
     this.formData = formData ? { ...formData } : {};
     this.components = components ? { ...components } : {};
+    this.computedStore.clear();
 
     // 重置版本状态和缓存快照，因为这是全新的基准。
     this.version = 0;
@@ -634,6 +652,7 @@ export class ReactiveRuntime {
     this.state = {};
     this.formData = {};
     this.components = {};
+    this.computedStore.clear();
     this.dirtyPaths = new Set<DataPath>();
     this.version = 0;
     this.dirtyHistory.clear();
@@ -657,5 +676,35 @@ export class ReactiveRuntime {
    */
   getState(): Record<string, unknown> {
     return this.state;
+  }
+
+  /** 读取当前只读 Computed 命名空间；脏节点会按 Contract 拓扑同步重算。 */
+  getComputed(): Readonly<Record<string, unknown>> {
+    return this.computedStore.read(this.state);
+  }
+
+  /** 在当前 Session 中原子替换 Computed 声明图，不重置 State。 */
+  configureComputed(
+    analysis: ComputedLogicAnalysis | undefined,
+    options?: { notify?: boolean },
+  ): void {
+    const changedKeys = this.computedStore.configure(analysis);
+    if (changedKeys.size > 0) this.snapshotManager.invalidate();
+    if (options?.notify === false || changedKeys.size === 0) return;
+    this.markComputedDirty(changedKeys);
+    this.scheduleFlush();
+  }
+
+  /** 清理 Session 私有 Computed 图与缓存。 */
+  clearComputed(options?: { notify?: boolean }): void {
+    const removedKeys = this.computedStore.configure(undefined);
+    if (removedKeys.size > 0) this.snapshotManager.invalidate();
+    if (options?.notify === false || removedKeys.size === 0) return;
+    this.markComputedDirty(removedKeys);
+    this.scheduleFlush();
+  }
+
+  private markComputedDirty(keys: Iterable<string>): void {
+    for (const key of keys) this.markDirty(`computed.${key}`);
   }
 }

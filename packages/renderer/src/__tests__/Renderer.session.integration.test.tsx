@@ -1,9 +1,24 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, act, cleanup } from '@testing-library/react';
+import { render, screen, act, cleanup, fireEvent } from '@testing-library/react';
 import React, { useState } from 'react';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { Renderer } from '../Renderer';
 import { testPreset } from './fixtures/testPreset';
+
+const conformanceFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-computed-conformance.json'),
+    'utf8',
+  ),
+) as {
+  schema: PageSchema;
+  expected: {
+    initial: { computed: { label: string } };
+    afterChange: { state: { seen: number }; computed: { label: string } };
+  };
+};
 
 const simpleSchema: PageSchema = {
   schemaVersion: 0,
@@ -15,6 +30,165 @@ const simpleSchema: PageSchema = {
 };
 
 describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
+  it('matches the shared Computed conformance corpus before and after one event', async () => {
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="computed-conformance-page"
+        documentSessionId="computed-conformance-session"
+        schema={conformanceFixture.schema}
+      />,
+    );
+
+    expect(screen.getByText(conformanceFixture.expected.initial.computed.label)).toBeTruthy();
+    expect(screen.getByText('0')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'change price' }));
+      await Promise.resolve();
+    });
+
+    const expectedValue = String(conformanceFixture.expected.afterChange.state.seen);
+    expect(conformanceFixture.expected.afterChange.computed.label).toBe(expectedValue);
+    expect(screen.getAllByText(expectedValue)).toHaveLength(2);
+  });
+
+  it('renders named Computed and hot-replaces its graph without resetting Session State', async () => {
+    const createSchema = (multiplier: number): PageSchema => ({
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: {
+        states: { count: 1 },
+        computed: { result: `state.count * ${multiplier}` },
+      },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['value', 'increment'] },
+        value: { id: 'value', type: 'Text', props: { children: '{{ computed.result }}' } },
+        increment: {
+          id: 'increment',
+          type: 'Button',
+          props: { children: 'increment computed' },
+          events: {
+            onClick: [{ type: 'setValue', field: 'state.count', value: '{{ state.count + 1 }}' }],
+          },
+        },
+      },
+    });
+
+    const rendered = render(
+      <Renderer
+        preset={testPreset}
+        pageId="computed-page"
+        documentSessionId="computed-session"
+        schema={createSchema(2)}
+      />,
+    );
+
+    expect(screen.getByText('2')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'increment computed' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('4')).toBeTruthy();
+
+    await act(async () => {
+      rendered.rerender(
+        <Renderer
+          preset={testPreset}
+          pageId="computed-page"
+          documentSessionId="computed-session"
+          schema={createSchema(3)}
+        />,
+      );
+      await Promise.resolve();
+    });
+    expect(screen.getByText('6')).toBeTruthy();
+  });
+
+  it('initializes declared Page State and rerenders after a state action', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: { states: { count: 1 } },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['value', 'increment'] },
+        value: { id: 'value', type: 'Text', props: { children: '{{ state.count }}' } },
+        increment: {
+          id: 'increment',
+          type: 'Button',
+          props: { children: 'increment' },
+          events: {
+            onClick: [{ type: 'setValue', field: 'state.count', value: '{{ state.count + 1 }}' }],
+          },
+        },
+      },
+    };
+
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="state-page"
+        documentSessionId="state-session"
+        schema={schema}
+        eventContext={{ state: { count: 99 } }}
+      />,
+    );
+
+    expect(screen.getByText('1')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'increment' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('2')).toBeTruthy();
+  });
+
+  it('shallow-merges an object into declared Page State', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: { states: { profile: { name: 'Ada' } } },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['value', 'merge'] },
+        value: {
+          id: 'value',
+          type: 'Text',
+          props: { children: '{{ state.profile.name + ":" + (state.profile.age || 0) }}' },
+        },
+        merge: {
+          id: 'merge',
+          type: 'Button',
+          props: { children: 'merge' },
+          events: {
+            onClick: [
+              {
+                type: 'setValue',
+                field: 'state.profile',
+                value: { age: 37 },
+                merge: true,
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="merge-page"
+        documentSessionId="merge-session"
+        schema={schema}
+      />,
+    );
+
+    expect(screen.getByText('Ada:0')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'merge' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Ada:37')).toBeTruthy();
+  });
+
   it('渲染组件成功创建独立 Session，并正确绑定数据上下文', () => {
     render(
       <Renderer

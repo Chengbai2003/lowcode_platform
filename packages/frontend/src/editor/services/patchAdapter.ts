@@ -14,6 +14,7 @@ type MutableSchema = {
   schemaVersion: 0;
   rootId: string;
   components: Record<string, MutableComponent>;
+  logic?: PageSchema['logic'];
 };
 
 export function applyPatchToSchema(
@@ -39,10 +40,17 @@ export function applyPatchToSchema(
       case 'moveComponent':
         moveComponent(nextSchema, operation.componentId, operation.newParentId, operation.newIndex);
         break;
+      case 'replacePageLogic':
+        replacePageLogic(nextSchema, operation.logic);
+        break;
     }
   }
 
   return freezeSchema(nextSchema);
+}
+
+function replacePageLogic(schema: MutableSchema, logic?: Record<string, unknown>) {
+  schema.logic = logic ? (JSON.parse(JSON.stringify(logic)) as PageSchema['logic']) : undefined;
 }
 
 function insertComponent(
@@ -157,6 +165,7 @@ function cloneSchema(schema: PageSchema): MutableSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
+    logic: schema.logic ? structuredClone(schema.logic) : undefined,
   };
 }
 
@@ -179,5 +188,6 @@ function freezeSchema(schema: MutableSchema): PageSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
+    ...(schema.logic ? { logic: schema.logic } : {}),
   };
 }

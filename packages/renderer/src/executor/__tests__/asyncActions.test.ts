@@ -113,6 +113,28 @@ describe('asyncActions', () => {
       expect(context.data.auth).toEqual({ token: mockResponse });
     });
 
+    it('writes nested State resultTo paths into runtime', async () => {
+      const mockResponse = { name: 'Ada' };
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+
+      const context = createFetchContext();
+
+      await apiCall(
+        {
+          type: 'apiCall',
+          url: 'https://api.example.com/profile',
+          resultTo: 'state.user.profile',
+        },
+        context,
+      );
+
+      expect(context.runtime.get('state.user.profile')).toEqual(mockResponse);
+      expect(context.state.user).toEqual({ profile: mockResponse });
+    });
+
     it('uses runtime.set for resultTo writes', async () => {
       const mockResponse = { id: 1, name: 'test' };
       mockFetch.mockResolvedValueOnce({

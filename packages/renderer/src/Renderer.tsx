@@ -3,8 +3,12 @@
  * 将 JSON Schema 渲染为 React 组件
  */
 
-import React, { useMemo, useEffect, useRef } from 'react';
-import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
+import React, { useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import {
+  analyzeComputedDeclarations,
+  requireSupportedPageSchema,
+  SchemaValidationError,
+} from '@lowcode-platform/schema-contract';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import type { RendererProps } from './types';
 import { flattenSchemaValues } from './utils/schema';
@@ -66,6 +70,21 @@ export function Renderer({
     [flattenedData, eventContextData],
   );
 
+  const declaredInitialState = useMemo(
+    () =>
+      canonicalSchema?.logic?.states
+        ? (structuredClone(canonicalSchema.logic.states) as Record<string, unknown>)
+        : undefined,
+    [canonicalSchema?.logic?.states],
+  );
+  const hasDeclaredState = canonicalSchema?.logic?.states !== undefined;
+  const computedAnalysis = useMemo(() => {
+    if (canonicalSchema?.logic?.computed === undefined) return undefined;
+    const result = analyzeComputedDeclarations(canonicalSchema.logic);
+    if (!result.ok) throw new SchemaValidationError(result.issues);
+    return result.value;
+  }, [canonicalSchema]);
+
   // 稳定 flatComponents 引用：仅在内容实际变化时更新。
   // 注意：这里必须使用 canonicalSchema（而非原始 schema prop），
   // 否则同引用原地变异可绕过 Contract 边界进入渲染树。
@@ -95,9 +114,12 @@ export function Renderer({
     return createRuntimeSession({
       pageId,
       documentSessionId,
+      computedAnalysis,
       dispatcherInit: {
         ...eventContext,
         data: runtimeInitialData,
+        // 声明式 State 是新 Session 的权威初始值；无声明时保留旧宿主上下文行为。
+        state: hasDeclaredState ? declaredInitialState : eventContext.state,
         components: stableFlatComponents,
       },
     });
@@ -109,6 +131,11 @@ export function Renderer({
       session.dispose();
     };
   }, [session]);
+
+  // 同一文档 Session 的 Schema 热更新只替换 Computed 图，不重置运行中 State。
+  useLayoutEffect(() => {
+    session.configureComputed(computedAnalysis);
+  }, [computedAnalysis, session]);
 
   // M0-4 Scope E：宿主能力显式授予，默认全 deny；注入后运行时不可变。
   const hostCapabilities = useMemo(
@@ -125,13 +152,18 @@ export function Renderer({
   useEffect(() => {
     if (eventContext && session.dispatcher) {
       Object.entries(eventContext).forEach(([key, value]) => {
-        if (key === 'data' || key === 'components') {
+        if (
+          key === 'data' ||
+          key === 'components' ||
+          key === 'computed' ||
+          (key === 'state' && hasDeclaredState)
+        ) {
           return;
         }
         session.dispatcher.setContext(key, value);
       });
     }
-  }, [eventContext, session.dispatcher]);
+  }, [eventContext, hasDeclaredState, session.dispatcher]);
 
   useEffect(() => {
     if (session.dispatcher) {

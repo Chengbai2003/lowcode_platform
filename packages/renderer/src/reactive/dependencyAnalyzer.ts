@@ -58,6 +58,7 @@ function extractDataKeysFromVariables(variables: string[], rawExpression: string
 const KNOWN_CONTEXT_KEYS = new Set([
   'formData',
   'state',
+  'computed',
   'route',
   'user',
   'ui',

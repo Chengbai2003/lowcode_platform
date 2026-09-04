@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
-import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  PageSchema,
+  ComponentNode,
+  requireSupportedPageSchema,
+  SchemaValidationError,
+} from '@lowcode-platform/schema-contract';
 import { getActionValidationError, hasCustomScriptInValue } from '../page-schema/action-validation';
-import { requireValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
 import { EditorPatchOperation } from './types/editor-patch.types';
@@ -69,6 +73,9 @@ export class PatchValidationService {
             });
           }
           break;
+        case 'replacePageLogic':
+          this.assertPageLogicValid(operation.logic, traceId);
+          break;
       }
     }
   }
@@ -119,6 +126,9 @@ export class PatchValidationService {
             traceId,
           );
           break;
+        case 'replacePageLogic':
+          this.assertPageLogicValid(operation.logic, traceId);
+          break;
       }
 
       currentSchema = this.patchApplyService.applyPatch(currentSchema, [operation]);
@@ -126,8 +136,22 @@ export class PatchValidationService {
 
     let canonicalSchema: PageSchema;
     try {
-      canonicalSchema = requireValidPageSchema(currentSchema) as unknown as PageSchema;
+      canonicalSchema = requireSupportedPageSchema(currentSchema);
     } catch (error) {
+      if (error instanceof SchemaValidationError) {
+        throw new AgentToolException({
+          code: 'SCHEMA_INVALID',
+          message: error.message,
+          traceId,
+          details: {
+            issues: error.issues.map((issue) => ({
+              code: issue.code,
+              path: [...issue.path],
+              message: issue.message,
+            })),
+          },
+        });
+      }
       throw new AgentToolException({
         code: 'SCHEMA_INVALID',
         message: error instanceof Error ? error.message : 'Schema is invalid after applying patch',
@@ -329,4 +353,37 @@ export class PatchValidationService {
     }
     return false;
   }
+
+  private assertPageLogicValid(
+    logic: unknown,
+    traceId: string,
+  ): asserts logic is Record<string, unknown> {
+    if (
+      !logic ||
+      typeof logic !== 'object' ||
+      Array.isArray(logic) ||
+      !(Object.getPrototypeOf(logic) === null || Object.getPrototypeOf(logic) === Object.prototype)
+    ) {
+      throw new AgentToolException({
+        code: 'PATCH_INVALID',
+        message: 'replacePageLogic requires logic object',
+        traceId,
+      });
+    }
+  }
+}
+
+export function canonicalizePatchOperations(
+  operations: readonly EditorPatchOperation[],
+  schema: PageSchema,
+): EditorPatchOperation[] {
+  return operations.map((operation) => {
+    if (operation.op === 'replacePageLogic') {
+      return {
+        ...operation,
+        logic: (schema.logic ?? {}) as Record<string, unknown>,
+      };
+    }
+    return operation;
+  });
 }
