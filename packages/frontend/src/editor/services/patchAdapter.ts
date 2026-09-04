@@ -40,10 +40,17 @@ export function applyPatchToSchema(
       case 'moveComponent':
         moveComponent(nextSchema, operation.componentId, operation.newParentId, operation.newIndex);
         break;
+      case 'replacePageLogic':
+        replacePageLogic(nextSchema, operation.logic);
+        break;
     }
   }
 
   return freezeSchema(nextSchema);
+}
+
+function replacePageLogic(schema: MutableSchema, logic?: Record<string, unknown>) {
+  schema.logic = logic ? (JSON.parse(JSON.stringify(logic)) as PageSchema['logic']) : undefined;
 }
 
 function insertComponent(

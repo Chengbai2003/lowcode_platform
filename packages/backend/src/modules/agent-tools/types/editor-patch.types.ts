@@ -6,6 +6,7 @@ export const PATCH_OPERATION_TYPES = [
   'bindEvent',
   'removeComponent',
   'moveComponent',
+  'replacePageLogic',
 ] as const;
 
 export type EditorPatchOperationType = (typeof PATCH_OPERATION_TYPES)[number];
@@ -42,9 +43,15 @@ export interface EditorPatchMoveComponentOperation {
   newIndex: number;
 }
 
+export interface EditorPatchReplacePageLogicOperation {
+  op: 'replacePageLogic';
+  logic: Record<string, unknown>;
+}
+
 export type EditorPatchOperation =
   | EditorPatchInsertComponentOperation
   | EditorPatchUpdatePropsOperation
   | EditorPatchBindEventOperation
   | EditorPatchRemoveComponentOperation
-  | EditorPatchMoveComponentOperation;
+  | EditorPatchMoveComponentOperation
+  | EditorPatchReplacePageLogicOperation;

@@ -149,4 +149,43 @@ describe('PatchApplyService', () => {
     expect(result.components.container.childrenIds).not.toContain('button');
     expect(result.components.sidebar.childrenIds).toEqual(['button']);
   });
+
+  it('applies replacePageLogic atomically', () => {
+    const schema = createSchema();
+    const result = service.applyPatch(schema, [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 10 },
+          computed: { doubleCount: 'state.count * 2' },
+        },
+      },
+    ]);
+
+    expect(result.logic).toEqual({
+      states: { count: 10 },
+      computed: { doubleCount: 'state.count * 2' },
+    });
+    expect(Object.keys(result.components)).toEqual(Object.keys(schema.components));
+    expect(result.components.button.props).toMatchObject({ children: 'Old' });
+  });
+
+  it('clears Page Logic with replacePageLogic using empty object', () => {
+    const schema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: { active: true },
+        computed: { title: "'Status: ' + state.active" },
+      },
+    };
+
+    const result = service.applyPatch(schema, [
+      {
+        op: 'replacePageLogic',
+        logic: {},
+      },
+    ]);
+
+    expect(result.logic).toEqual({});
+  });
 });

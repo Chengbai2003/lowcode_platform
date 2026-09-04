@@ -12,6 +12,7 @@ const CHANGE_GROUP_LABELS: Record<AgentPatchChangeKind, string> = {
   props: '属性',
   event: '事件',
   structure: '结构',
+  logic: '页面逻辑',
 };
 
 export function buildPatchPresentation(
@@ -60,6 +61,7 @@ export function assessPatchRisk(
       operation.op === 'removeComponent',
   );
   const moveOperations = patch.filter((operation) => operation.op === 'moveComponent');
+  const hasLogicOperation = patch.some((operation) => operation.op === 'replacePageLogic');
   const removeSubtreeSizes = removeOperations.map((operation) =>
     countSubtreeNodes(baseSchema, operation.componentId),
   );
@@ -99,6 +101,11 @@ export function assessPatchRisk(
       reasons.push('包含结构移动');
     }
 
+    if (hasLogicOperation) {
+      level = 'medium';
+      reasons.push('修改页面逻辑声明');
+    }
+
     if (patchOps >= 3 || distinctTargets >= 3) {
       level = 'medium';
       reasons.push('涉及多个 patch 或目标组件');
@@ -129,6 +136,10 @@ function classifyPatchOperation(operation: EditorPatchOperation): AgentPatchChan
     operation.op === 'moveComponent'
   ) {
     return 'structure';
+  }
+
+  if (operation.op === 'replacePageLogic') {
+    return 'logic';
   }
 
   if (operation.op === 'updateProps' && isContentLikeProps(operation.props)) {
@@ -192,6 +203,20 @@ function buildPatchChangeEntry(
         targetId: operation.componentId,
         summary: `移动 ${operation.componentId} 到 ${operation.newParentId} 的位置 ${operation.newIndex}`,
       };
+    case 'replacePageLogic': {
+      const logic = operation.logic as
+        | { states?: Record<string, unknown>; computed?: Record<string, unknown> }
+        | undefined;
+      const statesCount = Object.keys(logic?.states ?? {}).length;
+      const computedCount = Object.keys(logic?.computed ?? {}).length;
+      const prevStatesCount = Object.keys(baseSchema.logic?.states ?? {}).length;
+      const prevComputedCount = Object.keys(baseSchema.logic?.computed ?? {}).length;
+      return {
+        op: operation.op,
+        targetId: 'page.logic',
+        summary: `修改页面逻辑声明 (State: ${prevStatesCount} -> ${statesCount}, Computed: ${prevComputedCount} -> ${computedCount})`,
+      };
+    }
   }
 }
 
@@ -231,6 +256,9 @@ function countDistinctTargets(patch: readonly EditorPatchOperation[]): number {
       case 'moveComponent':
         targets.add(operation.componentId);
         targets.add(operation.newParentId);
+        break;
+      case 'replacePageLogic':
+        targets.add('page.logic');
         break;
     }
   }

@@ -374,4 +374,98 @@ describe('ToolExecutionService', () => {
     expect(response.schema.components.button.props?.type).toBeUndefined();
     expect(response.warnings).toContain('Normalized Button danger prop for button');
   });
+
+  it('executes replace_page_logic tool successfully', async () => {
+    const context = await createContext();
+
+    await service.executeTool(
+      'replace_page_logic',
+      {
+        logic: {
+          states: { count: 42 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+      context,
+    );
+
+    expect(context.accumulatedPatch).toEqual([
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 42 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+    ]);
+    expect(context.workingSchema.logic).toEqual({
+      states: { count: 42 },
+      computed: { double: 'state.count * 2' },
+    });
+  });
+
+  it('previews patch with replacePageLogic operation', async () => {
+    const response = await service.previewPatch(
+      {
+        draftSchema: createSchema() as unknown as Record<string, unknown>,
+        patch: [
+          {
+            op: 'replacePageLogic',
+            logic: {
+              states: { active: true },
+              computed: { status: "'Active: ' + state.active" },
+            },
+          },
+        ],
+      },
+      'trace-logic-preview',
+    );
+
+    expect(response.patch).toEqual([
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { active: true },
+          computed: { status: "'Active: ' + state.active" },
+        },
+      },
+    ]);
+    expect(response.schema.logic).toEqual({
+      states: { active: true },
+      computed: { status: "'Active: ' + state.active" },
+    });
+  });
+
+  it('preserves structured issues when draftSchema has Contract validation failure', async () => {
+    const invalidDraftSchema = {
+      ...createSchema(),
+      logic: {
+        states: {},
+        computed: { broken: 'state.nonexistent + 1' },
+      },
+    };
+
+    try {
+      await service.createExecutionContext(
+        { draftSchema: invalidDraftSchema as unknown as Record<string, unknown> },
+        'trace-structured-issues',
+      );
+      throw new Error('Expected createExecutionContext to throw');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AgentToolException);
+      const response = (error as AgentToolException).getResponse() as {
+        code: string;
+        details?: { issues?: Array<{ code: string; path: (string | number)[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      expect(response.details?.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'COMPUTED_REFERENCE_MISSING',
+            path: ['logic', 'computed', 'broken'],
+          }),
+        ]),
+      );
+    }
+  });
 });

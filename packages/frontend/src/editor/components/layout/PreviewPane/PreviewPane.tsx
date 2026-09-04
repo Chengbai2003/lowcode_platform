@@ -2,35 +2,16 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Editor, { type OnMount } from '@monaco-editor/react';
 import type { ComponentPreset } from '@lowcode-platform/renderer';
 import type { ComponentRegistry, PageSchema } from '../../../../types';
-import { validateA2UISchemaWithWhitelist } from '../../../../schema/schemaValidation';
+import type { SharedSchemaIssue } from '../../../../schema/schemaValidation';
 import { serializePageSchema } from '../../../services/schemaSync';
+import {
+  serializePageLogic,
+  parseAndValidatePageLogic,
+  parseAndValidateFullSchema,
+} from '../../../services/pageLogicAuthoring';
 import { SelectableCanvas } from './SelectableCanvas';
 import { NoSchemaEmptyState } from '../../EmptyState';
 import styles from './PreviewPane.module.scss';
-
-/**
- * 类型守卫错误信息
- */
-class SchemaValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'SchemaValidationError';
-  }
-}
-
-/**
- * 校验并转换 JSON 字符串为 PageSchema
- */
-function parseAndValidateSchema(jsonString: string, whitelist: string[]): PageSchema {
-  const parsed = JSON.parse(jsonString);
-  const result = validateA2UISchemaWithWhitelist(parsed, whitelist);
-
-  if (!result.success) {
-    throw new SchemaValidationError(result.error.issues[0]?.message || '无效的 A2UI Schema');
-  }
-
-  return result.data;
-}
 
 interface PreviewPaneProps {
   schema: PageSchema | null;
@@ -47,7 +28,7 @@ interface PreviewPaneProps {
   onSchemaCommit?: (schema: PageSchema) => void;
 }
 
-type ActiveTab = 'preview' | 'json' | 'compiled';
+type ActiveTab = 'preview' | 'logic' | 'json' | 'compiled';
 
 export const PreviewPane: React.FC<PreviewPaneProps> = ({
   schema,
@@ -66,19 +47,38 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   const [activeTab, setActiveTab] = useState<ActiveTab>('preview');
   const [editedJson, setEditedJson] = useState<string>('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [jsonValidationErrors, setJsonValidationErrors] = useState<SharedSchemaIssue[]>([]);
   const editedJsonRef = useRef<string>('');
   const hasUnsavedChangesRef = useRef(false);
+
+  const [editedLogicJson, setEditedLogicJson] = useState<string>('');
+  const [hasUnsavedLogicChanges, setHasUnsavedLogicChanges] = useState(false);
+  const [logicValidationErrors, setLogicValidationErrors] = useState<SharedSchemaIssue[]>([]);
+  const editedLogicJsonRef = useRef<string>('');
+  const hasUnsavedLogicChangesRef = useRef(false);
+
+  const schemaRef = useRef<PageSchema | null>(schema);
   const saveWhitelistRef = useRef<string[]>(Object.keys(allComponents));
   const onSchemaCommitRef = useRef(onSchemaCommit);
   const onSchemaChangeRef = useRef(onSchemaChange);
   const jsonEditorRef = useRef<Parameters<OnMount>[0] | null>(null);
+  const logicEditorRef = useRef<Parameters<OnMount>[0] | null>(null);
   const monacoRef = useRef<Parameters<OnMount>[1] | null>(null);
   const selectionDecorationIdsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    schemaRef.current = schema;
+  }, [schema]);
 
   useEffect(() => {
     editedJsonRef.current = editedJson;
     hasUnsavedChangesRef.current = hasUnsavedChanges;
   }, [editedJson, hasUnsavedChanges]);
+
+  useEffect(() => {
+    editedLogicJsonRef.current = editedLogicJson;
+    hasUnsavedLogicChangesRef.current = hasUnsavedLogicChanges;
+  }, [editedLogicJson, hasUnsavedLogicChanges]);
 
   useEffect(() => {
     saveWhitelistRef.current = Object.keys(allComponents);
@@ -94,14 +94,40 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     return serializePageSchema(schema);
   }, [schema]);
 
+  // 将 schema.logic 转换为可展示的 JSON 格式
+  const getDisplayLogicJson = useCallback(() => {
+    return serializePageLogic(schema?.logic);
+  }, [schema?.logic]);
+
   // 当 schema 变化或切换到 JSON tab 时，重置编辑内容
   useEffect(() => {
     if (activeTab === 'json') {
       const json = getDisplayJson();
       setEditedJson(json);
       setHasUnsavedChanges(false);
+      setJsonValidationErrors([]);
     }
   }, [activeTab, getDisplayJson]);
+
+  // 当 schema.logic 变化或切换到 Logic tab 时，重置编辑内容
+  useEffect(() => {
+    if (activeTab === 'logic') {
+      const logicJson = getDisplayLogicJson();
+      setEditedLogicJson(logicJson);
+      setHasUnsavedLogicChanges(false);
+      setLogicValidationErrors([]);
+    }
+  }, [activeTab, getDisplayLogicJson]);
+
+  // 处理 Logic 编辑
+  const handleLogicJsonChange = useCallback((value: string | undefined) => {
+    if (value !== undefined) {
+      setEditedLogicJson(value);
+      setHasUnsavedLogicChanges(true);
+      editedLogicJsonRef.current = value;
+      hasUnsavedLogicChangesRef.current = true;
+    }
+  }, []);
 
   // 处理 JSON 编辑
   const handleJsonChange = useCallback((value: string | undefined) => {
@@ -271,18 +297,18 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
         if (!hasUnsavedChangesRef.current) {
           return;
         }
-        try {
-          const parsed = parseAndValidateSchema(editedJsonRef.current, saveWhitelistRef.current);
+        const result = parseAndValidateFullSchema(editedJsonRef.current, saveWhitelistRef.current);
+        if (result.success) {
+          setJsonValidationErrors([]);
           if (onSchemaCommitRef.current) {
-            onSchemaCommitRef.current(parsed);
+            onSchemaCommitRef.current(result.data);
           } else {
-            onSchemaChangeRef.current?.(parsed);
+            onSchemaChangeRef.current?.(result.data);
           }
           setHasUnsavedChanges(false);
           hasUnsavedChangesRef.current = false;
-        } catch (e) {
-          const errorMessage = e instanceof Error ? e.message : 'JSON 格式错误';
-          alert(`保存失败：${errorMessage}`);
+        } else {
+          setJsonValidationErrors(result.issues);
         }
       });
 
@@ -293,12 +319,81 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
     [clearSelectionDecorations, revealSelectedComponentInJson],
   );
 
+  const handleLogicEditorMount: OnMount = useCallback((editor, monacoInstance) => {
+    if (!monacoInstance) return;
+    logicEditorRef.current = editor;
+
+    // 注册 Ctrl/Cmd + S 快捷键
+    editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
+      if (!hasUnsavedLogicChangesRef.current) {
+        return;
+      }
+      if (!schemaRef.current) {
+        return;
+      }
+      const result = parseAndValidatePageLogic(
+        editedLogicJsonRef.current,
+        schemaRef.current,
+        saveWhitelistRef.current,
+      );
+      if (result.success) {
+        setLogicValidationErrors([]);
+        if (onSchemaCommitRef.current) {
+          onSchemaCommitRef.current(result.data);
+        } else {
+          onSchemaChangeRef.current?.(result.data);
+        }
+        setHasUnsavedLogicChanges(false);
+        hasUnsavedLogicChangesRef.current = false;
+      } else {
+        setLogicValidationErrors(result.issues);
+      }
+    });
+  }, []);
+
   useEffect(() => {
     return () => {
       jsonEditorRef.current = null;
+      logicEditorRef.current = null;
       monacoRef.current = null;
     };
   }, []);
+
+  const renderErrorPanel = (issues: SharedSchemaIssue[], onClose: () => void) => {
+    if (issues.length === 0) return null;
+    return (
+      <div className={styles.errorPanel} role="alert" data-testid="schema-error-panel">
+        <div className={styles.errorPanelHeader}>
+          <span>校验错误 ({issues.length})</span>
+          <button
+            className={styles.errorPanelClose}
+            onClick={onClose}
+            aria-label="关闭错误面板"
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+        <div className={styles.errorList}>
+          {issues.map((issue, idx) => (
+            <div
+              key={`${issue.code}-${idx}`}
+              className={styles.errorItem}
+              data-testid="schema-error-item"
+            >
+              <span className={styles.issueCode}>{issue.code}</span>
+              <span className={styles.issueDivider}>·</span>
+              <span className={styles.issuePath}>
+                {issue.path.length > 0 ? issue.path.join('.') : '(root)'}
+              </span>
+              <span className={styles.issueDivider}>·</span>
+              <span className={styles.issueMessage}>{issue.message}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   // 切换到编译代码 Tab 时的检查
   const handleCompiledTabClick = () => {
@@ -318,6 +413,12 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
             onClick={() => setActiveTab('preview')}
           >
             实时预览
+          </button>
+          <button
+            className={`${styles.tabButton} ${activeTab === 'logic' ? styles.active : ''}`}
+            onClick={() => setActiveTab('logic')}
+          >
+            页面逻辑
           </button>
           <button
             className={`${styles.tabButton} ${activeTab === 'json' ? styles.active : ''}`}
@@ -352,6 +453,46 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
           />
         )}
 
+        {activeTab === 'logic' && schema && (
+          <div className={styles.editorContainer}>
+            <div className={styles.jsonEditorHeader}>
+              <span className={styles.saveHint}>
+                {hasUnsavedLogicChanges ? (
+                  <span className={styles.unsaved}>
+                    <span className={styles.dot} /> 按 Ctrl+S 保存修改
+                  </span>
+                ) : (
+                  <span className={styles.saved}>已同步</span>
+                )}
+              </span>
+            </div>
+            <div className={styles.monacoContainer}>
+              <Editor
+                height="100%"
+                defaultLanguage="json"
+                theme={previewTheme === 'dark' ? 'vs-dark' : 'light'}
+                value={editedLogicJson}
+                onChange={handleLogicJsonChange}
+                onMount={handleLogicEditorMount}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: 'on',
+                  scrollBeyondLastLine: false,
+                  padding: { top: 16, bottom: 16 },
+                  readOnly: false,
+                  lineNumbers: 'on',
+                  renderWhitespace: 'selection',
+                  fontFamily: 'JetBrains Mono, Consolas, Monaco, monospace',
+                }}
+              />
+            </div>
+            {renderErrorPanel(logicValidationErrors, () => setLogicValidationErrors([]))}
+          </div>
+        )}
+
+        {activeTab === 'logic' && !schema && <NoSchemaEmptyState />}
+
         {activeTab === 'json' && schema && (
           <div className={styles.editorContainer}>
             <div className={styles.jsonEditorHeader}>
@@ -365,25 +506,28 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
                 )}
               </span>
             </div>
-            <Editor
-              height="100%"
-              defaultLanguage="json"
-              theme={previewTheme === 'dark' ? 'vs-dark' : 'light'}
-              value={editedJson}
-              onChange={handleJsonChange}
-              onMount={handleEditorMount}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 14,
-                wordWrap: 'on',
-                scrollBeyondLastLine: false,
-                padding: { top: 16, bottom: 16 },
-                readOnly: false,
-                lineNumbers: 'on',
-                renderWhitespace: 'selection',
-                fontFamily: 'JetBrains Mono, Consolas, Monaco, monospace',
-              }}
-            />
+            <div className={styles.monacoContainer}>
+              <Editor
+                height="100%"
+                defaultLanguage="json"
+                theme={previewTheme === 'dark' ? 'vs-dark' : 'light'}
+                value={editedJson}
+                onChange={handleJsonChange}
+                onMount={handleEditorMount}
+                options={{
+                  minimap: { enabled: false },
+                  fontSize: 14,
+                  wordWrap: 'on',
+                  scrollBeyondLastLine: false,
+                  padding: { top: 16, bottom: 16 },
+                  readOnly: false,
+                  lineNumbers: 'on',
+                  renderWhitespace: 'selection',
+                  fontFamily: 'JetBrains Mono, Consolas, Monaco, monospace',
+                }}
+              />
+            </div>
+            {renderErrorPanel(jsonValidationErrors, () => setJsonValidationErrors([]))}
           </div>
         )}
 

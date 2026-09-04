@@ -129,7 +129,7 @@ export interface AgentEditSchemaResponse {
 }
 
 export type AgentPatchRiskLevel = 'low' | 'medium' | 'high';
-export type AgentPatchChangeKind = 'content' | 'props' | 'event' | 'structure';
+export type AgentPatchChangeKind = 'content' | 'props' | 'event' | 'structure' | 'logic';
 
 export interface AgentPatchChangeEntry {
   op: EditorPatchOperation['op'];

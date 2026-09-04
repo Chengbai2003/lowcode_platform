@@ -4,6 +4,7 @@
  * Extracted from agent-runner.service.ts to keep the runner thin.
  */
 
+import { isDeepStrictEqual } from 'node:util';
 import { buildParentMap } from '../schema-context/utils/parent-map.builder';
 import type { PageSchema } from '../schema-context';
 import type { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
@@ -56,6 +57,12 @@ export function normalizeFinalPatch(
               );
         if (currentParentId === normalized.newParentId && currentIndex === normalized.newIndex)
           continue;
+        break;
+      }
+      case 'replacePageLogic': {
+        const currentLogic = baseSchema.logic ?? {};
+        const newLogic = normalized.logic ?? {};
+        if (isDeepStrictEqual(currentLogic, newLogic)) continue;
         break;
       }
     }

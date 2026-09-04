@@ -18,7 +18,7 @@ import { AgentPolicyService } from './agent-policy.service';
 import { AgentReadCacheService } from './agent-read-cache.service';
 import { AgentRoutingService } from './agent-routing.service';
 import { AgentScopeConfirmationService } from './agent-scope-confirmation.service';
-import { AgentRunnerService } from './agent-runner.service';
+import { AgentRunnerService, isPageLogicInstruction } from './agent-runner.service';
 import { AgentService } from './agent.service';
 import { AgentSessionMemoryService } from './agent-session-memory.service';
 import { AgentTraceService } from './agent-trace.service';
@@ -446,34 +446,49 @@ describe('AgentRunnerService', () => {
           };
         }
 
-        if (name === 'preview_patch') {
-          const previewPatch = input.patch as Array<{
-            op: 'updateProps';
-            componentId: string;
-            props: Record<string, unknown>;
-          }>;
+        if (name === 'replace_page_logic') {
+          const patch = {
+            op: 'replacePageLogic' as const,
+            logic: input.logic as Record<string, unknown>,
+          };
+          context.accumulatedPatch = [...context.accumulatedPatch, patch];
           context.workingSchema = {
             ...context.workingSchema,
-            components: previewPatch.reduce(
-              (acc, operation) => {
-                if (operation.op !== 'updateProps') {
-                  return acc;
-                }
+            logic: patch.logic,
+          } as unknown as PageSchema;
+          return {
+            data: { ok: true },
+            patchDelta: [patch],
+            updatedWorkingSchema: context.workingSchema,
+          };
+        }
 
-                return {
-                  ...acc,
+        if (name === 'preview_patch') {
+          const previewPatch = input.patch as Array<any>;
+          let updatedWorking = { ...context.workingSchema };
+          for (const operation of previewPatch) {
+            if (operation.op === 'replacePageLogic') {
+              updatedWorking = {
+                ...updatedWorking,
+                logic: operation.logic,
+              } as unknown as PageSchema;
+            } else if (operation.op === 'updateProps') {
+              updatedWorking = {
+                ...updatedWorking,
+                components: {
+                  ...updatedWorking.components,
                   [operation.componentId]: {
-                    ...acc[operation.componentId],
+                    ...updatedWorking.components[operation.componentId],
                     props: {
-                      ...(acc[operation.componentId]?.props ?? {}),
+                      ...(updatedWorking.components[operation.componentId]?.props ?? {}),
                       ...operation.props,
                     } as unknown as PageSchema['components'][string]['props'],
                   },
-                };
-              },
-              { ...context.workingSchema.components },
-            ),
-          } as unknown as PageSchema;
+                },
+              } as unknown as PageSchema;
+            }
+          }
+          context.workingSchema = updatedWorking;
           return {
             data: { patch: input.patch },
             updatedWorkingSchema: context.workingSchema,
@@ -1775,5 +1790,98 @@ describe('AgentRunnerService', () => {
         pageVersionConflictCount: 1,
       }),
     );
+  });
+
+  describe('Page Logic Routing & Execution', () => {
+    it('identifies page logic instructions correctly', () => {
+      expect(isPageLogicInstruction('请添加 Page State 变量 count')).toBe(true);
+      expect(isPageLogicInstruction('定义 computed 变量 fullName')).toBe(true);
+      expect(isPageLogicInstruction('调整页面逻辑')).toBe(true);
+      expect(isPageLogicInstruction('添加状态声明 user: null')).toBe(true);
+      expect(isPageLogicInstruction('新增计算声明 doubleCount')).toBe(true);
+      expect(isPageLogicInstruction('计算值为 state.a + state.b')).toBe(true);
+
+      expect(isPageLogicInstruction('把按钮改成提交')).toBe(false);
+      expect(isPageLogicInstruction('删除表单组件')).toBe(false);
+      expect(isPageLogicInstruction('隐藏所有输入框')).toBe(false);
+      expect(isPageLogicInstruction('')).toBe(false);
+    });
+
+    it('routes page logic instructions without selectedId to tool calling without clarification', async () => {
+      const { runner, aiService, toolExecutionService } = createRunner();
+
+      aiService.runToolCalling.mockImplementation(async (input) => {
+        await input.executeTool('replace_page_logic', {
+          logic: {
+            states: { count: 10 },
+            computed: { doubleCount: 'state.count * 2' },
+          },
+        });
+        return {
+          text: '已成功配置页面逻辑',
+          finishReason: 'stop',
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+          totalUsage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+          warnings: [],
+          steps: [
+            {
+              stepNumber: 0,
+              finishReason: 'stop',
+              toolCalls: [{ toolName: 'replace_page_logic' }],
+            },
+          ],
+          toolCallCount: 1,
+        };
+      });
+
+      const result = await runner.runEdit(
+        {
+          instruction:
+            '请添加页面逻辑：状态声明 count 为 10，计算声明 doubleCount 为 state.count * 2',
+          pageId: 'page-1',
+          pageVersion: 3,
+          responseMode: 'patch',
+        },
+        'trace-logic-agent',
+      );
+
+      // 验证未要求用户澄清目标组件，直接生成 Patch
+      expect(result.mode).toBe('patch');
+      if (result.mode === 'patch') {
+        expect(result.resolvedSelectedId).toBeUndefined();
+        expect(result.patch).toEqual([
+          {
+            op: 'replacePageLogic',
+            logic: {
+              states: { count: 10 },
+              computed: { doubleCount: 'state.count * 2' },
+            },
+          },
+        ]);
+        expect(result.changeGroups).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'logic',
+              entries: expect.arrayContaining([
+                expect.objectContaining({
+                  op: 'replacePageLogic',
+                  targetId: 'page.logic',
+                  summary: expect.stringContaining('修改页面逻辑声明'),
+                }),
+              ]),
+            }),
+          ]),
+        );
+        expect(result.risk.level).toBe('medium');
+        expect(result.risk.reasons).toContain('修改页面逻辑声明');
+      }
+
+      // 验证以 rootId 组装 focusContext，避免快路径误改 root
+      expect(toolExecutionService.getFocusContext).toHaveBeenCalledWith(
+        expect.anything(),
+        'root',
+        expect.stringContaining('页面逻辑'),
+      );
+    });
   });
 });

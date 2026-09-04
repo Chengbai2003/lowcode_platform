@@ -195,6 +195,27 @@ export function createWriteDefinitions(deps: WriteToolsDeps): ToolDefinition[] {
           newIndex: asRequiredNumber(input.newIndex),
         }),
     },
+    {
+      name: 'replace_page_logic',
+      description:
+        '原子替换整块页面逻辑声明（states 与 computed）。调用前必须先用 get_page_schema 读取当前 schema.logic，提交时传入完整 logic 对象，保留未要求修改的声明。',
+      inputSchema: createObjectSchema(
+        '原子替换页面逻辑声明。',
+        {
+          logic: {
+            type: 'object',
+            description: '完整的页面逻辑声明对象，包含 states 和 computed。',
+          },
+        },
+        ['logic'],
+      ),
+      visibility: 'agent',
+      execute: async (input, context) =>
+        executeWriteTool(patchValidationService, context, {
+          op: 'replacePageLogic',
+          logic: asRecord(input.logic),
+        }),
+    },
   ];
 }
 

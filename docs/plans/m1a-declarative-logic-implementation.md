@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-1 / S2-S3 Computed` | **优先级**：`P0`
+> **当前阶段**：`M1a-1（S1-S4 已完成，等待合并 PR #48）` | **优先级**：`P0`
 
 ## 目标与边界
 
@@ -18,11 +18,13 @@ M1a 用纯数据声明替代页面脚本，让 Renderer 解释执行与 Compiler
 ## 实施顺序
 
 ```text
-S1 Page State 纵向闭环
+S1 Page State 纵向闭环 (Done)
   ↓
-S2 安全 Computed + 依赖 DAG / 循环检测
+S2 安全 Computed + 依赖 DAG / 循环检测 (Done)
   ↓
-S3 Computed Runtime + Compiler 等价实现
+S3 Computed Runtime + Compiler 等价实现 (Done)
+  ↓
+S4 页面逻辑 Authoring 与结构化诊断闭环 (Done)
   ↓
 M1a-2 具名 ActionFlow + 错误 / 取消 / 预算语义
   ↓
@@ -40,18 +42,26 @@ M1a-3 六消费面固定语料与解释/编译一致性门禁
 
 S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 State 写入在 Contract 中 fail-close，无声明的旧页面仍保留既有嵌套写入语义。已有组件字段若会生成 `state` / `setState` 绑定，Compiler 明确拒绝并要求先重命名，避免静默改义。同一事件内跨动作读取 State 的解释/编译顺序一致性必须在 #45 完成前明确并纳入 #47 语料，当前切片不扩大 Action 协议。
 
-### S2：Computed Contract 与共享分析（当前 PR）
+### S2：Computed Contract 与共享分析（已完成）
 
 - `ComputedExpression` 是不带 `{{ }}` 的单一表达式；共享 Contract 唯一负责 AST 白名单、引用提取和资源预算。
 - Contract 输出依赖优先、同层按 Logic Key 稳定排序的 DAG；缺失引用、动态访问、危险属性、宿主/构造器、循环和超预算图全部 fail-close。
 - Editor JSON、组件 Patch、Agent 组件 Patch 与 Storage 显式保留 `logic.computed`；结构化声明入口和诊断 UI 留给 S4。
 
-### S3：Computed Runtime 与 Compiler 等价实现（当前 PR）
+### S3：Computed Runtime 与 Compiler 等价实现（已完成）
 
 - RuntimeSession 私有持有 Computed 缓存与反向依赖图；State 顶层 Logic Key 变更只失效直接和传递依赖，批量写入最多一次 flush。
 - `computed.*` 进入 Renderer 安全表达式上下文并保持只读；声明图热替换保留当前 Session State，dispose 清空图与缓存。
 - Compiler 复用 Contract 拓扑生成 React 代码，并用事件局部值与 ref 保证连续动作及跨 `await` 动作读取最新 State/Computed。
 - `test-fixtures/m1a-computed-conformance.json` 同时驱动 Contract、Renderer 与 Compiler，验证初始值及一次事件后的可观察状态一致。
+
+### S4：页面逻辑 Authoring 与结构化诊断闭环（已完成）
+
+- **单一真相源**：Editor 与 Agent 严禁重复实现表达式解析、AST 校验或预算规则；校验全部统一委托给 Schema Contract（fail-close）。
+- **原子 Patch 协议**：新增且仅新增一个原子操作 `replacePageLogic`（工具名 `replace_page_logic`），整块替换 `schema.logic`（传 `{}` 即清空）；不引入组件级细粒度混淆操作。
+- **Agent 路由与快路径隔离**：通过领域词（`Page State`、`computed`、`页面逻辑`、`状态声明`、`计算声明/计算值` 等）识别页面级逻辑指令，直接跳过集合容器与组件目标澄清；以 `rootId` 组装只读 focusContext 但保持 `resolvedSelectedId` 为 `undefined`，防止单组件快路径误修改根节点。
+- **Editor 轻量 Authoring**：PreviewPane 增加「页面逻辑」Tab，提供 Monaco Editor 进行最小 JSON 编辑（支持状态与计算属性声明）；全量通过 `parseAndValidatePageLogic` 与 Contract 校验后再触发 Commit；支持与 Undo/Redo 历史无缝集成。
+- **结构化诊断反馈**：彻底移除 `alert()` 弹窗，全量在 Editor 内部以结构化错误面板展示 `code · path · message` 三元组（支持错误代码、路径定位与详情描述）。
 
 ### M1a-2：ActionFlow
 

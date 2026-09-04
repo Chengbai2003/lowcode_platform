@@ -1,8 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ContextAssemblerService } from '../schema-context';
-import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  PageSchema,
+  ComponentNode,
+  requireSupportedPageSchema,
+  SchemaValidationError,
+} from '@lowcode-platform/schema-contract';
 import { PageSchemaService } from '../page-schema/page-schema.service';
-import { requireValidPageSchema } from '../page-schema/schema-validation';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchPreviewRequestDto } from './dto/patch-preview-request.dto';
 import { PatchPreviewResponseDto } from './dto/patch-preview-response.dto';
@@ -142,8 +146,22 @@ export class ToolExecutionService {
     if (input.draftSchema) {
       try {
         // 只消费 Contract 返回的 canonical 对象；页面版本不写入 Schema
-        workingSchema = requireValidPageSchema(input.draftSchema) as unknown as PageSchema;
+        workingSchema = requireSupportedPageSchema(input.draftSchema);
       } catch (error) {
+        if (error instanceof SchemaValidationError) {
+          throw new AgentToolException({
+            code: 'SCHEMA_INVALID',
+            message: error.message,
+            traceId,
+            details: {
+              issues: error.issues.map((issue) => ({
+                code: issue.code,
+                path: [...issue.path],
+                message: issue.message,
+              })),
+            },
+          });
+        }
         throw new AgentToolException({
           code: 'SCHEMA_INVALID',
           message: error instanceof Error ? error.message : 'Draft schema is invalid',
@@ -192,6 +210,7 @@ export class ToolExecutionService {
       actions?: Array<Record<string, unknown>>;
       newParentId?: string;
       newIndex?: number;
+      logic?: Record<string, unknown>;
     }>,
   ): EditorPatchOperation[] {
     return patch.map<EditorPatchOperation>((operation) => {
@@ -227,6 +246,16 @@ export class ToolExecutionService {
             componentId: operation.componentId ?? '',
             newParentId: operation.newParentId ?? '',
             newIndex: operation.newIndex ?? -1,
+          };
+        case 'replacePageLogic':
+          return {
+            op: 'replacePageLogic',
+            logic:
+              operation.logic &&
+              typeof operation.logic === 'object' &&
+              !Array.isArray(operation.logic)
+                ? operation.logic
+                : {},
           };
         default:
           throw new AgentToolException({

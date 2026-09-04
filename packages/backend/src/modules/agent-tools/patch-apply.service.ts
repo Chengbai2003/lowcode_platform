@@ -50,10 +50,17 @@ export class PatchApplyService {
             operation.newIndex,
           );
           break;
+        case 'replacePageLogic':
+          this.replacePageLogic(nextSchema, operation.logic);
+          break;
       }
     }
 
     return this.freezeSchema(nextSchema);
+  }
+
+  private replacePageLogic(schema: MutableSchema, logic?: Record<string, unknown>) {
+    schema.logic = logic ? (JSON.parse(JSON.stringify(logic)) as PageLogic) : undefined;
   }
 
   private insertComponent(

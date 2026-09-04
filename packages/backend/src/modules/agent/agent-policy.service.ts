@@ -261,6 +261,9 @@ export class AgentPolicyService {
           targets.add(operation.componentId);
           targets.add(operation.newParentId);
           break;
+        case 'replacePageLogic':
+          targets.add('page.logic');
+          break;
       }
     }
 
