@@ -2025,6 +2025,19 @@ function sanitizeVarName(stepPath: readonly (string | number)[]): string {
   return stepPath.join('_').replace(/[^a-zA-Z0-9_]/g, '_');
 }
 
+function buildNestedFlowStepCode(
+  action: ActionNode,
+  ctx: TransformContext,
+  flowKey: string,
+  topStepIndex: number | null,
+  stepPath: readonly (string | number)[],
+  localScope: Set<string>,
+): string {
+  const stepCode = topStepIndex === null ? 'null' : String(topStepIndex);
+  const body = buildFlowStepCode(action, ctx, flowKey, topStepIndex, stepPath, localScope);
+  return `try {\n${indentBlock(body)}\n} catch (stepErr) {\n  if (stepErr instanceof FlowExecutionError) throw stepErr;\n  throw flowContext.createError('FLOW_STEP_FAILED', ${toQuotedString(flowKey)}, ${stepCode}, ${JSON.stringify(stepPath)}, stepErr?.message || String(stepErr), stepErr);\n}`;
+}
+
 function buildFlowStepCode(
   action: ActionNode,
   ctx: TransformContext,
@@ -2142,7 +2155,7 @@ ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
       );
       const thenSteps = (action.then ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2154,7 +2167,7 @@ ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
         .join('\n');
       const elseSteps = (action.else ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2186,7 +2199,7 @@ ${indentBlock(thenSteps)}
       );
       const loopSteps = (action.actions ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2211,7 +2224,7 @@ ${indentBlock(loopSteps)}
     case 'dialog': {
       const onOkSteps = (action.onOk ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2223,7 +2236,7 @@ ${indentBlock(loopSteps)}
         .join('\n');
       const onCancelSteps = (action.onCancel ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2348,7 +2361,7 @@ setState(state);`;
       successScope.add('response');
       const onSuccessSteps = (action.onSuccess ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2364,7 +2377,7 @@ setState(state);`;
       errorScope.add('errorObject');
       const onErrorSteps = (action.onError ?? [])
         .map((childAction, childIndex) =>
-          buildFlowStepCode(
+          buildNestedFlowStepCode(
             childAction,
             ctx,
             flowKey,
@@ -2475,7 +2488,7 @@ ${indentBlock(stepBody)}
       const onErrorSteps = flow.onError
         .map(
           (onErrorAction, onErrorIndex) =>
-            `onErrorStepPath = ['onError', ${onErrorIndex}];\n${buildFlowStepCode(
+            `onErrorStepPath = ['onError', ${onErrorIndex}];\n${buildNestedFlowStepCode(
               onErrorAction,
               ctx,
               flowKey,
