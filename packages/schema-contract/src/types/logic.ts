@@ -61,4 +61,5 @@ export type ActionFlowDeclarations = Readonly<Record<string, ActionFlow>>;
 export interface PageLogic {
   readonly states?: Readonly<Record<string, JsonValue>>;
   readonly computed?: Readonly<Record<string, ComputedExpression>>;
+  readonly flows?: ActionFlowDeclarations;
 }

@@ -2,20 +2,21 @@ import { isSupportedSchemaVersion } from '../types/versions';
 import type { PageSchema } from '../types/schema';
 import { isSafeLogicKey, type ComputedExpression, type PageLogic } from '../types/logic';
 import { analyzeComputedDeclarations, type ComputedLogicAnalysis } from '../computed';
+import { analyzeActionFlowDeclarations, type ActionFlowAnalysis } from '../action-flow';
 import type { ComponentNode } from '../types/node';
 import type { JsonValue } from '../types/json';
 import type { SchemaValidationLimits } from '../types/limits';
 import { normalizeValidationLimits } from '../types/limits';
 import type { ParsePageSchemaResult, SchemaContractIssue } from './issues';
 import { validateComponentGraph } from './tree';
-import { validateActionList } from './actions';
+import { validateActionList, type ActionValidationContext } from './actions';
 import type { InspectionContext, IssueSink } from './inspector';
 import { inspectAndSanitizeJsonValue, pushIssue } from './inspector';
 import { describeValue } from './describe';
 
 const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components', 'logic']);
 const ALLOWED_COMPONENT_KEYS = new Set(['id', 'type', 'props', 'childrenIds', 'events']);
-const ALLOWED_LOGIC_KEYS = new Set(['states', 'computed']);
+const ALLOWED_LOGIC_KEYS = new Set(['states', 'computed', 'flows']);
 
 const hasOwn = (target: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(target, key);
@@ -202,7 +203,7 @@ export function validatePageSchemaValue(
     aborted: false,
   };
 
-  const actionValidationContext = {
+  const actionValidationContext: ActionValidationContext = {
     issues,
     inspectionContext,
     maxActionNodes: limits.maxActionNodes,
@@ -329,6 +330,7 @@ export function validatePageSchemaValue(
   let statesObj: object | undefined;
   let computedObj: object | undefined;
   let computedAnalysis: ComputedLogicAnalysis | undefined;
+  let flowsAnalysis: ActionFlowAnalysis | undefined;
 
   if (logicRes.exists && logic !== undefined) {
     if (!logic || typeof logic !== 'object' || Array.isArray(logic)) {
@@ -513,7 +515,33 @@ export function validatePageSchemaValue(
     return { ok: false, issues };
   }
 
+  if (logicObj) {
+    const flowsRes = safeGetValue(logicObj, 'flows');
+    const flows = flowsRes.exists ? flowsRes.value : undefined;
+    if (flowsRes.exists && flows !== undefined) {
+      const flowsResult = analyzeActionFlowDeclarations(flows, limits, ['logic', 'flows'], {
+        allowLegacyNestedStateTargets: statesObj === undefined,
+      });
+      if (!flowsResult.ok) {
+        for (const flowIssue of flowsResult.issues) {
+          pushIssue(inspectionContext, flowIssue);
+          if (inspectionContext.aborted) break;
+        }
+      } else {
+        flowsAnalysis = flowsResult.value;
+      }
+    }
+  }
+
+  if (issues.length > 0 || inspectionContext.aborted) {
+    return { ok: false, issues };
+  }
+
   actionValidationContext.allowLegacyNestedStateTargets = statesObj === undefined;
+  const declaredFlowKeys = new Set<string>(flowsAnalysis ? Object.keys(flowsAnalysis.flows) : []);
+  actionValidationContext.flowValidation = {
+    declaredFlowKeys,
+  };
 
   const componentKeys = Object.getOwnPropertyNames(componentsObj);
 
@@ -916,6 +944,14 @@ export function validatePageSchemaValue(
       }
       Object.defineProperty(cleanLogicObject, 'computed', {
         value: cleanComputed,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    if (flowsAnalysis) {
+      Object.defineProperty(cleanLogicObject, 'flows', {
+        value: flowsAnalysis.flows,
         enumerable: true,
         writable: true,
         configurable: true,
