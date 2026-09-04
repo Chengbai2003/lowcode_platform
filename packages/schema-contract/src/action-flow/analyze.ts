@@ -1,11 +1,14 @@
 import type { ActionFlow, ActionFlowDeclarations } from '../types/logic';
 import { isSafeLogicKey } from '../types/logic';
+import type { Action, ActionList } from '../actions/action-union';
 import type { SchemaValidationLimits } from '../types/limits';
 import { normalizeValidationLimits } from '../types/limits';
 import type { SchemaContractIssue } from '../validation/issues';
 import { deepFreeze } from '../canonicalize';
 import { validateActionList, type ActionValidationContext } from '../validation/actions';
 import type { InspectionContext } from '../validation/inspector';
+import { isPlainPrototype, safeGet } from '../internal/descriptor';
+import { compareLogicKeys, pushMinHeap, popMinHeap } from '../internal/heap';
 
 export interface ActionFlowNodeAnalysis {
   readonly key: string;
@@ -26,140 +29,56 @@ export type ActionFlowAnalysisResult =
   | { readonly ok: true; readonly value: ActionFlowAnalysis }
   | { readonly ok: false; readonly issues: readonly SchemaContractIssue[] };
 
-function compareLogicKeys(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
-
-function isPlainPrototype(obj: object): boolean {
-  const proto = Object.getPrototypeOf(obj);
-  return proto === Object.prototype || proto === null;
-}
-
-function safeGet(
-  obj: object,
-  key: string,
-): { exists: boolean; isAccessor: boolean; value: unknown } {
-  const desc = Object.getOwnPropertyDescriptor(obj, key);
-  if (!desc) return { exists: false, isAccessor: false, value: undefined };
-  if (desc.get || desc.set) return { exists: true, isAccessor: true, value: undefined };
-  return { exists: true, isAccessor: false, value: (desc as PropertyDescriptor).value };
-}
-
-function pushMinHeap(heap: string[], value: string): void {
-  heap.push(value);
-  let index = heap.length - 1;
-  while (index > 0) {
-    const parent = (index - 1) >> 1;
-    if (compareLogicKeys(heap[index], heap[parent]) >= 0) break;
-    const temp = heap[index];
-    heap[index] = heap[parent];
-    heap[parent] = temp;
-    index = parent;
+function cloneCanonicalJson(val: unknown): unknown {
+  if (Array.isArray(val)) {
+    return val.map(cloneCanonicalJson);
   }
-}
-
-function popMinHeap(heap: string[]): string | undefined {
-  if (heap.length <= 1) return heap.pop();
-  const first = heap[0];
-  const last = heap.pop()!;
-  heap[0] = last;
-  let index = 0;
-  const length = heap.length;
-  while (true) {
-    const left = (index << 1) + 1;
-    if (left >= length) break;
-    const right = left + 1;
-    const smaller = right < length && compareLogicKeys(heap[right], heap[left]) < 0 ? right : left;
-    if (compareLogicKeys(heap[smaller], heap[index]) >= 0) break;
-    heap[index] = heap[smaller];
-    index = smaller;
-  }
-  heap[index] = last;
-  return first;
-}
-
-function extractFlowsObject(
-  input: unknown,
-  basePath: readonly (string | number)[],
-):
-  | { readonly ok: true; readonly flowsObj: object | undefined }
-  | { readonly ok: false; readonly issue: SchemaContractIssue } {
-  if (input === undefined) {
-    return { ok: true, flowsObj: undefined };
-  }
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    return {
-      ok: false,
-      issue: {
-        code: 'INVALID_FLOWS_OBJECT',
-        path: basePath,
-        message: 'ActionFlow declarations must be a plain object',
-      },
-    };
-  }
-  const inputObj = input as object;
-  if (!isPlainPrototype(inputObj)) {
-    return {
-      ok: false,
-      issue: {
-        code: 'INVALID_OBJECT_PROTOTYPE',
-        path: basePath,
-        message: 'ActionFlow declarations must be a plain object',
-      },
-    };
-  }
-
-  // 支持入参为 PageLogic 风格的包装对象：{ flows?: ... }
-  // 注意：如果 flow 自身名字恰好为 "flows"（即 inputObj.flows 包含 steps），
-  // 则 inputObj 为 declarations 字典本身，而非外层包装。
-  const flowsDesc = Object.getOwnPropertyDescriptor(inputObj, 'flows');
-  if (flowsDesc) {
-    if (flowsDesc.get || flowsDesc.set) {
-      return {
-        ok: false,
-        issue: {
-          code: 'ACCESSOR_PROPERTY_FORBIDDEN',
-          path: basePath,
-          message: 'Property "flows" must not be an accessor',
-        },
-      };
+  if (val !== null && typeof val === 'object') {
+    const clean: Record<string, unknown> = {};
+    for (const key of Object.getOwnPropertyNames(val)) {
+      const desc = Object.getOwnPropertyDescriptor(val, key);
+      if (!desc || !('value' in desc)) continue;
+      clean[key] = cloneCanonicalJson(desc.value);
     }
-    const val = flowsDesc.value;
-    const isFlowNamedFlows =
-      val !== null &&
-      typeof val === 'object' &&
-      !Array.isArray(val) &&
-      Object.prototype.hasOwnProperty.call(val, 'steps');
+    return clean;
+  }
+  return val;
+}
 
-    if (!isFlowNamedFlows) {
-      if (val === undefined) {
-        return { ok: true, flowsObj: undefined };
+function cloneCanonicalAction(action: unknown): Action {
+  const obj = action as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
+  for (const key of Object.getOwnPropertyNames(obj)) {
+    const desc = Object.getOwnPropertyDescriptor(obj, key);
+    if (!desc || !('value' in desc)) continue;
+    const val = desc.value;
+    if (
+      key === 'then' ||
+      key === 'else' ||
+      key === 'actions' ||
+      key === 'onSuccess' ||
+      key === 'onError' ||
+      key === 'onOk' ||
+      key === 'onCancel'
+    ) {
+      if (Array.isArray(val)) {
+        clean[key] = cloneCanonicalActionList(val);
+        continue;
       }
-      if (!val || typeof val !== 'object' || Array.isArray(val)) {
-        return {
-          ok: false,
-          issue: {
-            code: 'INVALID_FLOWS_OBJECT',
-            path: basePath,
-            message: 'ActionFlow declarations must be a plain object',
-          },
-        };
-      }
-      if (!isPlainPrototype(val as object)) {
-        return {
-          ok: false,
-          issue: {
-            code: 'INVALID_OBJECT_PROTOTYPE',
-            path: basePath,
-            message: 'ActionFlow declarations must be a plain object',
-          },
-        };
-      }
-      return { ok: true, flowsObj: val as object };
+    }
+    if (Array.isArray(val)) {
+      clean[key] = cloneCanonicalJson(val);
+    } else if (val !== null && typeof val === 'object') {
+      clean[key] = cloneCanonicalJson(val);
+    } else {
+      clean[key] = val;
     }
   }
+  return clean as unknown as Action;
+}
 
-  return { ok: true, flowsObj: inputObj };
+function cloneCanonicalActionList(actions: readonly unknown[]): ActionList {
+  return actions.map((item) => cloneCanonicalAction(item));
 }
 
 /**
@@ -167,7 +86,7 @@ function extractFlowsObject(
  *
  * 纯函数，全链路 descriptor-safe，绝不触发 getter/setter。
  * 校验流程结构、安全 Logic Key、Action 节点预算/嵌套深度、缺失引用、循环引用与深引用链。
- * 输出拓扑稳定、完全深冻结的规范化声明与依赖图。
+ * 严格保持输入不可变，构造全新的 canonical tree 并在输出上做完全深冻结。
  */
 export function analyzeActionFlowDeclarations(
   declarations: unknown,
@@ -177,13 +96,7 @@ export function analyzeActionFlowDeclarations(
   const limits = normalizeValidationLimits(customLimits);
   const issues: SchemaContractIssue[] = [];
 
-  const extraction = extractFlowsObject(declarations, basePath);
-  if (!extraction.ok) {
-    return { ok: false, issues: Object.freeze([extraction.issue]) };
-  }
-
-  const flowsObj = extraction.flowsObj;
-  if (!flowsObj) {
+  if (declarations === undefined) {
     return {
       ok: true,
       value: deepFreeze({
@@ -191,6 +104,33 @@ export function analyzeActionFlowDeclarations(
         flows: {},
         order: [],
       }),
+    };
+  }
+
+  if (!declarations || typeof declarations !== 'object' || Array.isArray(declarations)) {
+    return {
+      ok: false,
+      issues: Object.freeze([
+        {
+          code: 'INVALID_FLOWS_OBJECT',
+          path: basePath,
+          message: 'ActionFlow declarations must be a plain object',
+        },
+      ]),
+    };
+  }
+
+  const flowsObj = declarations as object;
+  if (!isPlainPrototype(flowsObj)) {
+    return {
+      ok: false,
+      issues: Object.freeze([
+        {
+          code: 'INVALID_OBJECT_PROTOTYPE',
+          path: basePath,
+          message: 'ActionFlow declarations must be a plain object',
+        },
+      ]),
     };
   }
 
@@ -412,10 +352,11 @@ export function analyzeActionFlowDeclarations(
     }
 
     const flowDependencies = Array.from(currentDeps).sort(compareLogicKeys);
+    // 构造独立的 canonical tree，防止 deepFreeze 反向污染/冻结调用方入参
     const cleanFlow: ActionFlow = {
-      steps: stepsVal as unknown as ActionFlow['steps'],
+      steps: cloneCanonicalActionList(stepsVal),
       ...(onErrorRes.exists && Array.isArray(onErrorVal) && onErrorVal.length > 0
-        ? { onError: onErrorVal as unknown as NonNullable<ActionFlow['onError']> }
+        ? { onError: cloneCanonicalActionList(onErrorVal) }
         : {}),
     };
 
@@ -430,7 +371,7 @@ export function analyzeActionFlowDeclarations(
     return { ok: false, issues: Object.freeze(issues.slice(0, limits.maxIssues)) };
   }
 
-  // 4. 拓扑排序与循环依赖检测 (Kahn's Algorithm)
+  // 4. 拓扑排序与循环依赖检测 (Kahn's Algorithm with Min-Heap)
   const nodesMap = new Map(declaredNodes.map((node) => [node.key, node]));
   const indegree = new Map<string, number>();
   const dependents = new Map<string, string[]>();

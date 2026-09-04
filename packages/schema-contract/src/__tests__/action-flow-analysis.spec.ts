@@ -403,4 +403,87 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       }),
     ]);
   });
+
+  it('20. regression: correctly sifts down min-heap for 7+ independent flows in lexicographical order', () => {
+    const flows: Record<string, { steps: Array<{ type: 'log'; value: string }> }> = {
+      g: { steps: [{ type: 'log', value: 'g' }] },
+      f: { steps: [{ type: 'log', value: 'f' }] },
+      e: { steps: [{ type: 'log', value: 'e' }] },
+      d: { steps: [{ type: 'log', value: 'd' }] },
+      c: { steps: [{ type: 'log', value: 'c' }] },
+      b: { steps: [{ type: 'log', value: 'b' }] },
+      a: { steps: [{ type: 'log', value: 'a' }] },
+    };
+    const result = analyzeActionFlowDeclarations(flows);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.order).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+  });
+
+  it('21. regression: pure function does not mutate or freeze caller input and builds distinct canonical tree', () => {
+    const rawStep = { type: 'log' as const, value: 'hello' };
+    const rawSteps = [rawStep];
+    const rawFlow = { steps: rawSteps };
+    const input = { submit: rawFlow };
+
+    const result = analyzeActionFlowDeclarations(input);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    // Caller input MUST NOT be frozen
+    expect(Object.isFrozen(input)).toBe(false);
+    expect(Object.isFrozen(rawFlow)).toBe(false);
+    expect(Object.isFrozen(rawSteps)).toBe(false);
+    expect(Object.isFrozen(rawStep)).toBe(false);
+
+    // Canonical output MUST be frozen and have distinct object references
+    expect(Object.isFrozen(result.value.flows.submit)).toBe(true);
+    expect(Object.isFrozen(result.value.flows.submit.steps)).toBe(true);
+    expect(Object.isFrozen(result.value.flows.submit.steps[0])).toBe(true);
+
+    expect(result.value.flows.submit).not.toBe(rawFlow);
+    expect(result.value.flows.submit.steps).not.toBe(rawSteps);
+    expect(result.value.flows.submit.steps[0]).not.toBe(rawStep);
+  });
+
+  it('22. regression: fails close when runFlow.input is explicitly provided as undefined', () => {
+    const result = analyzeActionFlowDeclarations({
+      main: {
+        steps: [{ type: 'runFlow', flow: 'sub', input: undefined }],
+      },
+      sub: {
+        steps: [{ type: 'log', value: 'sub' }],
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'UNDEFINED_VALUE_FORBIDDEN',
+        path: ['logic', 'flows', 'main', 'steps', 0, 'input'],
+      }),
+    ]);
+  });
+
+  it('23. regression: requires explicit ActionFlowDeclarations and does not guess wrapper object', () => {
+    const resultWrapped = analyzeActionFlowDeclarations({
+      flows: {
+        submit: {
+          steps: [{ type: 'log', value: 'hi' }],
+        },
+      },
+    });
+    expect(resultWrapped.ok).toBe(false);
+    if (resultWrapped.ok) return;
+    expect(resultWrapped.issues).toEqual([
+      expect.objectContaining({
+        code: 'UNKNOWN_FLOW_FIELD',
+        path: ['logic', 'flows', 'flows', 'submit'],
+      }),
+      expect.objectContaining({
+        code: 'FLOW_STEPS_REQUIRED',
+        path: ['logic', 'flows', 'flows', 'steps'],
+      }),
+    ]);
+  });
 });

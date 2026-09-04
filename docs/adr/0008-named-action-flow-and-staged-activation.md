@@ -1,6 +1,6 @@
 # ADR-0008：具名 ActionFlow 与阶段性激活边界
 
-> Status: Accepted  
+> Status: Accepted
 > Date: 2026-09-04
 
 ## 背景

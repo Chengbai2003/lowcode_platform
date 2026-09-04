@@ -55,20 +55,7 @@ export function isSafeIdentifier(name: unknown): boolean {
   );
 }
 
-function isPlainPrototype(obj: object): boolean {
-  const proto = Object.getPrototypeOf(obj);
-  return proto === Object.prototype || proto === null;
-}
-
-function safeGet(
-  obj: object,
-  key: string,
-): { exists: boolean; isAccessor: boolean; value: unknown } {
-  const desc = Object.getOwnPropertyDescriptor(obj, key);
-  if (!desc) return { exists: false, isAccessor: false, value: undefined };
-  if (desc.get || desc.set) return { exists: true, isAccessor: true, value: undefined };
-  return { exists: true, isAccessor: false, value: (desc as PropertyDescriptor).value };
-}
+import { isPlainPrototype, safeGet } from '../internal/descriptor';
 
 function validateLogicTarget(
   value: unknown,
@@ -898,7 +885,7 @@ export function validateActionItem(
         context.flowValidation.onFlowReference?.(flowVal, [...path, 'flow']);
       }
 
-      if (inputRes.exists && inputVal !== undefined) {
+      if (inputRes.exists) {
         inspectAndSanitizeJsonValue(inputVal, [...path, 'input'], 0, context.inspectionContext);
       }
       break;
