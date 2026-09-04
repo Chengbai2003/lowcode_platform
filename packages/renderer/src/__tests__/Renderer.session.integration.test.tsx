@@ -197,6 +197,7 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
 
   it('handles delay cancellation scenario with no state write-back after unmount', async () => {
     let activeSession: RuntimeSession | undefined;
+    let executeFlowSpy: ReturnType<typeof vi.spyOn> | undefined;
     const sessionSpy = vi
       .spyOn(RuntimeSessionModule, 'createRuntimeSession')
       .mockImplementation((options) => {
@@ -226,7 +227,11 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
       );
 
       expect(activeSession).toBeDefined();
-      expect(activeSession?.runtime.getState()).toMatchObject(cancellation.initialState);
+      if (!activeSession) return;
+
+      executeFlowSpy = vi.spyOn(activeSession, 'executeFlow');
+
+      expect(activeSession.runtime.getState()).toMatchObject(cancellation.initialState);
       expect(
         screen.getByText(pageLogicConformance.expected.initialVisibleText.delayed),
       ).toBeTruthy();
@@ -237,9 +242,21 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
         await vi.advanceTimersByTimeAsync(inFlightAdvanceMs);
       });
 
+      expect(executeFlowSpy).toHaveBeenCalledTimes(1);
+      expect(executeFlowSpy).toHaveBeenCalledWith(cancellation.flow, undefined);
+
+      const flowPromise = executeFlowSpy.mock.results[0].value;
+      expect(flowPromise).toBeInstanceOf(Promise);
+
       // Unmount the component while flow delay is pending
       rendered.unmount();
-      expect(activeSession?.isDisposed()).toBe(true);
+      expect(activeSession.isDisposed()).toBe(true);
+
+      await expect(flowPromise).rejects.toMatchObject({
+        diagnostic: {
+          code: 'FLOW_ABORTED',
+        },
+      });
 
       // Advance timers past delayMs
       const postUnmountAdvanceMs = cancellation.delayMs * 2;
@@ -248,8 +265,9 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
       });
 
       // Observe the SAME RuntimeSession instance: state must remain initial with zero write-back
-      expect(activeSession?.runtime.getState()).toMatchObject(cancellation.noWriteBackState);
+      expect(activeSession.runtime.getState()).toMatchObject(cancellation.noWriteBackState);
     } finally {
+      executeFlowSpy?.mockRestore();
       sessionSpy.mockRestore();
       cleanup();
       vi.useRealTimers();
