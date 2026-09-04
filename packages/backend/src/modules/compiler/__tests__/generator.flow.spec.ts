@@ -817,6 +817,27 @@ describe('compiler ActionFlow runtime generation', () => {
     expect(harness.value.read()).toMatchObject({ ran: true });
   });
 
+  it('rejects a stale generated handler after unmount without writing state', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        states: { ran: false },
+        flows: { main: { steps: [{ type: 'setValue', field: 'state.ran', value: true }] } },
+      },
+    };
+    const harness = createFlowHarness(
+      compileToCode(schema),
+      '{ executeFlow, read: () => stateRef.current }',
+    );
+
+    harness.unmount();
+
+    await expect(harness.value.executeFlow('main')).rejects.toMatchObject({ code: 'FLOW_ABORTED' });
+    expect(harness.value.read()).toMatchObject({ ran: false });
+  });
+
   it('unmount aborts in-flight flow, prevents late state write, and protects against unhandledRejection', async () => {
     let modalOnOk: (() => void) | undefined;
     let modalDestroy = jest.fn();

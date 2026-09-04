@@ -2647,7 +2647,8 @@ const buildRequestUrl = (url, params) => {
 };`;
 
   const rootFlowExecutor = `const executeFlow = async (rootFlowName, rawInput) => {
-  if (flowAbortControllerRef.current?.signal.aborted) {
+  const mountController = flowAbortControllerRef.current;
+  if (!mountController || mountController.signal.aborted) {
     throw new FlowExecutionError({
       code: 'FLOW_ABORTED',
       flow: rootFlowName,
