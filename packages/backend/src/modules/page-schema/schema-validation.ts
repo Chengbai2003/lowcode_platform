@@ -26,7 +26,14 @@ export function requireValidPageSchema(input: unknown): PageSchema {
       const detail = error.issues
         .map((issue) => `[${issue.path.join('.')}] ${issue.message}`)
         .join('; ');
-      throw new BadRequestException(`Schema validation failed: ${detail}`);
+      throw new BadRequestException({
+        message: `Schema validation failed: ${detail}`,
+        issues: error.issues.map((issue) => ({
+          code: issue.code,
+          path: [...issue.path],
+          message: issue.message,
+        })),
+      });
     }
     throw error;
   }

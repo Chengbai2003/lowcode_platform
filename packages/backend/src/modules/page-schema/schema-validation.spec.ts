@@ -1,4 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { BadRequestException } from '@nestjs/common';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { requireValidPageSchema } from './schema-validation';
 
 interface TestComponent {
@@ -154,4 +157,78 @@ describe('requireValidPageSchema (Contract HTTP adapter)', () => {
     const big = { schemaVersion: 0 as const, rootId: 'n0', components: bigComponents };
     expect(() => requireValidPageSchema(big)).toThrow(BadRequestException);
   });
+});
+
+interface ConformanceFixture {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly legacySchema: PageSchema;
+  readonly expected: {
+    readonly canonicalLogic: Record<string, unknown>;
+  };
+  readonly negativeCases: Record<
+    string,
+    {
+      readonly schema: PageSchema;
+      readonly expectedCode: string;
+      readonly expectedPath: ReadonlyArray<string | number>;
+    }
+  >;
+}
+
+function loadConformanceFixture(): ConformanceFixture {
+  const candidatePaths = [
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+    path.resolve(process.cwd(), 'test-fixtures/m1a-page-logic-conformance.json'),
+  ];
+  for (const candidatePath of candidatePaths) {
+    if (existsSync(candidatePath)) {
+      return JSON.parse(readFileSync(candidatePath, 'utf8')) as ConformanceFixture;
+    }
+  }
+  throw new Error('Unable to locate test-fixtures/m1a-page-logic-conformance.json');
+}
+
+const conformanceFixture = loadConformanceFixture();
+const negativeCaseEntries = Object.entries(conformanceFixture.negativeCases);
+
+describe('M1a-3 / C2.1 Backend validator conformance against unified fixture', () => {
+  it('covers exactly 9 negative cases in the conformance fixture', () => {
+    expect(negativeCaseEntries).toHaveLength(9);
+  });
+
+  it('returns canonical deep-frozen schema matching expected.canonicalLogic for main schema', () => {
+    const canonical = requireValidPageSchema(conformanceFixture.schema);
+    expect(Object.isFrozen(canonical)).toBe(true);
+    expect(Object.isFrozen(canonical.logic)).toBe(true);
+    expect(canonical.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+  });
+
+  it('accepts legacySchema without logic', () => {
+    const canonical = requireValidPageSchema(conformanceFixture.legacySchema);
+    expect(canonical.schemaVersion).toBe(0);
+    expect(Object.isFrozen(canonical)).toBe(true);
+  });
+
+  it.each(negativeCaseEntries)(
+    'rejects negative case "%s" with exact expectedCode and expectedPath',
+    (_caseName, testCase) => {
+      try {
+        requireValidPageSchema(testCase.schema);
+        throw new Error('Expected requireValidPageSchema to throw BadRequestException');
+      } catch (error) {
+        expect(error).toBeInstanceOf(BadRequestException);
+        const response = (error as BadRequestException).getResponse() as {
+          message: string;
+          issues: Array<{ code: string; path: (string | number)[]; message: string }>;
+        };
+        expect(response.message).toContain('Schema validation failed:');
+        expect(Array.isArray(response.issues)).toBe(true);
+        const matched = response.issues.find((issue) => issue.code === testCase.expectedCode);
+        expect(matched).toBeDefined();
+        expect(matched?.path).toEqual(testCase.expectedPath);
+      }
+    },
+  );
 });

@@ -1,9 +1,47 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
 import {
   safeValidateA2UISchema,
+  validateA2UISchema,
   validateA2UISchemaWithWhitelist,
   validateAndAutoFixA2UISchema,
 } from '../schemaValidation';
+
+interface ConformanceFixture {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly legacySchema: PageSchema;
+  readonly expected: {
+    readonly canonicalLogic: Record<string, unknown>;
+  };
+  readonly negativeCases: Record<
+    string,
+    {
+      readonly schema: PageSchema;
+      readonly expectedCode: string;
+      readonly expectedPath: ReadonlyArray<string | number>;
+    }
+  >;
+}
+
+function loadConformanceFixture(): ConformanceFixture {
+  const candidatePaths = [
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+    path.resolve(process.cwd(), 'test-fixtures/m1a-page-logic-conformance.json'),
+  ];
+  for (const candidatePath of candidatePaths) {
+    if (existsSync(candidatePath)) {
+      return JSON.parse(readFileSync(candidatePath, 'utf8')) as ConformanceFixture;
+    }
+  }
+  throw new Error('Unable to locate test-fixtures/m1a-page-logic-conformance.json');
+}
+
+const conformanceFixture = loadConformanceFixture();
+const negativeCaseEntries = Object.entries(conformanceFixture.negativeCases);
 
 describe('validateAndAutoFixA2UISchema', () => {
   const whitelist = ['Page', 'Button', 'Text'];
@@ -196,4 +234,52 @@ describe('schemaValidation structured diagnostics fidelity', () => {
     expect(issue.path).toEqual(['components', 'custom-widget', 'type']);
     expect(issue.message).toContain('UnregisteredWidget');
   });
+});
+
+describe('M1a-3 / C2.1 Renderer validator conformance against unified fixture', () => {
+  it('covers exactly 9 negative cases in the conformance fixture', () => {
+    expect(negativeCaseEntries).toHaveLength(9);
+  });
+
+  it('returns canonical deep-frozen schema matching expected.canonicalLogic for main schema', () => {
+    const result = safeValidateA2UISchema(conformanceFixture.schema);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(Object.isFrozen(result.data)).toBe(true);
+    expect(Object.isFrozen(result.data.logic)).toBe(true);
+    expect(result.data.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+
+    const directCanonical = validateA2UISchema(conformanceFixture.schema);
+    expect(Object.isFrozen(directCanonical)).toBe(true);
+    expect(directCanonical.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+  });
+
+  it('accepts legacySchema without logic', () => {
+    const result = safeValidateA2UISchema(conformanceFixture.legacySchema);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(result.data.schemaVersion).toBe(0);
+    expect(Object.isFrozen(result.data)).toBe(true);
+
+    const directLegacy = validateA2UISchema(conformanceFixture.legacySchema);
+    expect(directLegacy.schemaVersion).toBe(0);
+    expect(Object.isFrozen(directLegacy)).toBe(true);
+  });
+
+  it.each(negativeCaseEntries)(
+    'rejects negative case "%s" with exact expectedCode and expectedPath',
+    (_caseName, testCase) => {
+      const result = safeValidateA2UISchema(testCase.schema);
+      expect(result.success).toBe(false);
+      if (result.success) return;
+
+      const matched = result.error.issues.find((issue) => issue.code === testCase.expectedCode);
+      expect(matched).toBeDefined();
+      expect(matched?.path).toEqual(testCase.expectedPath);
+
+      expect(() => validateA2UISchema(testCase.schema)).toThrow();
+    },
+  );
 });

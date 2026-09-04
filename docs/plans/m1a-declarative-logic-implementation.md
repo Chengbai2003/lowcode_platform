@@ -74,8 +74,9 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
 
 ### M1a-3：六消费面一致性门禁（#47 进行中）
 
-- **C1 进行中**：建立唯一统一版本化语料 `test-fixtures/m1a-page-logic-conformance.json`，合并并替代旧的独立语料，统一覆盖 State、Computed、ActionFlow、Legacy inline ActionList、取消写回守卫、边界超限与负向诊断用例。迁移 Contract/Renderer/Compiler 现有测试对旧语料的依赖并彻底移除旧文件。
-- **C2/C3 待实施**：实施六消费面能力门禁（Capability Gate），比较 Renderer 与 Compiler 的可观察状态、渲染、错误和取消行为；发现差异即阻断发布。注意：#47 尚未完成，C1 仅交付统一语料基座。
+- **C1 已完成（Completed）**：建立唯一统一版本化语料 `test-fixtures/m1a-page-logic-conformance.json`，合并并替代旧的独立语料，统一覆盖 State、Computed、ActionFlow、Legacy inline ActionList、取消写回守卫、边界超限与负向诊断用例。迁移 Contract/Renderer/Compiler 现有测试对旧语料的依赖并彻底移除旧文件。
+- **C2.1 进行中（In Progress）**：跨表面 Validator 一致性测试。所有测试直接读取统一语料，参数化遍历全部 9 个 negativeCases，分别通过 Backend、Renderer、Frontend 和 Agent 的真实校验入口执行，断言 Contract issue 的 expectedCode 与 expectedPath 完全一致；主 schema 返回 canonical 深冻结结果并与 expected.canonicalLogic 一致；legacySchema 继续被所有适用入口接受。
+- **C2.2/C3 待实施**：实施剩余的六消费面能力门禁（Capability Gate），比较 Renderer 与 Compiler 的可观察状态、渲染、错误和取消行为；发现差异即阻断发布。注意：#47 保持 Open。
 
 ## 阶段门槛
 

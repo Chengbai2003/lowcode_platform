@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import React, { useEffect, useState } from 'react';
 import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
@@ -70,6 +72,40 @@ const baseSchema: PageSchema = {
     child: { id: 'child', type: 'Text', props: { children: 'test' } },
   },
 };
+
+interface ConformanceFixture {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly legacySchema: PageSchema;
+  readonly expected: {
+    readonly canonicalLogic: Record<string, unknown>;
+  };
+  readonly negativeCases: Record<
+    string,
+    {
+      readonly schema: PageSchema;
+      readonly expectedCode: string;
+      readonly expectedPath: ReadonlyArray<string | number>;
+    }
+  >;
+}
+
+function loadConformanceFixture(): ConformanceFixture {
+  const candidatePaths = [
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+    path.resolve(process.cwd(), 'test-fixtures/m1a-page-logic-conformance.json'),
+  ];
+  for (const candidatePath of candidatePaths) {
+    if (existsSync(candidatePath)) {
+      return JSON.parse(readFileSync(candidatePath, 'utf8')) as ConformanceFixture;
+    }
+  }
+  throw new Error('Unable to locate test-fixtures/m1a-page-logic-conformance.json');
+}
+
+const conformanceFixture = loadConformanceFixture();
+const negativeCaseEntries = Object.entries(conformanceFixture.negativeCases);
 
 describe('pageLogicAuthoring', () => {
   it('serializes only the current logic, and outputs {} when no logic is present', () => {
@@ -349,4 +385,69 @@ describe('pageLogicAuthoring', () => {
     if (rejected.success) return;
     expect(rejected.issues.some((issue) => issue.code === 'FLOW_REFERENCE_MISSING')).toBe(true);
   });
+});
+
+describe('M1a-3 / C2.1 Frontend validator conformance against unified fixture', () => {
+  it('covers exactly 9 negative cases in the conformance fixture', () => {
+    expect(negativeCaseEntries).toHaveLength(9);
+  });
+
+  it('returns canonical deep-frozen schema matching expected.canonicalLogic for main schema', () => {
+    const result = parseAndValidateFullSchema(JSON.stringify(conformanceFixture.schema), whitelist);
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(Object.isFrozen(result.data)).toBe(true);
+    expect(Object.isFrozen(result.data.logic)).toBe(true);
+    expect(result.data.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+  });
+
+  it('accepts legacySchema without logic', () => {
+    const result = parseAndValidateFullSchema(
+      JSON.stringify(conformanceFixture.legacySchema),
+      whitelist,
+    );
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+
+    expect(result.data.schemaVersion).toBe(0);
+    expect(Object.isFrozen(result.data)).toBe(true);
+  });
+
+  it.each(negativeCaseEntries)(
+    'rejects negative case "%s" with exact expectedCode and expectedPath via parseAndValidateFullSchema',
+    (_caseName, testCase) => {
+      const fullResult = parseAndValidateFullSchema(JSON.stringify(testCase.schema), whitelist);
+      expect(fullResult.success).toBe(false);
+      if (fullResult.success) return;
+
+      const matched = fullResult.issues.find((issue) => issue.code === testCase.expectedCode);
+      expect(matched).toBeDefined();
+      expect(matched?.path).toEqual(testCase.expectedPath);
+    },
+  );
+
+  it.each(negativeCaseEntries)(
+    'rejects negative case "%s" with exact expectedCode and expectedPath via parseAndValidatePageLogic',
+    (_caseName, testCase) => {
+      const cleanBaseSchema: PageSchema = {
+        schemaVersion: 0,
+        rootId: 'root',
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: [] },
+        },
+      };
+      const snippetResult = parseAndValidatePageLogic(
+        JSON.stringify(testCase.schema.logic ?? {}),
+        cleanBaseSchema,
+        whitelist,
+      );
+      expect(snippetResult.success).toBe(false);
+      if (snippetResult.success) return;
+
+      const matched = snippetResult.issues.find((issue) => issue.code === testCase.expectedCode);
+      expect(matched).toBeDefined();
+      expect(matched?.path).toEqual(testCase.expectedPath);
+    },
+  );
 });
