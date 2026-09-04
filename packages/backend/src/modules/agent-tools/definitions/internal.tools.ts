@@ -66,7 +66,16 @@ export function createInternalDefinitions(deps: InternalToolsDeps): ToolDefiniti
           patch,
           context.traceId,
         );
-        return { data: { patch }, updatedWorkingSchema: nextSchema };
+        const normalizedPatch = patch.map((operation) => {
+          if (operation.op === 'replacePageLogic') {
+            return {
+              ...operation,
+              logic: (nextSchema.logic ?? {}) as Record<string, unknown>,
+            };
+          }
+          return operation;
+        });
+        return { data: { patch: normalizedPatch }, updatedWorkingSchema: nextSchema };
       },
     },
   ];

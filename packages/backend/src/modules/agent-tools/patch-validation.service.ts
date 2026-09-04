@@ -74,17 +74,7 @@ export class PatchValidationService {
           }
           break;
         case 'replacePageLogic':
-          if (
-            !operation.logic ||
-            typeof operation.logic !== 'object' ||
-            Array.isArray(operation.logic)
-          ) {
-            throw new AgentToolException({
-              code: 'PATCH_INVALID',
-              message: 'replacePageLogic requires logic object',
-              traceId,
-            });
-          }
+          this.assertPageLogicValid(operation.logic, traceId);
           break;
       }
     }
@@ -137,17 +127,7 @@ export class PatchValidationService {
           );
           break;
         case 'replacePageLogic':
-          if (
-            !operation.logic ||
-            typeof operation.logic !== 'object' ||
-            Array.isArray(operation.logic)
-          ) {
-            throw new AgentToolException({
-              code: 'PATCH_INVALID',
-              message: 'replacePageLogic requires logic object',
-              traceId,
-            });
-          }
+          this.assertPageLogicValid(operation.logic, traceId);
           break;
       }
 
@@ -372,5 +352,23 @@ export class PatchValidationService {
       }
     }
     return false;
+  }
+
+  private assertPageLogicValid(
+    logic: unknown,
+    traceId: string,
+  ): asserts logic is Record<string, unknown> {
+    if (
+      !logic ||
+      typeof logic !== 'object' ||
+      Array.isArray(logic) ||
+      !(Object.getPrototypeOf(logic) === null || Object.getPrototypeOf(logic) === Object.prototype)
+    ) {
+      throw new AgentToolException({
+        code: 'PATCH_INVALID',
+        message: 'replacePageLogic requires logic object',
+        traceId,
+      });
+    }
   }
 }

@@ -404,8 +404,52 @@ describe('ToolExecutionService', () => {
     });
   });
 
-  it('previews patch with replacePageLogic operation', async () => {
-    const response = await service.previewPatch(
+  it.each([
+    ['null', null],
+    ['string', 'not-an-object'],
+    ['array', [1, 2]],
+    ['number', 42],
+    ['undefined', undefined],
+  ])('rejects replace_page_logic with non-plain-object logic (%s)', async (_, invalidLogic) => {
+    const context = await createContext();
+    await expectToolError(
+      () =>
+        service.executeTool(
+          'replace_page_logic',
+          { logic: invalidLogic } as unknown as Record<string, unknown>,
+          context,
+        ),
+      'PATCH_INVALID',
+      'replacePageLogic requires logic object',
+    );
+  });
+
+  it('normalizes expression whitespace via Contract in executeTool and previewPatch', async () => {
+    const context = await createContext();
+
+    await service.executeTool(
+      'replace_page_logic',
+      {
+        logic: {
+          states: { count: 5 },
+          computed: { double: '  state.count * 2  ' },
+        },
+      },
+      context,
+    );
+
+    expect(context.accumulatedPatch).toEqual([
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: 5 },
+          computed: { double: 'state.count * 2' },
+        },
+      },
+    ]);
+    expect(context.workingSchema.logic?.computed?.double).toBe('state.count * 2');
+
+    const previewResponse = await service.previewPatch(
       {
         draftSchema: createSchema() as unknown as Record<string, unknown>,
         patch: [
@@ -413,27 +457,46 @@ describe('ToolExecutionService', () => {
             op: 'replacePageLogic',
             logic: {
               states: { active: true },
-              computed: { status: "'Active: ' + state.active" },
+              computed: { status: "  'Active: ' + state.active  " },
             },
           },
         ],
       },
-      'trace-logic-preview',
+      'trace-whitespace-trim',
     );
 
-    expect(response.patch).toEqual([
+    expect(previewResponse.patch[0]).toEqual({
+      op: 'replacePageLogic',
+      logic: {
+        states: { active: true },
+        computed: { status: "'Active: ' + state.active" },
+      },
+    });
+    expect(previewResponse.schema.logic?.computed?.status).toBe("'Active: ' + state.active");
+  });
+
+  it('clears page logic when passing empty logic object', async () => {
+    const schemaWithLogic = {
+      ...createSchema(),
+      logic: {
+        states: { count: 10 },
+        computed: { double: 'state.count * 2' },
+      },
+    };
+    const context = await service.createExecutionContext(
+      { draftSchema: schemaWithLogic as unknown as Record<string, unknown> },
+      'trace-clear-logic',
+    );
+
+    await service.executeTool('replace_page_logic', { logic: {} }, context);
+
+    expect(context.accumulatedPatch).toEqual([
       {
         op: 'replacePageLogic',
-        logic: {
-          states: { active: true },
-          computed: { status: "'Active: ' + state.active" },
-        },
+        logic: {},
       },
     ]);
-    expect(response.schema.logic).toEqual({
-      states: { active: true },
-      computed: { status: "'Active: ' + state.active" },
-    });
+    expect(context.workingSchema.logic).toEqual({});
   });
 
   it('preserves structured issues when draftSchema has Contract validation failure', async () => {

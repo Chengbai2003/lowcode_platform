@@ -330,17 +330,31 @@ describe('PatchValidationService', () => {
     ).not.toThrow();
   });
 
-  it('rejects replacePageLogic with invalid logic shape', async () => {
+  it.each([
+    ['null', null],
+    ['string', 'not-an-object'],
+    ['array', [1, 2, 3]],
+    ['number', 123],
+    ['undefined', undefined],
+  ])('rejects replacePageLogic with non-plain-object logic (%s)', async (_, invalidLogic) => {
     const patch = [
       {
         op: 'replacePageLogic',
-        logic: 'not-an-object',
+        logic: invalidLogic,
       },
     ] as unknown as EditorPatchOperation[];
 
     await expectToolError(
       () => {
         service.validatePatchAgainstSchema(createSchema(), patch, createSchema(), 'trace-1');
+      },
+      'PATCH_INVALID',
+      'replacePageLogic requires logic object',
+    );
+
+    await expectToolError(
+      () => {
+        service.previewValidatedSchema(createSchema(), patch, 'trace-1');
       },
       'PATCH_INVALID',
       'replacePageLogic requires logic object',

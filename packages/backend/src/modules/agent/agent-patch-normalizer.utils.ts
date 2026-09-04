@@ -5,6 +5,7 @@
  */
 
 import { isDeepStrictEqual } from 'node:util';
+import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
 import { buildParentMap } from '../schema-context/utils/parent-map.builder';
 import type { PageSchema } from '../schema-context';
 import type { EditorPatchOperation } from '../agent-tools/types/editor-patch.types';
@@ -60,9 +61,24 @@ export function normalizeFinalPatch(
         break;
       }
       case 'replacePageLogic': {
+        let canonicalNewLogic = (normalized.logic ?? {}) as Record<string, unknown>;
+        try {
+          const candidate = requireSupportedPageSchema({
+            ...baseSchema,
+            logic: normalized.logic,
+          });
+          canonicalNewLogic = (candidate.logic ?? {}) as Record<string, unknown>;
+        } catch {
+          // Invalid logic will fail downstream validation
+        }
+        normalized.logic = canonicalNewLogic;
         const currentLogic = baseSchema.logic ?? {};
-        const newLogic = normalized.logic ?? {};
-        if (isDeepStrictEqual(currentLogic, newLogic)) continue;
+        if (
+          isDeepStrictEqual(currentLogic, canonicalNewLogic) ||
+          JSON.stringify(currentLogic) === JSON.stringify(canonicalNewLogic)
+        ) {
+          continue;
+        }
         break;
       }
     }

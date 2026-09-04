@@ -189,10 +189,18 @@ function toFixtureToolCall(operation: EditorPatchOperation): FixtureToolCall {
           newIndex: operation.newIndex,
         },
       };
+    case 'replacePageLogic':
+      return {
+        name: 'replace_page_logic',
+        input: { logic: operation.logic },
+      };
   }
 }
 
-function selectedIdForPatch(operation: EditorPatchOperation): string {
+function selectedIdForPatch(operation?: EditorPatchOperation): string | undefined {
+  if (!operation || operation.op === 'replacePageLogic') {
+    return undefined;
+  }
   return operation.op === 'insertComponent' ? operation.parentId : operation.componentId;
 }
 

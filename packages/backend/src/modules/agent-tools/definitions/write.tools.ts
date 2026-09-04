@@ -26,7 +26,16 @@ function executeWriteTools(
     operations,
     context.traceId,
   );
-  return { patchDelta: operations, updatedWorkingSchema: nextSchema };
+  const normalizedOperations = operations.map((operation) => {
+    if (operation.op === 'replacePageLogic') {
+      return {
+        ...operation,
+        logic: (nextSchema.logic ?? {}) as Record<string, unknown>,
+      };
+    }
+    return operation;
+  });
+  return { patchDelta: normalizedOperations, updatedWorkingSchema: nextSchema };
 }
 
 function executeWriteTool(
@@ -213,7 +222,7 @@ export function createWriteDefinitions(deps: WriteToolsDeps): ToolDefinition[] {
       execute: async (input, context) =>
         executeWriteTool(patchValidationService, context, {
           op: 'replacePageLogic',
-          logic: asRecord(input.logic),
+          logic: input.logic as Record<string, unknown>,
         }),
     },
   ];

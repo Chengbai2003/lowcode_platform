@@ -250,12 +250,7 @@ export class ToolExecutionService {
         case 'replacePageLogic':
           return {
             op: 'replacePageLogic',
-            logic:
-              operation.logic &&
-              typeof operation.logic === 'object' &&
-              !Array.isArray(operation.logic)
-                ? operation.logic
-                : {},
+            logic: operation.logic as Record<string, unknown>,
           };
         default:
           throw new AgentToolException({
