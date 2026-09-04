@@ -567,4 +567,47 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       }),
     ]);
   });
+
+  it('27. regression: a <-> b, c -> a only reports a and b as cycle members, never falsely marks c', () => {
+    const flows = {
+      a: { steps: [{ type: 'runFlow', flow: 'b' }] },
+      b: { steps: [{ type: 'runFlow', flow: 'a' }] },
+      c: { steps: [{ type: 'runFlow', flow: 'a' }] },
+    };
+    const result = analyzeActionFlowDeclarations(flows);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+
+    const cycleIssues = result.issues.filter((i) => i.code === 'FLOW_REFERENCE_CYCLE');
+    const cycleKeys = cycleIssues.map((i) => i.path[i.path.length - 1]);
+    expect(cycleKeys).toEqual(['a', 'b']);
+    expect(cycleKeys).not.toContain('c');
+  });
+
+  it('28. regression: 10,000 node cycle does not throw RangeError and reports structured cycle issues within budget', () => {
+    const count = 10_000;
+    const declarations: Record<string, unknown> = Object.create(null);
+    for (let i = 0; i < count; i++) {
+      const next = (i + 1) % count;
+      declarations[`flow_${i}`] = {
+        steps: [{ type: 'runFlow', flow: `flow_${next}` }],
+      };
+    }
+
+    let result: any;
+    expect(() => {
+      result = analyzeActionFlowDeclarations(declarations, {
+        maxFlowEntries: count,
+        maxActionNodes: count,
+        maxIssues: 50,
+      });
+    }).not.toThrow();
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues.length).toBe(50);
+    for (const issue of result.issues) {
+      expect(issue.code).toBe('FLOW_REFERENCE_CYCLE');
+    }
+  });
 });

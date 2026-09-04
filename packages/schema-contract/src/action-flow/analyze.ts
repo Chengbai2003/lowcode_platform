@@ -89,6 +89,117 @@ function cloneCanonicalActionList(actions: readonly unknown[]): ActionList {
   return actions.map((item) => cloneCanonicalAction(item));
 }
 
+interface TarjanCallFrame {
+  node: string;
+  edgeIndex: number;
+  deps: readonly string[];
+}
+
+/**
+ * 迭代式 Tarjan 强连通分量 (SCC) 算法，精确收录有向环上的所有节点（包含自环）。
+ *
+ * 复杂度 O(V + E)，显式维护堆栈数组，杜绝调用栈溢出（支持 10,000+ 节点环）。
+ * 严格区分真实成环节点与仅单向依赖环的节点（如 a <-> b, c -> a 时仅报告 a 和 b，不报告 c）。
+ */
+function findCycleNodes(
+  unresolvedKeys: readonly string[],
+  nodesMap: Map<string, { flowDependencies: readonly string[] }>,
+): string[] {
+  let index = 0;
+  const indices = new Map<string, number>();
+  const lowlink = new Map<string, number>();
+  const onStack = new Set<string>();
+  const tarjanStack: string[] = [];
+  const cycleNodes = new Set<string>();
+  const unresolvedSet = new Set(unresolvedKeys);
+
+  for (const root of unresolvedKeys) {
+    if (indices.has(root)) continue;
+
+    const callStack: TarjanCallFrame[] = [
+      {
+        node: root,
+        edgeIndex: 0,
+        deps: (nodesMap.get(root)?.flowDependencies ?? []).filter((d) => unresolvedSet.has(d)),
+      },
+    ];
+
+    indices.set(root, index);
+    lowlink.set(root, index);
+    index++;
+    tarjanStack.push(root);
+    onStack.add(root);
+
+    while (callStack.length > 0) {
+      const frame = callStack[callStack.length - 1]!;
+      const v = frame.node;
+
+      if (frame.edgeIndex < frame.deps.length) {
+        const w = frame.deps[frame.edgeIndex]!;
+        frame.edgeIndex++;
+
+        if (!indices.has(w)) {
+          indices.set(w, index);
+          lowlink.set(w, index);
+          index++;
+          tarjanStack.push(w);
+          onStack.add(w);
+
+          callStack.push({
+            node: w,
+            edgeIndex: 0,
+            deps: (nodesMap.get(w)?.flowDependencies ?? []).filter((d) => unresolvedSet.has(d)),
+          });
+        } else if (onStack.has(w)) {
+          const curLow = lowlink.get(v)!;
+          const wIndex = indices.get(w)!;
+          if (wIndex < curLow) {
+            lowlink.set(v, wIndex);
+          }
+        }
+      } else {
+        callStack.pop();
+
+        if (callStack.length > 0) {
+          const parentFrame = callStack[callStack.length - 1]!;
+          const parentNode = parentFrame.node;
+          const parentLow = lowlink.get(parentNode)!;
+          const vLow = lowlink.get(v)!;
+          if (vLow < parentLow) {
+            lowlink.set(parentNode, vLow);
+          }
+        }
+
+        if (lowlink.get(v) === indices.get(v)) {
+          const scc: string[] = [];
+          while (true) {
+            const w = tarjanStack.pop()!;
+            onStack.delete(w);
+            scc.push(w);
+            if (w === v) break;
+          }
+
+          if (scc.length > 1) {
+            for (const node of scc) {
+              cycleNodes.add(node);
+            }
+          } else if (scc.length === 1) {
+            const selfNode = scc[0]!;
+            const deps = nodesMap.get(selfNode)?.flowDependencies ?? [];
+            if (deps.includes(selfNode)) {
+              cycleNodes.add(selfNode);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const result = Array.from(cycleNodes);
+  result.sort(compareLogicKeys);
+  return result;
+}
+
 /**
  * 独立分析与校验 ActionFlow 声明。
  *
@@ -427,31 +538,7 @@ export function analyzeActionFlowDeclarations(
       .filter((k) => !orderedSet.has(k))
       .sort(compareLogicKeys);
 
-    // 寻找真实成环的关键节点
-    const cycleKeys: string[] = [];
-    for (const key of unresolvedKeys) {
-      const visited = new Set<string>();
-      let inCycle = false;
-      const dfs = (curr: string) => {
-        if (inCycle) return;
-        visited.add(curr);
-        const deps = nodesMap.get(curr)?.flowDependencies ?? [];
-        for (const dep of deps) {
-          if (!orderedSet.has(dep)) {
-            if (dep === key || visited.has(dep)) {
-              inCycle = true;
-              return;
-            }
-            dfs(dep);
-          }
-        }
-      };
-      dfs(key);
-      if (inCycle) {
-        cycleKeys.push(key);
-      }
-    }
-
+    const cycleKeys = findCycleNodes(unresolvedKeys, nodesMap);
     const reportedCycleKeys = cycleKeys.length > 0 ? cycleKeys : unresolvedKeys;
     for (const cycleKey of reportedCycleKeys) {
       pushIssue(inspectionContext, {
