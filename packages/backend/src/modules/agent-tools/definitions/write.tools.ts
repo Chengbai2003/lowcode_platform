@@ -1,5 +1,5 @@
 import { AgentToolException } from '../agent-tool.exception';
-import { PatchValidationService } from '../patch-validation.service';
+import { PatchValidationService, canonicalizePatchOperations } from '../patch-validation.service';
 import { ToolDefinition, ToolExecutionContext, ToolExecutionResult } from '../types/tool.types';
 import {
   asActionList,
@@ -26,15 +26,7 @@ function executeWriteTools(
     operations,
     context.traceId,
   );
-  const normalizedOperations = operations.map((operation) => {
-    if (operation.op === 'replacePageLogic') {
-      return {
-        ...operation,
-        logic: (nextSchema.logic ?? {}) as Record<string, unknown>,
-      };
-    }
-    return operation;
-  });
+  const normalizedOperations = canonicalizePatchOperations(operations, nextSchema);
   return { patchDelta: normalizedOperations, updatedWorkingSchema: nextSchema };
 }
 

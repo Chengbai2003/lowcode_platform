@@ -269,4 +269,43 @@ describe('Agent deterministic eval (M0-3)', () => {
     expect(metrics.replayReproducibility).toBe(1);
     expect(firstRun.every((result) => result.status === 'passed')).toBe(true);
   });
+
+  it('回归测试：支持回放包含 replacePageLogic 的用例且正确进入 Logic 路由', async () => {
+    const logicCase: EvalCase = {
+      caseSchemaVersion: 1,
+      id: 'patch-replace-page-logic-regression',
+      category: 'patch',
+      title: '回放页面逻辑补丁',
+      capabilities: ['replace_page_logic'],
+      intent: '修改页面逻辑声明',
+      fixtures: {
+        baseSchema: {
+          schemaVersion: 0,
+          rootId: 'root',
+          components: {
+            root: { id: 'root', type: 'Page', childrenIds: [] },
+          },
+        },
+        patch: [
+          {
+            op: 'replacePageLogic',
+            logic: {
+              states: { count: 0 },
+              computed: { double: 'state.count * 2' },
+            },
+          },
+        ],
+      },
+      expected: {
+        submittedOps: 1,
+        normalizedOps: 1,
+        schemaValid: true,
+      },
+    };
+
+    const result = await runEvalCase(logicCase);
+    expect(result.status).toBe('passed');
+    expect(result.matchesExpected).toBe(true);
+    expect(result.actual.schemaValid).toBe(true);
+  });
 });

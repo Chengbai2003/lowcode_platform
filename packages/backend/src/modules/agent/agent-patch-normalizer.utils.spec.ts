@@ -143,4 +143,52 @@ describe('normalizeFinalPatch', () => {
       logic: {},
     });
   });
+
+  it('folds sequential replacePageLogic and drops patch when net change from base is zero (0 -> 1 -> 0)', () => {
+    const baseSchema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: { count: 0 },
+      },
+    };
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: { states: { count: 1 } },
+      },
+      {
+        op: 'replacePageLogic',
+        logic: { states: { count: 0 } },
+      },
+    ];
+
+    const result = normalizeFinalPatch(baseSchema, patch);
+    expect(result).toHaveLength(0);
+  });
+
+  it('folds sequential replacePageLogic and keeps only the last one when net change exists (0 -> 1 -> 2)', () => {
+    const baseSchema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: { count: 0 },
+      },
+    };
+    const patch: EditorPatchOperation[] = [
+      {
+        op: 'replacePageLogic',
+        logic: { states: { count: 1 } },
+      },
+      {
+        op: 'replacePageLogic',
+        logic: { states: { count: 2 } },
+      },
+    ];
+
+    const result = normalizeFinalPatch(baseSchema, patch);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({
+      op: 'replacePageLogic',
+      logic: { states: { count: 2 } },
+    });
+  });
 });

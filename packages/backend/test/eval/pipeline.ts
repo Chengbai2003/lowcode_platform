@@ -71,6 +71,7 @@ function makePatchValidationService(): PatchValidationService {
 
 const FIXTURE_PROVIDER = 'openai';
 const FIXTURE_REPLAY_INSTRUCTION = '执行录制的补丁工具调用';
+const FIXTURE_LOGIC_REPLAY_INSTRUCTION = '执行录制的页面逻辑补丁工具调用';
 export const FIXTURE_REPLAY_INSTRUCTION_VERSION = 'fixture-tool-calls-v1';
 
 interface FixtureToolCall {
@@ -344,9 +345,11 @@ export async function replayPatchThroughAgent(kase: EvalCase): Promise<{
     );
     let policyProfile: AgentPatchRunProfile | undefined;
     const startedAt = Date.now();
+    const isLogicOp = firstOperation.op === 'replacePageLogic';
+    const instruction = isLogicOp ? FIXTURE_LOGIC_REPLAY_INSTRUCTION : FIXTURE_REPLAY_INSTRUCTION;
     const response = await runner.runEdit(
       {
-        instruction: FIXTURE_REPLAY_INSTRUCTION,
+        instruction,
         pageId,
         pageVersion: saved.pageVersion,
         selectedId: selectedIdForPatch(firstOperation),

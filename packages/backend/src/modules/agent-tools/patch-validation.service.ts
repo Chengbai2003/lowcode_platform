@@ -372,3 +372,18 @@ export class PatchValidationService {
     }
   }
 }
+
+export function canonicalizePatchOperations(
+  operations: readonly EditorPatchOperation[],
+  schema: PageSchema,
+): EditorPatchOperation[] {
+  return operations.map((operation) => {
+    if (operation.op === 'replacePageLogic') {
+      return {
+        ...operation,
+        logic: (schema.logic ?? {}) as Record<string, unknown>,
+      };
+    }
+    return operation;
+  });
+}

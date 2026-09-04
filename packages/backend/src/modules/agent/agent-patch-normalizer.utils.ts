@@ -18,7 +18,19 @@ export function normalizeFinalPatch(
   const deduped: EditorPatchOperation[] = [];
   const seen = new Set<string>();
 
-  for (const operation of patch) {
+  let lastReplacePageLogicIndex = -1;
+  for (let i = 0; i < patch.length; i++) {
+    if (patch[i].op === 'replacePageLogic') {
+      lastReplacePageLogicIndex = i;
+    }
+  }
+
+  for (let i = 0; i < patch.length; i++) {
+    const operation = patch[i];
+    if (operation.op === 'replacePageLogic' && i !== lastReplacePageLogicIndex) {
+      continue;
+    }
+
     const normalized = { ...operation };
     const key = JSON.stringify(normalized);
     if (seen.has(key)) continue;
