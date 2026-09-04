@@ -35,7 +35,7 @@ function createFlowHarness(
     mockModal?: { confirm: jest.Mock; info: jest.Mock };
     mockNotification?: Record<string, jest.Mock>;
     mockMessage?: Record<string, jest.Mock>;
-    mockWindow?: { location: { href: string } };
+    mockWindow?: { location: { href: string; replace?: jest.Mock } };
     strictEffects?: boolean;
   },
 ) {
@@ -317,6 +317,42 @@ describe('compiler ActionFlow runtime generation', () => {
       status: 'success',
     });
     expect(mockWindow.location.href).toBe('/orders/42');
+  });
+
+  it('resolves dynamic Flow navigation params and uses replace without opening external targets', async () => {
+    const replace = jest.fn();
+    const mockWindow = { location: { href: '', replace } };
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        states: { dest: '/orders', unsafeDest: 'javascript:alert(1)' },
+        flows: {
+          replace: {
+            steps: [
+              {
+                type: 'navigate',
+                to: '{{state.dest}}',
+                params: { id: '{{input.id}}', keep: null },
+                replace: true,
+              },
+            ],
+          },
+          unsafe: { steps: [{ type: 'navigate', to: '{{state.unsafeDest}}' }] },
+        },
+      },
+    };
+    const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }', { mockWindow });
+
+    await expect(harness.value.executeFlow('replace', { id: 42 })).resolves.toMatchObject({
+      status: 'success',
+    });
+    expect(replace).toHaveBeenCalledWith('/orders?id=42&keep=null');
+    expect(mockWindow.location.href).toBe('');
+
+    await expect(harness.value.executeFlow('unsafe')).resolves.toMatchObject({ status: 'success' });
+    expect(mockWindow.location.href).toBe('/');
   });
 
   it('maps modal and confirm dialogs to their generated Modal methods', async () => {

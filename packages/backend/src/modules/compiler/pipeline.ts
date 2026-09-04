@@ -65,6 +65,7 @@ interface ActionNode {
   indexVar?: string;
   ms?: number;
   merge?: boolean;
+  replace?: boolean;
   code?: string;
   showError?: boolean;
   placement?: string;
@@ -368,6 +369,7 @@ function parseAction(action: unknown): ActionNode {
     indexVar: typeof record.indexVar === 'string' ? record.indexVar : undefined,
     ms: typeof record.ms === 'number' ? record.ms : undefined,
     merge: typeof record.merge === 'boolean' ? record.merge : undefined,
+    replace: typeof record.replace === 'boolean' ? record.replace : undefined,
     code: typeof record.code === 'string' ? record.code : undefined,
     showError: typeof record.showError === 'boolean' ? record.showError : undefined,
     placement: typeof record.placement === 'string' ? record.placement : undefined,
@@ -889,6 +891,8 @@ function createTransformContext(root: RootNode): TransformContext {
     registry.reserveExact('isNonRecoverableFlowErrorCode', 'flow:non-recoverable-check');
     registry.reserveExact('isolateFlowInput', 'flow:isolate-input');
     registry.reserveExact('buildRequestUrl', 'flow:build-request-url');
+    registry.reserveExact('sanitizeNavigationTarget', 'flow:navigation-sanitizer');
+    registry.reserveExact('buildNavigationTarget', 'flow:navigation-target-builder');
     registry.reserveExact('flowAbortControllerRef', 'flow:abort-controller-ref');
     registry.reserveExact('activeFlowControllersRef', 'flow:active-controllers-ref');
     registry.reserveExact('flowRegistry', 'flow:registry');
@@ -2120,11 +2124,30 @@ ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
     }
 
     case 'navigate': {
-      const target =
-        action.to?.kind === 'literal' && typeof action.to.value === 'string'
-          ? toQuotedString(sanitizeUrl(action.to.value))
-          : "'/'";
-      return `${preamble}\nwindow.location.href = ${target};`;
+      const targetCode = getExpressionCode(
+        action.to ?? { kind: 'literal', value: '/' },
+        "'/'",
+        ctxFields,
+        localScope,
+      );
+      const paramsCode = action.params
+        ? getExpressionCode(
+            {
+              kind: 'object',
+              properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
+            },
+            'undefined',
+            ctxFields,
+            localScope,
+          )
+        : 'undefined';
+      const targetVar = `navigationTarget_${sanitizeVarName(stepPath)}`;
+      const navigationStatement = action.replace
+        ? `window.location.replace(${targetVar});`
+        : `window.location.href = ${targetVar};`;
+      return `${preamble}
+const ${targetVar} = buildNavigationTarget(${targetCode}, ${paramsCode});
+${navigationStatement}`;
     }
 
     case 'feedback': {
@@ -2615,6 +2638,39 @@ const buildRequestUrl = (url, params) => {
   if (entries.length === 0) return url;
   const queryString = new URLSearchParams(entries).toString();
   return url.includes('?') ? \`\${url}&\${queryString}\` : \`\${url}?\${queryString}\`;
+};
+
+const sanitizeNavigationTarget = (input) => {
+  if (typeof input !== 'string') return '/';
+  if (/[\x00-\x20\x7f\\\\]/.test(input)) return '/';
+  if (/%(?:25)*5c/i.test(input)) return '/';
+  if (input !== input.trim()) return '/';
+  const target = input.trim();
+  if (!target || !target.startsWith('/') || target.startsWith('//')) return '/';
+  try {
+    const base = new URL('https://lowcode.internal');
+    const url = new URL(target, base);
+    if (url.origin !== base.origin) return '/';
+    return url.pathname + url.search + url.hash || '/';
+  } catch {
+    return '/';
+  }
+};
+
+const buildNavigationTarget = (input, params) => {
+  const target = sanitizeNavigationTarget(input);
+  if (!params || typeof params !== 'object') return target;
+  try {
+    const url = new URL(target, 'https://lowcode.internal');
+    for (const [key, value] of Object.entries(params)) {
+      if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        url.searchParams.set(key, String(value));
+      }
+    }
+    return url.pathname + url.search + url.hash || '/';
+  } catch {
+    return target;
+  }
 };`;
 
   const childFlowExecutor = `const executeChildFlow = async (targetFlow, rawInput, flowContext, callerFlow, callerStepIndex, callerStepPath) => {
