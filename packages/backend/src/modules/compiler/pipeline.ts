@@ -1,13 +1,17 @@
 import {
+  analyzeActionFlowDeclarations,
   analyzeComputedDeclarations,
   FORBIDDEN_DATA_PATH_KEYS,
   isSafeDataPathKey,
   isSafeLogicKey,
+  normalizeFlowExecutionLimits,
   SchemaValidationError,
+  type ActionFlowAnalysis,
   type ComputedLogicAnalysis,
   type PageSchema,
   type ComponentNode,
   type JsonValue,
+  type FlowExecutionLimits,
 } from '@lowcode-platform/schema-contract';
 import jsep from 'jsep';
 import { compileStyle } from './styleCompiler';
@@ -82,6 +86,8 @@ interface ActionNode {
   onError?: ActionNode[];
   onOk?: ActionNode[];
   onCancel?: ActionNode[];
+  flow?: string;
+  input?: ValueNode;
 }
 
 interface EventBindingNode {
@@ -125,6 +131,12 @@ interface ResolvedComponentNode {
 
 type ParseTreeNode = MissingComponentNode | CycleComponentNode | ResolvedComponentNode;
 
+interface FlowDeclarationNode {
+  key: string;
+  steps: ActionNode[];
+  onError?: ActionNode[];
+}
+
 interface RootNode {
   type: 'root';
   schema: PageSchema;
@@ -137,7 +149,12 @@ interface RootNode {
   helpers: Set<string>;
   usesPageState: boolean;
   usesComputed: boolean;
+  usesFlows: boolean;
   computedAnalysis?: ComputedLogicAnalysis;
+  flowAnalysis?: ActionFlowAnalysis;
+  flows?: FlowDeclarationNode[];
+  flowRuntimeCode?: string;
+  flowExecutionLimits?: FlowExecutionLimits;
 }
 
 interface JSXElementNode {
@@ -317,6 +334,7 @@ function createCompileOptions(options?: CompileOptions): Required<CompileOptions
     componentBindings: options?.componentBindings || {},
     defaultLibrary: options?.defaultLibrary || 'antd',
     allowDefaultComponentFallback: options?.allowDefaultComponentFallback ?? true,
+    flowExecutionLimits: options?.flowExecutionLimits || {},
   };
 }
 
@@ -379,6 +397,8 @@ function parseAction(action: unknown): ActionNode {
     onCancel: Array.isArray(record.onCancel)
       ? record.onCancel.map((item) => parseAction(item))
       : undefined,
+    flow: typeof record.flow === 'string' ? record.flow : undefined,
+    input: record.input !== undefined ? normalizeValue(record.input) : undefined,
   };
 }
 
@@ -558,6 +578,27 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     computedAnalysis = result.value;
   }
 
+  const usesFlows = schema.logic?.flows !== undefined;
+  let flowAnalysis: ActionFlowAnalysis | undefined;
+  let flowDeclarations: FlowDeclarationNode[] | undefined;
+  let flowExecutionLimits: FlowExecutionLimits | undefined;
+  if (usesFlows) {
+    flowExecutionLimits = normalizeFlowExecutionLimits(options?.flowExecutionLimits);
+    const result = analyzeActionFlowDeclarations(
+      schema.logic!.flows,
+      undefined,
+      ['logic', 'flows'],
+      { allowLegacyNestedStateTargets: schema.logic?.states === undefined },
+    );
+    if (!result.ok) throw new SchemaValidationError(result.issues);
+    flowAnalysis = result.value;
+    flowDeclarations = Object.entries(flowAnalysis.flows).map(([key, flow]) => ({
+      key,
+      steps: flow.steps.map((item) => parseAction(item)),
+      onError: flow.onError ? flow.onError.map((item) => parseAction(item)) : undefined,
+    }));
+  }
+
   return {
     type: 'root',
     schema,
@@ -569,9 +610,14 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     handlers: [],
     helpers: new Set(),
     usesComputed,
+    usesFlows,
     ...(computedAnalysis ? { computedAnalysis } : {}),
+    ...(flowAnalysis ? { flowAnalysis } : {}),
+    ...(flowDeclarations ? { flows: flowDeclarations } : {}),
+    ...(flowExecutionLimits ? { flowExecutionLimits } : {}),
     usesPageState:
       usesComputed ||
+      usesFlows ||
       schema.logic?.states !== undefined ||
       flatComponents.some((component) => componentUsesPageState(component, !hasLegacyStateField)),
   };
@@ -754,6 +800,10 @@ function collectImports(ctx: TransformContext) {
     addImport(ctx, 'react', 'useMemo');
     addImport(ctx, 'react', 'useRef');
   }
+  if (ctx.root.usesFlows) {
+    addImport(ctx, 'react', 'useRef');
+    addImport(ctx, 'react', 'useEffect');
+  }
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
   if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
@@ -775,6 +825,12 @@ function preCollectAllActionImports(ctx: TransformContext) {
   for (const component of ctx.root.flatComponents) {
     for (const event of component.events) {
       collectActionImports(event.actions, ctx);
+    }
+  }
+  if (ctx.root.flows) {
+    for (const flow of ctx.root.flows) {
+      collectActionImports(flow.steps, ctx);
+      if (flow.onError) collectActionImports(flow.onError, ctx);
     }
   }
 }
@@ -825,6 +881,19 @@ function createTransformContext(root: RootNode): TransformContext {
     for (const name of COMPUTED_RUNTIME_INTRINSICS) {
       registry.reserveExact(name, 'page-computed-intrinsic');
     }
+  } else if (root.usesFlows) {
+    registry.reserveExact('stateRef', 'page-state-ref');
+  }
+  if (root.usesFlows) {
+    registry.reserveExact('FlowExecutionError', 'flow:error-class');
+    registry.reserveExact('isNonRecoverableFlowErrorCode', 'flow:non-recoverable-check');
+    registry.reserveExact('isolateFlowInput', 'flow:isolate-input');
+    registry.reserveExact('buildRequestUrl', 'flow:build-request-url');
+    registry.reserveExact('flowAbortControllerRef', 'flow:abort-controller-ref');
+    registry.reserveExact('activeFlowControllersRef', 'flow:active-controllers-ref');
+    registry.reserveExact('flowRegistry', 'flow:registry');
+    registry.reserveExact('executeChildFlow', 'flow:child-flow-executor');
+    registry.reserveExact('executeFlow', 'flow:root-flow-executor');
   }
   const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
   for (const name of reservedHandlerNames) {
@@ -884,12 +953,15 @@ function createHandlerCode(
   isAsync: boolean,
   params: string[],
   usesComputed: boolean,
+  usesFlows: boolean,
 ): string {
   const asyncKeyword = isAsync ? 'async ' : '';
   const parameterCode = params.join(', ');
   const logicPrologue = usesComputed
     ? 'let state = stateRef.current;\nlet computed = computedRef.current;'
-    : '';
+    : usesFlows
+      ? 'let state = stateRef.current;'
+      : '';
   const handlerBody = [logicPrologue, bodyCode].filter(Boolean).join('\n');
   return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(handlerBody)}\n};`;
 }
@@ -915,6 +987,7 @@ function registerHandler(
     built.async,
     params,
     ctx.root.usesComputed,
+    ctx.root.usesFlows,
   );
 
   return {
@@ -1554,7 +1627,9 @@ function buildActionBlock(
   );
   const refreshCode = ctx.root.usesComputed
     ? 'state = stateRef.current;\ncomputed = computedRef.current;'
-    : '';
+    : ctx.root.usesFlows
+      ? 'state = stateRef.current;'
+      : '';
   return {
     code: segments
       .map((segment) => [refreshCode, segment.code].filter(Boolean).join('\n'))
@@ -1573,13 +1648,18 @@ function getStateWriteCode(
     statePath.length === 1
       ? `({ ...state, ${toObjectKeyCode(statePath[0])}: ${valueCode} })`
       : getNestedStateUpdateCode(statePath, valueCode);
-  if (!ctx.root.usesComputed) {
+  if (!ctx.root.usesComputed && !ctx.root.usesFlows) {
     return `setState((state) => ${nextStateCode});`;
   }
-  return `state = ${nextStateCode};
+  if (ctx.root.usesComputed) {
+    return `state = ${nextStateCode};
 computed = computePageLogic(state);
 stateRef.current = state;
 computedRef.current = computed;
+setState(state);`;
+  }
+  return `state = ${nextStateCode};
+stateRef.current = state;
 setState(state);`;
 }
 
@@ -1927,9 +2007,836 @@ function buildActionStatement(
         async: false,
       };
     }
+    case 'runFlow': {
+      const inputCode = action.input
+        ? getExpressionCode(action.input, 'undefined', ctxFields, localScope)
+        : 'undefined';
+      return {
+        code: `await executeFlow(${toQuotedString(action.flow || '')}, ${inputCode});`,
+        async: true,
+      };
+    }
     default:
       return { code: `/* Unknown action: ${escapeComment(String(action.type))} */`, async: false };
   }
+}
+
+function sanitizeVarName(stepPath: readonly (string | number)[]): string {
+  return stepPath.join('_').replace(/[^a-zA-Z0-9_]/g, '_');
+}
+
+function buildFlowStepCode(
+  action: ActionNode,
+  ctx: TransformContext,
+  flowKey: string,
+  topStepIndex: number | null,
+  stepPath: readonly (string | number)[],
+  localScope: Set<string>,
+): string {
+  const ctxFields = getExpressionContextFields(ctx);
+  const stepPathCode = JSON.stringify(stepPath);
+  const flowKeyStr = toQuotedString(flowKey);
+  const topStepIndexCode = topStepIndex === null ? 'null' : String(topStepIndex);
+  const preamble = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+flowContext.incrementActionCount(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+state = stateRef.current;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+
+  switch (action.type) {
+    case 'setValue': {
+      const valueCode = getExpressionCode(
+        action.value ?? { kind: 'literal', value: '' },
+        'undefined',
+        ctxFields,
+        localScope,
+      );
+      if (action.field) {
+        const stateKey = action.field.startsWith('state.')
+          ? action.field.slice('state.'.length)
+          : action.field;
+        const statePath = sanitizeStatePath(stateKey, !hasDeclaredPageState(ctx));
+        if (statePath) {
+          const currentValueCode = getStatePathValueCode(statePath);
+          const nextValueCode = action.merge
+            ? getMergedStateValueCode(currentValueCode, valueCode)
+            : valueCode;
+          const nextStateCode =
+            statePath.length === 1
+              ? `({ ...state, ${toObjectKeyCode(statePath[0])}: ${nextValueCode} })`
+              : getNestedStateUpdateCode(statePath, nextValueCode);
+          return `${preamble}
+flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+state = ${nextStateCode};
+stateRef.current = state;
+${ctx.root.usesComputed ? 'computed = computePageLogic(state);\ncomputedRef.current = computed;' : ''}
+setState(state);`;
+        }
+        return `${preamble}\n/* invalid state field discarded */`;
+      }
+      return `${preamble}\n/* setValue missing field */`;
+    }
+
+    case 'delay': {
+      const ms = typeof action.ms === 'number' ? action.ms : 0;
+      return `${preamble}
+await flowContext.waitForDelay(
+  ${ms},
+  ${flowKeyStr},
+  ${topStepIndexCode},
+  ${stepPathCode},
+);
+state = stateRef.current;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+    }
+
+    case 'runFlow': {
+      const inputCode = action.input
+        ? getExpressionCode(action.input, 'undefined', ctxFields, localScope)
+        : 'undefined';
+      return `${preamble}
+await executeChildFlow(
+  ${toQuotedString(action.flow || '')},
+  ${inputCode},
+  flowContext,
+  ${flowKeyStr},
+  ${topStepIndexCode},
+  ${stepPathCode},
+);
+state = stateRef.current;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+    }
+
+    case 'navigate': {
+      const target =
+        action.to?.kind === 'literal' && typeof action.to.value === 'string'
+          ? toQuotedString(sanitizeUrl(action.to.value))
+          : "'/'";
+      return `${preamble}\nwindow.location.href = ${target};`;
+    }
+
+    case 'feedback': {
+      const feedbackStatement =
+        action.kind === 'notification'
+          ? `notification.${sanitizeFeedbackLevel(action.level || 'info')}(${buildNotificationObject(action, ctxFields, localScope)});`
+          : `message.${sanitizeFeedbackLevel(action.level || 'info')}(${getExpressionCode(action.content ?? { kind: 'literal', value: '' }, '""', ctxFields, localScope)});`;
+      return `${preamble}\n${feedbackStatement}`;
+    }
+
+    case 'log': {
+      const level = sanitizeLogLevel(action.level || 'log', 'log');
+      const valCode = getExpressionCode(
+        action.value ?? { kind: 'literal', value: '' },
+        '""',
+        ctxFields,
+        localScope,
+      );
+      return `${preamble}\nconsole.${level}(${valCode});`;
+    }
+
+    case 'if': {
+      const condCode = getExpressionCode(
+        action.condition ?? { kind: 'literal', value: false },
+        'false',
+        ctxFields,
+        localScope,
+      );
+      const thenSteps = (action.then ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'then', childIndex],
+            localScope,
+          ),
+        )
+        .join('\n');
+      const elseSteps = (action.else ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'else', childIndex],
+            localScope,
+          ),
+        )
+        .join('\n');
+      const elseCode = elseSteps ? ` else {\n${indentBlock(elseSteps)}\n}` : '';
+      return `${preamble}
+if (${condCode}) {
+${indentBlock(thenSteps)}
+}${elseCode}`;
+    }
+
+    case 'loop': {
+      const safeItemVar = sanitizeLoopVar(action.itemVar, 'item');
+      const safeIndexVar =
+        action.indexVar !== undefined ? sanitizeLoopVar(action.indexVar, 'index') : undefined;
+      const childScope = new Set(localScope);
+      childScope.add(safeItemVar);
+      if (safeIndexVar) childScope.add(safeIndexVar);
+      const overCode = getExpressionCode(
+        action.over ?? { kind: 'array', items: [] },
+        '[]',
+        ctxFields,
+        localScope,
+      );
+      const loopSteps = (action.actions ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'actions', childIndex],
+            childScope,
+          ),
+        )
+        .join('\n');
+      const loopVarSuffix = sanitizeVarName(stepPath);
+      return `${preamble}
+const loopSource_${loopVarSuffix} = ${overCode};
+for (const [${safeIndexVar ?? '_loopIdx'}, ${safeItemVar}] of (Array.isArray(loopSource_${loopVarSuffix}) ? loopSource_${loopVarSuffix} : []).entries()) {
+  flowContext.incrementLoopIteration(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+  flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+  state = stateRef.current;
+  ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+${indentBlock(loopSteps)}
+}`;
+    }
+
+    case 'dialog': {
+      const onOkSteps = (action.onOk ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'onOk', childIndex],
+            localScope,
+          ),
+        )
+        .join('\n');
+      const onCancelSteps = (action.onCancel ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'onCancel', childIndex],
+            localScope,
+          ),
+        )
+        .join('\n');
+      const titleCode = getExpressionCode(
+        action.title ?? { kind: 'literal', value: '确认' },
+        '"确认"',
+        ctxFields,
+        localScope,
+      );
+      const contentCode = getExpressionCode(
+        action.content ?? { kind: 'literal', value: '' },
+        '""',
+        ctxFields,
+        localScope,
+      );
+      const method = action.kind === 'confirm' ? 'confirm' : 'info';
+      return `${preamble}
+await flowContext.executeWithAbortRace(
+  new Promise((resolve, reject) => {
+    let instance;
+    const onAbort = () => {
+      try {
+        instance?.destroy();
+      } catch {}
+    };
+    flowContext.signal.addEventListener('abort', onAbort, { once: true });
+    instance = Modal.${method}({
+      title: ${titleCode},
+      content: ${contentCode},
+      onOk: async () => {
+        flowContext.signal.removeEventListener('abort', onAbort);
+        let state = stateRef.current;
+        ${ctx.root.usesComputed ? 'let computed = computedRef.current;' : ''}
+        try {
+${indentBlock(onOkSteps)}
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      },
+      onCancel: async () => {
+        flowContext.signal.removeEventListener('abort', onAbort);
+        let state = stateRef.current;
+        ${ctx.root.usesComputed ? 'let computed = computedRef.current;' : ''}
+        try {
+${indentBlock(onCancelSteps)}
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      },
+    });
+  }),
+  ${flowKeyStr},
+  ${topStepIndexCode},
+  ${stepPathCode},
+);
+state = stateRef.current;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+    }
+
+    case 'apiCall': {
+      const method = action.method || 'GET';
+      const urlCode = getExpressionCode(
+        action.url ?? { kind: 'literal', value: '/' },
+        '"/"',
+        ctxFields,
+        localScope,
+      );
+      const headersCode = action.headers
+        ? getExpressionCode(
+            {
+              kind: 'object',
+              properties: Object.entries(action.headers).map(([key, value]) => ({ key, value })),
+            },
+            '{}',
+            ctxFields,
+            localScope,
+          )
+        : 'undefined';
+      const bodyCode = action.body
+        ? `JSON.stringify(${getExpressionCode(action.body, 'undefined', ctxFields, localScope)})`
+        : 'undefined';
+      const paramsCode = action.params
+        ? getExpressionCode(
+            {
+              kind: 'object',
+              properties: Object.entries(action.params).map(([key, value]) => ({ key, value })),
+            },
+            'undefined',
+            ctxFields,
+            localScope,
+          )
+        : 'undefined';
+
+      let resultToWrite = '';
+      if (action.resultTo) {
+        const resultKey = action.resultTo.startsWith('state.')
+          ? action.resultTo.slice('state.'.length)
+          : action.resultTo;
+        const statePath = sanitizeStatePath(resultKey, !hasDeclaredPageState(ctx));
+        if (statePath) {
+          const nextStateCode =
+            statePath.length === 1
+              ? `({ ...state, ${toObjectKeyCode(statePath[0])}: response })`
+              : getNestedStateUpdateCode(statePath, 'response');
+          resultToWrite = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+state = ${nextStateCode};
+stateRef.current = state;
+${ctx.root.usesComputed ? 'computed = computePageLogic(state);\ncomputedRef.current = computed;' : ''}
+setState(state);`;
+        }
+      }
+
+      const successScope = new Set(localScope);
+      successScope.add('response');
+      const onSuccessSteps = (action.onSuccess ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'onSuccess', childIndex],
+            successScope,
+          ),
+        )
+        .join('\n');
+
+      const errorScope = new Set(localScope);
+      errorScope.add('error');
+      errorScope.add('errorObject');
+      const onErrorSteps = (action.onError ?? [])
+        .map((childAction, childIndex) =>
+          buildFlowStepCode(
+            childAction,
+            ctx,
+            flowKey,
+            topStepIndex,
+            [...stepPath, 'onError', childIndex],
+            errorScope,
+          ),
+        )
+        .join('\n');
+
+      const varSuffix = sanitizeVarName(stepPath);
+      return `${preamble}
+const requestUrl_${varSuffix} = buildRequestUrl(${urlCode}, ${paramsCode});
+try {
+  const response = await flowContext.executeWithAbortRace(
+    (async () => {
+      const res = await fetch(requestUrl_${varSuffix}, {
+        method: ${toQuotedString(method)},
+        ${action.headers ? `headers: ${headersCode},` : ''}
+        ${action.body ? `body: ${bodyCode},` : ''}
+        signal: flowContext.signal,
+      });
+      const contentType = res.headers.get('content-type') || '';
+      const responseData = contentType.includes('application/json') ? await res.json() : await res.text();
+      if (!res.ok) {
+        const httpErr = new Error('HTTP ' + res.status + ': ' + res.statusText);
+        httpErr.response = responseData;
+        throw httpErr;
+      }
+      return responseData;
+    })(),
+    ${flowKeyStr},
+    ${topStepIndexCode},
+    ${stepPathCode},
+  );
+  state = stateRef.current;
+  ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+${indentBlock(resultToWrite)}
+${indentBlock(onSuccessSteps)}
+} catch (apiErr) {
+  if (apiErr instanceof FlowExecutionError && isNonRecoverableFlowErrorCode(apiErr.code)) {
+    throw apiErr;
+  }
+  if (flowContext.signal.aborted || flowAbortControllerRef.current?.signal.aborted) {
+    throw flowContext.createAbortError(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+  }
+${
+  onErrorSteps
+    ? `  const error = apiErr?.message || String(apiErr);
+  const errorObject = apiErr;
+${indentBlock(onErrorSteps)}`
+    : '  throw apiErr;'
+}
+}`;
+    }
+
+    default:
+      return `${preamble}
+throw flowContext.createError('FLOW_STEP_FAILED', ${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode}, 'Unsupported flow action type: ' + ${toQuotedString(action.type)});`;
+  }
+}
+
+function genFlowRuntime(root: RootNode, ctx: TransformContext): string {
+  if (!root.usesFlows || !root.flows) return '';
+  const limits = root.flowExecutionLimits;
+  if (!limits) throw new Error('ActionFlow code generation requires normalized execution limits');
+  const flowEntries: string[] = [];
+
+  for (const flow of root.flows) {
+    const flowKey = flow.key;
+    const flowKeyStr = toQuotedString(flowKey);
+    const stepsCode = flow.steps
+      .map((stepAction, stepIndex) => {
+        const stepBody = buildFlowStepCode(
+          stepAction,
+          ctx,
+          flowKey,
+          stepIndex,
+          ['steps', stepIndex],
+          new Set(['input']),
+        );
+        return `stackFrame.step = ${stepIndex};
+try {
+${indentBlock(stepBody)}
+} catch (stepErr) {
+  if (stepErr instanceof FlowExecutionError && isNonRecoverableFlowErrorCode(stepErr.code)) {
+    throw stepErr;
+  }
+  if (flowContext.signal.aborted || flowAbortControllerRef.current?.signal.aborted) {
+    throw flowContext.createAbortError(${flowKeyStr}, ${stepIndex}, ['steps', ${stepIndex}]);
+  }
+  throw stepErr instanceof FlowExecutionError
+    ? stepErr
+    : flowContext.createError(
+        'FLOW_STEP_FAILED',
+        ${flowKeyStr},
+        ${stepIndex},
+        ['steps', ${stepIndex}],
+        stepErr?.message || String(stepErr),
+        stepErr,
+      );
+}`;
+      })
+      .join('\n');
+
+    let onErrorBlock = '';
+    if (flow.onError && flow.onError.length > 0) {
+      const onErrorSteps = flow.onError
+        .map(
+          (onErrorAction, onErrorIndex) =>
+            `onErrorStepPath = ['onError', ${onErrorIndex}];\n${buildFlowStepCode(
+              onErrorAction,
+              ctx,
+              flowKey,
+              null,
+              ['onError', onErrorIndex],
+              new Set(['input', 'error', 'errorObject']),
+            )}`,
+        )
+        .join('\n');
+
+      onErrorBlock = `stackFrame.step = null;
+const error = err.message;
+const errorObject = err;
+let onErrorStepPath = ['onError', 0];
+try {
+${indentBlock(onErrorSteps)}
+  return { status: 'recovered', flow: ${flowKeyStr}, recovered: true, error: err };
+} catch (newErr) {
+  if (newErr instanceof FlowExecutionError && isNonRecoverableFlowErrorCode(newErr.code)) {
+    throw newErr;
+  }
+  if (flowContext.signal.aborted || flowAbortControllerRef.current?.signal.aborted) {
+    throw flowContext.createAbortError(${flowKeyStr}, null, ['onError', stackFrame.step ?? 0]);
+  }
+  const onErrorFailedError =
+    newErr instanceof FlowExecutionError
+      ? new FlowExecutionError(newErr.diagnostic, err)
+      : flowContext.createError(
+          'FLOW_STEP_FAILED',
+          ${flowKeyStr},
+          null,
+          onErrorStepPath,
+          newErr?.message || String(newErr),
+          err,
+        );
+  throw onErrorFailedError;
+}`;
+    }
+
+    flowEntries.push(`[${flowKeyStr}]: async (input, flowContext) => {
+  const flowKey = ${flowKeyStr};
+  const stackFrame = flowContext.callStack[flowContext.callStack.length - 1];
+  let state = stateRef.current;
+  ${root.usesComputed ? 'let computed = computedRef.current;' : ''}
+  try {
+${indentBlock(stepsCode)}
+    return { status: 'success', flow: flowKey, recovered: false };
+  } catch (err) {
+    if (err instanceof FlowExecutionError && isNonRecoverableFlowErrorCode(err.code)) {
+      throw err;
+    }
+    if (flowContext.signal.aborted || flowAbortControllerRef.current?.signal.aborted) {
+      throw flowContext.createAbortError(flowKey, stackFrame.step, ['steps', stackFrame.step ?? 0]);
+    }
+${indentBlock(onErrorBlock)}
+    throw err;
+  }
+}`);
+  }
+
+  const runtimePreamble = `const flowAbortControllerRef = useRef(null);
+const activeFlowControllersRef = useRef(new Set());
+useEffect(() => {
+  const mountController = new AbortController();
+  flowAbortControllerRef.current = mountController;
+  return () => {
+    mountController.abort();
+    if (flowAbortControllerRef.current === mountController) {
+      flowAbortControllerRef.current = null;
+    }
+    activeFlowControllersRef.current.forEach((controller) => controller.abort());
+    activeFlowControllersRef.current.clear();
+  };
+}, []);
+
+class FlowExecutionError extends Error {
+  constructor(diagnostic, cause) {
+    super(diagnostic.message);
+    this.name = 'FlowExecutionError';
+    Object.defineProperties(this, {
+      code: { value: diagnostic.code, enumerable: true, writable: true, configurable: true },
+      flow: { value: diagnostic.flow, enumerable: true, writable: true, configurable: true },
+      step: { value: diagnostic.step, enumerable: true, writable: true, configurable: true },
+      stepPath: { value: diagnostic.stepPath, enumerable: true, writable: true, configurable: true },
+      path: { value: diagnostic.path, enumerable: true, writable: true, configurable: true },
+      trace: { value: diagnostic.trace, enumerable: true, writable: true, configurable: true },
+    });
+    this.diagnostic = Object.freeze({
+      code: diagnostic.code,
+      flow: diagnostic.flow,
+      step: diagnostic.step,
+      stepPath: Object.freeze([...diagnostic.stepPath]),
+      path: Object.freeze([...diagnostic.path]),
+      trace: Object.freeze(
+        diagnostic.trace.map((frame) => Object.freeze({ flow: frame.flow, step: frame.step })),
+      ),
+      message: diagnostic.message,
+    });
+    if (cause instanceof Error) {
+      this.cause = cause;
+    }
+  }
+}
+
+const isNonRecoverableFlowErrorCode = (code) => code !== 'FLOW_STEP_FAILED';
+
+const isolateFlowInput = (value) => {
+  if (value === null || typeof value !== 'object') return value;
+  try {
+    return structuredClone(value);
+  } catch {
+    return value;
+  }
+};
+
+const buildRequestUrl = (url, params) => {
+  if (!params || typeof params !== 'object') return url;
+  const entries = Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => [key, String(value)]);
+  if (entries.length === 0) return url;
+  const queryString = new URLSearchParams(entries).toString();
+  return url.includes('?') ? \`\${url}&\${queryString}\` : \`\${url}?\${queryString}\`;
+};`;
+
+  const childFlowExecutor = `const executeChildFlow = async (targetFlow, rawInput, flowContext, callerFlow, callerStepIndex, callerStepPath) => {
+  flowContext.throwIfAborted(callerFlow, callerStepIndex, callerStepPath);
+  if (flowContext.callStack.length + 1 > ${limits.maxFlowDepth}) {
+    throw flowContext.createError(
+      'FLOW_DEPTH_EXCEEDED',
+      targetFlow,
+      null,
+      [],
+      'Flow call depth exceeded: maximum depth ${limits.maxFlowDepth} allowed',
+    );
+  }
+  if (!flowRegistry[targetFlow]) {
+    throw flowContext.createError(
+      'FLOW_NOT_FOUND',
+      targetFlow,
+      null,
+      [],
+      \`Flow not found: "\${targetFlow}"\`,
+    );
+  }
+  const isolatedInput = isolateFlowInput(rawInput);
+  flowContext.callStack.push({ flow: targetFlow, step: null });
+  try {
+    return await flowRegistry[targetFlow](isolatedInput, flowContext);
+  } finally {
+    flowContext.callStack.pop();
+  }
+};`;
+
+  const rootFlowExecutor = `const executeFlow = async (rootFlowName, rawInput) => {
+  if (flowAbortControllerRef.current?.signal.aborted) {
+    throw new FlowExecutionError({
+      code: 'FLOW_ABORTED',
+      flow: rootFlowName,
+      step: null,
+      stepPath: [],
+      path: ['logic', 'flows', rootFlowName],
+      trace: [{ flow: rootFlowName, step: null }],
+      message: 'Component unmounted',
+    });
+  }
+  if (!flowRegistry[rootFlowName]) {
+    throw new FlowExecutionError({
+      code: 'FLOW_NOT_FOUND',
+      flow: rootFlowName,
+      step: null,
+      stepPath: [],
+      path: ['logic', 'flows', rootFlowName],
+      trace: [{ flow: rootFlowName, step: null }],
+      message: \`Flow not found: "\${rootFlowName}"\`,
+    });
+  }
+  if (activeFlowControllersRef.current.size >= ${limits.maxConcurrentRuns}) {
+    throw new FlowExecutionError({
+      code: 'FLOW_CONCURRENCY_EXCEEDED',
+      flow: rootFlowName,
+      step: null,
+      stepPath: [],
+      path: ['logic', 'flows', rootFlowName],
+      trace: [{ flow: rootFlowName, step: null }],
+      message: 'Flow concurrency limit exceeded: maximum ${limits.maxConcurrentRuns} concurrent flows allowed',
+    });
+  }
+
+  const runController = new AbortController();
+  activeFlowControllersRef.current.add(runController);
+
+  const durationLimitMs = ${limits.maxDurationMs};
+  const deadline = performance.now() + durationLimitMs;
+  let durationTimedOut = false;
+  const durationTimer = setTimeout(() => {
+    durationTimedOut = true;
+    runController.abort();
+  }, durationLimitMs);
+
+  const callStack = [{ flow: rootFlowName, step: null }];
+  let executedActionsCount = 0;
+  let loopIterationsCount = 0;
+
+  const flowContext = {
+    get signal() {
+      return runController.signal;
+    },
+    callStack,
+    throwIfAborted(flowKey, stepIndex, stepPath) {
+      if (durationTimedOut || performance.now() > deadline) {
+        durationTimedOut = true;
+        if (!runController.signal.aborted) runController.abort();
+        throw flowContext.createError(
+          'FLOW_DURATION_EXCEEDED',
+          flowKey,
+          stepIndex,
+          stepPath,
+          'Flow duration exceeded: maximum ${limits.maxDurationMs}ms allowed',
+        );
+      }
+      if (flowAbortControllerRef.current?.signal.aborted) {
+        throw flowContext.createError(
+          'FLOW_ABORTED',
+          flowKey,
+          stepIndex,
+          stepPath,
+          'Component unmounted',
+        );
+      }
+      if (runController.signal.aborted) {
+        throw flowContext.createError(
+          'FLOW_ABORTED',
+          flowKey,
+          stepIndex,
+          stepPath,
+          'Flow execution aborted',
+        );
+      }
+    },
+    createAbortError(flowKey, stepIndex, stepPath) {
+      const isDuration = durationTimedOut || performance.now() > deadline;
+      const code = isDuration ? 'FLOW_DURATION_EXCEEDED' : 'FLOW_ABORTED';
+      const message = isDuration
+        ? 'Flow duration exceeded: maximum ${limits.maxDurationMs}ms allowed'
+        : 'Flow execution aborted';
+      return flowContext.createError(code, flowKey, stepIndex, stepPath, message);
+    },
+    createError(code, flowKey, stepIndex, stepPath, message, cause) {
+      const trace = callStack.map((frame) => ({ flow: frame.flow, step: frame.step }));
+      if (trace.length === 0 || trace[trace.length - 1].flow !== flowKey) {
+        trace.push({ flow: flowKey, step: stepIndex });
+      } else {
+        trace[trace.length - 1] = { flow: flowKey, step: stepIndex };
+      }
+      const path = ['logic', 'flows', flowKey, ...stepPath];
+      const diagnostic = {
+        code,
+        flow: flowKey,
+        step: stepIndex,
+        stepPath,
+        path,
+        trace,
+        message,
+      };
+      return new FlowExecutionError(diagnostic, cause);
+    },
+    incrementActionCount(flowKey, stepIndex, stepPath) {
+      flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+      executedActionsCount += 1;
+      if (executedActionsCount > ${limits.maxExecutedActions}) {
+        throw flowContext.createError(
+          'FLOW_ACTION_BUDGET_EXCEEDED',
+          flowKey,
+          stepIndex,
+          stepPath,
+          'Flow action execution budget exceeded: maximum ${limits.maxExecutedActions} actions allowed',
+        );
+      }
+    },
+    incrementLoopIteration(flowKey, stepIndex, stepPath) {
+      flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+      loopIterationsCount += 1;
+      if (loopIterationsCount > ${limits.maxLoopIterations}) {
+        throw flowContext.createError(
+          'FLOW_ITERATION_BUDGET_EXCEEDED',
+          flowKey,
+          stepIndex,
+          stepPath,
+          'Flow loop iteration budget exceeded: maximum ${limits.maxLoopIterations} iterations allowed',
+        );
+      }
+    },
+    waitForDelay(ms, flowKey, stepIndex, stepPath) {
+      flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+      return new Promise((resolve, reject) => {
+        let timer;
+        const cleanup = () => {
+          clearTimeout(timer);
+          runController.signal.removeEventListener('abort', onAbort);
+        };
+        const onAbort = () => {
+          cleanup();
+          reject(flowContext.createAbortError(flowKey, stepIndex, stepPath));
+        };
+        timer = setTimeout(() => {
+          cleanup();
+          resolve();
+        }, ms);
+        runController.signal.addEventListener('abort', onAbort, { once: true });
+      });
+    },
+    async executeWithAbortRace(actionPromise, flowKey, stepIndex, stepPath) {
+      actionPromise.catch(() => {});
+      flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+      let cleanup;
+      const abortPromise = new Promise((_, reject) => {
+        const onAbort = () => {
+          try {
+            flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+            reject(flowContext.createAbortError(flowKey, stepIndex, stepPath));
+          } catch (err) {
+            reject(err);
+          }
+        };
+        if (
+          runController.signal.aborted ||
+          flowAbortControllerRef.current?.signal.aborted ||
+          performance.now() > deadline
+        ) {
+          onAbort();
+          return;
+        }
+        runController.signal.addEventListener('abort', onAbort, { once: true });
+        cleanup = () => runController.signal.removeEventListener('abort', onAbort);
+      });
+      try {
+        const result = await Promise.race([actionPromise, abortPromise]);
+        flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+        return result;
+      } catch (error) {
+        flowContext.throwIfAborted(flowKey, stepIndex, stepPath);
+        throw error;
+      } finally {
+        cleanup?.();
+      }
+    },
+  };
+
+  const isolatedInput = isolateFlowInput(rawInput);
+  try {
+    return await flowRegistry[rootFlowName](isolatedInput, flowContext);
+  } finally {
+    clearTimeout(durationTimer);
+    activeFlowControllersRef.current.delete(runController);
+  }
+};`;
+
+  const flowRegistryCode = `const flowRegistry = {\n${indentBlock(flowEntries.join(',\n'))}\n};`;
+
+  return [runtimePreamble, flowRegistryCode, childFlowExecutor, rootFlowExecutor].join('\n\n');
 }
 
 export function transform(root: RootNode): void {
@@ -1941,6 +2848,9 @@ export function transform(root: RootNode): void {
   root.imports = ctx.imports;
   root.fields = ctx.fields;
   root.handlers = ctx.handlers;
+  if (root.usesFlows) {
+    root.flowRuntimeCode = genFlowRuntime(root, ctx);
+  }
   root.children = root.children.map((child) => {
     if (child.kind !== 'component') {
       return child;
@@ -2322,6 +3232,9 @@ ${indentBlock(evaluatorBody)}
     hooks.push('const computedRef = useRef(computed);');
     hooks.push('stateRef.current = state;');
     hooks.push('computedRef.current = computed;');
+  } else if (root.usesFlows) {
+    hooks.push('const stateRef = useRef(state);');
+    hooks.push('stateRef.current = state;');
   }
   hooks.push(
     ...root.fields.map(
@@ -2339,6 +3252,7 @@ function genHandlers(handlers: HandlerDeclaration[]): string {
 export function generate(root: RootNode): string {
   const importsCode = genImports(root.imports);
   const stateHooksCode = genStateHooks(root);
+  const flowRuntimeCode = root.flowRuntimeCode ?? '';
   const handlersCode = genHandlers(root.handlers);
   const rootNode = root.children[0];
   const jsxCode =
@@ -2346,7 +3260,9 @@ export function generate(root: RootNode): string {
       ? genJsx(rootNode.codegenNode)
       : '<></>';
 
-  const bodySections = [stateHooksCode, handlersCode, `return ${jsxCode};`].filter(Boolean);
+  const bodySections = [stateHooksCode, flowRuntimeCode, handlersCode, `return ${jsxCode};`].filter(
+    Boolean,
+  );
   const lines = [importsCode, 'export default function GeneratedPage() {'];
   if (bodySections.length > 0) {
     lines.push(indentBlock(bodySections.join('\n\n')));

@@ -1,8 +1,12 @@
+import type { FlowExecutionLimits } from '@lowcode-platform/schema-contract';
+
 export interface CompileOptions {
   componentSources?: Record<string, string>;
   componentBindings?: Record<string, CompilerComponentBinding>;
   defaultLibrary?: string;
   allowDefaultComponentFallback?: boolean;
+  /** Trusted compiler-host budget override; PageSchema cannot configure this. */
+  flowExecutionLimits?: Partial<FlowExecutionLimits>;
 }
 
 export interface CompilerComponentBinding {
