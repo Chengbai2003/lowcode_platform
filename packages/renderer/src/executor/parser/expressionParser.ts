@@ -95,6 +95,7 @@ const ALLOWED_EXTENSION_KEYS = [
   'row',
   'response',
   'error',
+  'input',
 ] as const;
 const PURE_UTILS_KEYS = ['formatDate', 'uuid', 'clone'] as const;
 

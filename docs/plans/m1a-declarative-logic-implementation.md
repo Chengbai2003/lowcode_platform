@@ -67,6 +67,10 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
 
 - 将可复用流程提升为具名声明，事件只引用 Flow；保留明确的兼容迁移窗口，不长期维护双语义。
 - 默认遇错停止，定义显式 `onError`、AbortSignal、步数/循环/异步预算和 dispose 后写入阻断。
+- **实施状态**：
+  - **F1 / F1.1 已完成**：建立具名 ActionFlow Schema Contract、独立静态分析器与综合深度预算；
+  - **F2 已完成**：实现 Renderer 内部 ActionFlow Runtime 语义（默认遇错停止、flow 级 `onError`、AbortSignal 全链路贯穿、session dispose 后写回阻断、结构化诊断 trace、多维运行时预算边界校验与矩阵测试守护）；
+  - **F3 待实施**：开放生产 `PageSchema.logic.flows`、组件事件 `runFlow` 桥接与内联 ActionList 迁移。
 
 ### M1a-3：一致性门禁
 

@@ -1,6 +1,13 @@
 import { EventDispatcher } from '../EventDispatcher';
 import type { ReactiveRuntime } from '../reactive/runtime';
-import type { ComputedLogicAnalysis } from '@lowcode-platform/schema-contract';
+import type { ComputedLogicAnalysis, ActionFlowAnalysis } from '@lowcode-platform/schema-contract';
+import {
+  FlowRun,
+  type FlowRunResult,
+  type FlowExecutionLimits,
+  FlowExecutionError,
+  normalizeFlowExecutionLimits,
+} from './FlowRun';
 
 /**
  * RuntimeSession（Issue #19 / M0-4 Scope D, ADR-0003）
@@ -29,6 +36,10 @@ export interface RuntimeSessionOptions {
   dispatcherInit?: Record<string, unknown>;
   /** 经 Schema Contract 验证并拓扑排序的 Computed 声明。 */
   computedAnalysis?: ComputedLogicAnalysis;
+  /** 经 Schema Contract 验证与 DAG 分析的 ActionFlow 声明分析结果。 */
+  flowAnalysis?: ActionFlowAnalysis;
+  /** 运行时 Flow 执行预算（仅宿主配置，无法被 Schema 放宽）。 */
+  flowExecutionLimits?: Partial<FlowExecutionLimits>;
 }
 
 export class RuntimeSession {
@@ -36,6 +47,10 @@ export class RuntimeSession {
   readonly documentSessionId: string;
   readonly dispatcher: EventDispatcher;
   readonly runtime: ReactiveRuntime;
+
+  private readonly flowAnalysis?: ActionFlowAnalysis;
+  private readonly flowLimits: FlowExecutionLimits;
+  private readonly activeRootRuns = new Set<FlowRun>();
 
   private readonly controller = new AbortController();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
@@ -53,6 +68,8 @@ export class RuntimeSession {
     }
     this.pageId = pageId;
     this.documentSessionId = documentSessionId;
+    this.flowAnalysis = options.flowAnalysis;
+    this.flowLimits = normalizeFlowExecutionLimits(options.flowExecutionLimits);
     this.dispatcher = options.dispatcher ?? new EventDispatcher(options.dispatcherInit ?? {});
     this.runtime = this.dispatcher.getRuntime();
     this.runtime.configureComputed(options.computedAnalysis, { notify: false });
@@ -156,6 +173,57 @@ export class RuntimeSession {
   }
 
   /**
+   * 执行具名 ActionFlow（Issue #46 F2）。
+   *
+   * 每次调用创建独立的根 FlowRun 实例；嵌套 Flow 共享同一预算与 signal。
+   */
+  async executeFlow(flowId: string, input?: unknown): Promise<FlowRunResult> {
+    if (this.disposed) {
+      throw new FlowExecutionError({
+        code: 'FLOW_ABORTED',
+        flow: flowId,
+        step: null,
+        stepPath: [],
+        path: ['logic', 'flows', flowId],
+        trace: [{ flow: flowId, step: null }],
+        message: 'RuntimeSession is disposed',
+      });
+    }
+
+    if (!this.flowAnalysis || !this.flowAnalysis.flows || !this.flowAnalysis.flows[flowId]) {
+      throw new FlowExecutionError({
+        code: 'FLOW_NOT_FOUND',
+        flow: flowId,
+        step: null,
+        stepPath: [],
+        path: ['logic', 'flows', flowId],
+        trace: [{ flow: flowId, step: null }],
+        message: `Flow not found: "${flowId}"`,
+      });
+    }
+
+    if (this.activeRootRuns.size >= this.flowLimits.maxConcurrentRuns) {
+      throw new FlowExecutionError({
+        code: 'FLOW_CONCURRENCY_EXCEEDED',
+        flow: flowId,
+        step: null,
+        stepPath: [],
+        path: ['logic', 'flows', flowId],
+        trace: [{ flow: flowId, step: null }],
+        message: `Flow concurrency exceeded: maximum ${this.flowLimits.maxConcurrentRuns} concurrent runs allowed`,
+      });
+    }
+
+    const flowRun = new FlowRun(this, this.flowAnalysis, this.flowLimits);
+    this.activeRootRuns.add(flowRun);
+    try {
+      return await flowRun.execute(flowId, input);
+    } finally {
+      this.activeRootRuns.delete(flowRun);
+    }
+  }
+
+  /**
    * 销毁 Session：清除 timers、执行 cleanups、abort 全部 in-flight 请求。
    * 幂等；dispose 后旧异步回调不得再写回状态（见 asyncActions 守卫）。
    */
@@ -165,6 +233,11 @@ export class RuntimeSession {
     }
     this.disposed = true;
     this.generationValue += 1;
+
+    for (const run of this.activeRootRuns) {
+      run.abort();
+    }
+    this.activeRootRuns.clear();
 
     for (const timer of this.timers) {
       clearTimeout(timer);

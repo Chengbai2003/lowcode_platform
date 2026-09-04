@@ -18,6 +18,7 @@ export type {
   DialogAction,
   IfAction,
   LoopAction,
+  RunFlowAction,
   DelayAction,
   LogAction,
   CoreActionType,

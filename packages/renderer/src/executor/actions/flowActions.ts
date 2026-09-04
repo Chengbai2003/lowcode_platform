@@ -1,29 +1,61 @@
 /**
  * 流程控制 Actions
- * if, loop
+ * if, loop, runFlow
  */
 
 import type { ActionHandler, ExecutionContext } from '../../dsl';
-import type { IfAction, LoopAction } from '../../dsl/actions/flow';
+import type { IfAction, LoopAction, RunFlowAction } from '../../dsl/actions/flow';
 import { resolveValue } from '../parser';
+import { getFlowRunContext, withFlowRunPath } from '../../session/FlowRun';
 
 /**
  * 条件分支
  * Action: { type: 'if'; condition: Value; then: Action[]; else?: Action[]; }
  */
 export const ifAction: ActionHandler = async (action, context, executor) => {
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
+
   const ifActionTyped = action as IfAction;
   const { condition, then: thenActions, else: elseActions } = ifActionTyped;
   const resolvedCondition = resolveValue(condition, context);
   const isTrue = Boolean(resolvedCondition);
 
   if (isTrue && thenActions && executor) {
-    for (const act of thenActions) {
-      await (executor as any).executeSingle(act, context);
+    if (flowContext) {
+      for (let i = 0; i < thenActions.length; i++) {
+        flowContext.throwIfAborted();
+        const act = thenActions[i];
+        const childContext = withFlowRunPath(context, flowContext, [
+          ...flowContext.stepPath,
+          'then',
+          i,
+        ]);
+        await (executor as any).executeSingle(act, childContext);
+      }
+    } else {
+      for (const act of thenActions) {
+        await (executor as any).executeSingle(act, context);
+      }
     }
   } else if (!isTrue && elseActions && executor) {
-    for (const act of elseActions) {
-      await (executor as any).executeSingle(act, context);
+    if (flowContext) {
+      for (let i = 0; i < elseActions.length; i++) {
+        flowContext.throwIfAborted();
+        const act = elseActions[i];
+        const childContext = withFlowRunPath(context, flowContext, [
+          ...flowContext.stepPath,
+          'else',
+          i,
+        ]);
+        await (executor as any).executeSingle(act, childContext);
+      }
+    } else {
+      for (const act of elseActions) {
+        await (executor as any).executeSingle(act, context);
+      }
     }
   }
 
@@ -35,6 +67,11 @@ export const ifAction: ActionHandler = async (action, context, executor) => {
  * Action: { type: 'loop'; over: Value; itemVar: string; indexVar?: string; actions: Action[]; }
  */
 export const loopAction: ActionHandler = async (action, context, executor) => {
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
+
   const loopActionTyped = action as LoopAction;
   const { over, itemVar, indexVar, actions } = loopActionTyped;
   const resolvedOver = resolveValue(over, context);
@@ -50,6 +87,9 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
   const results = [];
 
   for (let i = 0; i < resolvedOver.length; i++) {
+    if (flowContext) {
+      flowContext.flowRun.incrementLoopIteration(flowContext);
+    }
     const item = resolvedOver[i];
 
     // 创建循环上下文（不可变模式：创建新对象而非修改）
@@ -59,12 +99,46 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
       ...(indexVar ? { [indexVar]: i } : {}),
     } as ExecutionContext;
 
-    // 执行循环体
-    const result = await (executor as any).execute(actions, loopContext);
-    results.push(result);
+    if (flowContext) {
+      for (let a = 0; a < actions.length; a++) {
+        flowContext.throwIfAborted();
+        const act = actions[a];
+        const childContext = withFlowRunPath(loopContext, flowContext, [
+          ...flowContext.stepPath,
+          'actions',
+          a,
+        ]);
+        const result = await (executor as any).executeSingle(act, childContext);
+        results.push(result);
+      }
+    } else {
+      // 执行循环体（Legacy 模式）
+      const result = await (executor as any).execute(actions, loopContext);
+      results.push(result);
+    }
   }
 
   return { count: resolvedOver.length, items: resolvedOver, results };
+};
+
+/**
+ * 运行具名 ActionFlow
+ * Action: { type: 'runFlow'; flow: string; input?: Value; }
+ */
+export const runFlowAction: ActionHandler = async (action, context) => {
+  const flowContext = getFlowRunContext(context);
+  if (!flowContext) {
+    throw new Error('runFlow action can only be executed within an active FlowRun');
+  }
+
+  flowContext.throwIfAborted();
+
+  const runFlowTyped = action as RunFlowAction;
+  const targetFlow = runFlowTyped.flow;
+  const rawInput = runFlowTyped.input;
+  const resolvedInput = rawInput !== undefined ? resolveValue(rawInput, context) : undefined;
+
+  return await flowContext.flowRun.executeChildFlow(targetFlow, resolvedInput, context);
 };
 
 /**
@@ -73,4 +147,5 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
 export default {
   if: ifAction,
   loop: loopAction,
+  runFlow: runFlowAction,
 };

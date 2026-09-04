@@ -7,6 +7,7 @@ import type { ActionHandler } from '../../dsl';
 import type { SetValueAction } from '../../dsl/actions/data';
 import { resolveValue } from '../parser';
 import { isSafeKey } from '../../reactive/guards';
+import { getFlowRunContext } from '../../session/FlowRun';
 
 function validateFieldPath(field: string): void {
   if (!field) {
@@ -31,10 +32,19 @@ function validateFieldPath(field: string): void {
  * - 清除值：{ type: "setValue", field: "temp", value: null }
  */
 export const setValue: ActionHandler = async (action, context) => {
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
+
   const setValueAction = action as SetValueAction;
   const { field, value, merge = false } = setValueAction;
   const resolvedValue = resolveValue(value, context);
   validateFieldPath(field);
+
+  if (flowContext) {
+    flowContext.throwIfAborted();
+  }
 
   if (merge && typeof resolvedValue === 'object' && resolvedValue !== null) {
     const safeValue: Record<string, unknown> = {};

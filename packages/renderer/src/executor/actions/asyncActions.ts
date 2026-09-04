@@ -10,6 +10,7 @@ import type { ApiRequestConfig } from '../../dsl/context';
 import type { RuntimeSession } from '../../session/RuntimeSession';
 import { isCapabilityGranted, type HostCapabilities } from '../../host/HostCapabilities';
 import { resolveValue, resolveValues } from '../parser';
+import { FlowExecutionError, getFlowRunContext, withFlowRunPath } from '../../session/FlowRun';
 
 /** 读取执行上下文中的 Session（M0-4 Scope D；存在时启用 abort/写回守卫） */
 function getSession(context: Record<string, unknown>): RuntimeSession | undefined {
@@ -85,6 +86,7 @@ function validateResultToPath(path: string): void {
  * }
  */
 export const apiCall: ActionHandler = async (action, context, executor) => {
+  const flowContext = getFlowRunContext(context);
   const apiAction = action as ApiCallAction;
   const {
     url,
@@ -143,6 +145,12 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
 
     // 请求配置
     const session = getSession(context);
+    const effectiveSignal = flowContext ? flowContext.signal : session?.signal;
+
+    if (flowContext) {
+      flowContext.throwIfAborted();
+    }
+
     const config: RequestInit = {
       method: resolvedMethod,
       headers: {
@@ -150,9 +158,9 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
         ...resolvedHeaders,
       },
     };
-    // M0-4 Scope D：Session 内请求可被 dispose abort
-    if (session) {
-      config.signal = session.signal;
+    // Session / FlowRun 内请求携带有效 signal
+    if (effectiveSignal) {
+      config.signal = effectiveSignal;
     }
 
     if (['POST', 'PUT', 'PATCH'].includes(resolvedMethod) && resolvedBody !== undefined) {
@@ -171,10 +179,10 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
           signal?: AbortSignal,
         ) => Promise<unknown>;
         response = await (resolvedMethod === 'GET'
-          ? apiFn(fullUrl, resolvedParams, session?.signal)
+          ? apiFn(fullUrl, resolvedParams, effectiveSignal)
           : resolvedMethod === 'DELETE'
-            ? apiFn(fullUrl, session?.signal)
-            : apiFn(fullUrl, resolvedBody, session?.signal));
+            ? apiFn(fullUrl, effectiveSignal)
+            : apiFn(fullUrl, resolvedBody, effectiveSignal));
       } else if (typeof context.api.request === 'function') {
         const requestConfig: ApiRequestConfig = {
           url: resolvedUrl as string,
@@ -183,8 +191,8 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
           params: resolvedParams,
           data: resolvedBody,
         };
-        if (session) {
-          requestConfig.signal = session.signal;
+        if (effectiveSignal) {
+          requestConfig.signal = effectiveSignal;
         }
         response = await context.api.request(requestConfig);
       }
@@ -197,28 +205,84 @@ export const apiCall: ActionHandler = async (action, context, executor) => {
       response = await fetchResponse.json();
     }
 
-    // M0-4 Scope D：dispose 后旧请求不得写回新页面
-    if (session && session.isDisposed()) {
+    // 每次 await 返回后重新检查 signal
+    if (flowContext) {
+      flowContext.throwIfAborted();
+    } else if (session && session.isDisposed()) {
       return { success: false, aborted: true };
     }
 
     if (resultTo) {
+      if (flowContext) {
+        flowContext.throwIfAborted();
+      }
       context.runtime.set(resultTo, response);
     }
 
     // 成功回调
     if (onSuccess && executor) {
-      const typedExecutor = executor as {
-        execute: (actions: readonly Action[], ctx: unknown) => Promise<void>;
-      };
-      await typedExecutor.execute(onSuccess, { ...context, response });
+      if (flowContext) {
+        flowContext.throwIfAborted();
+        for (let a = 0; a < onSuccess.length; a++) {
+          flowContext.throwIfAborted();
+          const act = onSuccess[a];
+          const childContext = withFlowRunPath(context, flowContext, [
+            ...flowContext.stepPath,
+            'onSuccess',
+            a,
+          ]);
+          await (executor as any).executeSingle(act, { ...childContext, response });
+        }
+      } else {
+        const typedExecutor = executor as {
+          execute: (actions: readonly Action[], ctx: unknown) => Promise<void>;
+        };
+        await typedExecutor.execute(onSuccess, { ...context, response });
+      }
     }
 
     return { success: true, response, resultTo };
   } catch (error) {
     const errorObj = error instanceof Error ? error : new Error(String(error));
 
-    // M0-4 Scope D：dispose/abort 不是业务错误，静默返回且不写回
+    // Flow 模式处理
+    if (flowContext) {
+      if (flowContext.signal.aborted || (error instanceof Error && error.name === 'AbortError')) {
+        flowContext.throwIfAborted();
+        throw error;
+      }
+
+      // 不可恢复错误必须原样向外抛，不能由 apiCall.onError 或 Flow 级 onError 恢复
+      if (error instanceof FlowExecutionError) {
+        if (error.code !== 'FLOW_STEP_FAILED') {
+          throw error;
+        }
+      }
+
+      // apiCall.onError 成功后 Flow 继续；自身失败则向外传播
+      if (onError && executor) {
+        for (let a = 0; a < onError.length; a++) {
+          flowContext.throwIfAborted();
+          const act = onError[a];
+          const childContext = withFlowRunPath(context, flowContext, [
+            ...flowContext.stepPath,
+            'onError',
+            a,
+          ]);
+          await (executor as any).executeSingle(act, {
+            ...childContext,
+            error: errorObj.message,
+            errorObject: errorObj,
+          });
+        }
+        return { success: false, handled: true, error: errorObj.message };
+      }
+
+      // 没有 apiCall.onError：抛出原始 error，让 FlowRun / Engine 区分 Error 与 primitive
+      throw error;
+    }
+
+    // Legacy 模式：dispose/abort 不是业务错误，静默返回且不写回
     if (errorObj.name === 'AbortError' || getSession(context)?.isDisposed()) {
       return { success: false, aborted: true };
     }
@@ -257,6 +321,26 @@ export const delay: ActionHandler = async (action, context) => {
 
   if (Number.isNaN(ms) || ms < 0) {
     throw new Error('delay: ms must be a positive number');
+  }
+
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+    await new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const onAbort = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        flowContext.signal.removeEventListener('abort', onAbort);
+        reject(flowContext.createAbortError());
+      };
+      timer = setTimeout(() => {
+        flowContext.signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      flowContext.signal.addEventListener('abort', onAbort, { once: true });
+    });
+    flowContext.throwIfAborted();
+    return { delayed: ms };
   }
 
   const session = getSession(context);
