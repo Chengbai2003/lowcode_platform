@@ -2185,6 +2185,9 @@ ${indentBlock(thenSteps)}
     }
 
     case 'loop': {
+      if (!action.actions || action.actions.length === 0) {
+        return preamble;
+      }
       const safeItemVar = sanitizeLoopVar(action.itemVar, 'item');
       const safeIndexVar =
         action.indexVar !== undefined ? sanitizeLoopVar(action.indexVar, 'index') : undefined;

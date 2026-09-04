@@ -104,6 +104,129 @@ function createFlowHarness(
 }
 
 describe('compiler ActionFlow runtime generation', () => {
+  it.each([
+    [
+      'then',
+      {
+        type: 'if',
+        condition: true,
+        then: [
+          { type: 'feedback', content: 'ok' },
+          { type: 'apiCall', url: '/fail' },
+        ],
+      },
+      ['steps', 0, 'then', 1],
+    ],
+    [
+      'loop actions',
+      {
+        type: 'loop',
+        over: [1],
+        itemVar: 'item',
+        actions: [
+          { type: 'feedback', content: 'ok' },
+          { type: 'apiCall', url: '/fail' },
+        ],
+      },
+      ['steps', 0, 'actions', 1],
+    ],
+  ] as const)('reports the nested %s path through executeFlow', async (_name, step, stepPath) => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: { flows: { main: { steps: [step] } } },
+    };
+    const fetchMock = jest.spyOn(global, 'fetch').mockRejectedValue(new Error('nested failure'));
+    try {
+      const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }');
+      await expect(harness.value.executeFlow('main')).rejects.toMatchObject({
+        code: 'FLOW_STEP_FAILED',
+        flow: 'main',
+        step: 0,
+        stepPath,
+        path: ['logic', 'flows', 'main', ...stepPath],
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('does not consume loop iterations for an empty loop body', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        flows: { main: { steps: [{ type: 'loop', over: [1, 2], itemVar: 'item', actions: [] }] } },
+      },
+    };
+    const harness = createFlowHarness(
+      compileToCode(schema, { flowExecutionLimits: { maxLoopIterations: 1 } }),
+      '{ executeFlow }',
+    );
+    await expect(harness.value.executeFlow('main')).resolves.toMatchObject({ status: 'success' });
+  });
+
+  it('reports api onSuccess and dialog onOk child paths through executeFlow', async () => {
+    let onOk: (() => Promise<void>) | undefined;
+    const modal = {
+      confirm: jest.fn((config: { onOk: () => Promise<void> }) => {
+        onOk = config.onOk;
+        return { destroy: jest.fn() };
+      }),
+      info: jest.fn(),
+    };
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        flows: {
+          success: {
+            steps: [
+              { type: 'apiCall', url: '/ok', onSuccess: [{ type: 'apiCall', url: '/fail' }] },
+            ],
+          },
+          dialog: {
+            steps: [
+              {
+                type: 'dialog',
+                kind: 'confirm',
+                content: 'confirm',
+                onOk: [{ type: 'apiCall', url: '/fail' }],
+              },
+            ],
+          },
+        },
+      },
+    };
+    const response = {
+      ok: true,
+      headers: { get: () => 'application/json' },
+      json: async () => ({}),
+      text: async () => '',
+      status: 200,
+      statusText: 'OK',
+    };
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockResolvedValueOnce(response as unknown as Response)
+      .mockRejectedValue(new Error('nested failure'));
+    try {
+      const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }', {
+        mockModal: modal,
+      });
+      await expect(harness.value.executeFlow('success')).rejects.toMatchObject({
+        stepPath: ['steps', 0, 'onSuccess', 0],
+      });
+      const pending = harness.value.executeFlow('dialog');
+      await onOk?.();
+      await expect(pending).rejects.toMatchObject({ stepPath: ['steps', 0, 'onOk', 0] });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
   it('executes the shared ActionFlow conformance fixture through its generated event handler', async () => {
     const code = compileToCode(actionFlowFixture.schema);
     const harness = createFlowHarness(
@@ -362,7 +485,7 @@ describe('compiler ActionFlow runtime generation', () => {
                 type: 'loop',
                 over: largeArray,
                 itemVar: 'item',
-                actions: [],
+                actions: [{ type: 'feedback', kind: 'message', content: 'tick' }],
               },
             ],
           },
@@ -370,7 +493,7 @@ describe('compiler ActionFlow runtime generation', () => {
       },
     };
 
-    const code = compileToCode(schema);
+    const code = compileToCode(schema, { flowExecutionLimits: { maxExecutedActions: 100000 } });
     const harness = createFlowHarness(code, `{ executeFlow }`);
 
     await expect(harness.value.executeFlow('loopBudgetFlow')).rejects.toMatchObject({
