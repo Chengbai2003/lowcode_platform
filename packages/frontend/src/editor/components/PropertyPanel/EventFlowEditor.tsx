@@ -12,6 +12,7 @@ import {
   LogActionEditor,
   IfActionEditor,
   LoopActionEditor,
+  RunFlowActionEditor,
   UnsupportedActionEditor,
 } from './actionEditors';
 import styles from './PropertyPanel.module.scss';
@@ -27,6 +28,7 @@ interface EventTriggerEditorProps {
   onDeleteFlow: (trigger: string) => void;
   onDeleteAction: (trigger: string, actionIndex: number) => void;
   onUpdateAction: (trigger: string, actionIndex: number, nextAction: Action) => void;
+  flowKeys: readonly string[];
 }
 
 export const EventFlowEditor = ({
@@ -35,6 +37,7 @@ export const EventFlowEditor = ({
   onDeleteFlow,
   onDeleteAction,
   onUpdateAction,
+  flowKeys,
 }: EventTriggerEditorProps) => {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -70,6 +73,8 @@ export const EventFlowEditor = ({
         return `delay(${action.ms ?? 0}ms)`;
       case ACTION_TYPE.log:
         return `${action.level || 'info'}: ${String(action.value)}`;
+      case ACTION_TYPE.runFlow:
+        return `运行流程 ${action.flow}`;
       default:
         return '请配置详细参数...';
     }
@@ -99,6 +104,10 @@ export const EventFlowEditor = ({
         return <IfActionEditor action={action} updateAction={updateAction} />;
       case ACTION_TYPE.loop:
         return <LoopActionEditor action={action} updateAction={updateAction} />;
+      case ACTION_TYPE.runFlow:
+        return (
+          <RunFlowActionEditor action={action} flowKeys={flowKeys} updateAction={updateAction} />
+        );
       default:
         return <UnsupportedActionEditor />;
     }

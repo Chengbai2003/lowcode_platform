@@ -25,6 +25,7 @@ export const CORE_ACTION_TYPES = [
   // 工具
   'delay',
   'log',
+  'runFlow',
 ] as const;
 
 /**
@@ -75,6 +76,10 @@ const CORE_ACTIONS_DESCRIPTION = {
   log: {
     description: '控制台日志',
     example: `{ "type": "log", "value": "{{formData}}" }`,
+  },
+  runFlow: {
+    description: '运行页面 logic.flows 中已经声明的 ActionFlow',
+    example: `{ "type": "runFlow", "flow": "submitOrder", "input": { "source": "button" } }`,
   },
 } as const;
 

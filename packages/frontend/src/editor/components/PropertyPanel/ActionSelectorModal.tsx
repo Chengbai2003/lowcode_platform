@@ -10,6 +10,7 @@ import {
   FileText,
   Equal,
   RotateCcw,
+  Workflow,
   type LucideProps,
 } from 'lucide-react';
 import styles from './PropertyPanel.module.scss';
@@ -17,6 +18,7 @@ import styles from './PropertyPanel.module.scss';
 interface ActionSelectorModalProps {
   onClose: () => void;
   onSelect: (actionType: string) => void;
+  flowKeys: readonly string[];
 }
 
 const ACTION_TYPES: {
@@ -27,6 +29,14 @@ const ACTION_TYPES: {
   title: string;
   desc: string;
 }[] = [
+  {
+    type: 'runFlow',
+    icon: Workflow,
+    color: 'text-violet-600',
+    bg: 'bg-violet-100',
+    title: '运行流程',
+    desc: '调用页面中已声明的 ActionFlow',
+  },
   {
     type: 'setValue',
     icon: Variable,
@@ -101,7 +111,11 @@ const ACTION_TYPES: {
   },
 ];
 
-export const ActionSelectorModal: React.FC<ActionSelectorModalProps> = ({ onClose, onSelect }) => {
+export const ActionSelectorModal: React.FC<ActionSelectorModalProps> = ({
+  onClose,
+  onSelect,
+  flowKeys,
+}) => {
   return (
     <div className={styles.modalBackdrop} onClick={onClose}>
       <div className={styles.actionSelectorModal} onClick={(e) => e.stopPropagation()}>
@@ -124,6 +138,12 @@ export const ActionSelectorModal: React.FC<ActionSelectorModalProps> = ({ onClos
               <button
                 key={action.type}
                 className={styles.actionOption}
+                disabled={action.type === 'runFlow' && flowKeys.length === 0}
+                title={
+                  action.type === 'runFlow' && flowKeys.length === 0
+                    ? '请先在页面逻辑中声明 ActionFlow'
+                    : undefined
+                }
                 onClick={() => onSelect(action.type)}
               >
                 <div className={`${styles.actionOptionIcon} ${action.bg} ${action.color}`}>

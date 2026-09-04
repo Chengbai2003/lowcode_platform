@@ -86,7 +86,14 @@ export function isPageLogicInstruction(instruction: string): boolean {
     normalized.includes('页面逻辑') ||
     normalized.includes('状态声明') ||
     normalized.includes('计算声明') ||
-    normalized.includes('计算值')
+    normalized.includes('计算值') ||
+    normalized.includes('actionflow') ||
+    normalized.includes('action flow') ||
+    normalized.includes('runflow') ||
+    normalized.includes('run flow') ||
+    normalized.includes('流程声明') ||
+    normalized.includes('具名流程') ||
+    normalized.includes('页面流程')
   );
 }
 

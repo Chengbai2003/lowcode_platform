@@ -1800,10 +1800,14 @@ describe('AgentRunnerService', () => {
       expect(isPageLogicInstruction('添加状态声明 user: null')).toBe(true);
       expect(isPageLogicInstruction('新增计算声明 doubleCount')).toBe(true);
       expect(isPageLogicInstruction('计算值为 state.a + state.b')).toBe(true);
+      expect(isPageLogicInstruction('新增 ActionFlow submitOrder')).toBe(true);
+      expect(isPageLogicInstruction('用 runFlow 绑定页面流程')).toBe(true);
+      expect(isPageLogicInstruction('定义具名流程')).toBe(true);
 
       expect(isPageLogicInstruction('把按钮改成提交')).toBe(false);
       expect(isPageLogicInstruction('删除表单组件')).toBe(false);
       expect(isPageLogicInstruction('隐藏所有输入框')).toBe(false);
+      expect(isPageLogicInstruction('优化提交流程')).toBe(false);
       expect(isPageLogicInstruction('')).toBe(false);
     });
 

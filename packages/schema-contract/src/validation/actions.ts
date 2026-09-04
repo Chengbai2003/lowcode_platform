@@ -23,7 +23,7 @@ export interface ActionValidationContext {
   actionCount: number;
   /** ACTION_BUDGET_EXCEEDED 只报告一次 */
   actionBudgetReported: boolean;
-  readonly flowValidation?: FlowValidationContext;
+  flowValidation?: FlowValidationContext;
 }
 
 /**

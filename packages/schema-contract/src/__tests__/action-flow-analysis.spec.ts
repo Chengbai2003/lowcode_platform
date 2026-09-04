@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeActionFlowDeclarations, validatePageSchemaValue } from '../index';
+import {
+  analyzeActionFlowDeclarations,
+  DEFAULT_FLOW_EXECUTION_LIMITS,
+  HARD_FLOW_EXECUTION_LIMITS,
+  normalizeFlowExecutionLimits,
+  validatePageSchemaValue,
+} from '../index';
 
 describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
   it('1. accepts a single valid Flow declaration and produces topology', () => {
@@ -350,7 +356,7 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('18. fails close when logic.flows is passed to default PageSchema validator', () => {
+  it('18. accepts valid logic.flows in PageSchema validator and outputs deep-frozen canonical structure', () => {
     const schema = {
       schemaVersion: 0,
       rootId: 'root',
@@ -369,18 +375,21 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       },
     };
     const result = validatePageSchemaValue(schema);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.issues).toEqual([
-      expect.objectContaining({
-        code: 'UNKNOWN_LOGIC_FIELD',
-        path: ['logic', 'flows'],
-      }),
-    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.logic?.flows).toBeDefined();
+    expect(result.value.logic?.flows?.submit?.steps[0]).toEqual({
+      type: 'log',
+      value: 'hi',
+    });
+    expect(Object.isFrozen(result.value.logic?.flows)).toBe(true);
+    expect(Object.isFrozen(result.value.logic?.flows?.submit)).toBe(true);
+    expect(Object.isFrozen(result.value.logic?.flows?.submit?.steps)).toBe(true);
+    expect(Object.isFrozen(result.value.logic?.flows?.submit?.steps[0])).toBe(true);
   });
 
-  it('19. fails close when runFlow is used directly in component events', () => {
-    const schema = {
+  it('19. reports FLOW_REFERENCE_MISSING when runFlow references undeclared flow, and succeeds when declared', () => {
+    const schemaWithoutFlow = {
       schemaVersion: 0,
       rootId: 'root',
       components: {
@@ -393,14 +402,42 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
         },
       },
     };
-    const result = validatePageSchemaValue(schema);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.issues).toEqual([
-      expect.objectContaining({
-        code: 'UNSUPPORTED_ACTION_TYPE',
-        path: ['components', 'root', 'events', 'onClick', 0, 'type'],
-      }),
+    const resultFail = validatePageSchemaValue(schemaWithoutFlow);
+    expect(resultFail.ok).toBe(false);
+    if (!resultFail.ok) {
+      expect(resultFail.issues).toEqual([
+        expect.objectContaining({
+          code: 'FLOW_REFERENCE_MISSING',
+          path: ['components', 'root', 'events', 'onClick', 0, 'flow'],
+        }),
+      ]);
+    }
+
+    const schemaWithFlow = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: {
+        root: {
+          id: 'root',
+          type: 'Button',
+          events: {
+            onClick: [{ type: 'runFlow', flow: 'submit' }],
+          },
+        },
+      },
+      logic: {
+        flows: {
+          submit: {
+            steps: [{ type: 'log', value: 'submitted' }],
+          },
+        },
+      },
+    };
+    const resultSuccess = validatePageSchemaValue(schemaWithFlow);
+    expect(resultSuccess.ok).toBe(true);
+    if (!resultSuccess.ok) return;
+    expect(resultSuccess.value.components.root.events?.onClick).toEqual([
+      { type: 'runFlow', flow: 'submit' },
     ]);
   });
 
@@ -742,5 +779,239 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
         path: ['logic', 'flows', 'flowA'],
       }),
     ]);
+  });
+
+  it('33. PageSchema validates flows and component runFlow events with deep-frozen canonicalization', () => {
+    const schema = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: {
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          events: {
+            onClick: [{ type: 'runFlow', flow: 'increment', input: { step: 1 } }],
+          },
+        },
+      },
+      logic: {
+        states: { count: 0 },
+        flows: {
+          increment: {
+            steps: [
+              {
+                type: 'setValue',
+                field: 'state.count',
+                value: 'state.count + 1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const result = validatePageSchemaValue(schema);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.value.logic?.flows).toBeDefined();
+    expect(Object.isFrozen(result.value.logic?.flows)).toBe(true);
+    expect(Object.isFrozen(result.value.logic?.flows?.increment)).toBe(true);
+    expect(Object.isFrozen(result.value.components.btn.events?.onClick)).toBe(true);
+    expect(result.value.components.btn.events?.onClick?.[0]).toEqual({
+      type: 'runFlow',
+      flow: 'increment',
+      input: { step: 1 },
+    });
+  });
+
+  it('34. PageSchema reports FLOW_REFERENCE_MISSING for non-existent flow in component event', () => {
+    const schema = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: {
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          events: {
+            onClick: [{ type: 'runFlow', flow: 'nonExistentFlow' }],
+          },
+        },
+      },
+      logic: {
+        flows: {
+          existingFlow: {
+            steps: [{ type: 'log', value: 'ok' }],
+          },
+        },
+      },
+    };
+    const result = validatePageSchemaValue(schema);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'FLOW_REFERENCE_MISSING',
+        path: ['components', 'btn', 'events', 'onClick', 0, 'flow'],
+      }),
+    ]);
+  });
+
+  it('35. PageSchema fails close on flow cycle, unknown step, customScript, or budget exceeded', () => {
+    // a. Flow cycle
+    const cycleSchema = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: { btn: { id: 'btn', type: 'Button' } },
+      logic: {
+        flows: {
+          flowA: { steps: [{ type: 'runFlow', flow: 'flowB' }] },
+          flowB: { steps: [{ type: 'runFlow', flow: 'flowA' }] },
+        },
+      },
+    };
+    const cycleRes = validatePageSchemaValue(cycleSchema);
+    expect(cycleRes.ok).toBe(false);
+    if (!cycleRes.ok) {
+      expect(cycleRes.issues.some((i) => i.code === 'FLOW_REFERENCE_CYCLE')).toBe(true);
+    }
+
+    // b. Unknown step
+    const unknownStepSchema = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: { btn: { id: 'btn', type: 'Button' } },
+      logic: {
+        flows: {
+          badFlow: { steps: [{ type: 'magicSpell', value: 123 }] },
+        },
+      },
+    };
+    const unknownStepRes = validatePageSchemaValue(unknownStepSchema);
+    expect(unknownStepRes.ok).toBe(false);
+    if (!unknownStepRes.ok) {
+      expect(unknownStepRes.issues.some((i) => i.code === 'UNSUPPORTED_ACTION_TYPE')).toBe(true);
+    }
+
+    // c. customScript
+    const customScriptSchema = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: { btn: { id: 'btn', type: 'Button' } },
+      logic: {
+        flows: {
+          unsafeFlow: { steps: [{ type: 'customScript', code: 'alert(1)' }] },
+        },
+      },
+    };
+    const scriptRes = validatePageSchemaValue(customScriptSchema);
+    expect(scriptRes.ok).toBe(false);
+    if (!scriptRes.ok) {
+      expect(scriptRes.issues.some((i) => i.code === 'FORBIDDEN_CUSTOM_SCRIPT')).toBe(true);
+    }
+
+    // d. Action count budget exceeded in flows
+    const budgetSchema = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: { btn: { id: 'btn', type: 'Button' } },
+      logic: {
+        flows: {
+          f1: {
+            steps: [
+              { type: 'log', value: '1' },
+              { type: 'log', value: '2' },
+            ],
+          },
+        },
+      },
+    };
+    const budgetRes = validatePageSchemaValue(budgetSchema, { maxActionNodes: 1 });
+    expect(budgetRes.ok).toBe(false);
+    if (!budgetRes.ok) {
+      expect(budgetRes.issues.some((i) => i.code === 'ACTION_BUDGET_EXCEEDED')).toBe(true);
+    }
+  });
+
+  it('36. explicit states: flow setValue rejects nested state path with INVALID_STATE_TARGET', () => {
+    const schemaWithStates = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: { btn: { id: 'btn', type: 'Button' } },
+      logic: {
+        states: { user: { name: 'Alice' } },
+        flows: {
+          updateUser: {
+            steps: [
+              {
+                type: 'setValue',
+                field: 'state.user.name',
+                value: 'Bob',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const result = validatePageSchemaValue(schemaWithStates);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issues).toEqual([
+      expect.objectContaining({
+        code: 'INVALID_STATE_TARGET',
+        path: ['logic', 'flows', 'updateUser', 'steps', 0, 'field'],
+      }),
+    ]);
+  });
+
+  it('37. undeclared states: flow setValue allows nested state path', () => {
+    const schemaWithoutStates = {
+      schemaVersion: 0,
+      rootId: 'btn',
+      components: { btn: { id: 'btn', type: 'Button' } },
+      logic: {
+        flows: {
+          updateUser: {
+            steps: [
+              {
+                type: 'setValue',
+                field: 'state.user.name',
+                value: 'Bob',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const result = validatePageSchemaValue(schemaWithoutStates);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.logic?.flows?.updateUser.steps[0]).toEqual({
+      type: 'setValue',
+      field: 'state.user.name',
+      value: 'Bob',
+    });
+  });
+
+  it('38. normalizes and validates flow execution limits contract', () => {
+    const defaultLimits = normalizeFlowExecutionLimits();
+    expect(defaultLimits).toEqual(DEFAULT_FLOW_EXECUTION_LIMITS);
+    expect(Object.isFrozen(defaultLimits)).toBe(true);
+
+    const custom = normalizeFlowExecutionLimits({
+      maxExecutedActions: 50,
+      maxDurationMs: 1000,
+    });
+    expect(custom.maxExecutedActions).toBe(50);
+    expect(custom.maxDurationMs).toBe(1000);
+    expect(custom.maxFlowDepth).toBe(DEFAULT_FLOW_EXECUTION_LIMITS.maxFlowDepth);
+
+    expect(() => normalizeFlowExecutionLimits({ maxExecutedActions: 0 })).toThrow();
+    expect(() => normalizeFlowExecutionLimits({ maxExecutedActions: -1 })).toThrow();
+    expect(() => normalizeFlowExecutionLimits({ maxExecutedActions: 1.5 })).toThrow();
+    expect(() =>
+      normalizeFlowExecutionLimits({
+        maxExecutedActions: HARD_FLOW_EXECUTION_LIMITS.maxExecutedActions + 1,
+      }),
+    ).toThrow();
   });
 });

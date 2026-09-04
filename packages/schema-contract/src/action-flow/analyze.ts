@@ -200,6 +200,10 @@ function findCycleNodes(
   return result;
 }
 
+export interface ActionFlowAnalysisOptions {
+  readonly allowLegacyNestedStateTargets?: boolean;
+}
+
 /**
  * 独立分析与校验 ActionFlow 声明。
  *
@@ -211,6 +215,7 @@ export function analyzeActionFlowDeclarations(
   declarations: unknown,
   customLimits?: Partial<SchemaValidationLimits>,
   basePath: readonly (string | number)[] = ['logic', 'flows'],
+  options?: ActionFlowAnalysisOptions,
 ): ActionFlowAnalysisResult {
   const limits = normalizeValidationLimits(customLimits);
   const issues: SchemaContractIssue[] = [];
@@ -335,7 +340,7 @@ export function analyzeActionFlowDeclarations(
     inspectionContext,
     maxActionNodes: limits.maxActionNodes,
     maxActionDepth: limits.maxActionDepth,
-    allowLegacyNestedStateTargets: true,
+    allowLegacyNestedStateTargets: options?.allowLegacyNestedStateTargets ?? true,
     actionCount: 0,
     actionBudgetReported: false,
     flowValidation: {

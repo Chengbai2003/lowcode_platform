@@ -3,8 +3,10 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, act, cleanup, fireEvent } from '@testing-library/react';
 import React, { useState } from 'react';
-import type { PageSchema } from '@lowcode-platform/schema-contract';
+import { analyzeActionFlowDeclarations, type PageSchema } from '@lowcode-platform/schema-contract';
 import { Renderer } from '../Renderer';
+import { EventDispatcher } from '../EventDispatcher';
+import { createRuntimeSession } from '../session/RuntimeSession';
 import { testPreset } from './fixtures/testPreset';
 
 const conformanceFixture = JSON.parse(
@@ -20,6 +22,21 @@ const conformanceFixture = JSON.parse(
   };
 };
 
+const actionFlowFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-action-flow-conformance.json'),
+    'utf8',
+  ),
+) as {
+  schema: PageSchema;
+  expected: {
+    initial: { visibleStatus: string };
+    afterClick: { visibleStatus: string };
+    recovery: { state: { recovered: boolean }; result: { status: string; flow: string } };
+    unhandledDiagnostic: { code: string; flow: string; step: number; stepPath: string[] };
+  };
+};
+
 const simpleSchema: PageSchema = {
   schemaVersion: 0,
   rootId: 'root',
@@ -29,7 +46,52 @@ const simpleSchema: PageSchema = {
   },
 };
 
+function createFixtureSession() {
+  const flows = actionFlowFixture.schema.logic?.flows;
+  if (!flows) throw new Error('ActionFlow fixture must declare flows');
+  const analysis = analyzeActionFlowDeclarations(flows);
+  if (!analysis.ok) throw new Error('ActionFlow fixture must pass Contract analysis');
+  return createRuntimeSession({
+    pageId: 'action-flow-fixture',
+    documentSessionId: 'fixture-session',
+    dispatcher: new EventDispatcher({
+      api: { get: vi.fn().mockRejectedValue(new Error('failed')) },
+    }),
+    flowAnalysis: analysis.value,
+  });
+}
+
 describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
+  it('loads the shared ActionFlow conformance fixture', async () => {
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="action-flow-conformance-page"
+        documentSessionId="action-flow-conformance-session"
+        schema={actionFlowFixture.schema}
+      />,
+    );
+
+    expect(screen.getByText(actionFlowFixture.expected.initial.visibleStatus)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText(actionFlowFixture.expected.afterClick.visibleStatus)).toBeTruthy();
+  });
+
+  it('executes fixture recovery and reports its unhandled diagnostic through RuntimeSession', async () => {
+    const session = createFixtureSession();
+    const recovered = await session.executeFlow('recoverFailure');
+    expect(recovered).toMatchObject(actionFlowFixture.expected.recovery.result);
+    expect(session.runtime.getState()).toMatchObject(actionFlowFixture.expected.recovery.state);
+
+    await expect(session.executeFlow('unhandledFailure')).rejects.toMatchObject(
+      actionFlowFixture.expected.unhandledDiagnostic,
+    );
+  });
+
   it('matches the shared Computed conformance corpus before and after one event', async () => {
     render(
       <Renderer
@@ -270,5 +332,219 @@ describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
     unmount();
     // 卸载无报错且安全清理
     cleanup();
+  });
+
+  it('点击组件触发 runFlow，正确执行 steps、修改 state、驱动渲染', async () => {
+    const flowSchema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: {
+        states: { count: 0 },
+        flows: {
+          increment: {
+            steps: [
+              {
+                type: 'setValue',
+                field: 'state.count',
+                value: '{{ state.count + 1 }}',
+              },
+            ],
+          },
+        },
+      },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['counter', 'btn'] },
+        counter: {
+          id: 'counter',
+          type: 'Text',
+          props: { children: '{{ state.count }}' },
+        },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'trigger flow' },
+          events: {
+            onClick: [{ type: 'runFlow', flow: 'increment' }],
+          },
+        },
+      },
+    };
+
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="flow-exec-page"
+        documentSessionId="flow-exec-session"
+        schema={flowSchema}
+      />,
+    );
+
+    expect(screen.getByText('0')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'trigger flow' }));
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('1')).toBeTruthy();
+  });
+
+  it('同一 session 下热替换 flow 声明，后续点击按新 flow 执行，旧 state 保持', async () => {
+    const createFlowSchema = (step: number): PageSchema => ({
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: {
+        states: { count: 10 },
+        flows: {
+          changeCount: {
+            steps: [
+              {
+                type: 'setValue',
+                field: 'state.count',
+                value: `{{ state.count + ${step} }}`,
+              },
+            ],
+          },
+        },
+      },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['counter', 'btn'] },
+        counter: {
+          id: 'counter',
+          type: 'Text',
+          props: { children: '{{ state.count }}' },
+        },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'change count' },
+          events: {
+            onClick: [{ type: 'runFlow', flow: 'changeCount' }],
+          },
+        },
+      },
+    });
+
+    const rendered = render(
+      <Renderer
+        preset={testPreset}
+        pageId="hot-replace-flow-page"
+        documentSessionId="hot-replace-flow-session"
+        schema={createFlowSchema(1)}
+      />,
+    );
+
+    expect(screen.getByText('10')).toBeTruthy();
+
+    // First click: adds 1 -> 11
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'change count' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('11')).toBeTruthy();
+
+    // Hot-replace schema with step = 100 within same session
+    await act(async () => {
+      rendered.rerender(
+        <Renderer
+          preset={testPreset}
+          pageId="hot-replace-flow-page"
+          documentSessionId="hot-replace-flow-session"
+          schema={createFlowSchema(100)}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    // State 11 is preserved
+    expect(screen.getByText('11')).toBeTruthy();
+
+    // Second click: adds 100 -> 111
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'change count' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText('111')).toBeTruthy();
+  });
+
+  it('页面 unmount / session dispose 能够中止正在执行的 flow（API、delay、modal），不再产生悬挂写回', async () => {
+    let abortCalled = false;
+
+    const mockApi = {
+      get: vi.fn().mockImplementation((_url: string, _params?: unknown, signal?: AbortSignal) => {
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            abortCalled = true;
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        });
+      }),
+    };
+
+    const asyncFlowSchema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: {
+        states: { status: 'idle' },
+        flows: {
+          inFlightFlow: {
+            steps: [
+              {
+                type: 'apiCall',
+                url: 'https://example.com/api/test',
+                resultTo: 'state.status',
+              },
+              {
+                type: 'delay',
+                ms: 100,
+              },
+              {
+                type: 'setValue',
+                field: 'state.status',
+                value: 'late_finish',
+              },
+            ],
+          },
+        },
+      },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['btn'] },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'run api flow' },
+          events: {
+            onClick: [{ type: 'runFlow', flow: 'inFlightFlow' }],
+          },
+        },
+      },
+    };
+
+    try {
+      const rendered = render(
+        <Renderer
+          preset={testPreset}
+          pageId="abort-flow-page"
+          documentSessionId="abort-flow-session"
+          schema={asyncFlowSchema}
+          eventContext={{ api: mockApi }}
+        />,
+      );
+
+      // Trigger flow with in-flight fetch
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'run api flow' }));
+        await new Promise((r) => setTimeout(r, 10));
+      });
+
+      expect(mockApi.get).toHaveBeenCalled();
+
+      // Unmount before api resolves
+      rendered.unmount();
+
+      expect(abortCalled).toBe(true);
+    } finally {
+      cleanup();
+    }
   });
 });

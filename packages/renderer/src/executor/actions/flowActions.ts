@@ -7,6 +7,7 @@ import type { ActionHandler, ExecutionContext } from '../../dsl';
 import type { IfAction, LoopAction, RunFlowAction } from '../../dsl/actions/flow';
 import { resolveValue } from '../parser';
 import { getFlowRunContext, withFlowRunPath } from '../../session/FlowRun';
+import type { RuntimeSession } from '../../session/RuntimeSession';
 
 /**
  * 条件分支
@@ -126,19 +127,33 @@ export const loopAction: ActionHandler = async (action, context, executor) => {
  * Action: { type: 'runFlow'; flow: string; input?: Value; }
  */
 export const runFlowAction: ActionHandler = async (action, context) => {
-  const flowContext = getFlowRunContext(context);
-  if (!flowContext) {
-    throw new Error('runFlow action can only be executed within an active FlowRun');
-  }
-
-  flowContext.throwIfAborted();
-
   const runFlowTyped = action as RunFlowAction;
   const targetFlow = runFlowTyped.flow;
   const rawInput = runFlowTyped.input;
   const resolvedInput = rawInput !== undefined ? resolveValue(rawInput, context) : undefined;
+  const isolatedInput =
+    resolvedInput !== undefined && typeof resolvedInput === 'object' && resolvedInput !== null
+      ? (() => {
+          try {
+            return structuredClone(resolvedInput);
+          } catch {
+            return resolvedInput;
+          }
+        })()
+      : resolvedInput;
 
-  return await flowContext.flowRun.executeChildFlow(targetFlow, resolvedInput, context);
+  const flowContext = getFlowRunContext(context);
+  if (flowContext) {
+    flowContext.throwIfAborted();
+    return await flowContext.flowRun.executeChildFlow(targetFlow, isolatedInput, context);
+  }
+
+  const session = (context as { session?: RuntimeSession }).session;
+  if (session) {
+    return await session.executeFlow(targetFlow, isolatedInput);
+  }
+
+  throw new Error('runFlow action can only be executed within an active FlowRun or RuntimeSession');
 };
 
 /**

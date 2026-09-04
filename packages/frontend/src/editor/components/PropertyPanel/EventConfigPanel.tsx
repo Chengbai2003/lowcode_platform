@@ -33,6 +33,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
   // 获取当前组件的事件配置
   const component = schema && selectedId ? schema.components[selectedId] : null;
   const events = useMemo(() => component?.events || {}, [component]);
+  const flowKeys = useMemo(() => Object.keys(schema?.logic?.flows ?? {}), [schema?.logic?.flows]);
 
   // 添加新事件流（打开触发器选择器）
   const handleAddEventFlow = useCallback(() => {
@@ -144,6 +145,9 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
           value: { type: 'literal', value: 'Debug log' },
           level: 'info' as const,
         }),
+        ...(actionType === 'runFlow' && {
+          flow: flowKeys[0],
+        }),
       } as Action;
 
       const currentActions = events[activeTrigger] || [];
@@ -164,7 +168,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
       onSchemaChange(newSchema);
       setIsModalOpen(false);
     },
-    [schema, selectedId, activeTrigger, events, onSchemaChange],
+    [schema, selectedId, activeTrigger, events, flowKeys, onSchemaChange],
   );
 
   // 删除动作
@@ -255,6 +259,7 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
               onDeleteFlow={handleDeleteFlow}
               onDeleteAction={handleDeleteAction}
               onUpdateAction={handleUpdateAction}
+              flowKeys={flowKeys}
             />
           ))
         )}
@@ -267,7 +272,11 @@ export const EventConfigPanel: React.FC<EventConfigPanelProps> = ({
 
       {/* 动作选择器弹窗 */}
       {isModalOpen && (
-        <ActionSelectorModal onClose={() => setIsModalOpen(false)} onSelect={handleAddAction} />
+        <ActionSelectorModal
+          onClose={() => setIsModalOpen(false)}
+          onSelect={handleAddAction}
+          flowKeys={flowKeys}
+        />
       )}
 
       {/* 触发器选择器弹窗 */}

@@ -963,8 +963,8 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
     expect(dispatcher.getRuntime().getState().step2).toBe('done');
   });
 
-  it('26. logic.flows 和组件 runFlow 生产入口仍被拒绝', () => {
-    // 1. validatePageSchemaValue rejects logic.flows
+  it('26. logic.flows 和组件 runFlow 生产入口正式放行并在 Session 下驱动状态更新', async () => {
+    // 1. validatePageSchemaValue accepts logic.flows
     const pageWithFlows = {
       schemaVersion: 0 as const,
       rootId: 'root',
@@ -972,18 +972,17 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
         root: { id: 'root', type: 'container', props: {} },
       },
       logic: {
+        states: { x: 0 },
         flows: {
           submit: { steps: [{ type: 'setValue', field: 'state.x', value: 1 }] },
         },
       },
     };
     const res1 = validatePageSchemaValue(pageWithFlows);
-    expect(res1.ok).toBe(false);
-    if (!res1.ok) {
-      expect(res1.issues.some((i) => i.code === 'UNKNOWN_LOGIC_FIELD')).toBe(true);
-    }
+    expect(res1.ok).toBe(true);
+    expect(res1.value?.logic?.flows?.submit).toBeDefined();
 
-    // 2. Component event rejects runFlow
+    // 2. Component event accepts runFlow and updates state when triggered via Session
     const pageWithComponentRunFlow = {
       schemaVersion: 0 as const,
       rootId: 'btn-1',
@@ -996,12 +995,31 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
           },
         },
       },
+      logic: {
+        states: { x: 0 },
+        flows: {
+          submit: { steps: [{ type: 'setValue', field: 'state.x', value: 42 }] },
+        },
+      },
     };
     const res2 = validatePageSchemaValue(pageWithComponentRunFlow);
-    expect(res2.ok).toBe(false);
-    if (!res2.ok) {
-      expect(res2.issues.some((i) => i.code === 'UNSUPPORTED_ACTION_TYPE')).toBe(true);
-    }
+    expect(res2.ok).toBe(true);
+
+    const flowAnalysis = analyzeActionFlowDeclarations(res2.value!.logic!.flows!);
+    expect(flowAnalysis.ok).toBe(true);
+    const session = createRuntimeSession({
+      pageId: 'page-26',
+      documentSessionId: 'doc-26',
+      flowAnalysis: flowAnalysis.value,
+      dispatcherInit: {
+        state: { x: 0 },
+      },
+    });
+
+    const clickActions = res2.value!.components['btn-1'].events!.onClick;
+    if (!clickActions) throw new Error('Expected onClick actions');
+    await session.dispatcher.execute(clickActions);
+    expect(session.runtime.getState().x).toBe(42);
 
     // 3. Executing runFlow outside FlowRun in Legacy context fails
     const dispatcher = new EventDispatcher();

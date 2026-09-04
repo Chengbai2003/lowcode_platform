@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-1（S1-S4 已完成，等待合并 PR #48）` | **优先级**：`P0`
+> **当前阶段**：`M1a-2 / F3 已实施，Draft PR #52 待审核；#47 仍为后续六消费面门禁` | **优先级**：`P0`
 
 ## 目标与边界
 
@@ -70,7 +70,7 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
 - **实施状态**：
   - **F1 / F1.1 已完成**：建立具名 ActionFlow Schema Contract、独立静态分析器与综合深度预算；
   - **F2 已完成**：实现 Renderer 内部 ActionFlow Runtime 语义（默认遇错停止、flow 级 `onError`、AbortSignal 全链路贯穿、session dispose 后写回阻断、结构化诊断 trace、多维运行时预算边界校验与矩阵测试守护）；
-  - **F3 待实施**：开放生产 `PageSchema.logic.flows`、组件事件 `runFlow` 桥接与内联 ActionList 迁移。
+  - **F3 已实施（待 PR 审核）**：生产 `PageSchema.logic.flows`、组件事件 `runFlow`、Renderer/Compiler 执行、Editor/Agent authoring 与 Repository 往返已接通；保留 Legacy ActionList，不做自动迁移。跨六消费面固定语料门禁仍属 #47。
 
 ### M1a-3：一致性门禁
 

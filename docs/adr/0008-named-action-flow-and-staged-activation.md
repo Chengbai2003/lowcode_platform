@@ -42,6 +42,9 @@
    - 旧内联 ActionList 在 `schemaVersion: 0` 期间继续合法可用，不进行自动迁移或批量重写已有 Schema。
    - F3 闭环后，新 Authoring 优先生成具名 Flow；是否在 Schema V1 废弃内联形式留到 M1b 冻结前决定。
 
+8. **F3 生产激活状态**
+   - F3 已在 Contract、Renderer、Compiler、Editor/Agent 与 Repository 接通 `logic.flows`/`runFlow`；固定语料的六消费面 capability gate 留给 #47，且不改变本 ADR 的 Legacy 兼容边界。
+
 ## 备选方案
 
 ### 继续复制内联 ActionList

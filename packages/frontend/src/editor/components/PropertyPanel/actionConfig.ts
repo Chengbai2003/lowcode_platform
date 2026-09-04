@@ -13,6 +13,7 @@ import {
   FileText,
   Equal,
   RotateCcw,
+  Workflow,
 } from 'lucide-react';
 import type { Action, Value } from '../../../types';
 
@@ -27,6 +28,7 @@ export const ACTION_TYPE = {
   loop: 'loop',
   delay: 'delay',
   log: 'log',
+  runFlow: 'runFlow',
 } as const;
 
 /** 保留历史读取：customScript 已永久禁用，仅用于识别历史数据 */
@@ -45,6 +47,7 @@ export type DelayActionItem = Extract<Action, { type: typeof ACTION_TYPE.delay }
 export type LogActionItem = Extract<Action, { type: typeof ACTION_TYPE.log }>;
 export type IfActionItem = Extract<Action, { type: typeof ACTION_TYPE.if }>;
 export type LoopActionItem = Extract<Action, { type: typeof ACTION_TYPE.loop }>;
+export type RunFlowActionItem = Extract<Action, { type: typeof ACTION_TYPE.runFlow }>;
 /** 历史 customScript 类型，仅用于展示禁用态 */
 /** 历史customScript动作形状：Schema联合已移除该类型，仅用于只读提示 */
 export type HistoricCustomScriptActionItem = { type: 'customScript'; code?: string };
@@ -122,6 +125,13 @@ export const ACTION_TYPE_CONFIG: Record<
     bg: 'bg-slate-100',
     title: '日志',
     desc: '输出调试日志',
+  },
+  [ACTION_TYPE.runFlow]: {
+    icon: Workflow,
+    color: 'text-violet-600',
+    bg: 'bg-violet-100',
+    title: '运行流程',
+    desc: '调用页面中已声明的 ActionFlow',
   },
 };
 

@@ -137,7 +137,8 @@ export function createWriteDefinitions(deps: WriteToolsDeps): ToolDefinition[] {
     },
     {
       name: 'bind_event',
-      description: '替换目标 trigger 的完整 action 列表。',
+      description:
+        '替换目标 trigger 的完整 action 列表。runFlow 只能引用当前页面 logic.flows 中已声明的流程。',
       inputSchema: createObjectSchema(
         '绑定组件事件。',
         {
@@ -199,13 +200,13 @@ export function createWriteDefinitions(deps: WriteToolsDeps): ToolDefinition[] {
     {
       name: 'replace_page_logic',
       description:
-        '原子替换整块页面逻辑声明（states 与 computed）。调用前必须先用 get_page_schema 读取当前 schema.logic，提交时传入完整 logic 对象，保留未要求修改的声明。',
+        '原子替换整块页面逻辑声明（states、computed 与 flows）。调用前必须先用 get_page_schema 读取当前 schema.logic，提交时传入完整 logic 对象，保留未要求修改的声明。删除或改名 flow 前，必须先把引用它的事件重新绑定。',
       inputSchema: createObjectSchema(
         '原子替换页面逻辑声明。',
         {
           logic: {
             type: 'object',
-            description: '完整的页面逻辑声明对象，包含 states 和 computed。',
+            description: '完整的页面逻辑声明对象，包含 states、computed 和 flows。',
           },
         },
         ['logic'],
