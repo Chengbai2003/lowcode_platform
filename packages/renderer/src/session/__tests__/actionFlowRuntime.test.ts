@@ -1017,7 +1017,8 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
     });
 
     const clickActions = res2.value!.components['btn-1'].events!.onClick;
-    await session.dispatcher.execute(clickActions as any);
+    if (!clickActions) throw new Error('Expected onClick actions');
+    await session.dispatcher.execute(clickActions);
     expect(session.runtime.getState().x).toBe(42);
 
     // 3. Executing runFlow outside FlowRun in Legacy context fails

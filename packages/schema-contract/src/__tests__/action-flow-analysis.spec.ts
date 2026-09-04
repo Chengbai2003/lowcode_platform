@@ -6,6 +6,7 @@ import {
   normalizeFlowExecutionLimits,
   validatePageSchemaValue,
 } from '../index';
+import type { Action } from '../actions';
 
 describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
   it('1. accepts a single valid Flow declaration and produces topology', () => {
@@ -882,7 +883,7 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       components: { btn: { id: 'btn', type: 'Button' } },
       logic: {
         flows: {
-          badFlow: { steps: [{ type: 'magicSpell', value: 123 } as any] },
+          badFlow: { steps: [{ type: 'magicSpell', value: 123 } as unknown as Action] },
         },
       },
     };
@@ -899,7 +900,7 @@ describe('ActionFlow Contract and Migration Boundary (M1a-2 / F1)', () => {
       components: { btn: { id: 'btn', type: 'Button' } },
       logic: {
         flows: {
-          unsafeFlow: { steps: [{ type: 'customScript', code: 'alert(1)' } as any] },
+          unsafeFlow: { steps: [{ type: 'customScript', code: 'alert(1)' } as unknown as Action] },
         },
       },
     };

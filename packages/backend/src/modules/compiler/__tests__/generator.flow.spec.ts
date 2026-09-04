@@ -31,7 +31,11 @@ function extractGeneratedComponentBody(code: string): string {
 function createFlowHarness(
   code: string,
   returnedCode: string,
-  options?: { mockModal?: any; mockNotification?: any; mockMessage?: any },
+  options?: {
+    mockModal?: { confirm: jest.Mock; info: jest.Mock };
+    mockNotification?: Record<string, jest.Mock>;
+    mockMessage?: Record<string, jest.Mock>;
+  },
 ) {
   let renderedState: unknown;
   let unmountCleanup: (() => void) | undefined;
@@ -433,7 +437,7 @@ describe('compiler ActionFlow runtime generation', () => {
     const code = compileToCode(schema);
     const harness = createFlowHarness(code, `{ executeFlow }`);
 
-    const promises: Promise<any>[] = [];
+    const promises: Promise<unknown>[] = [];
     for (let i = 0; i < 8; i++) {
       promises.push(harness.value.executeFlow('slowFlow'));
     }
@@ -581,24 +585,25 @@ describe('compiler ActionFlow runtime generation', () => {
       const code = compileToCode(schema);
       const harness = createFlowHarness(code, `{ executeFlow }`);
 
-      let caughtError: any;
+      let caughtError: unknown;
       try {
         await harness.value.executeFlow('mainFlow');
       } catch (err) {
         caughtError = err;
       }
 
-      expect(caughtError).toBeDefined();
-      expect(caughtError.name).toBe('FlowExecutionError');
-      expect(caughtError.code).toBe('FLOW_STEP_FAILED');
-      expect(caughtError.flow).toBe('subFlow');
-      expect(caughtError.step).toBe(0);
-      expect(caughtError.stepPath).toEqual(['steps', 0]);
-      expect(caughtError.path).toEqual(['logic', 'flows', 'subFlow', 'steps', 0]);
-      expect(caughtError.trace).toEqual([
-        { flow: 'mainFlow', step: 0 },
-        { flow: 'subFlow', step: 0 },
-      ]);
+      expect(caughtError).toMatchObject({
+        name: 'FlowExecutionError',
+        code: 'FLOW_STEP_FAILED',
+        flow: 'subFlow',
+        step: 0,
+        stepPath: ['steps', 0],
+        path: ['logic', 'flows', 'subFlow', 'steps', 0],
+        trace: [
+          { flow: 'mainFlow', step: 0 },
+          { flow: 'subFlow', step: 0 },
+        ],
+      });
     } finally {
       global.fetch = realFetch;
     }
