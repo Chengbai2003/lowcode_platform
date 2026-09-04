@@ -35,6 +35,8 @@ function createFlowHarness(
     mockModal?: { confirm: jest.Mock; info: jest.Mock };
     mockNotification?: Record<string, jest.Mock>;
     mockMessage?: Record<string, jest.Mock>;
+    mockWindow?: { location: { href: string } };
+    strictEffects?: boolean;
   },
 ) {
   let renderedState: unknown;
@@ -54,7 +56,11 @@ function createFlowHarness(
   const useMemo = (factory: () => unknown) => factory();
   const useRef = <T>(value: T) => ({ current: value });
   const useEffect = (effect: () => void | (() => void)) => {
-    const cleanup = effect();
+    let cleanup = effect();
+    if (options?.strictEffects && typeof cleanup === 'function') {
+      cleanup();
+      cleanup = effect();
+    }
     if (typeof cleanup === 'function') {
       unmountCleanup = cleanup;
     }
@@ -88,11 +94,21 @@ function createFlowHarness(
     'Modal',
     'notification',
     'message',
+    'window',
     `${extractGeneratedComponentBody(code)}\nreturn ${returnedCode};`,
   );
 
   return {
-    value: factory(useState, useMemo, useRef, useEffect, Modal, notification, message),
+    value: factory(
+      useState,
+      useMemo,
+      useRef,
+      useEffect,
+      Modal,
+      notification,
+      message,
+      options?.mockWindow || { location: { href: '' } },
+    ),
     getRenderedState: () => renderedState,
     unmount: () => {
       unmountCleanup?.();
@@ -129,6 +145,31 @@ describe('compiler ActionFlow runtime generation', () => {
         ],
       },
       ['steps', 0, 'actions', 1],
+    ],
+    [
+      'else',
+      {
+        type: 'if',
+        condition: false,
+        then: [],
+        else: [
+          { type: 'feedback', content: 'ok' },
+          { type: 'apiCall', url: '/fail' },
+        ],
+      },
+      ['steps', 0, 'else', 1],
+    ],
+    [
+      'api onError',
+      {
+        type: 'apiCall',
+        url: '/fail',
+        onError: [
+          { type: 'feedback', content: 'recovering' },
+          { type: 'apiCall', url: '/fail' },
+        ],
+      },
+      ['steps', 0, 'onError', 1],
     ],
   ] as const)('reports the nested %s path through executeFlow', async (_name, step, stepPath) => {
     const schema: PageSchema = {
@@ -177,9 +218,11 @@ describe('compiler ActionFlow runtime generation', () => {
 
   it('reports api onSuccess and dialog onOk child paths through executeFlow', async () => {
     let onOk: (() => Promise<void>) | undefined;
+    let onCancel: (() => Promise<void>) | undefined;
     const modal = {
-      confirm: jest.fn((config: { onOk: () => Promise<void> }) => {
+      confirm: jest.fn((config: { onOk: () => Promise<void>; onCancel: () => Promise<void> }) => {
         onOk = config.onOk;
+        onCancel = config.onCancel;
         return { destroy: jest.fn() };
       }),
       info: jest.fn(),
@@ -205,20 +248,24 @@ describe('compiler ActionFlow runtime generation', () => {
               },
             ],
           },
+          cancel: {
+            steps: [
+              {
+                type: 'dialog',
+                kind: 'confirm',
+                content: 'confirm',
+                onCancel: [{ type: 'apiCall', url: '/fail' }],
+              },
+            ],
+          },
         },
       },
     };
-    const response = {
-      ok: true,
-      headers: { get: () => 'application/json' },
-      json: async () => ({}),
-      text: async () => '',
-      status: 200,
-      statusText: 'OK',
-    };
     const fetchMock = jest
       .spyOn(global, 'fetch')
-      .mockResolvedValueOnce(response as unknown as Response)
+      .mockResolvedValueOnce(
+        new Response('{}', { headers: { 'content-type': 'application/json' } }),
+      )
       .mockRejectedValue(new Error('nested failure'));
     try {
       const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }', {
@@ -240,9 +287,76 @@ describe('compiler ActionFlow runtime generation', () => {
         stepPath: ['steps', 0, 'onOk', 0],
         path: ['logic', 'flows', 'dialog', 'steps', 0, 'onOk', 0],
       });
+      const cancelled = harness.value.executeFlow('cancel');
+      await onCancel?.();
+      await expect(cancelled).rejects.toMatchObject({
+        code: 'FLOW_STEP_FAILED',
+        flow: 'cancel',
+        step: 0,
+        stepPath: ['steps', 0, 'onCancel', 0],
+        path: ['logic', 'flows', 'cancel', 'steps', 0, 'onCancel', 0],
+      });
     } finally {
       fetchMock.mockRestore();
     }
+  });
+
+  it('writes a literal navigate target through the generated public flow executor', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        flows: { navigate: { steps: [{ type: 'navigate', to: '/orders/42' }] } },
+      },
+    };
+    const mockWindow = { location: { href: '' } };
+    const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }', { mockWindow });
+
+    await expect(harness.value.executeFlow('navigate')).resolves.toMatchObject({
+      status: 'success',
+    });
+    expect(mockWindow.location.href).toBe('/orders/42');
+  });
+
+  it('maps modal and confirm dialogs to their generated Modal methods', async () => {
+    let modalOnOk: (() => Promise<void>) | undefined;
+    let confirmOnOk: (() => Promise<void>) | undefined;
+    const modal = {
+      info: jest.fn((config: { onOk: () => Promise<void> }) => {
+        modalOnOk = config.onOk;
+        return { destroy: jest.fn() };
+      }),
+      confirm: jest.fn((config: { onOk: () => Promise<void> }) => {
+        confirmOnOk = config.onOk;
+        return { destroy: jest.fn() };
+      }),
+    };
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        flows: {
+          modal: { steps: [{ type: 'dialog', kind: 'modal', content: 'notice' }] },
+          confirm: { steps: [{ type: 'dialog', kind: 'confirm', content: 'continue?' }] },
+        },
+      },
+    };
+    const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }', {
+      mockModal: modal,
+    });
+
+    const modalRun = harness.value.executeFlow('modal');
+    expect(modal.info).toHaveBeenCalledTimes(1);
+    expect(modal.confirm).not.toHaveBeenCalled();
+    await modalOnOk?.();
+    await expect(modalRun).resolves.toMatchObject({ status: 'success' });
+
+    const confirmRun = harness.value.executeFlow('confirm');
+    expect(modal.confirm).toHaveBeenCalledTimes(1);
+    await confirmOnOk?.();
+    await expect(confirmRun).resolves.toMatchObject({ status: 'success' });
   });
   it('executes the shared ActionFlow conformance fixture through its generated event handler', async () => {
     const code = compileToCode(actionFlowFixture.schema);
@@ -444,6 +558,54 @@ describe('compiler ActionFlow runtime generation', () => {
     }
   });
 
+  it('keeps the primary step diagnostic as cause when onError action 1 fails', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        flows: {
+          main: {
+            steps: [{ type: 'apiCall', url: '/primary-failure' }],
+            onError: [
+              { type: 'feedback', content: 'recovery started' },
+              { type: 'apiCall', url: '/recovery-failure' },
+            ],
+          },
+        },
+      },
+    };
+    const fetchMock = jest
+      .spyOn(global, 'fetch')
+      .mockRejectedValueOnce(new Error('primary failure'));
+    fetchMock.mockRejectedValueOnce(new Error('recovery failure'));
+    try {
+      const harness = createFlowHarness(compileToCode(schema), '{ executeFlow }');
+      let caughtError: unknown;
+      try {
+        await harness.value.executeFlow('main');
+      } catch (error) {
+        caughtError = error;
+      }
+
+      expect(caughtError).toMatchObject({
+        code: 'FLOW_STEP_FAILED',
+        flow: 'main',
+        step: null,
+        stepPath: ['onError', 1],
+        path: ['logic', 'flows', 'main', 'onError', 1],
+        cause: expect.objectContaining({
+          code: 'FLOW_STEP_FAILED',
+          step: 0,
+          stepPath: ['steps', 0],
+          message: 'primary failure',
+        }),
+      });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it('enforces a trusted custom action execution budget through executeFlow', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,
@@ -591,24 +753,21 @@ describe('compiler ActionFlow runtime generation', () => {
       },
     };
 
-    const code = compileToCode(schema, { flowExecutionLimits: { maxDurationMs: 1 } });
-    const harness = createFlowHarness(code, `{ executeFlow }`);
-
-    const realNow = performance.now;
-    let mockedTime = 1000;
-    jest.spyOn(performance, 'now').mockImplementation(() => mockedTime);
-
+    jest.useFakeTimers();
+    const nowSpy = jest.spyOn(performance, 'now').mockReturnValue(1_000);
     try {
+      const code = compileToCode(schema, { flowExecutionLimits: { maxDurationMs: 1 } });
+      const harness = createFlowHarness(code, `{ executeFlow }`);
       const flowPromise = harness.value.executeFlow('timeoutFlow');
-      // Advance mocked monotonic clock past the trusted one-millisecond deadline.
-      mockedTime += 2;
+      jest.advanceTimersByTime(1);
 
       await expect(flowPromise).rejects.toMatchObject({
         name: 'FlowExecutionError',
         code: 'FLOW_DURATION_EXCEEDED',
       });
     } finally {
-      jest.spyOn(performance, 'now').mockImplementation(realNow);
+      nowSpy.mockRestore();
+      jest.useRealTimers();
     }
   });
 
@@ -634,6 +793,28 @@ describe('compiler ActionFlow runtime generation', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('executes a flow after StrictMode effect cleanup and setup replay', async () => {
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page', props: {} } },
+      logic: {
+        states: { ran: false },
+        flows: { main: { steps: [{ type: 'setValue', field: 'state.ran', value: true }] } },
+      },
+    };
+    const harness = createFlowHarness(
+      compileToCode(schema),
+      '{ executeFlow, read: () => stateRef.current }',
+      {
+        strictEffects: true,
+      },
+    );
+
+    await expect(harness.value.executeFlow('main')).resolves.toMatchObject({ status: 'success' });
+    expect(harness.value.read()).toMatchObject({ ran: true });
   });
 
   it('unmount aborts in-flight flow, prevents late state write, and protects against unhandledRejection', async () => {
