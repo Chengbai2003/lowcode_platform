@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 0,
+  "rootId": "submit",
+  "components": {
+    "submit": {
+      "id": "submit",
+      "type": "Button",
+      "props": { "children": "Submit" },
+      "events": {
+        "onClick": [{ "type": "runFlow", "flow": "submitOrder", "input": { "source": "fixture" } }]
+      }
+    }
+  },
+  "logic": {
+    "states": { "count": 0, "source": "" },
+    "flows": {
+      "recordSource": {
+        "steps": [{ "type": "setValue", "field": "state.source", "value": "{{input.source}}" }]
+      },
+      "submitOrder": {
+        "steps": [
+          { "type": "runFlow", "flow": "recordSource", "input": { "source": "fixture" } },
+          { "type": "setValue", "field": "state.count", "value": "{{state.count + 1}}" }
+        ],
+        "onError": [
+          {
+            "type": "feedback",
+            "kind": "message",
+            "level": "error",
+            "content": "Submission failed"
+          }
+        ]
+      }
+    }
+  }
+}

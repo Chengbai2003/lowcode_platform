@@ -1,5 +1,14 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
 import { compileToCode } from '../generator';
+
+const actionFlowFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-action-flow-conformance.json'),
+    'utf8',
+  ),
+) as PageSchema;
 
 function extractGeneratedComponentBody(code: string): string {
   const functionStart = 'export default function GeneratedPage() {\n';
@@ -84,6 +93,10 @@ function createFlowHarness(
 }
 
 describe('compiler ActionFlow runtime generation', () => {
+  it('compiles the shared ActionFlow conformance fixture', () => {
+    expect(compileToCode(actionFlowFixture)).toContain('executeFlow');
+  });
+
   it('strictly executes steps sequentially and reads latest State/Computed across await ticks', async () => {
     const schema: PageSchema = {
       schemaVersion: 0,

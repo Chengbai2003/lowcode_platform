@@ -20,6 +20,13 @@ const conformanceFixture = JSON.parse(
   };
 };
 
+const actionFlowFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-action-flow-conformance.json'),
+    'utf8',
+  ),
+) as PageSchema;
+
 const simpleSchema: PageSchema = {
   schemaVersion: 0,
   rootId: 'root',
@@ -30,6 +37,22 @@ const simpleSchema: PageSchema = {
 };
 
 describe('Renderer RuntimeSession Integration (M0-4 Scope D / PR #34)', () => {
+  it('loads the shared ActionFlow conformance fixture', async () => {
+    render(
+      <Renderer
+        preset={testPreset}
+        pageId="action-flow-conformance-page"
+        documentSessionId="action-flow-conformance-session"
+        schema={actionFlowFixture}
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Submit' }));
+      await Promise.resolve();
+    });
+  });
+
   it('matches the shared Computed conformance corpus before and after one event', async () => {
     render(
       <Renderer
