@@ -1069,9 +1069,14 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
     process.on('unhandledRejection', onUnhandled);
 
     try {
-      let hangingReject: any;
-      const hangingPromise = new Promise((_resolve, reject) => {
-        hangingReject = reject;
+      let rejectApi!: (reason?: unknown) => void;
+      const apiPromise = new Promise((_resolve, reject) => {
+        rejectApi = reject;
+      });
+
+      let rejectModal!: (reason?: unknown) => void;
+      const modalPromise = new Promise((_resolve, reject) => {
+        rejectModal = reject;
       });
 
       const { session } = createTestSession(
@@ -1089,10 +1094,10 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
         {
           flowLimits: { maxDurationMs: 40, maxConcurrentRuns: 1 },
           api: {
-            get: () => hangingPromise,
+            get: () => apiPromise,
           },
           modal: {
-            confirm: () => hangingPromise,
+            confirm: () => modalPromise,
           },
         },
       );
@@ -1112,12 +1117,12 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
       expect(quickRes.status).toBe('success');
       expect(session.runtime.getState().done).toBe(true);
 
-      // 随后让 hanging promise reject，验证不触发 unhandled rejection
-      hangingReject(new Error('late rejection'));
+      // 随后让 hanging API promise reject，验证不触发 unhandled rejection
+      rejectApi(new Error('late api rejection'));
       await new Promise((r) => setTimeout(r, 20));
       expect(unhandledRejectionFired).toBe(false);
 
-      // 1b. dispose 后及时 reject FLOW_ABORTED
+      // 1b. modal Promise 在 session.dispose() 时仍处于 pending
       const p = session.executeFlow('hangingModalFlow');
       session.dispose();
       await expect(p).rejects.toSatisfy((err: unknown) => {
@@ -1125,6 +1130,11 @@ describe('M1a-2 / F2: Renderer ActionFlow Runtime 矩阵测试', () => {
         expect((err as FlowExecutionError).code).toBe('FLOW_ABORTED');
         return true;
       });
+
+      // await FLOW_ABORTED 后，再让 modal Promise late reject
+      rejectModal(new Error('late modal rejection'));
+      await new Promise((r) => setTimeout(r, 20));
+      expect(unhandledRejectionFired).toBe(false);
     } finally {
       process.off('unhandledRejection', onUnhandled);
     }
