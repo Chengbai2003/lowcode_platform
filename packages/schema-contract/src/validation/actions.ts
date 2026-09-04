@@ -6,7 +6,12 @@ import { isSafeDataPathKey, isSafeLogicKey } from '../types/logic';
 
 export interface FlowValidationContext {
   readonly declaredFlowKeys: ReadonlySet<string>;
-  readonly onFlowReference?: (targetFlow: string, path: readonly (string | number)[]) => void;
+  readonly onFlowReference?: (
+    targetFlow: string,
+    path: readonly (string | number)[],
+    depth: number,
+  ) => void;
+  readonly onActionDepth?: (depth: number) => void;
 }
 
 export interface ActionValidationContext {
@@ -253,6 +258,7 @@ export function validateActionItem(
   if (context.inspectionContext.aborted) return;
 
   context.actionCount++;
+  context.flowValidation?.onActionDepth?.(depth);
   if (context.actionCount > context.maxActionNodes) {
     if (!context.actionBudgetReported) {
       context.actionBudgetReported = true;
@@ -882,7 +888,7 @@ export function validateActionItem(
           message: `Referenced ActionFlow "${flowVal}" does not exist`,
         });
       } else {
-        context.flowValidation.onFlowReference?.(flowVal, [...path, 'flow']);
+        context.flowValidation.onFlowReference?.(flowVal, [...path, 'flow'], depth);
       }
 
       if (inputRes.exists) {
