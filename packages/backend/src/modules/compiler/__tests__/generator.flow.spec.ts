@@ -990,4 +990,82 @@ describe('compiler ActionFlow runtime generation', () => {
       global.fetch = realFetch;
     }
   });
+
+  it('preserves data modifications made during in-flight apiCall without losing intermediate edits', async () => {
+    const realFetch = global.fetch;
+    let resolveFetch: ((value: unknown) => void) | undefined;
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+    const mockFetch = jest.fn().mockImplementation(() => fetchPromise);
+    global.fetch = mockFetch;
+
+    try {
+      const schema: PageSchema = {
+        schemaVersion: 0,
+        rootId: 'root',
+        components: {
+          root: { id: 'root', type: 'Page', props: {}, childrenIds: ['editBtn'] },
+          editBtn: {
+            id: 'editBtn',
+            type: 'Button',
+            events: {
+              onClick: [{ type: 'setValue', field: 'data.userEdit', value: 'keep' }],
+            },
+          },
+        },
+        logic: {
+          flows: {
+            loadProfile: {
+              steps: [
+                {
+                  type: 'apiCall',
+                  url: '/api/profile',
+                  resultTo: 'data.profile',
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const code = compileToCode(schema);
+      const harness = createFlowHarness(
+        code,
+        `{
+          executeFlow,
+          handleEditBtnClick,
+          readData: () => dataRef.current,
+        }`,
+      );
+
+      // 1. Trigger the flow that initiates the async API call
+      const flowPromise = harness.value.executeFlow('loadProfile');
+
+      // 2. While the request is in flight, an intermediate user action updates data
+      harness.value.handleEditBtnClick();
+      expect(harness.value.readData()).toEqual({ userEdit: 'keep' });
+
+      // 3. Resolve the API call response
+      resolveFetch!({
+        ok: true,
+        headers: {
+          get: (header: string) =>
+            header.toLowerCase() === 'content-type' ? 'application/json' : null,
+        },
+        json: () => Promise.resolve({ server: 'received' }),
+        text: () => Promise.resolve(''),
+      });
+
+      await flowPromise;
+
+      // 4. Assert both intermediate user edits and API response are retained without data loss
+      expect(harness.value.readData()).toEqual({
+        userEdit: 'keep',
+        profile: { server: 'received' },
+      });
+    } finally {
+      global.fetch = realFetch;
+    }
+  });
 });

@@ -287,6 +287,89 @@ describe('asyncActions', () => {
         ),
       ).rejects.toThrow('unsafe resultTo path');
     });
+
+    it('rejects protocol-relative, backslash, control characters, and unsafe schemes without calling network entries', async () => {
+      const unsafeUrls = [
+        '//attacker.example.com/path',
+        '///attacker.example.com',
+        '/api/v1\\evil',
+        '/api/v1\u0000test',
+        '/api/v1\r\ntest',
+        '/api/v1\ttest',
+        'javascript:alert(1)',
+        'data:text/html,<script>alert(1)</script>',
+        'file:///etc/passwd',
+      ];
+
+      for (const url of unsafeUrls) {
+        // Test fetch fallback context
+        const fetchContext = createFetchContext();
+        mockFetch.mockClear();
+        await expect(
+          apiCall(
+            {
+              type: 'apiCall',
+              url,
+            },
+            fetchContext,
+          ),
+        ).rejects.toThrow('blocked unsafe URL');
+        expect(mockFetch).not.toHaveBeenCalled();
+
+        // Test context.api mode
+        const mockApiContext = createMockContext();
+        await expect(
+          apiCall(
+            {
+              type: 'apiCall',
+              url,
+            },
+            mockApiContext,
+          ),
+        ).rejects.toThrow('blocked unsafe URL');
+        expect(mockApiContext.api.get).not.toHaveBeenCalled();
+        expect(mockApiContext.api.request).not.toHaveBeenCalled();
+      }
+    });
+
+    it('permits valid root-relative URLs and invokes network handlers', async () => {
+      const mockResponse = { ok: true, data: 'from-root-relative' };
+
+      // 1. Fetch mode
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockResponse),
+      });
+      const fetchContext = createFetchContext();
+      const fetchResult = await apiCall(
+        {
+          type: 'apiCall',
+          url: '/api/v1/resource',
+          resultTo: 'apiData',
+        },
+        fetchContext,
+      );
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch.mock.calls[0][0]).toBe('/api/v1/resource');
+      expect(fetchResult.response).toEqual(mockResponse);
+      expect(fetchContext.data.apiData).toEqual(mockResponse);
+
+      // 2. Context.api mode
+      const apiContext = createMockContext();
+      (apiContext.api.get as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse);
+      const apiResult = await apiCall(
+        {
+          type: 'apiCall',
+          url: '/api/v1/resource',
+          resultTo: 'apiData',
+        },
+        apiContext,
+      );
+      expect(apiContext.api.get).toHaveBeenCalledTimes(1);
+      expect(apiContext.api.get).toHaveBeenCalledWith('/api/v1/resource', undefined, undefined);
+      expect(apiResult.response).toEqual(mockResponse);
+      expect(apiContext.data.apiData).toEqual(mockResponse);
+    });
   });
 
   describe('delay', () => {

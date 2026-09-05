@@ -149,6 +149,7 @@ interface RootNode {
   handlers: HandlerDeclaration[];
   helpers: Set<string>;
   usesPageState: boolean;
+  usesLegacyData?: boolean;
   usesComputed: boolean;
   usesFlows: boolean;
   computedAnalysis?: ComputedLogicAnalysis;
@@ -250,6 +251,13 @@ function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): 
     }
     return undefined;
   }
+  if (resultTo.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+    const suffix = resultTo.slice(5);
+    if (sanitizeStatePath(suffix, true)) {
+      return resultTo;
+    }
+    return undefined;
+  }
   return undefined;
 }
 
@@ -257,7 +265,11 @@ function getStatePathValueCode(path: readonly string[]): string {
   return `state${path.map((part) => `?.[${toQuotedString(part)}]`).join('')}`;
 }
 
-function getNestedStateUpdateCode(path: readonly string[], valueCode: string): string {
+function getNestedStateUpdateCode(
+  path: readonly string[],
+  valueCode: string,
+  targetVar: string = 'state',
+): string {
   const pathCode = JSON.stringify(path);
   return `((source, path, value) => {
   const root = source !== null && typeof source === 'object'
@@ -278,7 +290,7 @@ function getNestedStateUpdateCode(path: readonly string[], valueCode: string): s
   }
   targetCursor[path[path.length - 1]] = value;
   return root;
-})(state, ${pathCode}, ${valueCode})`;
+})(${targetVar}, ${pathCode}, ${valueCode})`;
 }
 
 function getMergedStateValueCode(currentValueCode: string, valueCode: string): string {
@@ -483,6 +495,67 @@ function componentUsesPageState(
   );
 }
 
+function valueNodeUsesLegacyData(value: ValueNode | undefined): boolean {
+  if (!value) return false;
+  switch (value.kind) {
+    case 'expression':
+      return collectInlineExpressionIdentifiers(value.code).has('data');
+    case 'template':
+      return value.parts.some(
+        (part) => part.kind === 'expression' && valueNodeUsesLegacyData(part.value),
+      );
+    case 'array':
+      return value.items.some(valueNodeUsesLegacyData);
+    case 'object':
+      return value.properties.some((property) => valueNodeUsesLegacyData(property.value));
+    default:
+      return false;
+  }
+}
+
+function actionUsesLegacyData(action: ActionNode): boolean {
+  if (action.field?.startsWith('data.') || action.resultTo?.startsWith('data.')) {
+    return true;
+  }
+  for (const value of [
+    action.value,
+    action.url,
+    action.to,
+    action.content,
+    action.title,
+    action.condition,
+    action.over,
+    action.body,
+  ]) {
+    if (valueNodeUsesLegacyData(value)) return true;
+  }
+  for (const values of [action.headers, action.params]) {
+    if (Object.values(values ?? {}).some(valueNodeUsesLegacyData)) return true;
+  }
+  return [
+    action.actions,
+    action.then,
+    action.else,
+    action.onSuccess,
+    action.onError,
+    action.onOk,
+    action.onCancel,
+  ].some((actions) => actions?.some(actionUsesLegacyData) ?? false);
+}
+
+function componentUsesLegacyData(component: FlatComponentNode): boolean {
+  return (
+    component.props.some((prop) => valueNodeUsesLegacyData(prop.value)) ||
+    component.events.some((event) => event.actions.some(actionUsesLegacyData))
+  );
+}
+
+function flowUsesLegacyData(flow: FlowDeclarationNode): boolean {
+  return (
+    flow.steps.some(actionUsesLegacyData) || (flow.onError?.some(actionUsesLegacyData) ?? false)
+  );
+}
+
 function componentDeclaresLegacyStateField(component: FlatComponentNode): boolean {
   const fieldProp = component.props.find((prop) => prop.name === 'field');
   if (
@@ -622,6 +695,10 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
       usesFlows ||
       schema.logic?.states !== undefined ||
       flatComponents.some((component) => componentUsesPageState(component, !hasLegacyStateField)),
+    usesLegacyData:
+      schema.logic?.states === undefined &&
+      (flatComponents.some(componentUsesLegacyData) ||
+        (flowDeclarations?.some(flowUsesLegacyData) ?? false)),
   };
 }
 
@@ -713,10 +790,14 @@ function resolveFieldNameForContext(
 ): string {
   const preferredName = resolveFieldName(sourceKey, source);
   if (
-    !ctx.root.usesPageState ||
-    (preferredName !== 'state' &&
-      preferredName !== 'setState' &&
-      createSetterName(preferredName) !== 'setState')
+    (!ctx.root.usesPageState ||
+      (preferredName !== 'state' &&
+        preferredName !== 'setState' &&
+        createSetterName(preferredName) !== 'setState')) &&
+    (!ctx.root.usesLegacyData ||
+      (preferredName !== 'data' &&
+        preferredName !== 'setData' &&
+        createSetterName(preferredName) !== 'setData'))
   ) {
     return preferredName;
   }
@@ -806,6 +887,9 @@ function collectImports(ctx: TransformContext) {
     addImport(ctx, 'react', 'useRef');
     addImport(ctx, 'react', 'useEffect');
   }
+  if (ctx.root.usesLegacyData) {
+    addImport(ctx, 'react', 'useRef');
+  }
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
   if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
@@ -886,6 +970,11 @@ function createTransformContext(root: RootNode): TransformContext {
   } else if (root.usesFlows) {
     registry.reserveExact('stateRef', 'page-state-ref');
   }
+  if (root.usesLegacyData) {
+    registry.reserveExact('data', 'page-legacy-data');
+    registry.reserveExact('setData', 'page-legacy-data-setter');
+    registry.reserveExact('dataRef', 'page-legacy-data-ref');
+  }
   if (root.usesFlows) {
     registry.reserveExact('FlowExecutionError', 'flow:error-class');
     registry.reserveExact('isNonRecoverableFlowErrorCode', 'flow:non-recoverable-check');
@@ -958,14 +1047,20 @@ function createHandlerCode(
   params: string[],
   usesComputed: boolean,
   usesFlows: boolean,
+  usesLegacyData = false,
 ): string {
   const asyncKeyword = isAsync ? 'async ' : '';
   const parameterCode = params.join(', ');
-  const logicPrologue = usesComputed
-    ? 'let state = stateRef.current;\nlet computed = computedRef.current;'
-    : usesFlows
-      ? 'let state = stateRef.current;'
-      : '';
+  const prologues: string[] = [];
+  if (usesComputed) {
+    prologues.push('let state = stateRef.current;', 'let computed = computedRef.current;');
+  } else if (usesFlows) {
+    prologues.push('let state = stateRef.current;');
+  }
+  if (usesLegacyData) {
+    prologues.push('let data = dataRef.current;');
+  }
+  const logicPrologue = prologues.join('\n');
   const handlerBody = [logicPrologue, bodyCode].filter(Boolean).join('\n');
   return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(handlerBody)}\n};`;
 }
@@ -992,6 +1087,7 @@ function registerHandler(
     params,
     ctx.root.usesComputed,
     ctx.root.usesFlows,
+    ctx.root.usesLegacyData,
   );
 
   return {
@@ -1194,6 +1290,7 @@ function getExpressionContextFields(ctx: TransformContext): Set<string> {
     fields.add('state');
   }
   if (ctx.root.usesComputed) fields.add('computed');
+  if (ctx.root.usesLegacyData) fields.add('data');
   return fields;
 }
 
@@ -1617,6 +1714,17 @@ function resolveResultTarget(
     }
     return getStateWriteCode(statePath, valueCode, ctx);
   }
+  if (sanitized.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+    const dataPath = sanitizeStatePath(sanitized.slice('data.'.length), true);
+    if (!dataPath) {
+      return `/* invalid resultTo discarded */`;
+    }
+    const nextDataCode =
+      dataPath.length === 1
+        ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: ${valueCode} })`
+        : getNestedStateUpdateCode(dataPath, valueCode, 'data');
+    return `data = dataRef.current;\ndata = ${nextDataCode};\ndataRef.current = data;\nsetData(data);`;
+  }
   return `/* invalid resultTo discarded */`;
 }
 
@@ -1629,11 +1737,16 @@ function buildActionBlock(
   const segments = actions.map((action) =>
     buildActionStatement(action, ctx, ownerHandlerName, localScope),
   );
-  const refreshCode = ctx.root.usesComputed
-    ? 'state = stateRef.current;\ncomputed = computedRef.current;'
-    : ctx.root.usesFlows
-      ? 'state = stateRef.current;'
-      : '';
+  const refreshParts: string[] = [];
+  if (ctx.root.usesComputed) {
+    refreshParts.push('state = stateRef.current;', 'computed = computedRef.current;');
+  } else if (ctx.root.usesFlows) {
+    refreshParts.push('state = stateRef.current;');
+  }
+  if (ctx.root.usesLegacyData) {
+    refreshParts.push('data = dataRef.current;');
+  }
+  const refreshCode = refreshParts.join('\n');
   return {
     code: segments
       .map((segment) => [refreshCode, segment.code].filter(Boolean).join('\n'))
@@ -1726,6 +1839,25 @@ function buildActionStatement(
               : valueCode;
             return {
               code: getStateWriteCode(statePath, nextValueCode, ctx),
+              async: false,
+            };
+          }
+          return { code: `/* invalid field discarded */`, async: false };
+        }
+
+        if (action.field.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+          const dataPath = sanitizeStatePath(action.field.slice('data.'.length), true);
+          if (dataPath) {
+            const currentValueCode = `data${dataPath.map((p) => `?.[${toQuotedString(p)}]`).join('')}`;
+            const nextValueCode = action.merge
+              ? getMergedStateValueCode(currentValueCode, valueCode)
+              : valueCode;
+            const nextDataCode =
+              dataPath.length === 1
+                ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: ${nextValueCode} })`
+                : getNestedStateUpdateCode(dataPath, nextValueCode, 'data');
+            return {
+              code: `data = ${nextDataCode};\ndataRef.current = data;\nsetData(data);`,
               async: false,
             };
           }
@@ -2016,7 +2148,7 @@ function buildActionStatement(
         ? getExpressionCode(action.input, 'undefined', ctxFields, localScope)
         : 'undefined';
       return {
-        code: `await executeFlow(${toQuotedString(action.flow || '')}, ${inputCode});`,
+        code: `try {\n  await executeFlow(${toQuotedString(action.flow || '')}, ${inputCode});\n} catch (flowErr) {\n  /* flow execution error handled */\n}`,
         async: true,
       };
     }
@@ -2057,7 +2189,8 @@ function buildFlowStepCode(
   const preamble = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
 flowContext.incrementActionCount(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
 state = stateRef.current;
-${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}`;
 
   switch (action.type) {
     case 'setValue': {
@@ -2068,6 +2201,26 @@ ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
         localScope,
       );
       if (action.field) {
+        if (action.field.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+          const dataPath = sanitizeStatePath(action.field.slice('data.'.length), true);
+          if (dataPath) {
+            const currentValueCode = `data${dataPath.map((p) => `?.[${toQuotedString(p)}]`).join('')}`;
+            const nextValueCode = action.merge
+              ? getMergedStateValueCode(currentValueCode, valueCode)
+              : valueCode;
+            const nextDataCode =
+              dataPath.length === 1
+                ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: ${nextValueCode} })`
+                : getNestedStateUpdateCode(dataPath, nextValueCode, 'data');
+            return `${preamble}
+flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+data = ${nextDataCode};
+dataRef.current = data;
+setData(data);`;
+          }
+          return `${preamble}\n/* invalid data field discarded */`;
+        }
+
         const stateKey = action.field.startsWith('state.')
           ? action.field.slice('state.'.length)
           : action.field;
@@ -2103,7 +2256,8 @@ await flowContext.waitForDelay(
   ${stepPathCode},
 );
 state = stateRef.current;
-${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}`;
     }
 
     case 'runFlow': {
@@ -2120,7 +2274,8 @@ await executeChildFlow(
   ${stepPathCode},
 );
 state = stateRef.current;
-${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
+${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}`;
     }
 
     case 'navigate': {
@@ -2366,20 +2521,35 @@ ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
 
       let resultToWrite = '';
       if (action.resultTo) {
-        const resultKey = action.resultTo.startsWith('state.')
-          ? action.resultTo.slice('state.'.length)
-          : action.resultTo;
-        const statePath = sanitizeStatePath(resultKey, !hasDeclaredPageState(ctx));
-        if (statePath) {
-          const nextStateCode =
-            statePath.length === 1
-              ? `({ ...state, ${toObjectKeyCode(statePath[0])}: response })`
-              : getNestedStateUpdateCode(statePath, 'response');
-          resultToWrite = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+        if (action.resultTo.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+          const dataPath = sanitizeStatePath(action.resultTo.slice('data.'.length), true);
+          if (dataPath) {
+            const nextDataCode =
+              dataPath.length === 1
+                ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: response })`
+                : getNestedStateUpdateCode(dataPath, 'response', 'data');
+            resultToWrite = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+data = dataRef.current;
+data = ${nextDataCode};
+dataRef.current = data;
+setData(data);`;
+          }
+        } else {
+          const resultKey = action.resultTo.startsWith('state.')
+            ? action.resultTo.slice('state.'.length)
+            : action.resultTo;
+          const statePath = sanitizeStatePath(resultKey, !hasDeclaredPageState(ctx));
+          if (statePath) {
+            const nextStateCode =
+              statePath.length === 1
+                ? `({ ...state, ${toObjectKeyCode(statePath[0])}: response })`
+                : getNestedStateUpdateCode(statePath, 'response');
+            resultToWrite = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
 state = ${nextStateCode};
 stateRef.current = state;
 ${ctx.root.usesComputed ? 'computed = computePageLogic(state);\ncomputedRef.current = computed;' : ''}
 setState(state);`;
+          }
         }
       }
 
@@ -2441,6 +2611,7 @@ try {
   );
   state = stateRef.current;
   ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+  ${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}
 ${indentBlock(resultToWrite)}
 ${indentBlock(onSuccessSteps)}
 } catch (apiErr) {
@@ -2452,7 +2623,10 @@ ${indentBlock(onSuccessSteps)}
   }
 ${
   onErrorSteps
-    ? `  const error = apiErr?.message || String(apiErr);
+    ? `  state = stateRef.current;
+  ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+  ${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}
+  const error = apiErr?.message || String(apiErr);
   const errorObject = apiErr;
 ${indentBlock(onErrorSteps)}`
     : '  throw apiErr;'
@@ -2559,6 +2733,7 @@ ${indentBlock(onErrorSteps)}
   const stackFrame = flowContext.callStack[flowContext.callStack.length - 1];
   let state = stateRef.current;
   ${root.usesComputed ? 'let computed = computedRef.current;' : ''}
+  ${root.usesLegacyData ? 'let data = dataRef.current;' : ''}
   try {
 ${indentBlock(stepsCode)}
     return { status: 'success', flow: flowKey, recovered: false };
@@ -3256,6 +3431,9 @@ function genValidatedComputedExpression(expression: string): string {
 
 function genStateHooks(root: RootNode): string {
   const ctxFields = new Set(root.fields.map((field) => field.name));
+  if (root.usesLegacyData) {
+    ctxFields.add('data');
+  }
   const hooks: string[] = [];
   if (root.usesPageState) {
     ctxFields.add('state');
@@ -3308,6 +3486,11 @@ ${indentBlock(evaluatorBody)}
   } else if (root.usesFlows) {
     hooks.push('const stateRef = useRef(state);');
     hooks.push('stateRef.current = state;');
+  }
+  if (root.usesLegacyData) {
+    hooks.push('const [data, setData] = useState({});');
+    hooks.push('const dataRef = useRef(data);');
+    hooks.push('dataRef.current = data;');
   }
   hooks.push(
     ...root.fields.map(
