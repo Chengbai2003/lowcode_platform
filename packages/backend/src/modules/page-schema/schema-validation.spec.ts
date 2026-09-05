@@ -201,7 +201,15 @@ describe('M1a-3 / C2.1 Backend validator conformance against unified fixture', (
   it('returns canonical deep-frozen schema matching expected.canonicalLogic for main schema', () => {
     const canonical = requireValidPageSchema(conformanceFixture.schema);
     expect(Object.isFrozen(canonical)).toBe(true);
+    expect(Object.isFrozen(canonical.components)).toBe(true);
+    expect(Object.isFrozen(canonical.components.root)).toBe(true);
     expect(Object.isFrozen(canonical.logic)).toBe(true);
+    expect(Object.isFrozen(canonical.logic?.states)).toBe(true);
+    expect(Object.isFrozen(canonical.logic?.computed)).toBe(true);
+    expect(Object.isFrozen(canonical.logic?.flows)).toBe(true);
+    expect(Object.isFrozen(canonical.logic?.flows?.submitOrder)).toBe(true);
+    expect(Object.isFrozen(canonical.logic?.flows?.submitOrder?.steps)).toBe(true);
+    expect(Object.isFrozen(canonical.logic?.flows?.submitOrder?.steps?.[0])).toBe(true);
     expect(canonical.logic).toEqual(conformanceFixture.expected.canonicalLogic);
   });
 

@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-3 / C1 进行中（统一版本化语料）；#46 已完成，#47 进行中（待 C2/C3 实施六消费面能力门禁）` | **优先级**：`P0`
+> **当前阶段**：`M1a-3 / C2.1 进行中（In Progress：跨表面 Validator 一致性测试；C1 已完成，剩余 C2.2/C3 待实施，#47 保持 Open）` | **优先级**：`P0`
 
 ## 目标与边界
 

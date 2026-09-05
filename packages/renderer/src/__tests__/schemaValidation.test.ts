@@ -247,11 +247,28 @@ describe('M1a-3 / C2.1 Renderer validator conformance against unified fixture', 
     if (!result.success) return;
 
     expect(Object.isFrozen(result.data)).toBe(true);
+    expect(Object.isFrozen(result.data.components)).toBe(true);
+    expect(Object.isFrozen(result.data.components.root)).toBe(true);
     expect(Object.isFrozen(result.data.logic)).toBe(true);
+    expect(Object.isFrozen(result.data.logic?.states)).toBe(true);
+    expect(Object.isFrozen(result.data.logic?.computed)).toBe(true);
+    expect(Object.isFrozen(result.data.logic?.flows)).toBe(true);
+    expect(Object.isFrozen(result.data.logic?.flows?.submitOrder)).toBe(true);
+    expect(Object.isFrozen(result.data.logic?.flows?.submitOrder?.steps)).toBe(true);
+    expect(Object.isFrozen(result.data.logic?.flows?.submitOrder?.steps?.[0])).toBe(true);
     expect(result.data.logic).toEqual(conformanceFixture.expected.canonicalLogic);
 
     const directCanonical = validateA2UISchema(conformanceFixture.schema);
     expect(Object.isFrozen(directCanonical)).toBe(true);
+    expect(Object.isFrozen(directCanonical.components)).toBe(true);
+    expect(Object.isFrozen(directCanonical.components.root)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic?.states)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic?.computed)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic?.flows)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic?.flows?.submitOrder)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic?.flows?.submitOrder?.steps)).toBe(true);
+    expect(Object.isFrozen(directCanonical.logic?.flows?.submitOrder?.steps?.[0])).toBe(true);
     expect(directCanonical.logic).toEqual(conformanceFixture.expected.canonicalLogic);
   });
 
