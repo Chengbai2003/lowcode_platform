@@ -165,7 +165,9 @@ function cloneSchema(schema: PageSchema): MutableSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
-    logic: schema.logic ? structuredClone(schema.logic) : undefined,
+    logic: schema.logic
+      ? (JSON.parse(JSON.stringify(schema.logic)) as PageSchema['logic'])
+      : undefined,
   };
 }
 

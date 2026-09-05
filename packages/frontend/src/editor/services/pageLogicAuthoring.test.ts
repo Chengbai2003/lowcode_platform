@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import React, { useEffect, useState } from 'react';
 import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
+import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
 import type { PageSchema } from '../../types';
 import {
   serializePageLogic,
@@ -458,4 +459,92 @@ describe('M1a-3 / C2.1 Frontend validator conformance against unified fixture', 
       expect(matched?.path).toEqual(testCase.expectedPath);
     },
   );
+});
+
+describe('M1a-3 / C2.2 Editor JSON round-trip conformance', () => {
+  function createCandidates() {
+    const schemaA = requireSupportedPageSchema(conformanceFixture.schema);
+    const candidateB: PageSchema = {
+      ...schemaA,
+      components: {
+        ...schemaA.components,
+        submit: {
+          ...schemaA.components.submit,
+          props: {
+            ...schemaA.components.submit.props,
+            children: 'Submit revised',
+          },
+        },
+      },
+    };
+    const schemaB = requireSupportedPageSchema(candidateB);
+
+    const candidateC: PageSchema = {
+      ...schemaB,
+      logic: {
+        ...schemaB.logic!,
+        states: {
+          ...schemaB.logic!.states,
+          price: 7,
+        },
+      },
+    };
+    const schemaC = requireSupportedPageSchema(candidateC);
+
+    const legacySchema = requireSupportedPageSchema(conformanceFixture.legacySchema);
+
+    return { schemaA, schemaB, schemaC, legacySchema };
+  }
+
+  it('serializes canonical A and parses via parseAndValidateFullSchema with full equality and canonicalLogic match', () => {
+    const { schemaA } = createCandidates();
+    expect(schemaA.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+
+    const serialized = serializePageSchema(schemaA);
+    const parsed = parseAndValidateFullSchema(serialized, whitelist);
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    expect(parsed.data).toEqual(schemaA);
+    expect(parsed.data.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+    expect(Object.isFrozen(parsed.data)).toBe(true);
+  });
+
+  it('serializes C.logic and applies to B via parseAndValidatePageLogic with full equality and declarations preserved', () => {
+    const { schemaB, schemaC } = createCandidates();
+    expect(schemaC.logic?.states?.price).toBe(7);
+
+    const serializedLogic = serializePageLogic(schemaC.logic);
+    const parsed = parseAndValidatePageLogic(serializedLogic, schemaB, whitelist);
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    expect(parsed.data).toEqual(schemaC);
+    expect(parsed.data.logic?.states?.price).toBe(7);
+    expect(parsed.data.components.submit.props?.children).toBe('Submit revised');
+    expect(parsed.data.logic?.computed).toEqual(schemaB.logic?.computed);
+    expect(parsed.data.logic?.flows).toEqual(schemaB.logic?.flows);
+    expect(parsed.data.components).toEqual(schemaB.components);
+    expect(Object.isFrozen(parsed.data)).toBe(true);
+  });
+
+  it('serializes and parses legacySchema preserving full structure and ensuring no logic property exists', () => {
+    const { legacySchema } = createCandidates();
+    expect(Object.prototype.hasOwnProperty.call(legacySchema, 'logic')).toBe(false);
+    expect(legacySchema.logic).toBeUndefined();
+
+    const serialized = serializePageSchema(legacySchema);
+    const parsed = parseAndValidateFullSchema(serialized, whitelist);
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+
+    expect(parsed.data).toEqual(legacySchema);
+    expect(Object.prototype.hasOwnProperty.call(parsed.data, 'logic')).toBe(false);
+    expect(parsed.data.logic).toBeUndefined();
+    expect(parsed.data.components['legacy-btn'].props?.children).toBe('Legacy Trigger');
+    expect(Object.isFrozen(parsed.data)).toBe(true);
+  });
 });

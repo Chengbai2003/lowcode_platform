@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { PageSchema } from '@lowcode-platform/schema-contract';
+import { requireSupportedPageSchema, type PageSchema } from '@lowcode-platform/schema-contract';
 import { PageSchemaRepository } from './page-schema.repository';
 
 const runtimeCompatibility = {
@@ -368,5 +368,237 @@ describe('PageSchemaRepository', () => {
     await fs.promises.writeFile(storePath, bad, 'utf-8');
     const repo = createRepo();
     await expect(repo.onModuleInit()).rejects.toThrow();
+  });
+
+  describe('M1a-3 / C2.2 Repository real disk persistence and CAS round-trip conformance', () => {
+    let suiteTmpDir: string;
+    let suiteStorePath: string;
+
+    function loadConformanceFixture() {
+      const candidatePaths = [
+        path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+        path.resolve(process.cwd(), 'test-fixtures/m1a-page-logic-conformance.json'),
+      ];
+      for (const candidatePath of candidatePaths) {
+        if (fs.existsSync(candidatePath)) {
+          return JSON.parse(fs.readFileSync(candidatePath, 'utf8'));
+        }
+      }
+      throw new Error('Unable to locate test-fixtures/m1a-page-logic-conformance.json');
+    }
+
+    const conformanceFixture = loadConformanceFixture();
+
+    function createConformanceCandidates() {
+      const schemaA = requireSupportedPageSchema(conformanceFixture.schema);
+      const candidateB: PageSchema = {
+        ...schemaA,
+        components: {
+          ...schemaA.components,
+          submit: {
+            ...schemaA.components.submit,
+            props: {
+              ...schemaA.components.submit.props,
+              children: 'Submit revised',
+            },
+          },
+        },
+      };
+      const schemaB = requireSupportedPageSchema(candidateB);
+
+      const candidateC: PageSchema = {
+        ...schemaB,
+        logic: {
+          ...schemaB.logic!,
+          states: {
+            ...schemaB.logic!.states,
+            price: 7,
+          },
+        },
+      };
+      const schemaC = requireSupportedPageSchema(candidateC);
+
+      const legacySchema = requireSupportedPageSchema(conformanceFixture.legacySchema);
+
+      return { schemaA, schemaB, schemaC, legacySchema };
+    }
+
+    beforeEach(async () => {
+      suiteTmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'page-schema-conformance-'));
+      suiteStorePath = path.join(suiteTmpDir, 'conformance-store.json');
+      (
+        PageSchemaRepository as unknown as { writeTails: Map<string, Promise<void>> }
+      ).writeTails?.clear?.();
+    });
+
+    afterEach(async () => {
+      jest.restoreAllMocks();
+      (
+        PageSchemaRepository as unknown as { writeTails: Map<string, Promise<void>> }
+      ).writeTails?.clear?.();
+      await fs.promises.rm(suiteTmpDir, { recursive: true, force: true });
+    });
+
+    it('persists v1 (A) and v2 (C), proves history immutability and exact reload from distinct instance via onModuleInit', async () => {
+      const { schemaA, schemaC } = createConformanceCandidates();
+      const pageId = 'p-roundtrip-conformance';
+
+      // 1. R1 init & save v1 (A)
+      const r1 = createRepo(suiteStorePath);
+      await r1.onModuleInit();
+
+      const saveV1 = await r1.saveSchema({
+        pageId,
+        systemId: 'default',
+        schema: schemaA,
+        runtimeCompatibility,
+      });
+      expect(saveV1.page.currentPageVersion).toBe(1);
+      expect(saveV1.snapshot.pageVersion).toBe(1);
+      expect(saveV1.snapshot.schema).toEqual(schemaA);
+
+      // 2. R1 save v2 (C with price=7) based on v1
+      const saveV2 = await r1.saveSchema({
+        pageId,
+        systemId: 'default',
+        schema: schemaC,
+        basePageVersion: 1,
+        runtimeCompatibility,
+      });
+      expect(saveV2.page.currentPageVersion).toBe(2);
+      expect(saveV2.snapshot.pageVersion).toBe(2);
+      expect(saveV2.snapshot.schema).toEqual(schemaC);
+
+      // 3. In R1 memory: v1 history is immutable, latest is C
+      const r1SnapV1 = r1.getSnapshotByVersion(pageId, 1);
+      expect(r1SnapV1?.schema).toEqual(schemaA);
+      expect(r1.getSnapshotByVersion(pageId, 2)?.schema).toEqual(schemaC);
+      expect(r1.getLatestSnapshot(pageId)?.schema).toEqual(schemaC);
+
+      // 4. Create distinct R2 instance with same file and onModuleInit (new-instance disk reload)
+      const r2 = createRepo(suiteStorePath);
+      await r2.onModuleInit();
+
+      const r2Page = r2.getPage(pageId);
+      expect(r2Page?.currentPageVersion).toBe(2);
+      expect(r2Page?.systemId).toBe('default');
+
+      const r2SnapV1 = r2.getSnapshotByVersion(pageId, 1);
+      const r2SnapV2 = r2.getSnapshotByVersion(pageId, 2);
+      const r2Latest = r2.getLatestSnapshot(pageId);
+
+      // Full schema exactly preserved
+      expect(r2SnapV1?.schema).toEqual(schemaA);
+      expect(r2SnapV2?.schema).toEqual(schemaC);
+      expect(r2Latest?.schema).toEqual(schemaC);
+
+      // RuntimeCompatibility exactly preserved
+      expect(r2SnapV1?.runtimeCompatibility).toEqual(runtimeCompatibility);
+      expect(r2SnapV2?.runtimeCompatibility).toEqual(runtimeCompatibility);
+
+      // schemaVersion is 0, storage metadata pageVersion/snapshotId/systemId absent from schema
+      expect(r2Latest?.schema.schemaVersion).toBe(0);
+      expect(Object.prototype.hasOwnProperty.call(r2Latest!.schema, 'pageVersion')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(r2Latest!.schema, 'snapshotId')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(r2Latest!.schema, 'systemId')).toBe(false);
+
+      // Representative nested freeze after load
+      expect(r2Latest?.schema).toBeDefined();
+      expect(Object.isFrozen(r2Latest!.schema)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.components)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.components.root)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.components.submit)).toBe(true);
+      expect(r2Latest!.schema.logic).toBeDefined();
+      expect(Object.isFrozen(r2Latest!.schema.logic)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.logic?.states)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.logic?.computed)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.logic?.flows)).toBe(true);
+      expect(Object.isFrozen(r2Latest!.schema.logic?.flows?.submitOrder)).toBe(true);
+    });
+
+    it('rejects stale CAS save with ConflictException, leaving disk snapshots, page pointers, and latest schema completely unchanged', async () => {
+      const { schemaA, schemaC } = createConformanceCandidates();
+      const pageId = 'p-cas-conformance';
+
+      const r1 = createRepo(suiteStorePath);
+      await r1.onModuleInit();
+
+      await r1.saveSchema({
+        pageId,
+        systemId: 'default',
+        schema: schemaA,
+        runtimeCompatibility,
+      });
+
+      await r1.saveSchema({
+        pageId,
+        systemId: 'default',
+        schema: schemaC,
+        basePageVersion: 1,
+        runtimeCompatibility,
+      });
+
+      const diskBefore = JSON.parse(await fs.promises.readFile(suiteStorePath, 'utf-8'));
+      expect(diskBefore.pages[0].currentPageVersion).toBe(2);
+      const snapshotCountBefore = diskBefore.snapshots.length;
+      const latestSnapshotIdBefore = diskBefore.pages[0].latestSnapshotId;
+
+      // Distinct instance R2 attempts stale CAS save based on v1 (current is 2)
+      const r2 = createRepo(suiteStorePath);
+      await r2.onModuleInit();
+
+      let caughtError: unknown;
+      try {
+        await r2.saveSchema({
+          pageId,
+          systemId: 'default',
+          schema: schemaA,
+          basePageVersion: 1,
+          runtimeCompatibility,
+        });
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeDefined();
+      expect((caughtError as { name: string }).name).toBe('ConflictException');
+
+      // Assert disk snapshot count, page pointer/version and latest full schema unchanged on disk
+      const diskAfter = JSON.parse(await fs.promises.readFile(suiteStorePath, 'utf-8'));
+      expect(diskAfter.snapshots).toHaveLength(snapshotCountBefore);
+      expect(diskAfter.pages[0].currentPageVersion).toBe(2);
+      expect(diskAfter.pages[0].latestSnapshotId).toBe(latestSnapshotIdBefore);
+
+      // Assert memory state in R2 also unchanged
+      expect(r2.getPage(pageId)?.currentPageVersion).toBe(2);
+      expect(r2.getLatestSnapshot(pageId)?.schema).toEqual(schemaC);
+    });
+
+    it('saves legacySchema, reloads from distinct disk instance, and preserves full equality without own logic property', async () => {
+      const { legacySchema } = createConformanceCandidates();
+      const legacyPageId = 'p-legacy-persistence';
+
+      const r1 = createRepo(suiteStorePath);
+      await r1.onModuleInit();
+
+      await r1.saveSchema({
+        pageId: legacyPageId,
+        systemId: 'default',
+        schema: legacySchema,
+        runtimeCompatibility,
+      });
+
+      const r2 = createRepo(suiteStorePath);
+      await r2.onModuleInit();
+
+      const reloaded = r2.getLatestSnapshot(legacyPageId);
+      expect(reloaded).toBeDefined();
+      expect(reloaded?.schema).toEqual(legacySchema);
+      expect(Object.prototype.hasOwnProperty.call(reloaded!.schema, 'logic')).toBe(false);
+      expect(reloaded!.schema.logic).toBeUndefined();
+      expect(reloaded!.schema.components['legacy-btn'].props?.children).toBe('Legacy Trigger');
+      expect(Object.isFrozen(reloaded!.schema)).toBe(true);
+      expect(Object.isFrozen(reloaded!.schema.components)).toBe(true);
+    });
   });
 });
