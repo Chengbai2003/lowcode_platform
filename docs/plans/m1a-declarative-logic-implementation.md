@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-3 / C2.3 进行中（In Progress：Renderer 与 Compiler 解释/编译对等性；C1/C2.1 [#54]/C2.2 [#55] 已完成，剩余 C3 待实施，#47 保持 Open）` | **优先级**：`P0`
+> **当前阶段**：`M1a-3 / C3a 进行中（In Progress：纯能力模型与公共门禁；C1/C2.1 [#54]/C2.2 [#55]/C2.3 [#57] 已完成，剩余 C3b 待实施，#47 保持 Open）` | **优先级**：`P0`
 
 ## 目标与边界
 
@@ -77,8 +77,9 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
 - **C1 已完成（Completed）**：建立唯一统一版本化语料 `test-fixtures/m1a-page-logic-conformance.json`，合并并替代旧的独立语料，统一覆盖 State、Computed、ActionFlow、Legacy inline ActionList、取消写回守卫、边界超限与负向诊断用例。迁移 Contract/Renderer/Compiler 现有测试对旧语料的依赖并彻底移除旧文件。
 - **C2.1 已完成（Completed，PR #54）**：跨表面 Validator 一致性测试。所有测试直接读取统一语料，参数化遍历全部 9 个 negativeCases，分别通过 Backend、Renderer、Frontend 和 Agent 的真实校验入口执行，断言 Contract issue 的 expectedCode 与 expectedPath 完全一致；主 schema 返回 canonical 深冻结结果并与 expected.canonicalLogic 一致；legacySchema 继续被所有适用入口接受。
 - **C2.2 已完成（Completed，PR #55）**：Authoring 与存储往返一致性测试。使用唯一语料验证 Editor 整页 JSON 导入导出、Frontend 组件 Patch 保留 logic、replacePageLogic 声明替换并保留组件事件、Editor Undo/Redo 完整恢复、Agent Patch Preview 返回 canonical 且不修改输入、Repository 历史与磁盘重新加载完整保留声明与 CAS 守卫、Legacy 链路无 logic 兼容。
-- **C2.3 进行中（In Progress）**：Renderer 与 Compiler 解释/编译对等性测试，固定语料验证 P1–P10（初始状态、事件变更、Flow 链路、onError 恢复、未处理失败诊断、延迟取消与写回阻断、双实例隔离、Legacy 兼容、Computed edge 语义及五项宿主预算对等）。
-- **C3 待实施（Pending）**：六消费面能力门禁（Capability Gate），发现差异即阻断发布。注意：#47 保持 Open。
+- **C2.3 已完成（Completed，PR #57）**：Renderer 与 Compiler 解释/编译对等性测试，固定语料验证 P1–P10（初始状态、事件变更、Flow 链路、onError 恢复、未处理失败诊断、延迟取消与写回阻断、双实例隔离、Legacy 兼容、Computed edge 语义及五项宿主预算对等）。
+- **C3a 进行中（In Progress）**：纯能力模型与公共门禁。在 schema-contract 中建立纯数据 manifest、纯能力求值器 evaluatePageSchemaCapabilities、能力探测器 detectPageSchemaCapabilities，并将公共入口 requireSupportedPageSchema / assertSupportedPageSchema 与能力门禁对齐，保证所有六面精确 supported 且 revision=1 时放行，未知/不支持/版本不匹配/配置非法均拒绝。
+- **C3b 待实施（Pending）**：真实入口、版本匹配与 CI 证据门禁。注意：#47 保持 Open。
 
 ## 阶段门槛
 
