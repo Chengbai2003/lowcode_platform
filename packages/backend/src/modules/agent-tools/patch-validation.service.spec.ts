@@ -1,9 +1,45 @@
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
-import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import { PageSchema } from '@lowcode-platform/schema-contract';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
 import { PatchValidationService } from './patch-validation.service';
 import { EditorPatchOperation } from './types/editor-patch.types';
+
+interface ConformanceFixture {
+  readonly corpusVersion: string;
+  readonly reviewReason: string;
+  readonly schema: PageSchema;
+  readonly legacySchema: PageSchema;
+  readonly expected: {
+    readonly canonicalLogic: Record<string, unknown>;
+  };
+  readonly negativeCases: Record<
+    string,
+    {
+      readonly schema: PageSchema;
+      readonly expectedCode: string;
+      readonly expectedPath: ReadonlyArray<string | number>;
+    }
+  >;
+}
+
+function loadConformanceFixture(): ConformanceFixture {
+  const candidatePaths = [
+    path.resolve(process.cwd(), '../../test-fixtures/m1a-page-logic-conformance.json'),
+    path.resolve(process.cwd(), 'test-fixtures/m1a-page-logic-conformance.json'),
+  ];
+  for (const candidatePath of candidatePaths) {
+    if (existsSync(candidatePath)) {
+      return JSON.parse(readFileSync(candidatePath, 'utf8')) as ConformanceFixture;
+    }
+  }
+  throw new Error('Unable to locate test-fixtures/m1a-page-logic-conformance.json');
+}
+
+const conformanceFixture = loadConformanceFixture();
+const negativeCaseEntries = Object.entries(conformanceFixture.negativeCases);
 
 function createSchema(): PageSchema {
   return {
@@ -497,5 +533,101 @@ describe('PatchValidationService', () => {
         ]),
       );
     }
+  });
+
+  describe('M1a-3 / C2.1 Agent validator conformance against unified fixture', () => {
+    it('covers exactly 9 negative cases in the conformance fixture', () => {
+      expect(negativeCaseEntries).toHaveLength(9);
+    });
+
+    it('returns canonical deep-frozen schema matching expected.canonicalLogic for main schema', () => {
+      const canonical = service.previewValidatedSchema(
+        conformanceFixture.schema,
+        [],
+        'trace-c2-main',
+      );
+      expect(Object.isFrozen(canonical)).toBe(true);
+      expect(Object.isFrozen(canonical.components)).toBe(true);
+      expect(Object.isFrozen(canonical.components.root)).toBe(true);
+      expect(Object.isFrozen(canonical.logic)).toBe(true);
+      expect(Object.isFrozen(canonical.logic?.states)).toBe(true);
+      expect(Object.isFrozen(canonical.logic?.computed)).toBe(true);
+      expect(Object.isFrozen(canonical.logic?.flows)).toBe(true);
+      expect(Object.isFrozen(canonical.logic?.flows?.submitOrder)).toBe(true);
+      expect(Object.isFrozen(canonical.logic?.flows?.submitOrder?.steps)).toBe(true);
+      expect(Object.isFrozen(canonical.logic?.flows?.submitOrder?.steps?.[0])).toBe(true);
+      expect(canonical.logic).toEqual(conformanceFixture.expected.canonicalLogic);
+    });
+
+    it('accepts legacySchema without logic', () => {
+      const canonical = service.previewValidatedSchema(
+        conformanceFixture.legacySchema,
+        [],
+        'trace-c2-legacy',
+      );
+      expect(canonical.schemaVersion).toBe(0);
+      expect(Object.isFrozen(canonical)).toBe(true);
+    });
+
+    it.each(negativeCaseEntries)(
+      'rejects negative case "%s" with exact expectedCode and expectedPath via previewValidatedSchema',
+      (_caseName, testCase) => {
+        try {
+          service.previewValidatedSchema(testCase.schema, [], 'trace-c2-neg');
+          throw new Error('Expected previewValidatedSchema to throw AgentToolException');
+        } catch (error) {
+          expect(error).toBeInstanceOf(AgentToolException);
+          const response = (error as AgentToolException).getResponse() as {
+            code: string;
+            details?: {
+              issues?: Array<{ code: string; path: (string | number)[]; message: string }>;
+            };
+          };
+          expect(response.code).toBe('SCHEMA_INVALID');
+          const matched = response.details?.issues?.find(
+            (issue) => issue.code === testCase.expectedCode,
+          );
+          expect(matched).toBeDefined();
+          expect(matched?.path).toEqual(testCase.expectedPath);
+        }
+      },
+    );
+
+    it.each(negativeCaseEntries)(
+      'rejects negative case "%s" with exact expectedCode and expectedPath via replacePageLogic patch',
+      (_caseName, testCase) => {
+        const baseSchema: PageSchema = {
+          schemaVersion: 0,
+          rootId: 'root',
+          components: {
+            root: { id: 'root', type: 'Page', childrenIds: [] },
+          },
+        };
+        const patch: EditorPatchOperation[] = [
+          {
+            op: 'replacePageLogic',
+            logic: (testCase.schema.logic ?? {}) as Record<string, unknown>,
+          },
+        ];
+        try {
+          service.previewValidatedSchema(baseSchema, patch, 'trace-c2-patch-neg');
+          throw new Error('Expected previewValidatedSchema to throw AgentToolException');
+        } catch (error) {
+          expect(error).toBeInstanceOf(AgentToolException);
+          const response = (error as AgentToolException).getResponse() as {
+            code: string;
+            details?: {
+              issues?: Array<{ code: string; path: (string | number)[]; message: string }>;
+            };
+          };
+          expect(response.code).toBe('SCHEMA_INVALID');
+          const matched = response.details?.issues?.find(
+            (issue) => issue.code === testCase.expectedCode,
+          );
+          expect(matched).toBeDefined();
+          expect(matched?.path).toEqual(testCase.expectedPath);
+        }
+      },
+    );
   });
 });
