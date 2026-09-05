@@ -119,7 +119,15 @@ export function createGeneratedComponent(
 
   const executeFlowTarget = 'const executeFlow = async (rootFlowName, rawInput) => {';
   let processedBeforeReturn = codeBeforeReturn;
-  if (processedBeforeReturn.includes(executeFlowTarget)) {
+  const executeFlowMatches = codeBeforeReturn.match(
+    /const executeFlow = async \(rootFlowName, rawInput\) => \{/g,
+  );
+  if (executeFlowMatches) {
+    if (executeFlowMatches.length !== 1) {
+      throw new Error(
+        `Expected exactly 1 executeFlow declaration, found ${executeFlowMatches.length}`,
+      );
+    }
     const wrappedExecuteFlow = `let __rawExecuteFlow;
   const executeFlow = (rootFlowName, rawInput) => {
     if (typeof __props !== 'undefined' && __props && typeof __props.__onExecuteFlow === 'function') {

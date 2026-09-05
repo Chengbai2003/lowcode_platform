@@ -1448,11 +1448,8 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
         expect(compilerDiagnostic.code).toBe(caseConfig.expectedError.code);
         expect(compilerDiagnostic.flow).toBe(caseConfig.expectedError.flow);
 
-        // 3. Direct engine parity check (code, flow, path, trace)
-        expect(rendererDiagnostic.code).toBe(compilerDiagnostic.code);
-        expect(rendererDiagnostic.flow).toBe(compilerDiagnostic.flow);
-        expect(rendererDiagnostic.path).toEqual(compilerDiagnostic.path);
-        expect(rendererDiagnostic.trace).toEqual(compilerDiagnostic.trace);
+        // 3. Direct engine parity check (full structural diagnostic parity: code, flow, step, stepPath, path, trace)
+        expect(rendererDiagnostic).toEqual(compilerDiagnostic);
       });
     }
   });

@@ -1723,7 +1723,7 @@ function resolveResultTarget(
       dataPath.length === 1
         ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: ${valueCode} })`
         : getNestedStateUpdateCode(dataPath, valueCode, 'data');
-    return `data = ${nextDataCode};\ndataRef.current = data;\nsetData(data);`;
+    return `data = dataRef.current;\ndata = ${nextDataCode};\ndataRef.current = data;\nsetData(data);`;
   }
   return `/* invalid resultTo discarded */`;
 }
@@ -2529,6 +2529,7 @@ ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}`;
                 ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: response })`
                 : getNestedStateUpdateCode(dataPath, 'response', 'data');
             resultToWrite = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+data = dataRef.current;
 data = ${nextDataCode};
 dataRef.current = data;
 setData(data);`;
@@ -2610,6 +2611,7 @@ try {
   );
   state = stateRef.current;
   ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+  ${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}
 ${indentBlock(resultToWrite)}
 ${indentBlock(onSuccessSteps)}
 } catch (apiErr) {
@@ -2621,7 +2623,10 @@ ${indentBlock(onSuccessSteps)}
   }
 ${
   onErrorSteps
-    ? `  const error = apiErr?.message || String(apiErr);
+    ? `  state = stateRef.current;
+  ${ctx.root.usesComputed ? 'computed = computedRef.current;' : ''}
+  ${ctx.root.usesLegacyData ? 'data = dataRef.current;' : ''}
+  const error = apiErr?.message || String(apiErr);
   const errorObject = apiErr;
 ${indentBlock(onErrorSteps)}`
     : '  throw apiErr;'
