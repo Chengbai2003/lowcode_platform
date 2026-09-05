@@ -18,6 +18,21 @@ type MutableSchema = {
   logic?: PageLogic;
 };
 
+function deepClonePlainValue<T>(value: T): T {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClonePlainValue(item)) as unknown as T;
+  }
+  const proto = Object.getPrototypeOf(value);
+  const result: Record<string, unknown> = proto === null ? Object.create(null) : {};
+  for (const [k, v] of Object.entries(value)) {
+    result[k] = deepClonePlainValue(v);
+  }
+  return result as T;
+}
+
 @Injectable()
 export class PatchApplyService {
   applyPatch(schema: PageSchema, patch: readonly EditorPatchOperation[]): PageSchema {
@@ -60,7 +75,7 @@ export class PatchApplyService {
   }
 
   private replacePageLogic(schema: MutableSchema, logic?: Record<string, unknown>) {
-    schema.logic = logic ? (JSON.parse(JSON.stringify(logic)) as PageLogic) : undefined;
+    schema.logic = logic ? (deepClonePlainValue(logic) as PageLogic) : undefined;
   }
 
   private insertComponent(
@@ -76,9 +91,9 @@ export class PatchApplyService {
     schema.components[typedComponent.id] = {
       id: typedComponent.id,
       type: typedComponent.type,
-      props: typedComponent.props ? { ...typedComponent.props } : {},
-      childrenIds: [...(typedComponent.childrenIds ?? [])],
-      events: typedComponent.events ? { ...typedComponent.events } : {},
+      props: typedComponent.props ? deepClonePlainValue(typedComponent.props) : undefined,
+      childrenIds: typedComponent.childrenIds ? [...typedComponent.childrenIds] : undefined,
+      events: typedComponent.events ? deepClonePlainValue(typedComponent.events) : undefined,
     };
 
     const insertAt = index === undefined ? parent.childrenIds.length : index;
@@ -89,7 +104,7 @@ export class PatchApplyService {
     const component = schema.components[componentId];
     component.props = {
       ...(component.props ?? {}),
-      ...props,
+      ...deepClonePlainValue(props),
     };
   }
 
@@ -102,7 +117,7 @@ export class PatchApplyService {
     const component = schema.components[componentId];
     component.events = {
       ...(component.events ?? {}),
-      [event]: actions.map((action) => ({ ...action })),
+      [event]: deepClonePlainValue(actions),
     };
   }
 
@@ -168,9 +183,9 @@ export class PatchApplyService {
         accumulator[id] = {
           id: component.id,
           type: component.type,
-          props: component.props ? { ...component.props } : {},
-          childrenIds: [...(component.childrenIds ?? [])],
-          events: component.events ? { ...component.events } : {},
+          props: component.props ? deepClonePlainValue(component.props) : undefined,
+          childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
+          events: component.events ? deepClonePlainValue(component.events) : undefined,
         };
         return accumulator;
       },
@@ -181,7 +196,7 @@ export class PatchApplyService {
       schemaVersion: schema.schemaVersion,
       rootId: schema.rootId,
       components,
-      logic: schema.logic ? (JSON.parse(JSON.stringify(schema.logic)) as PageLogic) : undefined,
+      logic: schema.logic ? (deepClonePlainValue(schema.logic) as PageLogic) : undefined,
     };
   }
 
@@ -191,11 +206,11 @@ export class PatchApplyService {
         accumulator[id] = {
           id: component.id,
           type: component.type,
-          props: component.props ? ({ ...component.props } as JsonObject) : undefined,
-          childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
-          events: component.events
-            ? ({ ...component.events } as unknown as ComponentNode['events'])
-            : undefined,
+          ...(component.props !== undefined ? { props: component.props as JsonObject } : {}),
+          ...(component.childrenIds !== undefined ? { childrenIds: component.childrenIds } : {}),
+          ...(component.events !== undefined
+            ? { events: component.events as unknown as ComponentNode['events'] }
+            : {}),
         };
         return accumulator;
       },
@@ -206,7 +221,7 @@ export class PatchApplyService {
       schemaVersion: schema.schemaVersion,
       rootId: schema.rootId,
       components,
-      ...(schema.logic ? { logic: schema.logic } : {}),
+      ...(schema.logic !== undefined ? { logic: schema.logic } : {}),
     };
   }
 }

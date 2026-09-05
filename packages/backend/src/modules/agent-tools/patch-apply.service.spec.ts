@@ -188,4 +188,37 @@ describe('PatchApplyService', () => {
 
     expect(result.logic).toEqual({});
   });
+
+  it('preserves -0 in states when updating component props without mutating logic declarations', () => {
+    const schema: PageSchema = {
+      ...createSchema(),
+      logic: {
+        states: { offset: -0 },
+      },
+    };
+
+    const result = service.applyPatch(schema, [
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: { children: 'New' },
+      },
+    ]);
+
+    expect(result.components.button.props).toMatchObject({ children: 'New' });
+    expect(Object.is(result.logic?.states?.offset, -0)).toBe(true);
+  });
+
+  it('preserves -0 in states during replacePageLogic', () => {
+    const schema = createSchema();
+    const result = service.applyPatch(schema, [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { offset: -0 },
+        },
+      },
+    ]);
+    expect(Object.is(result.logic?.states?.offset, -0)).toBe(true);
+  });
 });

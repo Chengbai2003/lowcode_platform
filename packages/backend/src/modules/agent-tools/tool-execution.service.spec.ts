@@ -795,6 +795,21 @@ describe('ToolExecutionService', () => {
         },
       ]);
 
+      const expectedLegacyRevised: PageSchema = {
+        ...legacySchema,
+        components: {
+          ...legacySchema.components,
+          'legacy-btn': {
+            ...legacySchema.components['legacy-btn'],
+            props: {
+              ...legacySchema.components['legacy-btn'].props,
+              children: 'Legacy Trigger revised',
+            },
+          },
+        },
+      };
+
+      expect(response.schema).toEqual(expectedLegacyRevised);
       expect(Object.prototype.hasOwnProperty.call(response.schema, 'logic')).toBe(false);
       expect(response.schema.logic).toBeUndefined();
       expect(response.schema.components['legacy-btn'].props?.children).toBe(
@@ -810,6 +825,38 @@ describe('ToolExecutionService', () => {
       expect(response.schema).toBeDefined();
       expect(Object.isFrozen(response.schema)).toBe(true);
       expect(Object.isFrozen(response.schema.components)).toBe(true);
+    });
+
+    it('previewPatch preserves -0 in state values when applying component updates', async () => {
+      const { schemaA } = createConformanceCandidates();
+      const schemaWithNegZero: PageSchema = {
+        ...schemaA,
+        logic: {
+          ...schemaA.logic!,
+          states: {
+            ...schemaA.logic!.states,
+            count: -0,
+          },
+        },
+      };
+
+      const response = await service.previewPatch(
+        {
+          draftSchema: schemaWithNegZero as unknown as Record<string, unknown>,
+          patch: [
+            {
+              op: 'updateProps',
+              componentId: 'submit',
+              props: { children: 'Submit revised' },
+            },
+          ],
+          autoFix: false,
+        },
+        'trace-c2-2-preview-negzero',
+      );
+
+      expect(response.schema.components.submit.props?.children).toBe('Submit revised');
+      expect(Object.is(response.schema.logic?.states?.count, -0)).toBe(true);
     });
   });
 });

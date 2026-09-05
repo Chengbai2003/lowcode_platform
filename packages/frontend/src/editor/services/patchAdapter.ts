@@ -17,6 +17,21 @@ type MutableSchema = {
   logic?: PageSchema['logic'];
 };
 
+function deepClonePlainValue<T>(value: T): T {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => deepClonePlainValue(item)) as unknown as T;
+  }
+  const proto = Object.getPrototypeOf(value);
+  const result: Record<string, unknown> = proto === null ? Object.create(null) : {};
+  for (const [k, v] of Object.entries(value)) {
+    result[k] = deepClonePlainValue(v);
+  }
+  return result as T;
+}
+
 export function applyPatchToSchema(
   schema: PageSchema,
   patch: readonly EditorPatchOperation[],
@@ -50,7 +65,7 @@ export function applyPatchToSchema(
 }
 
 function replacePageLogic(schema: MutableSchema, logic?: Record<string, unknown>) {
-  schema.logic = logic ? (JSON.parse(JSON.stringify(logic)) as PageSchema['logic']) : undefined;
+  schema.logic = logic ? (deepClonePlainValue(logic) as PageSchema['logic']) : undefined;
 }
 
 function insertComponent(
@@ -65,9 +80,9 @@ function insertComponent(
   schema.components[component.id] = {
     id: component.id,
     type: component.type,
-    props: component.props ? { ...component.props } : {},
-    childrenIds: [...(component.childrenIds ?? [])],
-    events: component.events ? { ...component.events } : {},
+    props: component.props ? deepClonePlainValue(component.props) : undefined,
+    childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
+    events: component.events ? deepClonePlainValue(component.events) : undefined,
   };
 
   const insertAt = index === undefined ? parent.childrenIds.length : index;
@@ -78,7 +93,7 @@ function updateProps(schema: MutableSchema, componentId: string, props: Record<s
   const component = schema.components[componentId];
   component.props = {
     ...(component.props ?? {}),
-    ...props,
+    ...deepClonePlainValue(props),
   };
 }
 
@@ -86,7 +101,7 @@ function bindEvent(schema: MutableSchema, componentId: string, event: string, ac
   const component = schema.components[componentId];
   component.events = {
     ...(component.events ?? {}),
-    [event]: actions.map((action) => ({ ...action })),
+    [event]: deepClonePlainValue(actions),
   };
 }
 
@@ -152,9 +167,9 @@ function cloneSchema(schema: PageSchema): MutableSchema {
       accumulator[id] = {
         id: component.id,
         type: component.type,
-        props: component.props ? { ...component.props } : {},
-        childrenIds: [...(component.childrenIds ?? [])],
-        events: component.events ? { ...component.events } : {},
+        props: component.props ? deepClonePlainValue(component.props) : undefined,
+        childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
+        events: component.events ? deepClonePlainValue(component.events) : undefined,
       };
       return accumulator;
     },
@@ -165,9 +180,7 @@ function cloneSchema(schema: PageSchema): MutableSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
-    logic: schema.logic
-      ? (JSON.parse(JSON.stringify(schema.logic)) as PageSchema['logic'])
-      : undefined,
+    logic: schema.logic ? (deepClonePlainValue(schema.logic) as PageSchema['logic']) : undefined,
   };
 }
 
@@ -177,9 +190,9 @@ function freezeSchema(schema: MutableSchema): PageSchema {
       accumulator[id] = {
         id: component.id,
         type: component.type,
-        props: component.props ? ({ ...component.props } as JsonObject) : undefined,
-        childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
-        events: component.events ? { ...component.events } : undefined,
+        ...(component.props !== undefined ? { props: component.props as JsonObject } : {}),
+        ...(component.childrenIds !== undefined ? { childrenIds: component.childrenIds } : {}),
+        ...(component.events !== undefined ? { events: component.events } : {}),
       };
       return accumulator;
     },
@@ -190,6 +203,6 @@ function freezeSchema(schema: MutableSchema): PageSchema {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
-    ...(schema.logic ? { logic: schema.logic } : {}),
+    ...(schema.logic !== undefined ? { logic: schema.logic } : {}),
   };
 }

@@ -339,6 +339,21 @@ describe('M1a-3 / C2.2 Frontend Patch round-trip conformance', () => {
     expect(JSON.stringify(legacySchema)).toBe(inputSchemaSnapshot);
     expect(() => requireSupportedPageSchema(actualLegacy)).not.toThrow();
 
+    const expectedLegacyRevised: PageSchema = {
+      ...legacySchema,
+      components: {
+        ...legacySchema.components,
+        'legacy-btn': {
+          ...legacySchema.components['legacy-btn'],
+          props: {
+            ...legacySchema.components['legacy-btn'].props,
+            children: 'Legacy Trigger revised',
+          },
+        },
+      },
+    };
+
+    expect(actualLegacy).toEqual(expectedLegacyRevised);
     expect(Object.prototype.hasOwnProperty.call(actualLegacy, 'logic')).toBe(false);
     expect(actualLegacy.logic).toBeUndefined();
     expect(actualLegacy.components['legacy-btn'].props?.children).toBe('Legacy Trigger revised');
@@ -351,5 +366,44 @@ describe('M1a-3 / C2.2 Frontend Patch round-trip conformance', () => {
     expect(actualLegacy.components['legacy-text'].type).toBe(
       legacySchema.components['legacy-text'].type,
     );
+  });
+
+  it('preserves -0 in states when updating component props without mutating logic declarations', () => {
+    const { schemaA } = createCandidates();
+    const schemaWithNegativeZero: PageSchema = {
+      ...schemaA,
+      logic: {
+        ...schemaA.logic!,
+        states: {
+          ...schemaA.logic!.states,
+          count: -0,
+        },
+      },
+    };
+
+    const patch: readonly EditorPatchOperation[] = [
+      {
+        op: 'updateProps',
+        componentId: 'submit',
+        props: { children: 'Submit revised' },
+      },
+    ];
+
+    const result = applyPatchToSchema(schemaWithNegativeZero, patch);
+    expect(result.components.submit.props?.children).toBe('Submit revised');
+    expect(Object.is(result.logic?.states?.count, -0)).toBe(true);
+  });
+
+  it('preserves -0 in states during replacePageLogic', () => {
+    const { schemaA } = createCandidates();
+    const result = applyPatchToSchema(schemaA, [
+      {
+        op: 'replacePageLogic',
+        logic: {
+          states: { count: -0 },
+        },
+      },
+    ]);
+    expect(Object.is(result.logic?.states?.count, -0)).toBe(true);
   });
 });

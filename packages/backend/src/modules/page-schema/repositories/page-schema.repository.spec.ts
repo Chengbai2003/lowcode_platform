@@ -565,6 +565,7 @@ describe('PageSchemaRepository', () => {
 
       // Assert disk snapshot count, page pointer/version and latest full schema unchanged on disk
       const diskAfter = JSON.parse(await fs.promises.readFile(suiteStorePath, 'utf-8'));
+      expect(diskAfter).toEqual(diskBefore);
       expect(diskAfter.snapshots).toHaveLength(snapshotCountBefore);
       expect(diskAfter.pages[0].currentPageVersion).toBe(2);
       expect(diskAfter.pages[0].latestSnapshotId).toBe(latestSnapshotIdBefore);
