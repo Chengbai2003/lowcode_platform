@@ -491,14 +491,14 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
 
         const toFlowResult = (res: unknown) => {
           const r = res as
-            | { status?: string; flow?: string; recovered?: boolean }
+            | { status?: unknown; flow?: unknown; recovered?: unknown }
             | null
             | undefined;
           return r
             ? {
-                status: String(r.status),
-                flow: String(r.flow),
-                recovered: Boolean(r.recovered),
+                status: r.status,
+                flow: r.flow,
+                recovered: r.recovered,
               }
             : undefined;
         };
@@ -543,14 +543,14 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
 
         const toFlowResult = (res: unknown) => {
           const r = res as
-            | { status?: string; flow?: string; recovered?: boolean }
+            | { status?: unknown; flow?: unknown; recovered?: unknown }
             | null
             | undefined;
           return r
             ? {
-                status: String(r.status),
-                flow: String(r.flow),
-                recovered: Boolean(r.recovered),
+                status: r.status,
+                flow: r.flow,
+                recovered: r.recovered,
               }
             : undefined;
         };
@@ -776,12 +776,21 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
         let compilerRejectedCode: string | undefined;
 
         try {
+          let capturedFlowPromise: Promise<unknown> | undefined;
+          const compilerFlowSpy = vi.fn((_flowName, _input, next) => {
+            const p = next();
+            capturedFlowPromise = p;
+            p.catch(() => {}); // prevent unhandled rejection
+            return p;
+          });
+
           const GeneratedComponent = createGeneratedComponent(compiledCodes.main);
           const rendered = render(
             <GeneratedComponent
               __testCapture={(caps) => {
                 compilerCaps = caps;
               }}
+              __onExecuteFlow={compilerFlowSpy}
             />,
           );
 
@@ -793,13 +802,15 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           );
           expect(cancelBtn).toBeDefined();
 
-          // Start flow run
-          const flowPromise = capturedInstance.executeFlow!('cancelDelayFlow');
-          flowPromise.catch(() => {}); // prevent unhandled rejection
-
+          // Click Cancel Delay button (same interaction as Renderer)
           await act(async () => {
+            fireEvent.click(cancelBtn!);
             await vi.advanceTimersByTimeAsync(Math.floor(cancellation.delayMs / 2));
           });
+
+          expect(compilerFlowSpy).toHaveBeenCalledTimes(1);
+          expect(compilerFlowSpy.mock.calls[0][0]).toBe('cancelDelayFlow');
+          expect(capturedFlowPromise).toBeDefined();
 
           compilerOldStateBefore = safeSnapshot(capturedInstance.getState()?.delayedState);
           expect(compilerOldStateBefore).toBe('initial');
@@ -808,7 +819,7 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           rendered.unmount();
 
           try {
-            await flowPromise;
+            await capturedFlowPromise;
           } catch (err) {
             const e = err as { diagnostic?: { code?: string }; code?: string } | null | undefined;
             compilerRejectedCode = e?.diagnostic?.code ?? e?.code;
@@ -832,17 +843,59 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
         expect(rendererOldStateBefore).toEqual(compilerOldStateBefore);
         expect(rendererOldStateAfter).toEqual(compilerOldStateAfter);
 
-        // Mount new fresh instances and assert clean initial state
-        const freshRendered = render(
-          <Renderer
-            preset={testPreset}
-            pageId="p6-fresh-renderer"
-            documentSessionId="p6-fresh-session"
-            schema={conformanceFixture.schema}
-          />,
-        );
-        expect(extractMainVisibleText(freshRendered.container).delayed).toBe('initial');
-        cleanup();
+        // Mount new fresh instances of both engines and assert clean full initial state
+        let freshRendererSession: RuntimeSession | undefined;
+        const freshSessionSpy = vi
+          .spyOn(RuntimeSessionModule, 'createRuntimeSession')
+          .mockImplementation((options) => {
+            const session = new RuntimeSessionModule.RuntimeSession(options);
+            freshRendererSession = session;
+            return session;
+          });
+
+        let freshCompilerCaps: CompilerCapture | undefined;
+        try {
+          const freshRendered = render(
+            <Renderer
+              preset={testPreset}
+              pageId="p6-fresh-renderer"
+              documentSessionId="p6-fresh-session"
+              schema={conformanceFixture.schema}
+            />,
+          );
+          expect(freshRendererSession).toBeDefined();
+          expect(freshRendererSession!.runtime.getState()).toEqual(
+            conformanceFixture.expected.initial.state,
+          );
+          expect(freshRendererSession!.runtime.getComputed()).toEqual(
+            conformanceFixture.expected.initial.computed,
+          );
+          expect(extractMainVisibleText(freshRendered.container)).toEqual(
+            conformanceFixture.expected.initialVisibleText,
+          );
+          freshRendered.unmount();
+
+          const GeneratedComponent = createGeneratedComponent(compiledCodes.main);
+          const freshCompilerRendered = render(
+            <GeneratedComponent
+              __testCapture={(caps) => {
+                freshCompilerCaps = caps;
+              }}
+            />,
+          );
+          expect(freshCompilerCaps).toBeDefined();
+          expect(freshCompilerCaps!.getState()).toEqual(conformanceFixture.expected.initial.state);
+          expect(freshCompilerCaps!.getComputed()).toEqual(
+            conformanceFixture.expected.initial.computed,
+          );
+          expect(extractMainVisibleText(freshCompilerRendered.container)).toEqual(
+            conformanceFixture.expected.initialVisibleText,
+          );
+          freshCompilerRendered.unmount();
+        } finally {
+          freshSessionSpy.mockRestore();
+          cleanup();
+        }
       } finally {
         cleanup();
         vi.useRealTimers();
@@ -852,6 +905,13 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
 
   describe('P7: 双实例隔离 (Dual Instance Isolation)', () => {
     it('observes strict isolation between two mounted instances of the same schema', async () => {
+      const pristineSchema = JSON.parse(JSON.stringify(conformanceFixture.schema));
+      const expectedBStateAfterSubmit = {
+        ...conformanceFixture.expected.initial.state,
+        source: 'fixture',
+        count: 1,
+      };
+
       // 1. Renderer observation
       const sessionMap = new Map<string, RuntimeSession>();
       const sessionSpy = vi
@@ -902,12 +962,14 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           await Promise.resolve();
         });
 
-        // Verify A is afterChange, B is initial
-        expect(sessionA.runtime.getState()).toMatchObject(
-          conformanceFixture.expected.afterChange.state,
+        // Verify A is afterChange, B is initial (full state and full computed)
+        expect(sessionA.runtime.getState()).toEqual(conformanceFixture.expected.afterChange.state);
+        expect(sessionA.runtime.getComputed()).toEqual(
+          conformanceFixture.expected.afterChange.computed,
         );
-        expect(sessionB.runtime.getState()).toMatchObject(
-          conformanceFixture.expected.initial.state,
+        expect(sessionB.runtime.getState()).toEqual(conformanceFixture.expected.initial.state);
+        expect(sessionB.runtime.getComputed()).toEqual(
+          conformanceFixture.expected.initial.computed,
         );
         expect(extractMainVisibleText(containerA).computed).toBe('19');
         expect(extractMainVisibleText(containerB).computed).toBe('10');
@@ -926,8 +988,11 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           await Promise.resolve();
         });
 
-        expect(sessionB.runtime.getState().source).toBe('fixture');
-        expect(sessionB.runtime.getState().count).toBe(1);
+        // Verify B's full state after submit
+        expect(sessionB.runtime.getState()).toEqual(expectedBStateAfterSubmit);
+        expect(sessionB.runtime.getComputed()).toEqual(
+          conformanceFixture.expected.initial.computed,
+        );
         expect(extractMainVisibleText(containerB).status).toBe('fixture:1');
 
         renderedB.unmount();
@@ -978,8 +1043,11 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           await Promise.resolve();
         });
 
-        expect(capsA!.getState()).toMatchObject(conformanceFixture.expected.afterChange.state);
-        expect(capsB!.getState()).toMatchObject(conformanceFixture.expected.initial.state);
+        // Verify A is afterChange, B is initial (full state and full computed)
+        expect(capsA!.getState()).toEqual(conformanceFixture.expected.afterChange.state);
+        expect(capsA!.getComputed()).toEqual(conformanceFixture.expected.afterChange.computed);
+        expect(capsB!.getState()).toEqual(conformanceFixture.expected.initial.state);
+        expect(capsB!.getComputed()).toEqual(conformanceFixture.expected.initial.computed);
         expect(extractMainVisibleText(containerA).computed).toBe('19');
         expect(extractMainVisibleText(containerB).computed).toBe('10');
 
@@ -995,8 +1063,9 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           await Promise.resolve();
         });
 
-        expect(capsB!.getState()?.source).toBe('fixture');
-        expect(capsB!.getState()?.count).toBe(1);
+        // Verify B's full state after submit
+        expect(capsB!.getState()).toEqual(expectedBStateAfterSubmit);
+        expect(capsB!.getComputed()).toEqual(conformanceFixture.expected.initial.computed);
         expect(extractMainVisibleText(containerB).status).toBe('fixture:1');
 
         renderedB.unmount();
@@ -1005,6 +1074,9 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
         containerB.remove();
         cleanup();
       }
+
+      // 3. Schema immutability assertion
+      expect(conformanceFixture.schema).toEqual(pristineSchema);
     });
   });
 
@@ -1280,10 +1352,31 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           }
         }
 
+        const extractDiagnostic = (err: unknown) => {
+          const e = err as { diagnostic?: unknown } | null | undefined;
+          const d = (e?.diagnostic ?? err) as
+            | {
+                code?: string;
+                flow?: string;
+                step?: unknown;
+                stepPath?: unknown;
+                path?: unknown;
+                trace?: unknown;
+              }
+            | null
+            | undefined;
+          return {
+            code: d?.code,
+            flow: d?.flow,
+            step: d?.step,
+            stepPath: d?.stepPath,
+            path: d?.path,
+            trace: d?.trace,
+          };
+        };
+
         expect(rendererError).toBeDefined();
-        const rendererDiagnostic =
-          (rendererError as { diagnostic?: { code: string; flow: string } }).diagnostic ??
-          (rendererError as { code?: string; flow?: string });
+        const rendererDiagnostic = extractDiagnostic(rendererError);
         expect(rendererDiagnostic.code).toBe(caseConfig.expectedError.code);
         expect(rendererDiagnostic.flow).toBe(caseConfig.expectedError.flow);
 
@@ -1304,21 +1397,21 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
           expect(compilerCaps).toBeDefined();
 
           if (budgetType === 'concurrencyBudget') {
-            await act(async () => {
-              const p1 = compilerCaps!.executeFlow!(caseConfig.flow);
-              const p2 = compilerCaps!.executeFlow!(caseConfig.flow);
-              try {
-                await p2;
-              } catch (err) {
-                compilerError = err;
-              }
-              try {
-                await p1;
-              } catch {
-                // expected p1 aborted
-              }
-            });
+            const p1 = compilerCaps!.executeFlow!(caseConfig.flow);
+            let p2Err: unknown;
+            try {
+              await compilerCaps!.executeFlow!(caseConfig.flow);
+            } catch (err) {
+              p2Err = err;
+            }
+            compilerError = p2Err;
+            // Immediately unmount to cancel the still-pending p1 (parity with session.dispose())
             rendered.unmount();
+            try {
+              await p1;
+            } catch {
+              // expected p1 aborted
+            }
           } else if (budgetType === 'durationBudget') {
             vi.useFakeTimers();
             try {
@@ -1351,15 +1444,15 @@ describe('Renderer–Compiler Observable Parity (C2.3 / Issue #47)', () => {
         }
 
         expect(compilerError).toBeDefined();
-        const compilerDiagnostic =
-          (compilerError as { diagnostic?: { code: string; flow: string } }).diagnostic ??
-          (compilerError as { code?: string; flow?: string });
+        const compilerDiagnostic = extractDiagnostic(compilerError);
         expect(compilerDiagnostic.code).toBe(caseConfig.expectedError.code);
         expect(compilerDiagnostic.flow).toBe(caseConfig.expectedError.flow);
 
-        // 3. Direct engine parity check
+        // 3. Direct engine parity check (code, flow, path, trace)
         expect(rendererDiagnostic.code).toBe(compilerDiagnostic.code);
         expect(rendererDiagnostic.flow).toBe(compilerDiagnostic.flow);
+        expect(rendererDiagnostic.path).toEqual(compilerDiagnostic.path);
+        expect(rendererDiagnostic.trace).toEqual(compilerDiagnostic.trace);
       });
     }
   });

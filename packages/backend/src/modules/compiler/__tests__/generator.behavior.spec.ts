@@ -385,4 +385,124 @@ describe('compiler generator behavior', () => {
     expect(formatted).not.toContain('__PWNED__');
     expect(formatted).toContain('Circular reference omitted');
   });
+
+  it('correctly targets data without referencing state in nested data updates (setValue and resultTo)', async () => {
+    const schema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['btn1', 'btn2'] },
+        btn1: {
+          id: 'btn1',
+          type: 'Button',
+          props: { children: 'Set' },
+          events: {
+            onClick: [
+              {
+                type: 'setValue',
+                field: 'data.profile.name',
+                value: 'Ada',
+              },
+            ],
+          },
+        },
+        btn2: {
+          id: 'btn2',
+          type: 'Button',
+          props: { children: 'Fetch' },
+          events: {
+            onClick: [
+              {
+                type: 'apiCall',
+                url: 'https://example.com/api',
+                resultTo: 'data.profile.name',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const code = await compileFormatted(schema);
+    expect(code).toContain(')(data, ["profile","name"], "Ada")');
+    expect(code).not.toContain(')(state, ["profile","name"]');
+    expect(code).toContain(')(data, ["profile","name"], response)');
+  });
+
+  it('declares data state and ref when page declares logic.flows but no logic.states, and component writes to data', async () => {
+    const schema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: {
+        flows: {
+          dummyFlow: {
+            steps: [
+              {
+                type: 'delay',
+                ms: 10,
+              },
+            ],
+          },
+        },
+      },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: ['btn'] },
+        btn: {
+          id: 'btn',
+          type: 'Button',
+          props: { children: 'Set Data' },
+          events: {
+            onClick: [
+              {
+                type: 'setValue',
+                field: 'data.key',
+                value: 'hello',
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const code = await compileFormatted(schema);
+    expect(code).toContain('const [data, setData] = useState({});');
+    expect(code).toContain('const dataRef = useRef(data);');
+    expect(code).toContain('let data = dataRef.current;');
+    expect(code).toContain('setData(data);');
+  });
+
+  it('supports flow steps writing to nested data paths when logic.states is undefined', async () => {
+    const schema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      logic: {
+        flows: {
+          updateDataFlow: {
+            steps: [
+              {
+                type: 'setValue',
+                field: 'data.profile.name',
+                value: 'Ada',
+              },
+              {
+                type: 'apiCall',
+                url: 'https://example.com/api',
+                resultTo: 'data.profile.name',
+              },
+            ],
+          },
+        },
+      },
+      components: {
+        root: { id: 'root', type: 'Page', childrenIds: [] },
+      },
+    };
+
+    const code = await compileFormatted(schema);
+    expect(code).toContain('const [data, setData] = useState({});');
+    expect(code).toContain('const dataRef = useRef(data);');
+    expect(code).toContain(')(data, ["profile","name"], "Ada")');
+    expect(code).toContain(')(data, ["profile","name"], response)');
+    expect(code).not.toContain(')(state, ["profile","name"]');
+  });
 });

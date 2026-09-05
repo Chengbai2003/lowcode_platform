@@ -12,6 +12,11 @@ export interface CompilerCapture {
 
 export interface GeneratedPageProps {
   __testCapture?: (caps: CompilerCapture) => void;
+  __onExecuteFlow?: (
+    flowName: string,
+    input: unknown,
+    next: () => Promise<unknown>,
+  ) => Promise<unknown>;
   [key: string]: unknown;
 }
 
@@ -112,8 +117,22 @@ export function createGeneratedComponent(
   const codeBeforeReturn = code.slice(0, returnIndex);
   const codeAfterReturn = code.slice(returnIndex);
 
+  const executeFlowTarget = 'const executeFlow = async (rootFlowName, rawInput) => {';
+  let processedBeforeReturn = codeBeforeReturn;
+  if (processedBeforeReturn.includes(executeFlowTarget)) {
+    const wrappedExecuteFlow = `let __rawExecuteFlow;
+  const executeFlow = (rootFlowName, rawInput) => {
+    if (typeof __props !== 'undefined' && __props && typeof __props.__onExecuteFlow === 'function') {
+      return __props.__onExecuteFlow(rootFlowName, rawInput, () => __rawExecuteFlow(rootFlowName, rawInput));
+    }
+    return __rawExecuteFlow(rootFlowName, rawInput);
+  };
+  __rawExecuteFlow = async (rootFlowName, rawInput) => {`;
+    processedBeforeReturn = processedBeforeReturn.replace(executeFlowTarget, wrappedExecuteFlow);
+  }
+
   const injectedCode =
-    codeBeforeReturn.replace(
+    processedBeforeReturn.replace(
       headerMarker,
       'export default function GeneratedPage(__props = {}) {',
     ) +
