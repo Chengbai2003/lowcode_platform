@@ -149,6 +149,7 @@ interface RootNode {
   handlers: HandlerDeclaration[];
   helpers: Set<string>;
   usesPageState: boolean;
+  usesLegacyData?: boolean;
   usesComputed: boolean;
   usesFlows: boolean;
   computedAnalysis?: ComputedLogicAnalysis;
@@ -246,6 +247,13 @@ function sanitizeResultTo(resultTo: string | undefined, ctx: TransformContext): 
   if (resultTo.startsWith('state.')) {
     const suffix = resultTo.slice(6);
     if (sanitizeStatePath(suffix, !hasDeclaredPageState(ctx))) {
+      return resultTo;
+    }
+    return undefined;
+  }
+  if (resultTo.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+    const suffix = resultTo.slice(5);
+    if (sanitizeStatePath(suffix, true)) {
       return resultTo;
     }
     return undefined;
@@ -483,6 +491,61 @@ function componentUsesPageState(
   );
 }
 
+function valueNodeUsesLegacyData(value: ValueNode | undefined): boolean {
+  if (!value) return false;
+  switch (value.kind) {
+    case 'expression':
+      return collectInlineExpressionIdentifiers(value.code).has('data');
+    case 'template':
+      return value.parts.some(
+        (part) => part.kind === 'expression' && valueNodeUsesLegacyData(part.value),
+      );
+    case 'array':
+      return value.items.some(valueNodeUsesLegacyData);
+    case 'object':
+      return value.properties.some((property) => valueNodeUsesLegacyData(property.value));
+    default:
+      return false;
+  }
+}
+
+function actionUsesLegacyData(action: ActionNode): boolean {
+  if (action.field?.startsWith('data.') || action.resultTo?.startsWith('data.')) {
+    return true;
+  }
+  for (const value of [
+    action.value,
+    action.url,
+    action.to,
+    action.content,
+    action.title,
+    action.condition,
+    action.over,
+    action.body,
+  ]) {
+    if (valueNodeUsesLegacyData(value)) return true;
+  }
+  for (const values of [action.headers, action.params]) {
+    if (Object.values(values ?? {}).some(valueNodeUsesLegacyData)) return true;
+  }
+  return [
+    action.actions,
+    action.then,
+    action.else,
+    action.onSuccess,
+    action.onError,
+    action.onOk,
+    action.onCancel,
+  ].some((actions) => actions?.some(actionUsesLegacyData) ?? false);
+}
+
+function componentUsesLegacyData(component: FlatComponentNode): boolean {
+  return (
+    component.props.some((prop) => valueNodeUsesLegacyData(prop.value)) ||
+    component.events.some((event) => event.actions.some(actionUsesLegacyData))
+  );
+}
+
 function componentDeclaresLegacyStateField(component: FlatComponentNode): boolean {
   const fieldProp = component.props.find((prop) => prop.name === 'field');
   if (
@@ -622,6 +685,11 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
       usesFlows ||
       schema.logic?.states !== undefined ||
       flatComponents.some((component) => componentUsesPageState(component, !hasLegacyStateField)),
+    usesLegacyData:
+      schema.logic?.states === undefined &&
+      !usesComputed &&
+      !usesFlows &&
+      flatComponents.some(componentUsesLegacyData),
   };
 }
 
@@ -713,10 +781,14 @@ function resolveFieldNameForContext(
 ): string {
   const preferredName = resolveFieldName(sourceKey, source);
   if (
-    !ctx.root.usesPageState ||
-    (preferredName !== 'state' &&
-      preferredName !== 'setState' &&
-      createSetterName(preferredName) !== 'setState')
+    (!ctx.root.usesPageState ||
+      (preferredName !== 'state' &&
+        preferredName !== 'setState' &&
+        createSetterName(preferredName) !== 'setState')) &&
+    (!ctx.root.usesLegacyData ||
+      (preferredName !== 'data' &&
+        preferredName !== 'setData' &&
+        createSetterName(preferredName) !== 'setData'))
   ) {
     return preferredName;
   }
@@ -806,6 +878,9 @@ function collectImports(ctx: TransformContext) {
     addImport(ctx, 'react', 'useRef');
     addImport(ctx, 'react', 'useEffect');
   }
+  if (ctx.root.usesLegacyData) {
+    addImport(ctx, 'react', 'useRef');
+  }
   ctx.imports.set(ctx.root.options.defaultLibrary, new Set(['message']));
   if (!ctx.registry.has('message')) ctx.registry.reserveExact('message', 'import:message');
 
@@ -886,6 +961,11 @@ function createTransformContext(root: RootNode): TransformContext {
   } else if (root.usesFlows) {
     registry.reserveExact('stateRef', 'page-state-ref');
   }
+  if (root.usesLegacyData) {
+    registry.reserveExact('data', 'page-legacy-data');
+    registry.reserveExact('setData', 'page-legacy-data-setter');
+    registry.reserveExact('dataRef', 'page-legacy-data-ref');
+  }
   if (root.usesFlows) {
     registry.reserveExact('FlowExecutionError', 'flow:error-class');
     registry.reserveExact('isNonRecoverableFlowErrorCode', 'flow:non-recoverable-check');
@@ -958,6 +1038,7 @@ function createHandlerCode(
   params: string[],
   usesComputed: boolean,
   usesFlows: boolean,
+  usesLegacyData = false,
 ): string {
   const asyncKeyword = isAsync ? 'async ' : '';
   const parameterCode = params.join(', ');
@@ -965,7 +1046,9 @@ function createHandlerCode(
     ? 'let state = stateRef.current;\nlet computed = computedRef.current;'
     : usesFlows
       ? 'let state = stateRef.current;'
-      : '';
+      : usesLegacyData
+        ? 'let data = dataRef.current;'
+        : '';
   const handlerBody = [logicPrologue, bodyCode].filter(Boolean).join('\n');
   return `const ${handlerName} = ${asyncKeyword}(${parameterCode}) => {\n${indentBlock(handlerBody)}\n};`;
 }
@@ -992,6 +1075,7 @@ function registerHandler(
     params,
     ctx.root.usesComputed,
     ctx.root.usesFlows,
+    ctx.root.usesLegacyData,
   );
 
   return {
@@ -1194,6 +1278,7 @@ function getExpressionContextFields(ctx: TransformContext): Set<string> {
     fields.add('state');
   }
   if (ctx.root.usesComputed) fields.add('computed');
+  if (ctx.root.usesLegacyData) fields.add('data');
   return fields;
 }
 
@@ -1617,6 +1702,17 @@ function resolveResultTarget(
     }
     return getStateWriteCode(statePath, valueCode, ctx);
   }
+  if (sanitized.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+    const dataPath = sanitizeStatePath(sanitized.slice('data.'.length), true);
+    if (!dataPath) {
+      return `/* invalid resultTo discarded */`;
+    }
+    const nextDataCode =
+      dataPath.length === 1
+        ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: ${valueCode} })`
+        : getNestedStateUpdateCode(dataPath, valueCode).replace(/^state/, 'data');
+    return `data = ${nextDataCode};\ndataRef.current = data;\nsetData(data);`;
+  }
   return `/* invalid resultTo discarded */`;
 }
 
@@ -1633,7 +1729,9 @@ function buildActionBlock(
     ? 'state = stateRef.current;\ncomputed = computedRef.current;'
     : ctx.root.usesFlows
       ? 'state = stateRef.current;'
-      : '';
+      : ctx.root.usesLegacyData
+        ? 'data = dataRef.current;'
+        : '';
   return {
     code: segments
       .map((segment) => [refreshCode, segment.code].filter(Boolean).join('\n'))
@@ -1726,6 +1824,25 @@ function buildActionStatement(
               : valueCode;
             return {
               code: getStateWriteCode(statePath, nextValueCode, ctx),
+              async: false,
+            };
+          }
+          return { code: `/* invalid field discarded */`, async: false };
+        }
+
+        if (action.field.startsWith('data.') && !hasDeclaredPageState(ctx)) {
+          const dataPath = sanitizeStatePath(action.field.slice('data.'.length), true);
+          if (dataPath) {
+            const currentValueCode = `data${dataPath.map((p) => `?.[${toQuotedString(p)}]`).join('')}`;
+            const nextValueCode = action.merge
+              ? getMergedStateValueCode(currentValueCode, valueCode)
+              : valueCode;
+            const nextDataCode =
+              dataPath.length === 1
+                ? `({ ...data, ${toObjectKeyCode(dataPath[0])}: ${nextValueCode} })`
+                : getNestedStateUpdateCode(dataPath, nextValueCode).replace(/^state/, 'data');
+            return {
+              code: `data = ${nextDataCode};\ndataRef.current = data;\nsetData(data);`,
               async: false,
             };
           }
@@ -3256,6 +3373,9 @@ function genValidatedComputedExpression(expression: string): string {
 
 function genStateHooks(root: RootNode): string {
   const ctxFields = new Set(root.fields.map((field) => field.name));
+  if (root.usesLegacyData) {
+    ctxFields.add('data');
+  }
   const hooks: string[] = [];
   if (root.usesPageState) {
     ctxFields.add('state');
@@ -3308,6 +3428,10 @@ ${indentBlock(evaluatorBody)}
   } else if (root.usesFlows) {
     hooks.push('const stateRef = useRef(state);');
     hooks.push('stateRef.current = state;');
+  } else if (root.usesLegacyData) {
+    hooks.push('const [data, setData] = useState({});');
+    hooks.push('const dataRef = useRef(data);');
+    hooks.push('dataRef.current = data;');
   }
   hooks.push(
     ...root.fields.map(

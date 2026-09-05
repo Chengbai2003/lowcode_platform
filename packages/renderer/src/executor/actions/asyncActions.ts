@@ -23,6 +23,30 @@ function getSession(context: Record<string, unknown>): RuntimeSession | undefine
  * 阻止内网地址和文件协议
  */
 function isSafeUrl(url: string): boolean {
+  if (typeof url !== 'string') return false;
+  if (/[\u0000-\u0020\u007f\\]/.test(url)) return false;
+
+  // 允许相对路径（以 / 开头，不能是协议相对 //）
+  if (url.startsWith('/') && !url.startsWith('//')) {
+    try {
+      const base = new URL('https://lowcode.internal');
+      const parsed = new URL(url, base);
+      if (parsed.origin !== base.origin) return false;
+      const lower = parsed.href.toLowerCase();
+      if (
+        lower.startsWith('javascript:') ||
+        lower.startsWith('data:') ||
+        lower.startsWith('vbscript:') ||
+        lower.startsWith('file:')
+      ) {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   try {
     const parsed = new URL(url);
 
