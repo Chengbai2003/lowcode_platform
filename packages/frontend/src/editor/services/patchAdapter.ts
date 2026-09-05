@@ -1,4 +1,3 @@
-import type { JsonObject } from '@lowcode-platform/schema-contract';
 import type { ComponentNode, PageSchema, ActionList } from '../../types';
 import type { EditorPatchOperation } from '../types/patch';
 
@@ -26,10 +25,51 @@ function deepClonePlainValue<T>(value: T): T {
   }
   const proto = Object.getPrototypeOf(value);
   const result: Record<string, unknown> = proto === null ? Object.create(null) : {};
-  for (const [k, v] of Object.entries(value)) {
-    result[k] = deepClonePlainValue(v);
+  for (const key of Object.getOwnPropertyNames(value)) {
+    const desc = Object.getOwnPropertyDescriptor(value, key);
+    if (!desc || desc.get || desc.set) continue;
+    Object.defineProperty(result, key, {
+      value: deepClonePlainValue(desc.value),
+      enumerable: desc.enumerable,
+      writable: true,
+      configurable: true,
+    });
   }
   return result as T;
+}
+
+function mergePlainObjects(
+  target: Record<string, unknown> | undefined,
+  source: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  if (target) {
+    for (const key of Object.getOwnPropertyNames(target)) {
+      const desc = Object.getOwnPropertyDescriptor(target, key);
+      if (desc && !desc.get && !desc.set && 'value' in desc) {
+        Object.defineProperty(result, key, {
+          value: deepClonePlainValue(desc.value),
+          enumerable: desc.enumerable,
+          writable: true,
+          configurable: true,
+        });
+      }
+    }
+  }
+  if (source) {
+    for (const key of Object.getOwnPropertyNames(source)) {
+      const desc = Object.getOwnPropertyDescriptor(source, key);
+      if (desc && !desc.get && !desc.set && 'value' in desc) {
+        Object.defineProperty(result, key, {
+          value: deepClonePlainValue(desc.value),
+          enumerable: desc.enumerable,
+          writable: true,
+          configurable: true,
+        });
+      }
+    }
+  }
+  return result;
 }
 
 export function applyPatchToSchema(
@@ -77,7 +117,7 @@ function insertComponent(
   const parent = schema.components[parentId];
   parent.childrenIds = [...(parent.childrenIds ?? [])];
 
-  schema.components[component.id] = {
+  const newComp: MutableComponent = {
     id: component.id,
     type: component.type,
     props: component.props ? deepClonePlainValue(component.props) : undefined,
@@ -85,24 +125,45 @@ function insertComponent(
     events: component.events ? deepClonePlainValue(component.events) : undefined,
   };
 
+  Object.defineProperty(schema.components, component.id, {
+    value: newComp,
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+
   const insertAt = index === undefined ? parent.childrenIds.length : index;
   parent.childrenIds.splice(insertAt, 0, component.id);
 }
 
 function updateProps(schema: MutableSchema, componentId: string, props: Record<string, unknown>) {
   const component = schema.components[componentId];
-  component.props = {
-    ...(component.props ?? {}),
-    ...deepClonePlainValue(props),
-  };
+  component.props = mergePlainObjects(component.props, props);
 }
 
 function bindEvent(schema: MutableSchema, componentId: string, event: string, actions: ActionList) {
   const component = schema.components[componentId];
-  component.events = {
-    ...(component.events ?? {}),
-    [event]: deepClonePlainValue(actions),
-  };
+  const events: Record<string, unknown> = {};
+  if (component.events) {
+    for (const key of Object.getOwnPropertyNames(component.events)) {
+      const desc = Object.getOwnPropertyDescriptor(component.events, key);
+      if (desc && !desc.get && !desc.set && 'value' in desc) {
+        Object.defineProperty(events, key, {
+          value: deepClonePlainValue(desc.value),
+          enumerable: desc.enumerable,
+          writable: true,
+          configurable: true,
+        });
+      }
+    }
+  }
+  Object.defineProperty(events, event, {
+    value: deepClonePlainValue(actions),
+    enumerable: true,
+    writable: true,
+    configurable: true,
+  });
+  component.events = events as ComponentNode['events'];
 }
 
 function removeComponent(schema: MutableSchema, componentId: string) {
@@ -162,42 +223,63 @@ function findParent(schema: MutableSchema, componentId: string): MutableComponen
 }
 
 function cloneSchema(schema: PageSchema): MutableSchema {
-  const components = Object.entries(schema.components).reduce<Record<string, MutableComponent>>(
-    (accumulator, [id, component]) => {
-      accumulator[id] = {
-        id: component.id,
-        type: component.type,
-        props: component.props ? deepClonePlainValue(component.props) : undefined,
-        childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
-        events: component.events ? deepClonePlainValue(component.events) : undefined,
-      };
-      return accumulator;
-    },
-    {},
-  );
+  const components: Record<string, MutableComponent> = {};
+  for (const id of Object.getOwnPropertyNames(schema.components)) {
+    const desc = Object.getOwnPropertyDescriptor(schema.components, id);
+    if (!desc || desc.get || desc.set || !desc.value) continue;
+    const component = desc.value as ComponentNode;
+    const clonedComp: MutableComponent = {
+      id: component.id,
+      type: component.type,
+      props: component.props ? deepClonePlainValue(component.props) : undefined,
+      childrenIds: component.childrenIds ? [...component.childrenIds] : undefined,
+      events: component.events ? deepClonePlainValue(component.events) : undefined,
+    };
+    Object.defineProperty(components, id, {
+      value: clonedComp,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
 
-  return {
+  const mutable: MutableSchema = {
     schemaVersion: schema.schemaVersion,
     rootId: schema.rootId,
     components,
-    logic: schema.logic ? (deepClonePlainValue(schema.logic) as PageSchema['logic']) : undefined,
   };
+  if (schema.logic !== undefined) {
+    mutable.logic = deepClonePlainValue(schema.logic) as PageSchema['logic'];
+  }
+  return mutable;
 }
 
 function freezeSchema(schema: MutableSchema): PageSchema {
-  const components = Object.entries(schema.components).reduce<Record<string, ComponentNode>>(
-    (accumulator, [id, component]) => {
-      accumulator[id] = {
-        id: component.id,
-        type: component.type,
-        ...(component.props !== undefined ? { props: component.props as JsonObject } : {}),
-        ...(component.childrenIds !== undefined ? { childrenIds: component.childrenIds } : {}),
-        ...(component.events !== undefined ? { events: component.events } : {}),
-      };
-      return accumulator;
-    },
-    {},
-  );
+  const components: Record<string, ComponentNode> = {};
+  for (const id of Object.getOwnPropertyNames(schema.components)) {
+    const desc = Object.getOwnPropertyDescriptor(schema.components, id);
+    if (!desc || desc.get || desc.set || !desc.value) continue;
+    const component = desc.value as MutableComponent;
+    const compNode: Record<string, unknown> = {
+      id: component.id,
+      type: component.type,
+    };
+    if (component.props !== undefined) {
+      compNode.props = component.props;
+    }
+    if (component.childrenIds !== undefined) {
+      compNode.childrenIds = component.childrenIds;
+    }
+    if (component.events !== undefined) {
+      compNode.events = component.events;
+    }
+    Object.defineProperty(components, id, {
+      value: compNode as unknown as ComponentNode,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
 
   return {
     schemaVersion: schema.schemaVersion,

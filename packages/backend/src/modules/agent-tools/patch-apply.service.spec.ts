@@ -1,5 +1,9 @@
 import { PatchApplyService } from './patch-apply.service';
-import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  PageSchema,
+  ComponentNode,
+  requireSupportedPageSchema,
+} from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './types/editor-patch.types';
 
 function createSchema(): PageSchema {
@@ -220,5 +224,77 @@ describe('PatchApplyService', () => {
       },
     ]);
     expect(Object.is(result.logic?.states?.offset, -0)).toBe(true);
+  });
+
+  it('safely handles -0 and own __proto__ keys without prototype pollution and passes Contract', () => {
+    const schema = createSchema();
+
+    const buttonProps: Record<string, unknown> = {
+      children: 'Old',
+    };
+    Object.defineProperty(buttonProps, '__proto__', {
+      value: { safe_proto: true },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(buttonProps, 'offset', {
+      value: -0,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const schemaWithSpecialProps: PageSchema = {
+      ...schema,
+      components: {
+        ...schema.components,
+        button: {
+          ...schema.components.button,
+          props: buttonProps as unknown as PageSchema['components'][string]['props'],
+        },
+      },
+      logic: {
+        states: { count: -0 },
+      },
+    };
+
+    const result = service.applyPatch(schemaWithSpecialProps, [
+      {
+        op: 'updateProps',
+        componentId: 'button',
+        props: { children: 'New' },
+      },
+    ]);
+
+    // 1. 键和值保留
+    expect(Object.prototype.hasOwnProperty.call(result.components.button.props, '__proto__')).toBe(
+      true,
+    );
+    expect((result.components.button.props as Record<string, unknown>)['__proto__']).toEqual({
+      safe_proto: true,
+    });
+    expect(Object.is(result.components.button.props?.offset, -0)).toBe(true);
+    expect(Object.is(result.logic?.states?.count, -0)).toBe(true);
+    expect(result.components.button.props?.children).toBe('New');
+
+    // 2. 原型未被改变且全局原型未被污染
+    expect(Object.getPrototypeOf(result.components.button.props)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(result.logic?.states)).toBe(Object.prototype);
+    expect((Object.prototype as unknown as Record<string, unknown>).safe_proto).toBeUndefined();
+    expect((Object.prototype as unknown as Record<string, unknown>).polluted).toBeUndefined();
+
+    // 3. 结果通过 Contract 校验
+    const canonical = requireSupportedPageSchema(result);
+    expect(canonical).toBeDefined();
+    expect(
+      Object.prototype.hasOwnProperty.call(canonical.components.button.props, '__proto__'),
+    ).toBe(true);
+    expect((canonical.components.button.props as Record<string, unknown>)['__proto__']).toEqual({
+      safe_proto: true,
+    });
+    expect(Object.is(canonical.components.button.props?.offset, -0)).toBe(true);
+    expect(Object.is(canonical.logic?.states?.count, -0)).toBe(true);
+    expect((Object.prototype as unknown as Record<string, unknown>).safe_proto).toBeUndefined();
   });
 });

@@ -406,4 +406,82 @@ describe('M1a-3 / C2.2 Frontend Patch round-trip conformance', () => {
     ]);
     expect(Object.is(result.logic?.states?.count, -0)).toBe(true);
   });
+
+  it('safely handles -0 and own __proto__ keys without prototype pollution and passes Contract', () => {
+    const { schemaA } = createCandidates();
+
+    const submitProps: Record<string, unknown> = {
+      children: 'Submit',
+    };
+    Object.defineProperty(submitProps, '__proto__', {
+      value: { safe_proto: true },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(submitProps, 'offset', {
+      value: -0,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+
+    const schemaWithSpecialProps: PageSchema = {
+      ...schemaA,
+      components: {
+        ...schemaA.components,
+        submit: {
+          ...schemaA.components.submit,
+          props: submitProps as unknown as PageSchema['components'][string]['props'],
+        },
+      },
+      logic: {
+        ...schemaA.logic!,
+        states: {
+          ...schemaA.logic!.states,
+          count: -0,
+        },
+      },
+    };
+
+    const patch: readonly EditorPatchOperation[] = [
+      {
+        op: 'updateProps',
+        componentId: 'submit',
+        props: { children: 'Submit revised' },
+      },
+    ];
+
+    const result = applyPatchToSchema(schemaWithSpecialProps, patch);
+
+    // 1. 键和值保留
+    expect(Object.prototype.hasOwnProperty.call(result.components.submit.props, '__proto__')).toBe(
+      true,
+    );
+    expect((result.components.submit.props as Record<string, unknown>)['__proto__']).toEqual({
+      safe_proto: true,
+    });
+    expect(Object.is(result.components.submit.props?.offset, -0)).toBe(true);
+    expect(Object.is(result.logic?.states?.count, -0)).toBe(true);
+    expect(result.components.submit.props?.children).toBe('Submit revised');
+
+    // 2. 原型未被改变且全局原型未被污染
+    expect(Object.getPrototypeOf(result.components.submit.props)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(result.logic?.states)).toBe(Object.prototype);
+    expect((Object.prototype as unknown as Record<string, unknown>).safe_proto).toBeUndefined();
+    expect((Object.prototype as unknown as Record<string, unknown>).polluted).toBeUndefined();
+
+    // 3. 结果通过 Contract 校验并保持 canonical
+    const canonical = requireSupportedPageSchema(result);
+    expect(canonical).toBeDefined();
+    expect(
+      Object.prototype.hasOwnProperty.call(canonical.components.submit.props, '__proto__'),
+    ).toBe(true);
+    expect((canonical.components.submit.props as Record<string, unknown>)['__proto__']).toEqual({
+      safe_proto: true,
+    });
+    expect(Object.is(canonical.components.submit.props?.offset, -0)).toBe(true);
+    expect(Object.is(canonical.logic?.states?.count, -0)).toBe(true);
+    expect((Object.prototype as unknown as Record<string, unknown>).safe_proto).toBeUndefined();
+  });
 });

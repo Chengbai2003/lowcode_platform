@@ -858,5 +858,87 @@ describe('ToolExecutionService', () => {
       expect(response.schema.components.submit.props?.children).toBe('Submit revised');
       expect(Object.is(response.schema.logic?.states?.count, -0)).toBe(true);
     });
+
+    it('previewPatch safely preserves -0 and own __proto__ keys without prototype pollution and passes Contract', async () => {
+      const { schemaA } = createConformanceCandidates();
+
+      const submitProps: Record<string, unknown> = {
+        children: 'Submit',
+      };
+      Object.defineProperty(submitProps, '__proto__', {
+        value: { safe_proto: true },
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+      Object.defineProperty(submitProps, 'offset', {
+        value: -0,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+
+      const schemaWithSpecialProps: PageSchema = {
+        ...schemaA,
+        components: {
+          ...schemaA.components,
+          submit: {
+            ...schemaA.components.submit,
+            props: submitProps as unknown as PageSchema['components'][string]['props'],
+          },
+        },
+        logic: {
+          ...schemaA.logic!,
+          states: {
+            ...schemaA.logic!.states,
+            count: -0,
+          },
+        },
+      };
+
+      const response = await service.previewPatch(
+        {
+          draftSchema: schemaWithSpecialProps as unknown as Record<string, unknown>,
+          patch: [
+            {
+              op: 'updateProps',
+              componentId: 'submit',
+              props: { children: 'Submit revised' },
+            },
+          ],
+          autoFix: false,
+        },
+        'trace-c2-2-preview-proto',
+      );
+
+      // 1. 键和值保留
+      expect(
+        Object.prototype.hasOwnProperty.call(response.schema.components.submit.props, '__proto__'),
+      ).toBe(true);
+      expect(
+        (response.schema.components.submit.props as Record<string, unknown>)['__proto__'],
+      ).toEqual({ safe_proto: true });
+      expect(Object.is(response.schema.components.submit.props?.offset, -0)).toBe(true);
+      expect(Object.is(response.schema.logic?.states?.count, -0)).toBe(true);
+      expect(response.schema.components.submit.props?.children).toBe('Submit revised');
+
+      // 2. 原型未被改变且全局原型未被污染
+      expect((Object.prototype as unknown as Record<string, unknown>).safe_proto).toBeUndefined();
+      expect((Object.prototype as unknown as Record<string, unknown>).polluted).toBeUndefined();
+
+      // 3. 结果通过 Contract 校验并深冻结
+      expect(Object.isFrozen(response.schema)).toBe(true);
+      const canonical = requireSupportedPageSchema(response.schema);
+      expect(canonical).toBeDefined();
+      expect(
+        Object.prototype.hasOwnProperty.call(canonical.components.submit.props, '__proto__'),
+      ).toBe(true);
+      expect((canonical.components.submit.props as Record<string, unknown>)['__proto__']).toEqual({
+        safe_proto: true,
+      });
+      expect(Object.is(canonical.components.submit.props?.offset, -0)).toBe(true);
+      expect(Object.is(canonical.logic?.states?.count, -0)).toBe(true);
+      expect((Object.prototype as unknown as Record<string, unknown>).safe_proto).toBeUndefined();
+    });
   });
 });
