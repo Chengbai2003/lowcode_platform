@@ -51,6 +51,33 @@ const negativeCasesList = Object.entries(conformanceFixture.negativeCases).map(
 );
 
 describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
+  const singleCapSchemas: Record<SchemaCapability, PageSchema> = {
+    'page-state': {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page' } },
+      logic: { states: { count: 0 } },
+    },
+    'named-computed': {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page' } },
+      logic: { computed: { double: '1 + 1' } },
+    },
+    'action-flow': {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page' } },
+      logic: { flows: { testFlow: { steps: [] } } },
+    },
+  };
+
+  const expectedPaths: Record<SchemaCapability, (string | number)[]> = {
+    'page-state': ['logic', 'states'],
+    'named-computed': ['logic', 'computed'],
+    'action-flow': ['logic', 'flows'],
+  };
+
   describe('1. Immutable Trusted Capability Manifest', () => {
     it('declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1', () => {
       expect(SCHEMA_CAPABILITIES).toEqual(['page-state', 'named-computed', 'action-flow']);
@@ -242,7 +269,7 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
     });
 
     it('detects action-flow from top-level and nested runFlow actions across all valid containers', () => {
-      // 1. Top-level in events
+      // 1. Top-level in events: fully declared and validated via canonicalization first
       const topLevelSchema: PageSchema = {
         schemaVersion: 0,
         rootId: 'root',
@@ -255,18 +282,26 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
             },
           },
         },
+        logic: {
+          flows: {
+            submit: { steps: [{ type: 'log', value: 'submit' }] },
+          },
+        },
       };
-      const detectedTop = detectPageSchemaCapabilities(topLevelSchema);
+
+      // Canonicalize first to prove schema is 100% valid under Schema Contract
+      const canonicalTop = createCanonicalPageSchema(topLevelSchema);
+      expect(canonicalTop).toBeDefined();
+      const detectedTop = detectPageSchemaCapabilities(canonicalTop);
       expect(detectedTop.has('action-flow')).toBe(true);
-      expect(detectedTop.get('action-flow')?.primaryPath).toEqual([
-        'components',
-        'root',
-        'events',
-        'onClick',
-        0,
+      // Both the declaration and the component event runFlow action are captured
+      expect(detectedTop.get('action-flow')?.allPaths).toEqual([
+        ['logic', 'flows'],
+        ['components', 'root', 'events', 'onClick', 0],
       ]);
 
-      // 2. Nested containers: if.then, if.else, loop.actions, apiCall.onSuccess, apiCall.onError, dialog.onOk, dialog.onCancel
+      // 2. Nested containers: if.then, if.else, loop.actions, apiCall.onSuccess, apiCall.onError,
+      //    dialog.onOk, dialog.onCancel, and flow steps/onError
       const nestedContainersSchema: PageSchema = {
         schemaVersion: 0,
         rootId: 'root',
@@ -296,7 +331,9 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
                 },
                 {
                   type: 'dialog',
-                  message: 'confirm',
+                  kind: 'confirm',
+                  title: 'Confirm',
+                  content: 'Proceed?',
                   onOk: [{ type: 'runFlow', flow: 'okFlow' }],
                   onCancel: [{ type: 'runFlow', flow: 'cancelFlow' }],
                 },
@@ -304,12 +341,37 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
             },
           },
         },
+        logic: {
+          flows: {
+            thenFlow: { steps: [{ type: 'log', value: 'then' }] },
+            elseFlow: { steps: [{ type: 'log', value: 'else' }] },
+            loopFlow: { steps: [{ type: 'log', value: 'loop' }] },
+            successFlow: { steps: [{ type: 'log', value: 'success' }] },
+            errorFlow: { steps: [{ type: 'log', value: 'error' }] },
+            okFlow: { steps: [{ type: 'log', value: 'ok' }] },
+            cancelFlow: { steps: [{ type: 'log', value: 'cancel' }] },
+            stepTargetFlow: { steps: [{ type: 'log', value: 'stepTarget' }] },
+            errorTargetFlow: { steps: [{ type: 'log', value: 'errorTarget' }] },
+            callerFlow: {
+              steps: [{ type: 'runFlow', flow: 'stepTargetFlow' }],
+              onError: [{ type: 'runFlow', flow: 'errorTargetFlow' }],
+            },
+          },
+        },
       };
 
-      const detectedNested = detectPageSchemaCapabilities(nestedContainersSchema);
+      // 1. Must pass real canonicalization first, proving complete Contract conformance (no FLOW_REFERENCE_MISSING)
+      const canonicalNested = createCanonicalPageSchema(nestedContainersSchema);
+      expect(canonicalNested).toBeDefined();
+
+      // 2. Pure capability detection on canonical schema
+      const detectedNested = detectPageSchemaCapabilities(canonicalNested);
       expect(detectedNested.has('action-flow')).toBe(true);
+
+      // 3. Assert allPaths contains all nested paths precisely, proving traversal across every container
       const allPaths = detectedNested.get('action-flow')?.allPaths;
       expect(allPaths).toEqual([
+        ['logic', 'flows'],
         ['components', 'root', 'events', 'onEvent', 0, 'then', 0],
         ['components', 'root', 'events', 'onEvent', 0, 'else', 0],
         ['components', 'root', 'events', 'onEvent', 1, 'actions', 0],
@@ -317,6 +379,8 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
         ['components', 'root', 'events', 'onEvent', 2, 'onError', 0],
         ['components', 'root', 'events', 'onEvent', 3, 'onOk', 0],
         ['components', 'root', 'events', 'onEvent', 3, 'onCancel', 0],
+        ['logic', 'flows', 'callerFlow', 'steps', 0],
+        ['logic', 'flows', 'callerFlow', 'onError', 0],
       ]);
     });
 
@@ -340,33 +404,6 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
   });
 
   describe('4. Matrix Missing Unit Rejection (CAPABILITY_UNKNOWN)', () => {
-    const singleCapSchemas: Record<SchemaCapability, PageSchema> = {
-      'page-state': {
-        schemaVersion: 0,
-        rootId: 'root',
-        components: { root: { id: 'root', type: 'Page' } },
-        logic: { states: { count: 0 } },
-      },
-      'named-computed': {
-        schemaVersion: 0,
-        rootId: 'root',
-        components: { root: { id: 'root', type: 'Page' } },
-        logic: { computed: { double: '1 + 1' } },
-      },
-      'action-flow': {
-        schemaVersion: 0,
-        rootId: 'root',
-        components: { root: { id: 'root', type: 'Page' } },
-        logic: { flows: { testFlow: { steps: [] } } },
-      },
-    };
-
-    const expectedPaths: Record<SchemaCapability, (string | number)[]> = {
-      'page-state': ['logic', 'states'],
-      'named-computed': ['logic', 'computed'],
-      'action-flow': ['logic', 'flows'],
-    };
-
     describe.each(SCHEMA_CAPABILITIES)('capability: %s', (cap) => {
       describe.each(CONSUMER_SURFACES)('surface: %s', (surface) => {
         it(`rejects when ${cap}.${surface} is missing from matrix`, () => {
@@ -464,31 +501,45 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
   });
 
   describe('6. Revision Mismatch Rejection (CAPABILITY_REVISION_MISMATCH)', () => {
-    it.each([0, 2, 99])('rejects when revision is %i (expected 1)', (badRevision) => {
+    describe.each(SCHEMA_CAPABILITIES)('capability: %s', (cap) => {
+      describe.each(CONSUMER_SURFACES)('surface: %s', (surface) => {
+        it.each([2, 99])(
+          `rejects when ${cap}.${surface} has revision mismatch (%i vs 1)`,
+          (badRevision) => {
+            const matrix = createTestCapabilityMatrix({
+              [cap]: {
+                [surface]: { status: 'supported', revision: badRevision },
+              },
+            });
+
+            const schema = singleCapSchemas[cap];
+            const result = evaluatePageSchemaCapabilities(schema, matrix);
+            expect(result.ok).toBe(false);
+            expect(result.issues).toHaveLength(1);
+            expect(result.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.REVISION_MISMATCH);
+            expect(result.issues[0].path).toEqual(expectedPaths[cap]);
+            expect(result.issues[0].message).toContain(cap);
+            expect(result.issues[0].message).toContain(surface);
+            expect(result.issues[0].message).toContain('required revision 1');
+            expect(result.issues[0].message).toContain(
+              `manifest specifies revision ${badRevision}`,
+            );
+          },
+        );
+      });
+    });
+
+    it('rejects revision=0 as CAPABILITY_MANIFEST_INVALID', () => {
       const matrix = createTestCapabilityMatrix({
         'page-state': {
-          compiler: { status: 'supported', revision: badRevision },
+          compiler: { status: 'supported', revision: 0 },
         },
       });
 
-      const schema: PageSchema = {
-        schemaVersion: 0,
-        rootId: 'root',
-        components: { root: { id: 'root', type: 'Page' } },
-        logic: { states: { count: 0 } },
-      };
-
-      const result = evaluatePageSchemaCapabilities(schema, matrix);
+      const result = evaluatePageSchemaCapabilities(singleCapSchemas['page-state'], matrix);
       expect(result.ok).toBe(false);
       expect(result.issues).toHaveLength(1);
-      if (badRevision === 0) {
-        // 0 is invalid revision
-        expect(result.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.MANIFEST_INVALID);
-      } else {
-        expect(result.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.REVISION_MISMATCH);
-        expect(result.issues[0].message).toContain('required revision 1');
-        expect(result.issues[0].message).toContain(`manifest specifies revision ${badRevision}`);
-      }
+      expect(result.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.MANIFEST_INVALID);
     });
   });
 
@@ -505,6 +556,7 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       ['string entry', 'supported'],
       ['number entry', 1],
       ['array entry', [{ status: 'supported' }]],
+      ['explicit unknown status', { status: 'unknown', revision: 1 }],
       ['invalid status', { status: 'experimental', revision: 1 }],
       ['non-number revision', { status: 'supported', revision: '1' }],
       ['float revision', { status: 'supported', revision: 1.5 }],
