@@ -3,7 +3,11 @@ import type { SchemaContractIssue } from '../validation/issues';
 /**
  * M1a 声明式逻辑的三大核心能力标识（固定 revision=1）
  */
-export const SCHEMA_CAPABILITIES = ['page-state', 'named-computed', 'action-flow'] as const;
+export const SCHEMA_CAPABILITIES = Object.freeze([
+  'page-state',
+  'named-computed',
+  'action-flow',
+] as const);
 
 export type SchemaCapability = (typeof SCHEMA_CAPABILITIES)[number];
 
@@ -14,14 +18,14 @@ export function isSchemaCapability(value: unknown): value is SchemaCapability {
 /**
  * 严格按照 Issue #47 划分的六大消费面
  */
-export const CONSUMER_SURFACES = [
+export const CONSUMER_SURFACES = Object.freeze([
   'contract',
   'validator',
   'editor-agent',
   'renderer',
   'compiler',
   'storage',
-] as const;
+] as const);
 
 export type ConsumerSurface = (typeof CONSUMER_SURFACES)[number];
 
@@ -67,15 +71,22 @@ export interface CapabilityManifest {
 /**
  * 冻结的能力门禁 Issue 诊断编码
  */
-export const CAPABILITY_ISSUE_CODES = {
+export const CAPABILITY_ISSUE_CODES = Object.freeze({
   UNKNOWN: 'CAPABILITY_UNKNOWN',
   UNSUPPORTED: 'CAPABILITY_UNSUPPORTED',
   REVISION_MISMATCH: 'CAPABILITY_REVISION_MISMATCH',
   MANIFEST_INVALID: 'CAPABILITY_MANIFEST_INVALID',
-} as const;
+} as const);
 
 export type CapabilityIssueCode =
   (typeof CAPABILITY_ISSUE_CODES)[keyof typeof CAPABILITY_ISSUE_CODES];
+
+/**
+ * 纯能力求值器可选配置
+ */
+export interface CapabilityEvaluationOptions {
+  readonly maxIssues?: number;
+}
 
 /**
  * 纯能力求值器返回结果

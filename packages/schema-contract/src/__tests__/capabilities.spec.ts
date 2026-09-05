@@ -97,7 +97,47 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
           status: 'unsupported',
           revision: 1,
         };
-      }).toThrow();
+      }).toThrow(TypeError);
+    });
+
+    it('freezes SCHEMA_CAPABILITIES and CONSUMER_SURFACES arrays and CAPABILITY_ISSUE_CODES at runtime', () => {
+      expect(Object.isFrozen(SCHEMA_CAPABILITIES)).toBe(true);
+      expect(Object.isFrozen(CONSUMER_SURFACES)).toBe(true);
+      expect(Object.isFrozen(CAPABILITY_ISSUE_CODES)).toBe(true);
+
+      // Attempting to push new item
+      expect(() => {
+        // @ts-expect-error mutating frozen array
+        (SCHEMA_CAPABILITIES as unknown as string[]).push('extra-cap');
+      }).toThrow(TypeError);
+      expect(() => {
+        // @ts-expect-error mutating frozen array
+        (CONSUMER_SURFACES as unknown as string[]).push('extra-surface');
+      }).toThrow(TypeError);
+
+      // Attempting to modify element by index
+      expect(() => {
+        // @ts-expect-error mutating frozen array
+        (SCHEMA_CAPABILITIES as unknown as string[])[0] = 'hacked';
+      }).toThrow(TypeError);
+      expect(() => {
+        // @ts-expect-error mutating frozen array
+        (CONSUMER_SURFACES as unknown as string[])[0] = 'hacked';
+      }).toThrow(TypeError);
+
+      // Attempting to clear array via length = 0
+      expect(() => {
+        // @ts-expect-error mutating frozen array
+        (SCHEMA_CAPABILITIES as unknown as string[]).length = 0;
+      }).toThrow(TypeError);
+      expect(() => {
+        // @ts-expect-error mutating frozen array
+        (CONSUMER_SURFACES as unknown as string[]).length = 0;
+      }).toThrow(TypeError);
+
+      // Array lengths and contents remain unchanged
+      expect(SCHEMA_CAPABILITIES.length).toBe(3);
+      expect(CONSUMER_SURFACES.length).toBe(6);
     });
   });
 
@@ -493,6 +533,85 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
         evaluatePageSchemaCapabilities(testSchema, { matrix: 'not-an-object' }).issues[0].code,
       ).toBe(CAPABILITY_ISSUE_CODES.MANIFEST_INVALID);
     });
+
+    it('safely describes invalid status and revision without executing object methods (toJSON) or throwing on BigInt', () => {
+      const statusToJSON = vi.fn(() => 'supported');
+      const badStatusMatrix = createTestCapabilityMatrix({
+        'page-state': {
+          compiler: { status: { toJSON: statusToJSON } as unknown as 'supported', revision: 1 },
+        },
+      });
+
+      const statusResult = evaluatePageSchemaCapabilities(testSchema, badStatusMatrix);
+      expect(statusResult.ok).toBe(false);
+      expect(statusResult.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.MANIFEST_INVALID);
+      expect(statusToJSON).not.toHaveBeenCalled();
+      expect(statusResult.issues[0].message).toContain('received object');
+
+      // BigInt revision does not throw TypeError: Do not know how to serialize a BigInt
+      const badBigIntRevisionMatrix = createTestCapabilityMatrix({
+        'page-state': {
+          compiler: { status: 'supported', revision: 10n as unknown as number },
+        },
+      });
+      let bigIntResult: ReturnType<typeof evaluatePageSchemaCapabilities> | undefined;
+      expect(() => {
+        bigIntResult = evaluatePageSchemaCapabilities(testSchema, badBigIntRevisionMatrix);
+      }).not.toThrow();
+      expect(bigIntResult?.ok).toBe(false);
+      expect(bigIntResult?.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.MANIFEST_INVALID);
+      expect(bigIntResult?.issues[0].message).toContain('received bigint');
+
+      // Object revision with toJSON
+      const revisionToJSON = vi.fn(() => 1);
+      const badObjectRevisionMatrix = createTestCapabilityMatrix({
+        'page-state': {
+          compiler: {
+            status: 'supported',
+            revision: { toJSON: revisionToJSON } as unknown as number,
+          },
+        },
+      });
+      const objectRevResult = evaluatePageSchemaCapabilities(testSchema, badObjectRevisionMatrix);
+      expect(objectRevResult.ok).toBe(false);
+      expect(objectRevResult.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.MANIFEST_INVALID);
+      expect(revisionToJSON).not.toHaveBeenCalled();
+      expect(objectRevResult.issues[0].message).toContain('received object');
+    });
+  });
+
+  describe('7b. Diagnostic Budget (maxIssues) Safety and Decoupling', () => {
+    const testSchema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page' } },
+      logic: { states: { count: 0 } },
+    };
+
+    it.each([0, -1, -10, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+      'throws TypeError when maxIssues is invalid (%s)',
+      (invalidMaxIssues) => {
+        expect(() =>
+          evaluatePageSchemaCapabilities(testSchema, undefined, { maxIssues: invalidMaxIssues }),
+        ).toThrow(TypeError);
+      },
+    );
+
+    it('throws TypeError when options is not a valid object', () => {
+      // @ts-expect-error testing invalid options
+      expect(() => evaluatePageSchemaCapabilities(testSchema, undefined, 'invalid')).toThrow(
+        TypeError,
+      );
+    });
+
+    it('limits diagnostic issues without turning failure into success', () => {
+      // Empty matrix has 6 missing surface entries for page-state
+      const emptyMatrix = {};
+      const result = evaluatePageSchemaCapabilities(testSchema, emptyMatrix, { maxIssues: 1 });
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(1);
+      expect(result.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.UNKNOWN);
+    });
   });
 
   describe('8. Strict Conjunction (All 6 surfaces required, not any/some)', () => {
@@ -559,46 +678,20 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       expect(result.ok).toBe(true);
       expect(result.issues).toEqual([]);
 
-      const canonical = requireSupportedPageSchema(
-        conformanceFixture.legacySchema,
-        undefined,
-        allBlockedMatrix,
-      );
+      const canonical = requireSupportedPageSchema(conformanceFixture.legacySchema);
       expect(canonical).toBeDefined();
       expect(canonical.logic).toBeUndefined();
 
-      expect(() =>
-        assertSupportedPageSchema(conformanceFixture.legacySchema, undefined, allBlockedMatrix),
-      ).not.toThrow();
+      expect(() => assertSupportedPageSchema(conformanceFixture.legacySchema)).not.toThrow();
     });
   });
 
   describe('10. Public Supported Gate Integration (requireSupported & assertSupported)', () => {
-    const blockedCompilerMatrix = createTestCapabilityMatrix({
-      'action-flow': {
-        compiler: { status: 'unsupported', revision: 1 },
-      },
-    });
-
-    it('requireSupportedPageSchema throws SchemaValidationError with capability issues when blocked', () => {
-      let caughtError: unknown;
-      try {
-        requireSupportedPageSchema(conformanceFixture.schema, undefined, blockedCompilerMatrix);
-      } catch (err) {
-        caughtError = err;
-      }
-
-      expect(caughtError).toBeInstanceOf(SchemaValidationError);
-      const validationError = caughtError as SchemaValidationError;
-      expect(validationError.issues[0].code).toBe(CAPABILITY_ISSUE_CODES.UNSUPPORTED);
-      expect(validationError.issues[0].path).toEqual(['logic', 'flows']);
-      expect(validationError.issues[0].message).toContain('compiler');
-    });
-
-    it('assertSupportedPageSchema throws SchemaValidationError with capability issues when blocked', () => {
-      expect(() =>
-        assertSupportedPageSchema(conformanceFixture.schema, undefined, blockedCompilerMatrix),
-      ).toThrow(SchemaValidationError);
+    it('accepts conformance schemas under production trusted manifest', () => {
+      const canonical = requireSupportedPageSchema(conformanceFixture.schema);
+      expect(canonical).toBeDefined();
+      expect(canonical.logic?.states).toBeDefined();
+      expect(() => assertSupportedPageSchema(conformanceFixture.schema)).not.toThrow();
     });
 
     it('createCanonicalPageSchema does NOT enforce capability gate (structural only)', () => {
@@ -608,7 +701,7 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       expect(canonical.logic?.flows).toBeDefined();
     });
 
-    it('rejects via real requireSupportedPageSchema when trusted manifest module is replaced in test isolation', async () => {
+    it('rejects via real requireSupportedPageSchema and assertSupportedPageSchema when trusted manifest module is replaced in test isolation', async () => {
       vi.resetModules();
       vi.doMock('../capabilities/manifest', () => ({
         TRUSTED_CAPABILITY_MANIFEST: {
@@ -629,7 +722,8 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       try {
         const isolatedCanonicalize = await import('../canonicalize');
         const isolatedIssues = await import('../validation/issues');
-        // Calling real requireSupportedPageSchema with NO manifest argument
+
+        // 1. requireSupportedPageSchema throws SchemaValidationError
         expect(() =>
           isolatedCanonicalize.requireSupportedPageSchema(conformanceFixture.schema),
         ).toThrow(isolatedIssues.SchemaValidationError);
@@ -646,6 +740,21 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
         expect(issues[0].code).toBe(CAPABILITY_ISSUE_CODES.UNSUPPORTED);
         expect(issues[0].path).toEqual(['logic', 'states']);
         expect(issues[0].message).toContain('compiler');
+
+        // 2. assertSupportedPageSchema also throws SchemaValidationError with same issue
+        expect(() =>
+          isolatedCanonicalize.assertSupportedPageSchema(conformanceFixture.schema),
+        ).toThrow(isolatedIssues.SchemaValidationError);
+
+        // 3. legacySchema without logic still passes through isolated gates
+        const legacyCanonical = isolatedCanonicalize.requireSupportedPageSchema(
+          conformanceFixture.legacySchema,
+        );
+        expect(legacyCanonical).toBeDefined();
+        expect(legacyCanonical.logic).toBeUndefined();
+        expect(() =>
+          isolatedCanonicalize.assertSupportedPageSchema(conformanceFixture.legacySchema),
+        ).not.toThrow();
       } finally {
         vi.doUnmock('../capabilities/manifest');
         vi.resetModules();
@@ -657,14 +766,9 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
     it.each(negativeCasesList)(
       'structural issue takes precedence on negative case: $name',
       (negativeCase) => {
-        // Even with a blocked matrix, structural issue must be detected first with exact expectedCode and expectedPath
-        const blockedMatrix = createTestCapabilityMatrix({
-          'page-state': { compiler: { status: 'unsupported', revision: 1 } },
-        });
-
         let caughtError: unknown;
         try {
-          requireSupportedPageSchema(negativeCase.schema, undefined, blockedMatrix);
+          requireSupportedPageSchema(negativeCase.schema);
         } catch (err) {
           caughtError = err;
         }

@@ -4,7 +4,6 @@ import { validatePageSchemaValue } from './validation/parse';
 import { SchemaValidationError, UnsupportedSchemaVersionError } from './validation/issues';
 import { evaluatePageSchemaCapabilities } from './capabilities/evaluate';
 import { getTrustedCapabilityManifest } from './capabilities/manifest';
-import type { CapabilityManifest, CapabilityMatrix } from './capabilities/types';
 export { deepFreeze } from './internal/freeze';
 
 function safeReadVersion(input: unknown): unknown {
@@ -44,7 +43,6 @@ export function createCanonicalPageSchema(input: unknown): PageSchema {
 export function assertSupportedPageSchema(
   schema: unknown,
   limits?: Partial<SchemaValidationLimits>,
-  manifest?: CapabilityManifest | CapabilityMatrix,
 ): asserts schema is PageSchema {
   const result = validatePageSchemaValue(schema, limits);
   if (!result.ok) {
@@ -54,10 +52,7 @@ export function assertSupportedPageSchema(
     }
     throw new SchemaValidationError(result.issues);
   }
-  const capResult = evaluatePageSchemaCapabilities(
-    result.value,
-    manifest ?? getTrustedCapabilityManifest(),
-  );
+  const capResult = evaluatePageSchemaCapabilities(result.value, getTrustedCapabilityManifest());
   if (!capResult.ok) {
     throw new SchemaValidationError(capResult.issues);
   }
@@ -76,7 +71,6 @@ export function assertSupportedPageSchema(
 export function requireSupportedPageSchema(
   input: unknown,
   limits?: Partial<SchemaValidationLimits>,
-  manifest?: CapabilityManifest | CapabilityMatrix,
 ): PageSchema {
   const result = validatePageSchemaValue(input, limits);
   if (!result.ok) {
@@ -86,10 +80,7 @@ export function requireSupportedPageSchema(
     }
     throw new SchemaValidationError(result.issues);
   }
-  const capResult = evaluatePageSchemaCapabilities(
-    result.value,
-    manifest ?? getTrustedCapabilityManifest(),
-  );
+  const capResult = evaluatePageSchemaCapabilities(result.value, getTrustedCapabilityManifest());
   if (!capResult.ok) {
     throw new SchemaValidationError(capResult.issues);
   }
