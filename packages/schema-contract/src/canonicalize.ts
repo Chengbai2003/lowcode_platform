@@ -2,41 +2,9 @@ import type { PageSchema } from './types/schema';
 import type { SchemaValidationLimits } from './types/limits';
 import { validatePageSchemaValue } from './validation/parse';
 import { SchemaValidationError, UnsupportedSchemaVersionError } from './validation/issues';
-
-/**
- * 递归深冻结任意对象与数组
- */
-export function deepFreeze<T>(obj: T): T {
-  if (obj === null || typeof obj !== 'object') {
-    return obj;
-  }
-
-  if (Object.isFrozen(obj)) {
-    return obj;
-  }
-
-  Object.freeze(obj);
-
-  const propNames = Object.getOwnPropertyNames(obj);
-  for (const key of propNames) {
-    const desc = Object.getOwnPropertyDescriptor(obj, key);
-    if (desc && 'value' in desc) {
-      const val = desc.value;
-      if (val !== null && typeof val === 'object') {
-        deepFreeze(val);
-      }
-    }
-  }
-  const symbols = Object.getOwnPropertySymbols(obj);
-  for (const sym of symbols) {
-    const desc = Object.getOwnPropertyDescriptor(obj, sym);
-    if (desc && 'value' in desc && desc.value !== null && typeof desc.value === 'object') {
-      deepFreeze(desc.value);
-    }
-  }
-
-  return obj;
-}
+import { evaluatePageSchemaCapabilities } from './capabilities/evaluate';
+import { getTrustedCapabilityManifest } from './capabilities/manifest';
+export { deepFreeze } from './internal/freeze';
 
 function safeReadVersion(input: unknown): unknown {
   if (!input || typeof input !== 'object') return undefined;
@@ -84,6 +52,10 @@ export function assertSupportedPageSchema(
     }
     throw new SchemaValidationError(result.issues);
   }
+  const capResult = evaluatePageSchemaCapabilities(result.value, getTrustedCapabilityManifest());
+  if (!capResult.ok) {
+    throw new SchemaValidationError(capResult.issues);
+  }
 }
 
 /**
@@ -107,6 +79,10 @@ export function requireSupportedPageSchema(
       throw new UnsupportedSchemaVersionError(safeReadVersion(input));
     }
     throw new SchemaValidationError(result.issues);
+  }
+  const capResult = evaluatePageSchemaCapabilities(result.value, getTrustedCapabilityManifest());
+  if (!capResult.ok) {
+    throw new SchemaValidationError(capResult.issues);
   }
   return result.value;
 }
