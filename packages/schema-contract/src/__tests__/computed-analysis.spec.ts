@@ -241,7 +241,7 @@ describe('Computed Contract analysis', () => {
   it.each([
     { type: 'setValue', field: 'computed.total', value: 1 },
     { type: 'apiCall', url: 'https://example.test', resultTo: 'computed.total' },
-  ])('rejects Action writes to the read-only Computed namespace', (action) => {
+  ])('rejects Action writes to the read-only Computed namespace ($type)', (action) => {
     const result = validatePageSchemaValue(
       schemaWith({ states: { count: 1 }, computed: { total: 'state.count + 1' } }, [action]),
     );

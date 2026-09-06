@@ -84,49 +84,49 @@
       "id": "ev-contract-page-state",
       "package": "packages/schema-contract",
       "runner": "vitest",
-      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
-      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 1. Immutable Trusted Capability Manifest declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1",
-      "description": "Contract surface declares page-state capability with status=supported and revision=1 in trusted manifest"
+      "testFile": "packages/schema-contract/src/__tests__/schema-contract.spec.ts",
+      "fullName": " @lowcode-platform/schema-contract M1a State declarations canonicalizes and deeply freezes logic.states without mutating the source",
+      "description": "Contract surface canonicalizes, validates, and deeply freezes logic.states declarations without mutating source"
     },
     {
       "id": "ev-contract-named-computed",
       "package": "packages/schema-contract",
       "runner": "vitest",
-      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
-      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 1. Immutable Trusted Capability Manifest declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1",
-      "description": "Contract surface declares named-computed capability with status=supported and revision=1 in trusted manifest"
+      "testFile": "packages/schema-contract/src/__tests__/computed-analysis.spec.ts",
+      "fullName": " Computed Contract analysis accepts the shared conformance corpus and emits its stable topology",
+      "description": "Contract surface validates computed declarations from shared conformance fixture and emits stable dependency topology"
     },
     {
       "id": "ev-contract-action-flow",
       "package": "packages/schema-contract",
       "runner": "vitest",
-      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
-      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 1. Immutable Trusted Capability Manifest declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1",
-      "description": "Contract surface declares action-flow capability with status=supported and revision=1 in trusted manifest"
+      "testFile": "packages/schema-contract/src/__tests__/action-flow-analysis.spec.ts",
+      "fullName": " ActionFlow Contract and Migration Boundary (M1a-2 / F1) 39. accepts the shared conformance corpus flows and produces a valid topological order",
+      "description": "Contract surface validates ActionFlow declarations and generates topological execution order matching canonical logic"
     },
     {
       "id": "ev-validator-page-state",
-      "package": "packages/schema-contract",
-      "runner": "vitest",
-      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
-      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 3. Pure Capability Detection (detectPageSchemaCapabilities) detects all 3 capabilities for main conformance schema with exact trigger paths",
-      "description": "Validator surface accurately detects page-state declaration paths"
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/schema-validation.spec.ts",
+      "fullName": "M1a-3 / C2.1 Backend validator conformance against unified fixture returns canonical deep-frozen schema matching expected.canonicalLogic for main schema",
+      "description": "Validator surface validates and canonicalizes page-state declarations matching expected canonical logic"
     },
     {
       "id": "ev-validator-named-computed",
-      "package": "packages/schema-contract",
-      "runner": "vitest",
-      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
-      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 3. Pure Capability Detection (detectPageSchemaCapabilities) detects all 3 capabilities for main conformance schema with exact trigger paths",
-      "description": "Validator surface accurately detects named-computed declaration paths"
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/schema-validation.spec.ts",
+      "fullName": "M1a-3 / C2.1 Backend validator conformance against unified fixture rejects negative case \"computedCycle\" with exact expectedCode and expectedPath",
+      "description": "Validator surface rejects computed cyclic dependencies with exact expectedCode and expectedPath"
     },
     {
       "id": "ev-validator-action-flow",
-      "package": "packages/schema-contract",
-      "runner": "vitest",
-      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
-      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 3. Pure Capability Detection (detectPageSchemaCapabilities) detects all 3 capabilities for main conformance schema with exact trigger paths",
-      "description": "Validator surface accurately detects action-flow declaration and invocation paths"
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/schema-validation.spec.ts",
+      "fullName": "M1a-3 / C2.1 Backend validator conformance against unified fixture rejects negative case \"flowCycle\" with exact expectedCode and expectedPath",
+      "description": "Validator surface rejects ActionFlow cyclic dependencies with exact expectedCode and expectedPath"
     },
     {
       "id": "ev-editor-page-state",

@@ -68,6 +68,19 @@ export const REQUIRED_PARITY_KEYS = Object.freeze([
   'P10_concurrencyBudget',
 ]);
 
+export const REQUIRED_STORAGE_EVIDENCES = Object.freeze([
+  'ev-storage-cas',
+  'ev-storage-reload',
+  'ev-storage-server-triplet',
+]);
+
+export const REQUIRED_PROFILE_REJECTION_EVIDENCES = Object.freeze([
+  'ev-profile-unknown',
+  'ev-profile-disabled',
+  'ev-profile-mismatch',
+  'ev-profile-historical',
+]);
+
 /**
  * 校验统一定型 Fixture 的原始字节 SHA-256 和版本号
  */
@@ -172,21 +185,35 @@ export function validateEvidenceManifest(manifest, repoRoot) {
   }
   for (const ingressKey of REQUIRED_INGRESS_REJECTIONS) {
     if (!ingressObj[ingressKey] || typeof ingressObj[ingressKey] !== 'string') {
-      throw new Error(`keyGroups.ingressRejections missing required ingress point: "${ingressKey}"`);
+      throw new Error(
+        `keyGroups.ingressRejections missing required ingress point: "${ingressKey}"`,
+      );
     }
   }
 
-  // 检查 storage 包含证据 ID
+  // 检查 storage 包含全部必要证据 ID（CAS, Reload, Server Triplet）
   if (!Array.isArray(manifest.keyGroups.storage) || manifest.keyGroups.storage.length === 0) {
     throw new Error('keyGroups.storage must be a non-empty array of evidence IDs');
   }
+  for (const requiredId of REQUIRED_STORAGE_EVIDENCES) {
+    if (!manifest.keyGroups.storage.includes(requiredId)) {
+      throw new Error(`keyGroups.storage missing required storage evidence: "${requiredId}"`);
+    }
+  }
 
-  // 检查 profileRejections 包含证据 ID
+  // 检查 profileRejections 包含全部必要证据 ID（unknown, disabled, mismatch, historical）
   if (
     !Array.isArray(manifest.keyGroups.profileRejections) ||
     manifest.keyGroups.profileRejections.length === 0
   ) {
     throw new Error('keyGroups.profileRejections must be a non-empty array of evidence IDs');
+  }
+  for (const requiredId of REQUIRED_PROFILE_REJECTION_EVIDENCES) {
+    if (!manifest.keyGroups.profileRejections.includes(requiredId)) {
+      throw new Error(
+        `keyGroups.profileRejections missing required profile rejection evidence: "${requiredId}"`,
+      );
+    }
   }
 
   // 检查 parity 包含 P1..P9 及 P10 五个预算 case
@@ -227,7 +254,9 @@ export function validateEvidenceManifest(manifest, repoRoot) {
       throw new Error(`Evidence "${id}" missing "testFile" string`);
     }
     if (isAbsolute(testFile)) {
-      throw new Error(`Evidence "${id}" testFile must be repo-relative, got absolute path "${testFile}"`);
+      throw new Error(
+        `Evidence "${id}" testFile must be repo-relative, got absolute path "${testFile}"`,
+      );
     }
     const normalizedPath = normalize(testFile);
     if (normalizedPath.startsWith('..') || normalizedPath.startsWith('/')) {
@@ -329,15 +358,13 @@ export function parseTestReport(rawJson, repoRoot) {
  */
 export function verifyTestResults(manifest, aggregatedReports, repoRoot) {
   const indexed = new Map();
-  const duplicateChecks = new Set();
 
   for (const item of aggregatedReports) {
     const key = `${normalize(item.testFile)}:::${item.fullName}`;
-    if (duplicateChecks.has(key)) {
-      throw new Error(`Ambiguous test result: duplicate fullName "${item.fullName}" in "${item.testFile}"`);
+    if (!indexed.has(key)) {
+      indexed.set(key, []);
     }
-    duplicateChecks.add(key);
-    indexed.set(key, item.status);
+    indexed.get(key).push(item.status);
   }
 
   const verifiedEvidences = [];
@@ -351,7 +378,14 @@ export function verifyTestResults(manifest, aggregatedReports, repoRoot) {
       );
     }
 
-    const status = indexed.get(key);
+    const statuses = indexed.get(key);
+    if (statuses.length > 1) {
+      throw new Error(
+        `Ambiguous test result: duplicate fullName "${evidence.fullName}" in "${evidence.testFile}"`,
+      );
+    }
+
+    const status = statuses[0];
     if (status !== 'passed') {
       throw new Error(
         `Evidence test not passed: [${evidence.id}]\n  Status: "${status}" (expected "passed")\n  File: ${evidence.testFile}\n  FullName: "${evidence.fullName}"`,
@@ -397,10 +431,18 @@ export function runAllSuites(repoRoot, manifest) {
 
       const args =
         suite.runner === 'vitest'
-          ? ['exec', 'vitest', 'run', testFileInPkg, '--reporter=json', `--outputFile=${reportFile}`]
+          ? [
+              'exec',
+              'vitest',
+              'run',
+              testFileInPkg,
+              '--reporter=json',
+              `--outputFile=${reportFile}`,
+            ]
           : ['exec', 'jest', testFileInPkg, '--json', `--outputFile=${reportFile}`];
 
-      const proc = spawnSync('pnpm', args, {
+      const runnerBin = process.env.__CHECK_M1A_RUNNER_BIN__ || 'pnpm';
+      const proc = spawnSync(runnerBin, args, {
         cwd: packageDir,
         encoding: 'utf8',
         env: { ...process.env, CI: 'true' },
@@ -464,7 +506,9 @@ export async function main(repoRoot = process.cwd()) {
   // 2. 校验证据清单结构与 3×6 矩阵完整性
   console.log('  2. Validating evidence manifest schema & 3×6 matrix...');
   const manifestRes = validateEvidenceManifest(manifest, repoRoot);
-  console.log(`     ✓ Verified ${manifestRes.evidenceCount} unique evidence citations across all 18 cells & key groups`);
+  console.log(
+    `     ✓ Verified ${manifestRes.evidenceCount} unique evidence citations across all 18 cells & key groups`,
+  );
 
   // 3. 执行真实窄测试并收集结构化 JSON 报告
   console.log('  3. Executing targeted test suites into isolated temporary directory...');
@@ -474,9 +518,13 @@ export async function main(repoRoot = process.cwd()) {
   // 4. 比对全部证据项，确保状态全为 passed
   console.log('  4. Matching cited evidence against test report assertions...');
   const verifyRes = verifyTestResults(manifest, testResults, repoRoot);
-  console.log(`     ✓ All ${verifyRes.verifiedCount} cited evidences successfully matched with status="passed"`);
+  console.log(
+    `     ✓ All ${verifyRes.verifiedCount} cited evidences successfully matched with status="passed"`,
+  );
 
-  console.log('\n✅ [check:m1a-capabilities] All capability gates and CI evidence checks PASSED.\n');
+  console.log(
+    '\n✅ [check:m1a-capabilities] All capability gates and CI evidence checks PASSED.\n',
+  );
 }
 
 // CLI 执行检测

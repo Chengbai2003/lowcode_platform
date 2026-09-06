@@ -1,12 +1,58 @@
+import React from 'react';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { render, screen, fireEvent, renderHook, act } from '@testing-library/react';
 import * as contract from '@lowcode-platform/schema-contract';
 import type { PageSchema } from '../../../types';
 import { parseAndValidateFullSchema } from '../pageLogicAuthoring';
 import { serializePageSchema } from '../schemaSync';
 import { useSchemaHistoryStore } from '../../hooks/useSchemaHistoryStore';
+import { PreviewPane } from '../../components/layout/PreviewPane/PreviewPane';
+
+let registeredSaveCommand: (() => void) | null = null;
+
+vi.mock('@monaco-editor/react', () => {
+  return {
+    default: ({ value, onChange, onMount }: any) => {
+      React.useEffect(() => {
+        if (onMount) {
+          const fakeEditor = {
+            addCommand: (_keybinding: number, handler: () => void) => {
+              registeredSaveCommand = handler;
+            },
+            deltaDecorations: vi.fn().mockReturnValue([]),
+            onDidFocusEditorText: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+            revealLineInCenter: vi.fn(),
+            getModel: vi.fn(),
+          };
+          const fakeMonaco = {
+            KeyMod: { CtrlCmd: 2048 },
+            KeyCode: { KeyS: 49 },
+            Range: class {},
+          };
+          onMount(fakeEditor, fakeMonaco);
+        }
+      }, [onMount]);
+
+      return React.createElement('textarea', {
+        'data-testid': 'monaco-editor-textarea',
+        value,
+        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(e.target.value),
+        onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+            e.preventDefault();
+            registeredSaveCommand?.();
+          }
+        },
+      });
+    },
+  };
+});
+
+vi.mock('../../components/layout/PreviewPane/SelectableCanvas', () => ({
+  SelectableCanvas: () => React.createElement('div', { 'data-testid': 'mock-selectable-canvas' }),
+}));
 
 const fixtureRaw = readFileSync(
   path.resolve(__dirname, '../../../../../../test-fixtures/m1a-page-logic-conformance.json'),
@@ -43,10 +89,12 @@ function withBlockedCapability<T>(
 
 describe('Editor JSON & Ingress Capability Gates (C3b / Issue #47)', () => {
   beforeEach(() => {
+    registeredSaveCommand = null;
     vi.restoreAllMocks();
   });
 
   afterEach(() => {
+    registeredSaveCommand = null;
     vi.restoreAllMocks();
   });
 
@@ -56,21 +104,10 @@ describe('Editor JSON & Ingress Capability Gates (C3b / Issue #47)', () => {
       const onSchemaCommitSpy = vi.fn();
       const onSchemaChangeSpy = vi.fn();
 
+      // 1. 验证底层契约校验函数准确输出 CAPABILITY_UNSUPPORTED
       withBlockedCapability('page-state', 'editor-agent', () => {
-        // 走真实解析与校验路径
         const validationResult = parseAndValidateFullSchema(serializedJson, whitelist);
-
-        // 1. 证明错误传递且不返回成功数据
         expect(validationResult.success).toBe(false);
-
-        // 2. 模拟 Editor JSON 保存逻辑（与 PreviewPane.tsx 的 Ctrl+S / onMount 逻辑完全对齐）
-        const commitIfValid = (res: typeof validationResult) => {
-          if (res.success) {
-            onSchemaCommitSpy(res.data);
-          }
-        };
-        commitIfValid(validationResult);
-
         if (validationResult.success) return;
 
         expect(validationResult.issues).toBeDefined();
@@ -78,11 +115,64 @@ describe('Editor JSON & Ingress Capability Gates (C3b / Issue #47)', () => {
         expect(validationResult.issues[0].code).toBe('CAPABILITY_UNSUPPORTED');
         expect(validationResult.issues[0].path).toEqual(['logic', 'states']);
         expect(validationResult.issues[0].message).toContain('editor-agent');
-
-        // 副作用断言：校验失败绝不触发 onSchemaCommit 或 onSchemaChange，不继续更新编辑器状态
-        expect(onSchemaCommitSpy).not.toHaveBeenCalled();
-        expect(onSchemaChangeSpy).not.toHaveBeenCalled();
       });
+
+      // 2. 挂载真实生产 PreviewPane 组件，接入实际快捷键与保存处理链路
+      const allComponents = {
+        Page: (() => null) as any,
+        Text: (() => null) as any,
+        Button: (() => null) as any,
+      };
+
+      const { unmount } = render(
+        React.createElement(PreviewPane, {
+          schema: conformanceFixture.legacySchema,
+          preset: { components: {} } as any,
+          pageId: 'page-1',
+          documentSessionId: 'session-1',
+          allComponents,
+          eventContext: {},
+          previewTheme: 'light',
+          onSchemaCommit: onSchemaCommitSpy,
+          onSchemaChange: onSchemaChangeSpy,
+        }),
+      );
+
+      try {
+        // 切换到 'JSON' tab
+        const jsonTabBtn = screen.getByRole('button', { name: 'JSON' });
+        fireEvent.click(jsonTabBtn);
+
+        const textarea = screen.getByTestId('monaco-editor-textarea') as HTMLTextAreaElement;
+
+        // 模拟用户在 JSON 编辑器中输入了包含 page-state 能力的 schema
+        fireEvent.change(textarea, {
+          target: { value: serializedJson },
+        });
+
+        // 在能力被阻断时触发真实 Ctrl+S 保存处理路径
+        withBlockedCapability('page-state', 'editor-agent', () => {
+          fireEvent.keyDown(textarea, { key: 's', ctrlKey: true });
+
+          // 严格副作用断言：真实 PreviewPane 处理路径因能力校验失败，绝不触发 onSchemaCommit 或 onSchemaChange
+          expect(onSchemaCommitSpy).not.toHaveBeenCalled();
+          expect(onSchemaChangeSpy).not.toHaveBeenCalled();
+
+          // 真实 PreviewPane 应展示错误面板并提示能力不支持
+          const errorPanel = screen.getByTestId('schema-error-panel');
+          expect(errorPanel).toBeDefined();
+          expect(errorPanel.textContent).toContain('CAPABILITY_UNSUPPORTED');
+          expect(errorPanel.textContent).toContain('logic.states');
+        });
+
+        // 在能力正常支持时触发相同保存路径，确认能正常提交到 onSchemaCommit
+        fireEvent.keyDown(textarea, { key: 's', ctrlKey: true });
+        expect(onSchemaCommitSpy).toHaveBeenCalledTimes(1);
+        const committed = onSchemaCommitSpy.mock.calls[0][0];
+        expect(committed.logic?.states).toBeDefined();
+      } finally {
+        unmount();
+      }
     });
 
     it('round-trips full conformance schema across JSON serialization without losing any capability fields', () => {

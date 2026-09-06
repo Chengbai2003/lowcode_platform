@@ -67,56 +67,61 @@ describe('Renderer Ingress Capability Gates (C3b / Issue #47)', () => {
   describe('7. Renderer 挂载 / 前端预览', () => {
     it('really mounts blocked schema and rejects before session creation, event dispatch, or host network calls', () => {
       const createSessionSpy = vi.spyOn(RuntimeSessionModule, 'createRuntimeSession');
+      const originalFetch = globalThis.fetch;
       const fetchSpy = vi.fn();
       globalThis.fetch = fetchSpy;
 
-      const hostCapabilitiesMock = {
-        network: {
-          fetch: vi.fn(),
-          allowedHosts: [],
-        },
-      };
+      try {
+        const hostCapabilitiesMock = {
+          network: {
+            fetch: vi.fn(),
+            allowedHosts: [],
+          },
+        };
 
-      const errorBoundaryRef = React.createRef<TestErrorBoundary>();
+        const errorBoundaryRef = React.createRef<TestErrorBoundary>();
 
-      withBlockedCapability('page-state', 'renderer', () => {
-        // 抑制 React 在 ErrorBoundary 捕获错误时的控制台报错噪声
-        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        withBlockedCapability('page-state', 'renderer', () => {
+          // 抑制 React 在 ErrorBoundary 捕获错误时的控制台报错噪声
+          const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-        try {
-          render(
-            <TestErrorBoundary ref={errorBoundaryRef}>
-              <Renderer
-                schema={conformanceFixture.schema}
-                preset={testPreset}
-                pageId="test-blocked-renderer-p1"
-                documentSessionId="test-blocked-renderer-d1"
-                hostCapabilities={hostCapabilitiesMock as never}
-              />
-            </TestErrorBoundary>,
-          );
-        } finally {
-          consoleErrorSpy.mockRestore();
-        }
+          try {
+            render(
+              <TestErrorBoundary ref={errorBoundaryRef}>
+                <Renderer
+                  schema={conformanceFixture.schema}
+                  preset={testPreset}
+                  pageId="test-blocked-renderer-p1"
+                  documentSessionId="test-blocked-renderer-d1"
+                  hostCapabilities={hostCapabilitiesMock as never}
+                />
+              </TestErrorBoundary>,
+            );
+          } finally {
+            consoleErrorSpy.mockRestore();
+          }
 
-        // 1. 断言 ErrorBoundary 捕获到具体能力失败（SchemaValidationError），而非通用 React 错误
-        const caughtError = errorBoundaryRef.current?.state.error;
-        expect(caughtError).toBeDefined();
-        expect(caughtError).toBeInstanceOf(SchemaValidationError);
+          // 1. 断言 ErrorBoundary 捕获到具体能力失败（SchemaValidationError），而非通用 React 错误
+          const caughtError = errorBoundaryRef.current?.state.error;
+          expect(caughtError).toBeDefined();
+          expect(caughtError).toBeInstanceOf(SchemaValidationError);
 
-        const schemaError = caughtError as SchemaValidationError;
-        expect(schemaError.issues.length).toBeGreaterThan(0);
-        expect(schemaError.issues[0].code).toBe('CAPABILITY_UNSUPPORTED');
-        expect(schemaError.issues[0].path).toEqual(['logic', 'states']);
-        expect(schemaError.issues[0].message).toContain('renderer');
+          const schemaError = caughtError as SchemaValidationError;
+          expect(schemaError.issues.length).toBeGreaterThan(0);
+          expect(schemaError.issues[0].code).toBe('CAPABILITY_UNSUPPORTED');
+          expect(schemaError.issues[0].path).toEqual(['logic', 'states']);
+          expect(schemaError.issues[0].message).toContain('renderer');
 
-        // 2. 严格副作用断言：拒绝前绝对未创建 Session
-        expect(createSessionSpy).not.toHaveBeenCalled();
+          // 2. 严格副作用断言：拒绝前绝对未创建 Session
+          expect(createSessionSpy).not.toHaveBeenCalled();
 
-        // 3. 严格副作用断言：绝对未发生 host 网络调用或全局 fetch
-        expect(fetchSpy).not.toHaveBeenCalled();
-        expect(hostCapabilitiesMock.network.fetch).not.toHaveBeenCalled();
-      });
+          // 3. 严格副作用断言：绝对未发生 host 网络调用或全局 fetch
+          expect(fetchSpy).not.toHaveBeenCalled();
+          expect(hostCapabilitiesMock.network.fetch).not.toHaveBeenCalled();
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
     });
 
     it('supported schema mounts normally, creates session, and renders DOM elements', () => {
