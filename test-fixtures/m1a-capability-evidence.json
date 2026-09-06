@@ -1,0 +1,508 @@
+{
+  "evidenceFormatVersion": 1,
+  "fixture": {
+    "path": "test-fixtures/m1a-page-logic-conformance.json",
+    "corpusVersion": "1.0.0",
+    "sha256": "a0256f9d53125b77412c8e82e512a1cd2fe866b2f1b85424272690672a8f4ea4"
+  },
+  "matrix": {
+    "page-state": {
+      "contract": "ev-contract-page-state",
+      "validator": "ev-validator-page-state",
+      "editor-agent": "ev-editor-page-state",
+      "renderer": "ev-renderer-page-state",
+      "compiler": "ev-compiler-page-state",
+      "storage": "ev-storage-page-state"
+    },
+    "named-computed": {
+      "contract": "ev-contract-named-computed",
+      "validator": "ev-validator-named-computed",
+      "editor-agent": "ev-editor-named-computed",
+      "renderer": "ev-renderer-named-computed",
+      "compiler": "ev-compiler-named-computed",
+      "storage": "ev-storage-named-computed"
+    },
+    "action-flow": {
+      "contract": "ev-contract-action-flow",
+      "validator": "ev-validator-action-flow",
+      "editor-agent": "ev-agent-action-flow",
+      "renderer": "ev-renderer-action-flow",
+      "compiler": "ev-compiler-action-flow",
+      "storage": "ev-storage-action-flow"
+    }
+  },
+  "keyGroups": {
+    "editor": [
+      "ev-editor-json-rejection",
+      "ev-editor-roundtrip",
+      "ev-editor-history",
+      "ev-editor-legacy"
+    ],
+    "agent": [
+      "ev-agent-draft-rejection",
+      "ev-agent-draft-ok",
+      "ev-agent-patch-result-rejection",
+      "ev-agent-patch-result-ok"
+    ],
+    "ingressRejections": {
+      "pageSchemaServiceSave": "ev-ingress-reject-page-schema-service-save",
+      "repositoryDirectSave": "ev-ingress-reject-repository-direct-save",
+      "repositoryDiskReload": "ev-ingress-reject-repository-disk-reload",
+      "agentDraft": "ev-agent-draft-rejection",
+      "agentPatchResult": "ev-agent-patch-result-rejection",
+      "editorJsonSave": "ev-editor-json-rejection",
+      "rendererMount": "ev-ingress-reject-renderer-mount",
+      "compilerServiceCompile": "ev-ingress-reject-compiler-service-compile",
+      "compilerDirectCompile": "ev-ingress-reject-compiler-direct-compile"
+    },
+    "storage": ["ev-storage-cas", "ev-storage-reload", "ev-storage-server-triplet"],
+    "profileRejections": [
+      "ev-profile-unknown",
+      "ev-profile-disabled",
+      "ev-profile-mismatch",
+      "ev-profile-historical"
+    ],
+    "parity": {
+      "P1": "ev-parity-p1",
+      "P2": "ev-parity-p2",
+      "P3": "ev-parity-p3",
+      "P4": "ev-parity-p4",
+      "P5": "ev-parity-p5",
+      "P6": "ev-parity-p6",
+      "P7": "ev-parity-p7",
+      "P8": "ev-parity-p8",
+      "P9": "ev-parity-p9",
+      "P10_actionBudget": "ev-parity-p10-action-budget",
+      "P10_iterationBudget": "ev-parity-p10-iteration-budget",
+      "P10_depthBudget": "ev-parity-p10-depth-budget",
+      "P10_durationBudget": "ev-parity-p10-duration-budget",
+      "P10_concurrencyBudget": "ev-parity-p10-concurrency-budget"
+    }
+  },
+  "evidences": [
+    {
+      "id": "ev-contract-page-state",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 1. Immutable Trusted Capability Manifest declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1",
+      "description": "Contract surface declares page-state capability with status=supported and revision=1 in trusted manifest"
+    },
+    {
+      "id": "ev-contract-named-computed",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 1. Immutable Trusted Capability Manifest declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1",
+      "description": "Contract surface declares named-computed capability with status=supported and revision=1 in trusted manifest"
+    },
+    {
+      "id": "ev-contract-action-flow",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 1. Immutable Trusted Capability Manifest declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1",
+      "description": "Contract surface declares action-flow capability with status=supported and revision=1 in trusted manifest"
+    },
+    {
+      "id": "ev-validator-page-state",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 3. Pure Capability Detection (detectPageSchemaCapabilities) detects all 3 capabilities for main conformance schema with exact trigger paths",
+      "description": "Validator surface accurately detects page-state declaration paths"
+    },
+    {
+      "id": "ev-validator-named-computed",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 3. Pure Capability Detection (detectPageSchemaCapabilities) detects all 3 capabilities for main conformance schema with exact trigger paths",
+      "description": "Validator surface accurately detects named-computed declaration paths"
+    },
+    {
+      "id": "ev-validator-action-flow",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 3. Pure Capability Detection (detectPageSchemaCapabilities) detects all 3 capabilities for main conformance schema with exact trigger paths",
+      "description": "Validator surface accurately detects action-flow declaration and invocation paths"
+    },
+    {
+      "id": "ev-editor-page-state",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/editor-ingress-capability.test.ts",
+      "fullName": " Editor JSON & Ingress Capability Gates (C3b / Issue #47) 6. Editor JSON → 保存 / 预览 preserves all three capabilities across history store undo and redo cycles",
+      "description": "Editor surface preserves page-state declarations across history undo/redo"
+    },
+    {
+      "id": "ev-editor-named-computed",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/editor-ingress-capability.test.ts",
+      "fullName": " Editor JSON & Ingress Capability Gates (C3b / Issue #47) 6. Editor JSON → 保存 / 预览 round-trips full conformance schema across JSON serialization without losing any capability fields",
+      "description": "Editor surface preserves named-computed declarations across full schema JSON roundtrip"
+    },
+    {
+      "id": "ev-agent-action-flow",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/agent-tools-ingress-capability.spec.ts",
+      "fullName": "Agent Tools Ingress Capability Gates (C3b / Issue #47) 4. ToolExecutionService.previewPatch: draft 输入 valid draft enters real toolchain normally under unblocked manifest",
+      "description": "Agent surface processes draft schema with action-flow normally through real toolchain"
+    },
+    {
+      "id": "ev-renderer-page-state",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/renderer-ingress-capability.test.tsx",
+      "fullName": " Renderer Ingress Capability Gates (C3b / Issue #47) 7. Renderer 挂载 / 前端预览 supported schema mounts normally, creates session, and renders DOM elements",
+      "description": "Renderer surface mounts supported page-state schema and initialises session"
+    },
+    {
+      "id": "ev-renderer-named-computed",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P2: 同一事件内链式 Computed (Chained Computed within Single Event) observes identical chained computed recomputation and DOM updates after click",
+      "description": "Renderer surface executes chained computed reactively on state mutation"
+    },
+    {
+      "id": "ev-renderer-action-flow",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P3: 嵌套 Flow 成功 (Nested Flow Success) observes nested flow execution with input propagation and DOM update",
+      "description": "Renderer surface executes nested action flow with input parameter propagation"
+    },
+    {
+      "id": "ev-compiler-page-state",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/compiler-ingress-capability.spec.ts",
+      "fullName": "Compiler Ingress Capability Gates (C3b / Issue #47) 8. CompilerService.compile compiles supported schema with trusted bindings from page snapshot normally",
+      "description": "Compiler surface compiles supported page-state schema using snapshot trusted bindings"
+    },
+    {
+      "id": "ev-compiler-named-computed",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P2: 同一事件内链式 Computed (Chained Computed within Single Event) observes identical chained computed recomputation and DOM updates after click",
+      "description": "Compiler surface generates chained computed reactive code matching renderer behavior"
+    },
+    {
+      "id": "ev-compiler-action-flow",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/compiler-ingress-capability.spec.ts",
+      "fullName": "Compiler Ingress Capability Gates (C3b / Issue #47) 9. 直接 compileToCode actual code generation passes syntax and logic inclusion for valid schema",
+      "description": "Compiler surface generates functional action flow execution code"
+    },
+    {
+      "id": "ev-storage-page-state",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 1. PageSchemaService.saveSchema saves fixed conformance corpus normally and client cannot control server runtime triplet",
+      "description": "Storage surface persists page-state schema into repository with server runtime metadata"
+    },
+    {
+      "id": "ev-storage-named-computed",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 2. PageSchemaRepository 直接 saveSchema normal CAS save succeeds and matches historical snapshot fields",
+      "description": "Storage surface persists named-computed schema via CAS and retains snapshot integrity"
+    },
+    {
+      "id": "ev-storage-action-flow",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 3. PageSchemaRepository 新实例磁盘加载 saves valid schema under normal manifest, rejects loading under blocked manifest with corrupted store error, disk bytes unchanged",
+      "description": "Storage surface validates action-flow on new repository instance disk reload"
+    },
+    {
+      "id": "ev-editor-json-rejection",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/editor-ingress-capability.test.ts",
+      "fullName": " Editor JSON & Ingress Capability Gates (C3b / Issue #47) 6. Editor JSON → 保存 / 预览 rejects blocked schema via real parseAndValidateFullSchema path and prevents schema update and save",
+      "description": "Editor JSON parser rejects blocked schema and prevents editor update"
+    },
+    {
+      "id": "ev-editor-roundtrip",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/editor-ingress-capability.test.ts",
+      "fullName": " Editor JSON & Ingress Capability Gates (C3b / Issue #47) 6. Editor JSON → 保存 / 预览 round-trips full conformance schema across JSON serialization without losing any capability fields",
+      "description": "Editor JSON roundtrip preserves all schema capability fields"
+    },
+    {
+      "id": "ev-editor-history",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/editor-ingress-capability.test.ts",
+      "fullName": " Editor JSON & Ingress Capability Gates (C3b / Issue #47) 6. Editor JSON → 保存 / 预览 preserves all three capabilities across history store undo and redo cycles",
+      "description": "Editor history store retains all three capabilities across undo/redo"
+    },
+    {
+      "id": "ev-editor-legacy",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/editor-ingress-capability.test.ts",
+      "fullName": " Editor JSON & Ingress Capability Gates (C3b / Issue #47) 6. Editor JSON → 保存 / 预览 round-trips legacy schema without logic and ensures no logic object is introduced",
+      "description": "Editor preserves legacy schema without logic object"
+    },
+    {
+      "id": "ev-agent-draft-rejection",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/agent-tools-ingress-capability.spec.ts",
+      "fullName": "Agent Tools Ingress Capability Gates (C3b / Issue #47) 4. ToolExecutionService.previewPatch: draft 输入 rejects blocked draft before patch execution; input draft remains unmodified and no save occurs",
+      "description": "ToolExecutionService rejects blocked draftSchema before patch execution with no side effects"
+    },
+    {
+      "id": "ev-agent-draft-ok",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/agent-tools-ingress-capability.spec.ts",
+      "fullName": "Agent Tools Ingress Capability Gates (C3b / Issue #47) 4. ToolExecutionService.previewPatch: draft 输入 valid draft enters real toolchain normally under unblocked manifest",
+      "description": "ToolExecutionService processes supported draft schema normally"
+    },
+    {
+      "id": "ev-agent-patch-result-rejection",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/agent-tools-ingress-capability.spec.ts",
+      "fullName": "Agent Tools Ingress Capability Gates (C3b / Issue #47) 5. ToolExecutionService.previewPatch: Patch 后结果 rejects patch when replacePageLogic introduces an unsupported capability on legacy schema; draft unchanged, not saved, no applicable patch returned",
+      "description": "previewPatch rejects patch that introduces unsupported capability into legacy schema"
+    },
+    {
+      "id": "ev-agent-patch-result-ok",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/agent-tools-ingress-capability.spec.ts",
+      "fullName": "Agent Tools Ingress Capability Gates (C3b / Issue #47) 5. ToolExecutionService.previewPatch: Patch 后结果 supported patch retains logic, and legacy patch does not introduce unwanted own logic",
+      "description": "previewPatch retains logic on supported patch and avoids unwanted logic on legacy patch"
+    },
+    {
+      "id": "ev-ingress-reject-page-schema-service-save",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 1. PageSchemaService.saveSchema rejects blocked schema with 400 BadRequestException and does not invoke repository.saveSchema",
+      "description": "PageSchemaService.saveSchema ingress rejects blocked schema with 400 before repository call"
+    },
+    {
+      "id": "ev-ingress-reject-repository-direct-save",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 2. PageSchemaRepository 直接 saveSchema rejects blocked schema on real disk file; byte content, snapshot count, and version pointer remain unchanged",
+      "description": "PageSchemaRepository.saveSchema ingress rejects blocked schema with zero disk modifications"
+    },
+    {
+      "id": "ev-ingress-reject-repository-disk-reload",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 3. PageSchemaRepository 新实例磁盘加载 saves valid schema under normal manifest, rejects loading under blocked manifest with corrupted store error, disk bytes unchanged",
+      "description": "PageSchemaRepository disk reload ingress rejects blocked schema with disk bytes unchanged"
+    },
+    {
+      "id": "ev-ingress-reject-renderer-mount",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/renderer-ingress-capability.test.tsx",
+      "fullName": " Renderer Ingress Capability Gates (C3b / Issue #47) 7. Renderer 挂载 / 前端预览 really mounts blocked schema and rejects before session creation, event dispatch, or host network calls",
+      "description": "Renderer mount ingress rejects blocked schema without session creation or host network calls"
+    },
+    {
+      "id": "ev-ingress-reject-compiler-service-compile",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/compiler-ingress-capability.spec.ts",
+      "fullName": "Compiler Ingress Capability Gates (C3b / Issue #47) 8. CompilerService.compile rejects blocked schema via real generator/evaluator pipeline with no successful code response and preserves capability issues",
+      "description": "CompilerService.compile ingress rejects blocked schema and preserves capability issues"
+    },
+    {
+      "id": "ev-ingress-reject-compiler-direct-compile",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/compiler-ingress-capability.spec.ts",
+      "fullName": "Compiler Ingress Capability Gates (C3b / Issue #47) 9. 直接 compileToCode real compileToCode pipeline rejects blocked schema input (non-mocked generator)",
+      "description": "compileToCode generator ingress rejects blocked schema input"
+    },
+    {
+      "id": "ev-storage-cas",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 2. PageSchemaRepository 直接 saveSchema normal CAS save succeeds and matches historical snapshot fields",
+      "description": "PageSchemaRepository CAS save preserves historical snapshot fields and increments version"
+    },
+    {
+      "id": "ev-storage-reload",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 3. PageSchemaRepository 新实例磁盘加载 saves valid schema under normal manifest, rejects loading under blocked manifest with corrupted store error, disk bytes unchanged",
+      "description": "PageSchemaRepository disk reload recovers snapshot version and schema faithfully"
+    },
+    {
+      "id": "ev-storage-server-triplet",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/page-schema-ingress-capability.spec.ts",
+      "fullName": "Page Schema Ingress Capability Gates (C3b / Issue #47) 1. PageSchemaService.saveSchema saves fixed conformance corpus normally and client cannot control server runtime triplet",
+      "description": "PageSchemaService ensures server-controlled runtime triplet on schema persistence"
+    },
+    {
+      "id": "ev-profile-unknown",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/profile-ingress-capability.spec.ts",
+      "fullName": "SystemRuntimeProfile Ingress Capability Gates (C3b / Issue #47) 10. 现有 Profile 组合链路 rejects unknown systemId without falling back to current active profile",
+      "description": "Profile registry rejects unknown systemId without fallback"
+    },
+    {
+      "id": "ev-profile-disabled",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/profile-ingress-capability.spec.ts",
+      "fullName": "SystemRuntimeProfile Ingress Capability Gates (C3b / Issue #47) 10. 现有 Profile 组合链路 rejects disabled profile snapshot without falling back to current active profile",
+      "description": "Profile registry rejects disabled profile without fallback"
+    },
+    {
+      "id": "ev-profile-mismatch",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/profile-ingress-capability.spec.ts",
+      "fullName": "SystemRuntimeProfile Ingress Capability Gates (C3b / Issue #47) 10. 现有 Profile 组合链路 rejects triplet mismatch without falling back to current active profile",
+      "description": "Profile registry rejects triplet mismatch without fallback"
+    },
+    {
+      "id": "ev-profile-historical",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/profile-ingress-capability.spec.ts",
+      "fullName": "SystemRuntimeProfile Ingress Capability Gates (C3b / Issue #47) 10. 现有 Profile 组合链路 resolves valid historical snapshot using its own compatibility info without overriding to current",
+      "description": "Profile registry preserves historical deprecated profile configuration"
+    },
+    {
+      "id": "ev-parity-p1",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P1: 初始挂载 (Initial Mount Parity) observes identical initial state, computed, and visible DOM text across Renderer and Compiler",
+      "description": "Renderer and Compiler observable parity on P1 initial mount"
+    },
+    {
+      "id": "ev-parity-p2",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P2: 同一事件内链式 Computed (Chained Computed within Single Event) observes identical chained computed recomputation and DOM updates after click",
+      "description": "Renderer and Compiler observable parity on P2 chained computed"
+    },
+    {
+      "id": "ev-parity-p3",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P3: 嵌套 Flow 成功 (Nested Flow Success) observes nested flow execution with input propagation and DOM update",
+      "description": "Renderer and Compiler observable parity on P3 nested flow success"
+    },
+    {
+      "id": "ev-parity-p4",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P4: onError 恢复 (Recovery from Error) observes onError recovery when apiCall fails with /fail",
+      "description": "Renderer and Compiler observable parity on P4 onError recovery"
+    },
+    {
+      "id": "ev-parity-p5",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P5: 未处理失败 (Unhandled Failure Diagnostic Parity) observes rejection with structural diagnostic and unchanged state when unhandledFailure occurs",
+      "description": "Renderer and Compiler observable parity on P5 unhandled failure diagnostic"
+    },
+    {
+      "id": "ev-parity-p6",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P6: 延迟取消和旧实例写回阻断 (Delay Cancellation Parity) observes delay abort on unmount and blocks late write-back across both engines",
+      "description": "Renderer and Compiler observable parity on P6 delay cancellation and no late write-back"
+    },
+    {
+      "id": "ev-parity-p7",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P7: 双实例隔离 (Dual Instance Isolation) observes strict isolation between two mounted instances of the same schema",
+      "description": "Renderer and Compiler observable parity on P7 dual instance isolation"
+    },
+    {
+      "id": "ev-parity-p8",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P8: Legacy 无 logic (Legacy Schema without Logic) observes legacy schema execution parity with inline ActionList and data bindings",
+      "description": "Renderer and Compiler observable parity on P8 legacy schema without logic"
+    },
+    {
+      "id": "ev-parity-p9",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P9: Computed edge 语义 (Edge Cases in Computed Logic) observes strict parity across undefinedKeys, values, nullableView, and immutable view",
+      "description": "Renderer and Compiler observable parity on P9 computed edge cases"
+    },
+    {
+      "id": "ev-parity-p10-action-budget",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P10: 五个宿主预算 case (Host Budget Cases Parity) enforces budget failure parity for actionBudget",
+      "description": "Renderer and Compiler observable parity on P10 actionBudget exhaustion"
+    },
+    {
+      "id": "ev-parity-p10-iteration-budget",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P10: 五个宿主预算 case (Host Budget Cases Parity) enforces budget failure parity for iterationBudget",
+      "description": "Renderer and Compiler observable parity on P10 iterationBudget exhaustion"
+    },
+    {
+      "id": "ev-parity-p10-depth-budget",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P10: 五个宿主预算 case (Host Budget Cases Parity) enforces budget failure parity for depthBudget",
+      "description": "Renderer and Compiler observable parity on P10 depthBudget exhaustion"
+    },
+    {
+      "id": "ev-parity-p10-duration-budget",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P10: 五个宿主预算 case (Host Budget Cases Parity) enforces budget failure parity for durationBudget",
+      "description": "Renderer and Compiler observable parity on P10 durationBudget exhaustion"
+    },
+    {
+      "id": "ev-parity-p10-concurrency-budget",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/Renderer.compiler-parity.test.tsx",
+      "fullName": " Renderer–Compiler Observable Parity (C2.3 / Issue #47) P10: 五个宿主预算 case (Host Budget Cases Parity) enforces budget failure parity for concurrencyBudget",
+      "description": "Renderer and Compiler observable parity on P10 concurrencyBudget exhaustion"
+    }
+  ]
+}
