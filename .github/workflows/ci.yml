@@ -85,6 +85,11 @@ jobs:
       - name: Architecture Boundaries Check
         run: pnpm check:architecture
 
+      - name: Capability Evidence & Ingress Gate Check
+        run: |
+          pnpm check:m1a-capabilities
+          pnpm test:m1a-capabilities-validator
+
       - name: Lint
         run: pnpm lint --max-warnings 500
 
