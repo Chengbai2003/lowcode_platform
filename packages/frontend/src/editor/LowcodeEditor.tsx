@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { ConfigProvider, theme, message, notification, Modal } from 'antd';
+import { ConfigProvider, theme, message, notification, Modal, Alert } from 'antd';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ExternalLink } from 'lucide-react';
 import type {
@@ -11,6 +11,7 @@ import type {
 } from './types';
 import type { AIMessageActionResult } from '../types';
 import { componentRegistry } from '../components';
+import type { ComponentPreset } from '@lowcode-platform/renderer';
 import { antdPreset } from '@lowcode-platform/preset-antd';
 import {
   EditorHeader,
@@ -62,6 +63,8 @@ function LowcodeEditorInner({
   }, [initialSchema, defaultSchema]);
 
   const [schema, setSchema] = useState<PageSchema>(initialSchemaObj);
+  const [currentPreset, setCurrentPreset] = useState<ComponentPreset>(antdPreset);
+  const [pageLoadError, setPageLoadError] = useState<string | null>(null);
   const [previewTheme, setPreviewTheme] = useState<'light' | 'dark'>('light');
   const [mode, setMode] = useState<'edit' | 'preview'>('edit');
   const [compiledCode, setCompiledCode] = useState<string | null>(null);
@@ -245,6 +248,8 @@ function LowcodeEditorInner({
     initialSchemaObj,
     setSchema,
     setPageVersion,
+    setPreset: setCurrentPreset,
+    setPageLoadError,
     onErrorRef,
   });
 
@@ -256,6 +261,7 @@ function LowcodeEditorInner({
     setSchema,
     setCompiledCode,
     onError,
+    pageLoadError,
   });
   // 处理模板应用
   const handleApplyTemplate = useCallback(
@@ -270,12 +276,12 @@ function LowcodeEditorInner({
   const documentSessionId = useSelectionStore((state) => state.documentSessionId);
   const runtimePageId = pageId ?? `draft:${documentSessionId}`;
 
-  // 内置 Preset 是编辑器唯一的 Preview/Compiler 组件集合。
-  const editorPreset = antdPreset;
+  // 当前激活的 Preset 是编辑器唯一的 Preview/Compiler 组件集合。
+  const editorPreset = currentPreset;
 
   // 内置组件注册表供属性面板/左侧面板使用。
   const allComponents = useMemo(() => {
-    const rendererComponents = { ...antdPreset.runtime };
+    const rendererComponents = { ...editorPreset.runtime };
     const componentsOnly = Object.keys(componentRegistry).reduce(
       (acc, key) => {
         acc[key] = componentRegistry[key].component;
@@ -284,7 +290,7 @@ function LowcodeEditorInner({
       {} as Record<string, React.ComponentType<Record<string, unknown>>>,
     );
     return { ...rendererComponents, ...componentsOnly };
-  }, []);
+  }, [editorPreset]);
 
   const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({
     allComponents,
@@ -348,7 +354,7 @@ function LowcodeEditorInner({
         <div className={styles.mainLayout}>
           {/* 左侧：组件树 */}
           <AnimatePresence>
-            {!isPreviewMode && (
+            {!isPreviewMode && !pageLoadError && (
               <motion.aside
                 initial={{ x: -300 }}
                 animate={{ x: 0 }}
@@ -366,27 +372,44 @@ function LowcodeEditorInner({
             )}
           </AnimatePresence>
 
-          {/* 中间：预览区域 */}
-          <main className={`${styles.centerPane} ${isPreviewMode ? styles.fullWidth : ''}`}>
-            <PreviewPane
-              schema={schema}
-              preset={editorPreset}
-              pageId={runtimePageId}
-              documentSessionId={documentSessionId}
-              allComponents={allComponents}
-              eventContext={mergedEventContext}
-              previewTheme={previewTheme}
-              selectedId={selectedId}
-              isPreviewMode={isPreviewMode}
-              compiledCode={compiledCode}
-              onSchemaChange={handleSchemaChange}
-              onSchemaCommit={handleSchemaCommit}
-            />
-          </main>
+          {/* 中间：预览区域或加载受阻错误信息 */}
+          {pageLoadError ? (
+            <main
+              className={`${styles.centerPane} ${isPreviewMode ? styles.fullWidth : ''}`}
+              data-testid="page-load-error-container"
+            >
+              <div style={{ padding: 32, maxWidth: 640, margin: '40px auto' }}>
+                <Alert
+                  type="error"
+                  showIcon
+                  message="页面加载受阻：运行时配置不支持"
+                  description={pageLoadError}
+                  data-testid="page-load-error"
+                />
+              </div>
+            </main>
+          ) : (
+            <main className={`${styles.centerPane} ${isPreviewMode ? styles.fullWidth : ''}`}>
+              <PreviewPane
+                schema={schema}
+                preset={editorPreset}
+                pageId={runtimePageId}
+                documentSessionId={documentSessionId}
+                allComponents={allComponents}
+                eventContext={mergedEventContext}
+                previewTheme={previewTheme}
+                selectedId={selectedId}
+                isPreviewMode={isPreviewMode}
+                compiledCode={compiledCode}
+                onSchemaChange={handleSchemaChange}
+                onSchemaCommit={handleSchemaCommit}
+              />
+            </main>
+          )}
 
           {/* 右侧：属性面板 */}
           <AnimatePresence>
-            {!isPreviewMode && (
+            {!isPreviewMode && !pageLoadError && (
               <motion.aside
                 initial={{ x: 350 }}
                 animate={{ x: 0 }}
@@ -406,12 +429,13 @@ function LowcodeEditorInner({
 
         {/* AI 浮动岛 - 预览模式下隐藏 (与 mainLayout 同级，不受容器限制) */}
         <AnimatePresence>
-          {!isPreviewMode && (
+          {!isPreviewMode && !pageLoadError && (
             <FloatingIsland
               currentSchema={schema}
               pageId={pageId}
               pageVersion={pageVersion}
               selectedId={selectedId}
+              preset={editorPreset}
               onSchemaUpdate={handleAISchemaUpdate}
               onPatchApply={handleAIPatchApply}
               onError={onError}
