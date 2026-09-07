@@ -1,8 +1,20 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { ANTD_RUNTIME_COMPATIBILITY, antdPreset } from '@lowcode-platform/preset-antd';
+import type { ComponentPreset } from '@lowcode-platform/renderer';
 import { useEditorStore, useSelectionStore } from '../store/editor-store';
 import type { PageSchema } from '../../types';
+
+interface CapturedPreviewPaneProps {
+  preset: ComponentPreset;
+  schema: PageSchema;
+  [key: string]: unknown;
+}
+
+interface CapturedFloatingIslandProps {
+  preset?: ComponentPreset;
+  [key: string]: unknown;
+}
 
 // Hoisted mocks for message and api
 const { messageMock, pageSchemaApiMock, capturedProps } = vi.hoisted(() => ({
@@ -17,8 +29,8 @@ const { messageMock, pageSchemaApiMock, capturedProps } = vi.hoisted(() => ({
     savePageSchema: vi.fn(),
   },
   capturedProps: {
-    previewPane: null as Record<string, unknown> | null,
-    floatingIsland: null as Record<string, unknown> | null,
+    previewPane: null as CapturedPreviewPaneProps | null,
+    floatingIsland: null as CapturedFloatingIslandProps | null,
   },
 }));
 
@@ -71,7 +83,7 @@ vi.mock('../components', async () => {
   return {
     ...actual,
     PreviewPane: (props: Record<string, unknown>) => {
-      capturedProps.previewPane = props;
+      capturedProps.previewPane = props as unknown as CapturedPreviewPaneProps;
       return <div data-testid="mock-preview-pane">PreviewPane Mounted</div>;
     },
     EditorHeader: (props: { onSave?: () => void; onCompile?: () => void }) => (
@@ -90,7 +102,7 @@ vi.mock('../components', async () => {
 
 vi.mock('../components/ai-assistant/FloatingIsland', () => ({
   FloatingIsland: (props: Record<string, unknown>) => {
-    capturedProps.floatingIsland = props;
+    capturedProps.floatingIsland = props as unknown as CapturedFloatingIslandProps;
     return <div data-testid="mock-floating-island">FloatingIsland Mounted</div>;
   },
 }));
@@ -135,12 +147,12 @@ describe('B3 Frontend Runtime Profile Integration Matrix (Issue #39)', () => {
 
       // 验证 PreviewPane 接收到的 preset 准确对应 antdPreset
       expect(capturedProps.previewPane).not.toBeNull();
-      expect(capturedProps.previewPane.preset).toBe(antdPreset);
-      expect(capturedProps.previewPane.preset.runtime).toBe(antdPreset.runtime);
+      expect(capturedProps.previewPane!.preset).toBe(antdPreset);
+      expect(capturedProps.previewPane!.preset.runtime).toBe(antdPreset.runtime);
 
       // 验证 FloatingIsland 接收到相同的 preset
       expect(capturedProps.floatingIsland).not.toBeNull();
-      expect(capturedProps.floatingIsland.preset).toBe(antdPreset);
+      expect(capturedProps.floatingIsland!.preset).toBe(antdPreset);
 
       // 错误提示未渲染
       expect(screen.queryByTestId('page-load-error')).toBeNull();
@@ -185,7 +197,7 @@ describe('B3 Frontend Runtime Profile Integration Matrix (Issue #39)', () => {
       // 等待 page-b 加载完成
       await waitFor(() => {
         expect(screen.getByTestId('mock-preview-pane')).toBeInTheDocument();
-        expect(capturedProps.previewPane.schema.rootId).toBe('root-b');
+        expect(capturedProps.previewPane!.schema.rootId).toBe('root-b');
       });
 
       // 此时延迟的 page-a 响应终于返回
@@ -198,7 +210,7 @@ describe('B3 Frontend Runtime Profile Integration Matrix (Issue #39)', () => {
       });
 
       // 验证：迟到的 page-a 响应不会覆盖 page-b
-      expect(capturedProps.previewPane.schema.rootId).toBe('root-b');
+      expect(capturedProps.previewPane!.schema.rootId).toBe('root-b');
     });
   });
 
