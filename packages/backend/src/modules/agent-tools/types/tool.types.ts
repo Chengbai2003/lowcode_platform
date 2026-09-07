@@ -1,6 +1,10 @@
 import { BackendComponentMeta } from '../../schema-context/component-metadata/component-meta.types';
 import { FocusContextResult } from '../../schema-context/types/focus-context.types';
-import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  PageSchema,
+  ComponentNode,
+  type RuntimeCompatibility,
+} from '@lowcode-platform/schema-contract';
 import { EditorPatchOperation } from './editor-patch.types';
 
 export type ToolVisibility = 'agent' | 'internal';
@@ -23,6 +27,7 @@ export interface ToolExecutionContext {
   accumulatedPatch: EditorPatchOperation[];
   warnings: string[];
   traceId: string;
+  readonly runtimeCompatibility: RuntimeCompatibility;
 }
 
 export interface ToolExecutionResult {

@@ -4,7 +4,10 @@ export { SchemaResolverService } from './schema-resolver.service';
 export { SchemaSlicerService } from './schema-slicer.service';
 export { NodeLocatorService } from './node-locator.service';
 export { CollectionTargetResolverService } from './collection-target-resolver.service';
-export { ComponentMetaRegistry } from './component-metadata/component-meta.registry';
+export {
+  ComponentMetaRegistry,
+  BUILTIN_ANTD_COMPONENT_META_REGISTRY,
+} from './component-metadata/component-meta.registry';
 export type { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
 export type {
   FocusContext,

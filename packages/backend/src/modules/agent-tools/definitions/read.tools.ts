@@ -4,6 +4,7 @@ import { ComponentMetaRegistry } from '../../schema-context/component-metadata/c
 import { ContextAssemblerService } from '../../schema-context/context-assembler.service';
 import { ToolDefinition } from '../types/tool.types';
 import { asOptionalString, createObjectSchema } from '../tool-input.coerce';
+import { DEPLOYMENT_RUNTIME_PROFILE_REGISTRY } from '../../runtime-profile/deployment-runtime-profile-registry';
 
 export interface ReadToolsDeps {
   contextAssembler: ContextAssemblerService;
@@ -77,10 +78,13 @@ export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
         type: { type: 'string', description: '组件类型。为空时返回全部组件元数据。' },
       }),
       visibility: 'agent',
-      execute: async (input) => {
+      execute: async (input, context) => {
         const type = asOptionalString(input.type);
-        if (type) return { data: { component: metaRegistry.resolve(type) } };
-        return { data: { components: metaRegistry.getAll() } };
+        const registry = context?.runtimeCompatibility
+          ? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveComponentMeta(context.runtimeCompatibility)
+          : metaRegistry;
+        if (type) return { data: { component: registry.resolve(type) } };
+        return { data: { components: registry.getAll() } };
       },
     },
     {
@@ -105,12 +109,16 @@ export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
             traceId: context.traceId,
           });
         }
+        const registry = context?.runtimeCompatibility
+          ? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveComponentMeta(context.runtimeCompatibility)
+          : metaRegistry;
         return {
           data: collectionTargetResolver.resolve({
             rootId,
             instruction: asOptionalString(input.instruction) ?? '',
             targetType: asOptionalString(input.targetType) ?? undefined,
             schema: context.workingSchema,
+            metaRegistry: registry,
           }),
         };
       },

@@ -3,18 +3,22 @@
  * 处理 Schema 编译相关业务逻辑
  */
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/common';
 import { validatePageSchemaValue } from '@lowcode-platform/schema-contract';
 import { CompileRequestDto } from './dto/compile-request.dto';
 import { compileToCode, formatCode } from './generator';
 import { resolveTrustedCompilerBindings } from './preset/trustedCompilerPresetResolver';
 import { PageSchemaService } from '../page-schema/page-schema.service';
+import { DeploymentRuntimeProfileRegistry } from '../runtime-profile/deployment-runtime-profile-registry';
 
 @Injectable()
 export class CompilerService {
   private readonly logger = new Logger(CompilerService.name);
 
-  constructor(private readonly pageSchemaService: PageSchemaService) {}
+  constructor(
+    private readonly pageSchemaService: PageSchemaService,
+    @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
+  ) {}
 
   /**
    * 编译 Schema 为 React 代码
@@ -44,7 +48,10 @@ export class CompilerService {
       dto.options.pageId,
       dto.options.pageVersion,
     );
-    const trustedBindings = resolveTrustedCompilerBindings(page.runtimeCompatibility);
+    const trustedBindings = resolveTrustedCompilerBindings(
+      page.runtimeCompatibility,
+      this.deploymentRegistry,
+    );
 
     try {
       // 3. 执行代码生成流水线

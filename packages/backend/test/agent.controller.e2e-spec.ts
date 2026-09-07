@@ -31,6 +31,7 @@ import { CollectionTargetResolverService } from '../src/modules/schema-context/c
 import { ComponentMetaRegistry } from '../src/modules/schema-context/component-metadata/component-meta.registry';
 import { PageSchemaService } from '../src/modules/page-schema/page-schema.service';
 import { AgentScopeConfirmationService } from '../src/modules/agent/agent-scope-confirmation.service';
+import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 
 function createBatchSchema() {
   return {
@@ -83,6 +84,7 @@ describe('AgentController (e2e)', () => {
       pageVersion: 4,
       snapshotId: 'page-1-v4',
       savedAt: '2026-03-20T00:00:00.000Z',
+      runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
       schema: {
         schemaVersion: 0,
         rootId: 'root',

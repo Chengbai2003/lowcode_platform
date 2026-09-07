@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { BackendComponentMeta } from './component-meta.types';
 import { ALIASES, REGISTRY } from './component-manifest';
 
@@ -13,9 +13,15 @@ import { ALIASES, REGISTRY } from './component-manifest';
 @Injectable()
 export class ComponentMetaRegistry {
   private readonly registry: ReadonlyMap<string, BackendComponentMeta>;
+  private readonly aliases: ReadonlyMap<string, string>;
 
-  constructor() {
-    this.registry = new Map(REGISTRY.map((meta) => [meta.type, meta]));
+  constructor(
+    @Optional() registryData?: readonly BackendComponentMeta[],
+    @Optional() aliasesData?: ReadonlyMap<string, string>,
+  ) {
+    this.registry = new Map((registryData ?? REGISTRY).map((meta) => [meta.type, meta]));
+    this.aliases = aliasesData ?? ALIASES;
+    Object.freeze(this);
   }
 
   get(type: string): BackendComponentMeta | undefined {
@@ -23,7 +29,7 @@ export class ComponentMetaRegistry {
   }
 
   resolve(type: string): BackendComponentMeta | undefined {
-    const resolved = ALIASES.get(type) ?? type;
+    const resolved = this.aliases.get(type) ?? type;
     return this.registry.get(resolved);
   }
 
@@ -47,3 +53,5 @@ export class ComponentMetaRegistry {
     return [...(this.resolve(type)?.textProps ?? [])];
   }
 }
+
+export const BUILTIN_ANTD_COMPONENT_META_REGISTRY = new ComponentMetaRegistry();

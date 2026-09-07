@@ -25,6 +25,7 @@ function executeWriteTools(
     context.workingSchema,
     operations,
     context.traceId,
+    context.runtimeCompatibility,
   );
   const normalizedOperations = canonicalizePatchOperations(operations, nextSchema);
   return { patchDelta: normalizedOperations, updatedWorkingSchema: nextSchema };

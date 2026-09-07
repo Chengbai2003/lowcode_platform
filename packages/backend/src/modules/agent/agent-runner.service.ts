@@ -11,6 +11,7 @@ import {
   CollectionTargetResolverService,
   ComponentMetaRegistry,
 } from '../schema-context';
+import { DEPLOYMENT_RUNTIME_PROFILE_REGISTRY } from '../runtime-profile/deployment-runtime-profile-registry';
 import type {
   ComponentNode,
   PageSchema,
@@ -54,12 +55,10 @@ import {
 } from './agent-batch.planner';
 import {
   AgentCollectionScope,
-  AgentClarificationCandidate,
   AgentEditClarificationResponse,
   AgentEditIntentConfirmationResponse,
   AgentEditPatchResponse,
   AgentEditScopeConfirmationResponse,
-  AgentIntentConfirmationOption,
   AgentPatchScopeSummary,
   AgentRouteDecision,
 } from './types/agent-edit.types';
@@ -536,7 +535,7 @@ export class AgentRunnerService {
     const clarificationCandidates = buildClarificationCandidates(
       candidates.slice(0, CLARIFICATION_CANDIDATE_LIMIT),
       initialResult.schema,
-      this.componentMetaRegistry,
+      this.resolveMetaRegistry(context),
     );
 
     return {
@@ -927,7 +926,8 @@ export class AgentRunnerService {
     const focusNode = focusContextResult.context.focusNode;
     const textUpdate = this.extractSimpleTextUpdate(dto.instruction);
     if (textUpdate) {
-      const textProp = this.componentMetaRegistry.getTextProps(focusNode.type)[0];
+      const metaRegistry = this.resolveMetaRegistry(context);
+      const textProp = metaRegistry.getTextProps(focusNode.type)[0];
       if (textProp) {
         await reporter.emitStatus({
           stage: 'calling_tool',
@@ -1248,5 +1248,12 @@ export class AgentRunnerService {
     }
 
     return Array.from(leftSet).every((value) => rightSet.has(value));
+  }
+
+  private resolveMetaRegistry(context: ToolExecutionContext): ComponentMetaRegistry {
+    if (context.runtimeCompatibility) {
+      return DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveComponentMeta(context.runtimeCompatibility);
+    }
+    return this.componentMetaRegistry;
   }
 }

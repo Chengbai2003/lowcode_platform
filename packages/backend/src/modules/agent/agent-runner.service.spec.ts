@@ -22,6 +22,7 @@ import { AgentRunnerService, isPageLogicInstruction } from './agent-runner.servi
 import { AgentService } from './agent.service';
 import { AgentSessionMemoryService } from './agent-session-memory.service';
 import { AgentTraceService } from './agent-trace.service';
+import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 
 function createBaseContext(): ToolExecutionContext {
   return {
@@ -47,6 +48,7 @@ function createBaseContext(): ToolExecutionContext {
     accumulatedPatch: [],
     warnings: [],
     traceId: 'agent-trace',
+    runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
   };
 }
 
@@ -146,6 +148,7 @@ function createBatchContext(): ToolExecutionContext {
     accumulatedPatch: [],
     warnings: [],
     traceId: 'agent-trace',
+    runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
   };
 }
 
@@ -186,6 +189,7 @@ function createMixedCollectionContext(): ToolExecutionContext {
     accumulatedPatch: [],
     warnings: [],
     traceId: 'agent-trace',
+    runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
   };
 }
 

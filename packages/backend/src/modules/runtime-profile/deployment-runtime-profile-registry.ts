@@ -4,6 +4,10 @@ import type { RuntimeCompatibility } from '@lowcode-platform/schema-contract';
 import { BUILTIN_ANTD_SYSTEM_RUNTIME_PROFILE } from '../page-schema/runtime-profiles';
 import { SystemRuntimeProfileRegistry } from '../page-schema/system-runtime-profile-registry';
 import type { SystemRuntimeProfile } from '../page-schema/system-runtime-profile';
+import {
+  ComponentMetaRegistry,
+  BUILTIN_ANTD_COMPONENT_META_REGISTRY,
+} from '../schema-context/component-metadata/component-meta.registry';
 
 export interface CompilerBindings {
   readonly defaultLibrary?: string;
@@ -107,10 +111,12 @@ function sealCompilerBindings(bindingId: string, value: unknown): CompilerBindin
 export class DeploymentRuntimeProfileRegistry {
   private readonly profileRegistry: SystemRuntimeProfileRegistry;
   private readonly compilerBindings: Readonly<Record<string, CompilerBindings>>;
+  private readonly componentMetas: Readonly<Record<string, ComponentMetaRegistry>>;
 
   public constructor(
     profiles: readonly SystemRuntimeProfile[],
     compilerBindings: Readonly<Record<string, CompilerBindings>>,
+    componentMetas?: Readonly<Record<string, ComponentMetaRegistry>>,
   ) {
     const bindingIds = Object.keys(compilerBindings);
     if (bindingIds.length === 0) invalid('at least one compiler binding is required');
@@ -134,6 +140,19 @@ export class DeploymentRuntimeProfileRegistry {
 
     this.profileRegistry = new SystemRuntimeProfileRegistry(profiles);
     this.compilerBindings = sealedBindings;
+
+    const metas = componentMetas ?? Object.create(null);
+    const sealedMetas: Record<string, ComponentMetaRegistry> = Object.create(null);
+    for (const [key, val] of Object.entries(metas)) {
+      if (val instanceof ComponentMetaRegistry) {
+        sealedMetas[key] = val;
+      }
+    }
+    if (!sealedMetas['builtin-antd']) {
+      sealedMetas['builtin-antd'] = BUILTIN_ANTD_COMPONENT_META_REGISTRY;
+    }
+    this.componentMetas = Object.freeze(sealedMetas);
+
     Object.freeze(this);
   }
 
@@ -153,11 +172,27 @@ export class DeploymentRuntimeProfileRegistry {
     }
     return compilerBindings;
   }
+
+  public resolveComponentMeta(runtimeCompatibility: RuntimeCompatibility): ComponentMetaRegistry {
+    this.resolveSnapshot(runtimeCompatibility);
+    const keyWithVersion = `${runtimeCompatibility?.componentPresetId}@${runtimeCompatibility?.componentPresetVersion}`;
+    const meta =
+      this.componentMetas[keyWithVersion] ??
+      this.componentMetas[runtimeCompatibility?.componentPresetId];
+    if (!meta) {
+      invalid(`unknown componentMeta for preset=${runtimeCompatibility?.componentPresetId}`);
+    }
+    return meta;
+  }
 }
 
 export const DEPLOYMENT_RUNTIME_PROFILE_REGISTRY = new DeploymentRuntimeProfileRegistry(
   [BUILTIN_ANTD_SYSTEM_RUNTIME_PROFILE],
   Object.freeze({
     'builtin-antd-compiler-bindings-0.1.0': antdCompilerBindings,
+  }),
+  Object.freeze({
+    'builtin-antd': BUILTIN_ANTD_COMPONENT_META_REGISTRY,
+    'builtin-antd@0.1.0': BUILTIN_ANTD_COMPONENT_META_REGISTRY,
   }),
 );
