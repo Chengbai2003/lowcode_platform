@@ -131,6 +131,7 @@ parse raw JSON
 - Props 不符合 Manifest 或包含危险值
 - 表达式包含不支持 AST、危险属性或超出预算
 - ActionList 结构非法、动作超出预算或表达式包含危险路径
+- 页面使用的 M1a 能力在任一消费面缺失、不支持、revision 不匹配或可信 manifest 配置非法
 
 未来遇到高于当前实现的正式 Schema 版本时，可以提供“原始 JSON 只读查看”，但不得渲染、执行、编译或再次保存。
 
@@ -157,5 +158,7 @@ Contract fixture 必须被以下消费面共同使用：
 ---
 
 ## 实施状态（2026-09）
+
+M1a-3 已完成（PR #58/#59）：`requireSupportedPageSchema` 与 `assertSupportedPageSchema` 在结构校验成功后统一执行能力门禁；`createCanonicalPageSchema` 与底层 parse 仍仅负责结构校验。生产使用构建随附的不可变能力 manifest，业务入口不能覆盖矩阵。CI 通过 `pnpm check:m1a-capabilities` 运行真实窄测试并匹配版本化证据，缺少必要证据或语料摘要不匹配即失败；运行时不读取测试报告。该门禁不替代部署 Profile 的精确版本与生命周期校验。验收记录见 [M1a 实施计划](../plans/m1a-declarative-logic-implementation.md#最终验收记录2026-09-07)；声明与会话边界继续遵循 [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) 与 [ADR-0008](../adr/0008-named-action-flow-and-staged-activation.md)。
 
 M0-1 已完成：Contract 为唯一 Schema 类型与校验来源（PR #20/#22/#23/#24，Issue #16）。消费面（Editor、Renderer、Compiler、Agent、SchemaContext、Repository）直接导入 Contract；Renderer 挂载边界、Repository 磁盘/写入边界与 Compiler 入口使用 `requireSupportedPageSchema` 做 fail-close 校验并只消费返回值；渲染树内部使用 canonical 的工作副本（reactive 运行时可写，深冻结语义由 M0-4 RuntimeSession 承接），持久化对象保持深冻结；`pnpm check:architecture` 强制架构边界。

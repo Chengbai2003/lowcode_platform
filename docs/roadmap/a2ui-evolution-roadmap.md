@@ -1,8 +1,8 @@
 # A2UI 平台演进路线图
 
 > Status: Active
-> Last Updated: 2026-09-04
-> Current Stage: M1 Foundation / M1a
+> Last Updated: 2026-09-07
+> Current Stage: M1 Foundation（进行中）/ M1a（已完成）
 > Execution Source of Truth: GitHub Issues（创建后在本文登记链接）
 
 ## 文档目的
@@ -115,7 +115,9 @@ M1F-2 只阻断外部 Preset 正式开放，不是 M1a-1 State & Computed 的技
 | ------------------------------------------------------------------------------------ | ------ | ------------------------------------------------------------------------------ | ----------- |
 | [M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) | P0     | 引入 `logic.states`、安全 computed、依赖 DAG 与循环检测                        | Completed   |
 | [M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46)       | P0     | 用具名 Flow 替代内联 ActionList，定义错误、取消与预算语义                      | Completed   |
-| [M1a-3 一致性套件](https://github.com/Chengbai2003/lowcode_platform/issues/47)       | P0     | 验证 Contract、Validator、Editor/Agent、Renderer、Compiler、Storage 六个消费面 | In Progress |
+| [M1a-3 一致性套件](https://github.com/Chengbai2003/lowcode_platform/issues/47)       | P0     | 验证 Contract、Validator、Editor/Agent、Renderer、Compiler、Storage 六个消费面 | Completed |
+
+M1a 已随 PR #59 完成；合并提交 `d505a8e` 的 [main CI](https://github.com/Chengbai2003/lowcode_platform/actions/runs/34040129184) 通过。最终证据与范围见 [M1a 实施计划](../plans/m1a-declarative-logic-implementation.md#最终验收记录2026-09-07)。M1F #38/#39 继续独立推进，M1b 仍为 Planned。
 
 M1a 发布门槛：
 

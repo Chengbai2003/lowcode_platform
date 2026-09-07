@@ -2,7 +2,7 @@
 
 > **Issues**：[#45 M1a-1 State & Computed](https://github.com/Chengbai2003/lowcode_platform/issues/45) · [#46 M1a-2 ActionFlow](https://github.com/Chengbai2003/lowcode_platform/issues/46) · [#47 M1a-3 六消费面一致性](https://github.com/Chengbai2003/lowcode_platform/issues/47)
 > **架构基线**：[ADR-0003](../adr/0003-isolated-renderer-runtime-session.md) · [ADR-0007](../adr/0007-separate-page-logic-declarations-and-session-values.md) · [Schema Contract](../architecture/schema-contract.md)
-> **当前阶段**：`M1a-3 / C3b 进行中（In Progress：真实入口与 CI 证据门禁；C1/C2.1 [#54]/C2.2 [#55]/C2.3 [#57]/C3a [#58] 已完成，剩余 C3b 待实施与验收，#47 保持 Open）` | **优先级**：`P0`
+> **当前阶段**：`M1a 已完成（C3b / PR #59 已合并，合并后 main CI 通过；2026-09-07 验收收尾）` | **优先级**：`P0`
 
 ## 目标与边界
 
@@ -26,9 +26,9 @@ S3 Computed Runtime + Compiler 等价实现 (Done)
   ↓
 S4 页面逻辑 Authoring 与结构化诊断闭环 (Done)
   ↓
-M1a-2 具名 ActionFlow + 错误 / 取消 / 预算语义
+M1a-2 具名 ActionFlow + 错误 / 取消 / 预算语义 (Done)
   ↓
-M1a-3 六消费面固定语料与解释/编译一致性门禁
+M1a-3 六消费面固定语料与解释/编译一致性门禁 (Done)
 ```
 
 ### S1：Page State 纵向闭环（已完成）
@@ -72,14 +72,22 @@ S1 仅对声明式 Page State 承诺顶层 Logic Key；声明存在时嵌套 Sta
   - **F2 已完成**：实现 Renderer 内部 ActionFlow Runtime 语义（默认遇错停止、flow 级 `onError`、AbortSignal 全链路贯穿、session dispose 后写回阻断、结构化诊断 trace、多维运行时预算边界校验与矩阵测试守护）；
   - **F3 已完成（PR #52 已合并）**：生产 `PageSchema.logic.flows`、组件事件 `runFlow`、Renderer/Compiler 执行、Editor/Agent authoring 与 Repository 往返已完整贯通并合并主线；保留 Legacy ActionList，不做自动迁移。
 
-### M1a-3：六消费面一致性门禁（#47 进行中）
+### M1a-3：六消费面一致性门禁（已完成）
 
 - **C1 已完成（Completed）**：建立唯一统一版本化语料 `test-fixtures/m1a-page-logic-conformance.json`，合并并替代旧的独立语料，统一覆盖 State、Computed、ActionFlow、Legacy inline ActionList、取消写回守卫、边界超限与负向诊断用例。迁移 Contract/Renderer/Compiler 现有测试对旧语料的依赖并彻底移除旧文件。
 - **C2.1 已完成（Completed，PR #54）**：跨表面 Validator 一致性测试。所有测试直接读取统一语料，参数化遍历全部 9 个 negativeCases，分别通过 Backend、Renderer、Frontend 和 Agent 的真实校验入口执行，断言 Contract issue 的 expectedCode 与 expectedPath 完全一致；主 schema 返回 canonical 深冻结结果并与 expected.canonicalLogic 一致；legacySchema 继续被所有适用入口接受。
 - **C2.2 已完成（Completed，PR #55）**：Authoring 与存储往返一致性测试。使用唯一语料验证 Editor 整页 JSON 导入导出、Frontend 组件 Patch 保留 logic、replacePageLogic 声明替换并保留组件事件、Editor Undo/Redo 完整恢复、Agent Patch Preview 返回 canonical 且不修改输入、Repository 历史与磁盘重新加载完整保留声明与 CAS 守卫、Legacy 链路无 logic 兼容。
 - **C2.3 已完成（Completed，PR #57）**：Renderer 与 Compiler 解释/编译对等性测试，固定语料验证 P1–P10（初始状态、事件变更、Flow 链路、onError 恢复、未处理失败诊断、延迟取消与写回阻断、双实例隔离、Legacy 兼容、Computed edge 语义及五项宿主预算对等）。
 - **C3a 已完成（Completed，PR #58）**：纯能力模型与公共门禁。在 schema-contract 中建立纯数据 manifest、纯能力求值器 evaluatePageSchemaCapabilities、能力探测器 detectPageSchemaCapabilities，并将公共入口 requireSupportedPageSchema / assertSupportedPageSchema 与能力门禁对齐，保证所有六面精确 supported 且 revision=1 时放行，未知/不支持/版本不匹配/配置非法均拒绝。
-- **C3b 进行中（In Progress）**：真实入口、版本匹配与 CI 证据门禁。增加入口审计表、10 处关键入口真实拒绝与副作用隔离证据、版本化证据清单 `test-fixtures/m1a-capability-evidence.json`、Node 标准库 runner + validator `scripts/check-m1a-capabilities.mjs` 以及 CI 校验接线；注意：#47 保持 Open。
+- **C3b 已完成（Completed，PR #59）**：真实入口、版本匹配与 CI 证据门禁。覆盖保存、Repository 写入/新实例磁盘加载、Agent draft/Patch 结果、Editor 实际保存处理、Renderer 挂载、Compiler 服务/直接生成及 Profile 拒绝证据；版本化清单 `test-fixtures/m1a-capability-evidence.json` 与 `pnpm check:m1a-capabilities` 校验本次真实测试结果、必要证据完整性与语料摘要。
+
+#### 最终验收记录（2026-09-07）
+
+- PR #59 合并提交：`d505a8ed3471fabd605c75e2c338eac577d27262`；[合并后 main CI](https://github.com/Chengbai2003/lowcode_platform/actions/runs/34040129184) 全部通过。
+- 最终审查版本 `c29f1f7`：能力门禁执行 196 个断言、匹配 53 项证据；校验器自测 19 项通过。计数为本次验收记录，不是未来测试数量上限。
+- 六面证据及错误/兼容/预算语料分别由 C1、C2.1、C2.2、C2.3、C3a、C3b 闭环；必要 Storage/Profile 证据删除、runner 失败或报告缺失都会拒绝验收。
+- 范围说明：“发布前门禁”覆盖当前编译/导出入口，不代表新增发布服务；磁盘恢复证据是 Repository 新实例重新加载，不宣称独立 OS 进程重启测试。
+- ADR-0007/0008 的声明与会话分离、具名 Flow 决策保持不变；本次仅同步实施状态，不重写历史决策。M1F、M1b、M1.5、M2 不因 M1a 完成而自动完成。
 
 ## 阶段门槛
 

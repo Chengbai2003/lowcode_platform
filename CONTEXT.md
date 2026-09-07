@@ -5,7 +5,7 @@
 ## Language
 
 **Page Logic**:
-随 `PageSchema` 持久化的页面逻辑声明集合；当前承载 State Declaration 与 Computed Declaration，后续承载 ActionFlow 声明。
+随 `PageSchema` 持久化的页面逻辑声明集合，承载 State Declaration、Computed Declaration 与 ActionFlow 声明。
 _Avoid_: Runtime data, page script
 
 **State Declaration**:
@@ -33,7 +33,7 @@ Page Logic 中具名、声明式且有明确错误和取消语义的动作流程
 _Avoid_: Script, inline handler
 
 **Consumer Surface**:
-必须一致理解同一 PageSchema 字段的六类边界：Contract/Validator、Editor/Agent、Renderer、Compiler、Storage 和一致性测试。
+必须一致理解同一 PageSchema 字段的六类边界：Contract、Validator、Editor/Agent、Renderer、Compiler 和 Storage；一致性测试验证这些边界，不是额外消费面。
 _Avoid_: Caller, integration point
 
 **Capability Gate**:
