@@ -96,7 +96,7 @@ export function usePageLifecycle({
           typeof error === 'object' && error ? (error as { status?: number }).status : undefined;
         if (status === 404) {
           try {
-            const bootstrapResult = await pageSchemaApi.savePageSchema(pageIdParam, initial);
+            await pageSchemaApi.savePageSchema(pageIdParam, initial);
             if (cancelled) return;
             const curGen = useEditorStore.getState().generation;
             const curPageId = useEditorStore.getState().currentPageId;
@@ -108,12 +108,40 @@ export function usePageLifecycle({
             ) {
               return;
             }
-            setSchema(initial);
-            setPageVersion(bootstrapResult.pageVersion);
-            setPreset?.(antdPreset);
+            // 重新读取服务端已保存页面，使用服务端绑定的 runtimeCompatibility 解析 Preset，
+            // 避免 404 初始化成功后硬编码 antdPreset 导致保存/预览身份不一致。
+            const verified = await pageSchemaApi.getPageSchema(pageIdParam);
+            if (cancelled) return;
+            const verifyGen = useEditorStore.getState().generation;
+            const verifyPageId = useEditorStore.getState().currentPageId;
+            const verifySessionId = useEditorStore.getState().documentSessionId;
+            if (
+              verifyGen !== requestGeneration ||
+              verifyPageId !== requestPageId ||
+              verifySessionId !== requestDocumentSessionId
+            ) {
+              return;
+            }
+            const resolvedPreset = BUILTIN_RENDERER_PRESET_CATALOG.resolve(
+              verified.runtimeCompatibility,
+            );
+            setSchema(verified.schema);
+            setPageVersion(verified.pageVersion);
+            setPreset?.(resolvedPreset);
             setPageLoadError?.(null);
             message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
           } catch (bootstrapError) {
+            if (cancelled) return;
+            const failGen = useEditorStore.getState().generation;
+            const failPageId = useEditorStore.getState().currentPageId;
+            const failSessionId = useEditorStore.getState().documentSessionId;
+            if (
+              failGen !== requestGeneration ||
+              failPageId !== requestPageId ||
+              failSessionId !== requestDocumentSessionId
+            ) {
+              return;
+            }
             const errorMessage =
               bootstrapError instanceof Error ? bootstrapError.message : '页面初始化失败';
             onErrorRef.current?.(errorMessage);

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import {
   PageSchema,
@@ -20,8 +20,12 @@ export class PatchValidationService {
   constructor(
     private readonly metaRegistry: ComponentMetaRegistry,
     private readonly patchApplyService: PatchApplyService,
-    private readonly deploymentRegistry: DeploymentRuntimeProfileRegistry = DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+    @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
   ) {}
+
+  private get runtimeProfileRegistry(): DeploymentRuntimeProfileRegistry {
+    return this.deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+  }
 
   validatePatchShape(patch: readonly EditorPatchOperation[], traceId: string) {
     for (const operation of patch) {
@@ -206,7 +210,7 @@ export class PatchValidationService {
     }
 
     const metaRegistry = runtimeCompatibility
-      ? this.deploymentRegistry.resolveComponentMeta(runtimeCompatibility)
+      ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
       : this.metaRegistry;
 
     if (!metaRegistry.resolve(type)) {

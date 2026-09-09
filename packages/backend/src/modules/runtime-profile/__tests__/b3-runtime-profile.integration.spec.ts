@@ -17,6 +17,10 @@ import { SchemaResolverService } from '../../schema-context/schema-resolver.serv
 import { CompilerService } from '../../compiler/compiler.service';
 import { ToolExecutionService } from '../../agent-tools/tool-execution.service';
 import { AgentToolException } from '../../agent-tools/agent-tool.exception';
+import { PatchApplyService } from '../../agent-tools/patch-apply.service';
+import { PatchAutoFixService } from '../../agent-tools/patch-auto-fix.service';
+import { PatchValidationService } from '../../agent-tools/patch-validation.service';
+import { createInternalDefinitions } from '../../agent-tools/definitions/internal.tools';
 import type { ContextAssemblerService } from '../../schema-context/context-assembler.service';
 import type { ToolRegistryService } from '../../agent-tools/tool-registry.service';
 
@@ -538,6 +542,156 @@ describe('B3 Runtime Profile Integration Matrix (Issue #39)', () => {
 
       expect(codeB.code).toContain('lib-b');
       expect(codeB.code).not.toContain('lib-a');
+    });
+  });
+
+  describe('Scenario 4b: Meta 精确版本，缺失即拒绝', () => {
+    it('rejects resolveComponentMeta when only unversioned preset key is registered', () => {
+      const metaFallback = new ComponentMetaRegistry(
+        [
+          {
+            type: 'Button',
+            displayName: '默认按钮',
+            isContainer: false,
+            textProps: ['children'],
+            category: 'other',
+            properties: [],
+          },
+        ],
+        new Map([['BtnDefault', 'Button']]),
+      );
+
+      const registry = new DeploymentRuntimeProfileRegistry(
+        [
+          {
+            systemId: 'default',
+            componentPresetId: 'builtin-antd',
+            componentPresetVersion: '9.9.9',
+            rendererVersion: '1.0.0',
+            compilerBindingId: 'bindings-a',
+            status: 'active',
+          },
+        ],
+        { 'bindings-a': bindingsA },
+        {
+          // 只注册未版本化键，模拟历史 fallback 来源
+          'builtin-antd': metaFallback,
+        },
+      );
+
+      expect(() =>
+        registry.resolveComponentMeta({
+          componentPresetId: 'builtin-antd',
+          componentPresetVersion: '9.9.9',
+          rendererVersion: '1.0.0',
+        }),
+      ).toThrow(BadRequestException);
+
+      // 精确版本键存在时允许
+      const exactRegistry = new DeploymentRuntimeProfileRegistry(
+        [
+          {
+            systemId: 'default',
+            componentPresetId: 'builtin-antd',
+            componentPresetVersion: '9.9.9',
+            rendererVersion: '1.0.0',
+            compilerBindingId: 'bindings-a',
+            status: 'active',
+          },
+        ],
+        { 'bindings-a': bindingsA },
+        {
+          'builtin-antd@9.9.9': metaFallback,
+        },
+      );
+      expect(
+        exactRegistry
+          .resolveComponentMeta({
+            componentPresetId: 'builtin-antd',
+            componentPresetVersion: '9.9.9',
+            rendererVersion: '1.0.0',
+          })
+          .resolve('BtnDefault'),
+      ).toBeDefined();
+    });
+  });
+
+  describe('Scenario 3b: preview_patch 走真实工具链并使用 context.runtimeCompatibility', () => {
+    function createInternalToolPreview(customRegistry: DeploymentRuntimeProfileRegistry) {
+      const applyService = new PatchApplyService();
+      const validationService = new PatchValidationService(
+        new ComponentMetaRegistry(),
+        applyService,
+        customRegistry,
+      );
+      const autoFixService = new PatchAutoFixService();
+      const tools = createInternalDefinitions({
+        patchAutoFixService: autoFixService,
+        patchValidationService: validationService,
+      });
+      const previewTool = tools.find((t) => t.name === 'preview_patch');
+      expect(previewTool).toBeDefined();
+      return previewTool!;
+    }
+
+    it('accepts BtnA insert under profile A and rejects it under profile B', async () => {
+      const previewTool = createInternalToolPreview(customDeploymentRegistry);
+
+      const baseSchema = {
+        schemaVersion: 0,
+        rootId: 'root',
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: [] },
+        },
+      } as unknown as PageSchema;
+
+      const patch = [
+        {
+          op: 'insertComponent',
+          parentId: 'root',
+          component: { id: 'btn-a-1', type: 'BtnA' },
+        },
+      ];
+
+      const contextA = {
+        workingSchema: baseSchema,
+        accumulatedPatch: [],
+        warnings: [],
+        traceId: 'trace-preview-a',
+        runtimeCompatibility: {
+          componentPresetId: 'preset-a',
+          componentPresetVersion: '1.0.0',
+          rendererVersion: '1.0.0',
+        },
+      };
+
+      const resultA = await previewTool.execute({ patch }, contextA as never);
+      expect(resultA.updatedWorkingSchema).toBeDefined();
+      expect((resultA.updatedWorkingSchema as PageSchema).components['btn-a-1']?.type).toBe('BtnA');
+
+      const contextB = {
+        workingSchema: baseSchema,
+        accumulatedPatch: [],
+        warnings: [],
+        traceId: 'trace-preview-b',
+        runtimeCompatibility: {
+          componentPresetId: 'preset-b',
+          componentPresetVersion: '2.0.0',
+          rendererVersion: '1.0.0',
+        },
+      };
+
+      await expect(previewTool.execute({ patch }, contextB as never)).rejects.toThrow(
+        AgentToolException,
+      );
+      try {
+        await previewTool.execute({ patch }, contextB as never);
+      } catch (err: unknown) {
+        expect((err as AgentToolException).getResponse()).toMatchObject({
+          code: 'PATCH_INVALID',
+          message: expect.stringContaining('BtnA'),
+        });
+      }
     });
   });
 });

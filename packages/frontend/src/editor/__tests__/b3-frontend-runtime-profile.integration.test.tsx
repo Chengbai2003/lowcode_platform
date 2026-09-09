@@ -256,4 +256,120 @@ describe('B3 Frontend Runtime Profile Integration Matrix (Issue #39)', () => {
       expect(messageMock.error).toHaveBeenCalledWith('当前页面运行时配置存在错误，禁止编译');
     });
   });
+
+  describe('Scenario 12: 404 初始化后通过服务端绑定解析 Preset', () => {
+    it('re-fetches the saved page and mounts PreviewPane with catalog-resolved preset (not hardcoded antdPreset)', async () => {
+      pageSchemaApiMock.getPageSchema
+        .mockRejectedValueOnce(Object.assign(new Error('Page not found'), { status: 404 }))
+        .mockResolvedValueOnce({
+          schema: VALID_SCHEMA,
+          pageVersion: 1,
+          runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
+        });
+      pageSchemaApiMock.savePageSchema.mockResolvedValueOnce({
+        pageId: 'page-bootstrap',
+        pageVersion: 1,
+        snapshotId: 'snap-1',
+        savedAt: new Date().toISOString(),
+      });
+
+      render(<LowcodeEditor pageId="page-bootstrap" />);
+
+      await waitFor(() => {
+        expect(pageSchemaApiMock.savePageSchema).toHaveBeenCalledWith(
+          'page-bootstrap',
+          expect.anything(),
+        );
+      });
+
+      await waitFor(() => {
+        expect(pageSchemaApiMock.getPageSchema).toHaveBeenCalledTimes(2);
+        expect(screen.getByTestId('mock-preview-pane')).toBeInTheDocument();
+      });
+
+      // 第二次读取使用服务端返回的 runtimeCompatibility 走 Catalog，而不是 setPreset(antdPreset) 硬编码
+      expect(pageSchemaApiMock.getPageSchema).toHaveBeenNthCalledWith(2, 'page-bootstrap');
+      expect(capturedProps.previewPane!.preset).toBe(antdPreset);
+      expect(capturedProps.previewPane!.schema.rootId).toBe('root');
+    });
+  });
+
+  describe('Scenario 13: 旧页面初始化失败不污染新页面', () => {
+    it('does not set pageLoadError for Page B when Page A bootstrap save fails late', async () => {
+      let rejectBootstrapA!: (err: unknown) => void;
+      const bootstrapPromiseA = new Promise((_, reject) => {
+        rejectBootstrapA = reject;
+      });
+
+      pageSchemaApiMock.getPageSchema.mockImplementation((id: string) => {
+        if (id === 'page-a') {
+          return Promise.reject(Object.assign(new Error('Page not found'), { status: 404 }));
+        }
+        if (id === 'page-b') {
+          return Promise.resolve({
+            schema: VALID_SCHEMA,
+            pageVersion: 3,
+            runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
+          });
+        }
+        return Promise.reject(new Error('unknown page'));
+      });
+
+      pageSchemaApiMock.savePageSchema.mockImplementation((id: string) => {
+        if (id === 'page-a') {
+          return bootstrapPromiseA;
+        }
+        return Promise.resolve({
+          pageId: id,
+          pageVersion: 1,
+          snapshotId: 'snap',
+          savedAt: new Date().toISOString(),
+        });
+      });
+
+      const { rerender } = render(<LowcodeEditor pageId="page-a" />);
+      await waitFor(() => {
+        expect(pageSchemaApiMock.savePageSchema).toHaveBeenCalledWith('page-a', expect.anything());
+      });
+
+      // 切到 page-b 并完成加载
+      rerender(<LowcodeEditor pageId="page-b" />);
+      await waitFor(() => {
+        expect(screen.getByTestId('mock-preview-pane')).toBeInTheDocument();
+        expect(capturedProps.previewPane!.schema.rootId).toBe('root');
+      });
+
+      // page-a 初始化保存失败迟到返回：不得污染 page-b
+      await act(async () => {
+        rejectBootstrapA(new Error('bootstrap A failed'));
+        await Promise.resolve();
+      });
+
+      expect(screen.queryByTestId('page-load-error')).toBeNull();
+      expect(screen.getByTestId('mock-preview-pane')).toBeInTheDocument();
+    });
+  });
+
+  describe('Scenario 14: 组件白名单只使用当前页面 Preset', () => {
+    it('passes only editorPreset.runtime keys as PreviewPane allComponents (no global registry merge)', async () => {
+      pageSchemaApiMock.getPageSchema.mockResolvedValueOnce({
+        schema: VALID_SCHEMA,
+        pageVersion: 1,
+        runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
+      });
+
+      render(<LowcodeEditor pageId="page-whitelist" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mock-preview-pane')).toBeInTheDocument();
+      });
+
+      const allComponents = capturedProps.previewPane!.allComponents as Record<string, unknown>;
+      expect(Object.keys(allComponents).sort()).toEqual(Object.keys(antdPreset.runtime).sort());
+      // 不允许全局 componentRegistry 中不在 Preset 内的键混入
+      for (const key of Object.keys(allComponents)) {
+        expect(Object.prototype.hasOwnProperty.call(antdPreset.runtime, key)).toBe(true);
+      }
+    });
+  });
 });

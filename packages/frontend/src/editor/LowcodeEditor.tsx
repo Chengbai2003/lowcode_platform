@@ -10,7 +10,6 @@ import type {
   PageSchema,
 } from './types';
 import type { AIMessageActionResult } from '../types';
-import { componentRegistry } from '../components';
 import type { ComponentPreset } from '@lowcode-platform/renderer';
 import { antdPreset } from '@lowcode-platform/preset-antd';
 import {
@@ -279,18 +278,8 @@ function LowcodeEditorInner({
   // 当前激活的 Preset 是编辑器唯一的 Preview/Compiler 组件集合。
   const editorPreset = currentPreset;
 
-  // 内置组件注册表供属性面板/左侧面板使用。
-  const allComponents = useMemo(() => {
-    const rendererComponents = { ...editorPreset.runtime };
-    const componentsOnly = Object.keys(componentRegistry).reduce(
-      (acc, key) => {
-        acc[key] = componentRegistry[key].component;
-        return acc;
-      },
-      {} as Record<string, React.ComponentType<Record<string, unknown>>>,
-    );
-    return { ...rendererComponents, ...componentsOnly };
-  }, [editorPreset]);
+  // 组件白名单只使用当前页面 Preset，禁止与全局 componentRegistry 合并或被其覆盖。
+  const allComponents = useMemo(() => ({ ...editorPreset.runtime }), [editorPreset]);
 
   const { handleAISchemaUpdate, handleAIPatchApply } = useAIPatch({
     allComponents,

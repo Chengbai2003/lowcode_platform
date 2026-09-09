@@ -176,11 +176,12 @@ export class DeploymentRuntimeProfileRegistry {
   public resolveComponentMeta(runtimeCompatibility: RuntimeCompatibility): ComponentMetaRegistry {
     this.resolveSnapshot(runtimeCompatibility);
     const keyWithVersion = `${runtimeCompatibility?.componentPresetId}@${runtimeCompatibility?.componentPresetVersion}`;
-    const meta =
-      this.componentMetas[keyWithVersion] ??
-      this.componentMetas[runtimeCompatibility?.componentPresetId];
+    // 精确版本键：缺失即拒绝，禁止回退到未版本化的 Preset ID
+    const meta = this.componentMetas[keyWithVersion];
     if (!meta) {
-      invalid(`unknown componentMeta for preset=${runtimeCompatibility?.componentPresetId}`);
+      invalid(
+        `unknown componentMeta for preset=${runtimeCompatibility?.componentPresetId}@${runtimeCompatibility?.componentPresetVersion}`,
+      );
     }
     return meta;
   }
