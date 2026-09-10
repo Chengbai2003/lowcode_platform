@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, X, History, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
+import type { ComponentPreset } from '@lowcode-platform/renderer';
 import type { PageSchema } from '../../../../types';
 import { AIAssistant } from '../AIAssistant/AIAssistant';
 import type { AgentPatchApplyHandler } from '../types/ai-types';
@@ -12,6 +13,7 @@ interface FloatingIslandProps {
   pageId?: string;
   pageVersion?: number | null;
   selectedId?: string | null;
+  preset?: ComponentPreset;
   onSchemaUpdate?: (schema: PageSchema) => void;
   onPatchApply?: AgentPatchApplyHandler;
   onError?: (error: string) => void;
@@ -23,6 +25,7 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
   pageId,
   pageVersion,
   selectedId,
+  preset,
   onSchemaUpdate,
   onPatchApply,
   onError,
@@ -186,6 +189,7 @@ export const FloatingIsland: React.FC<FloatingIslandProps> = ({
             pageId={pageId}
             pageVersion={pageVersion}
             selectedId={selectedId}
+            preset={preset}
             onSchemaUpdate={onSchemaUpdate}
             onPatchApply={onPatchApply}
             onError={onError}

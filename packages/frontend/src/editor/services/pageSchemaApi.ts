@@ -1,5 +1,5 @@
 import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
-import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
+import { BUILTIN_RENDERER_PRESET_CATALOG } from '../../renderer-preset-catalog';
 import { type ApiEnvelope, unwrapApiEnvelope } from '../lib/apiResponse';
 import { fetchApp } from '../lib/httpClient';
 
@@ -22,17 +22,10 @@ export interface SavePageSchemaResponse {
 function requireSupportedRuntimeCompatibility(
   runtimeCompatibility: RuntimeCompatibility | undefined,
 ): void {
-  const expected = ANTD_RUNTIME_COMPATIBILITY;
-  if (
-    !runtimeCompatibility ||
-    runtimeCompatibility.componentPresetId !== expected.componentPresetId ||
-    runtimeCompatibility.componentPresetVersion !== expected.componentPresetVersion ||
-    runtimeCompatibility.rendererVersion !== expected.rendererVersion
-  ) {
-    throw new Error(
-      `[PageSchema] Unsupported runtimeCompatibility: ${JSON.stringify(runtimeCompatibility ?? null)}`,
-    );
+  if (!runtimeCompatibility) {
+    throw new Error('[PageSchema] Unsupported runtimeCompatibility: null');
   }
+  BUILTIN_RENDERER_PRESET_CATALOG.resolve(runtimeCompatibility);
 }
 
 export const pageSchemaApi = {

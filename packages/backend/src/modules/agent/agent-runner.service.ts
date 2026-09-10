@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AIService, AIToolCallingError } from '../ai/ai.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
@@ -11,6 +11,10 @@ import {
   CollectionTargetResolverService,
   ComponentMetaRegistry,
 } from '../schema-context';
+import {
+  DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  DeploymentRuntimeProfileRegistry,
+} from '../runtime-profile/deployment-runtime-profile-registry';
 import type {
   ComponentNode,
   PageSchema,
@@ -54,12 +58,10 @@ import {
 } from './agent-batch.planner';
 import {
   AgentCollectionScope,
-  AgentClarificationCandidate,
   AgentEditClarificationResponse,
   AgentEditIntentConfirmationResponse,
   AgentEditPatchResponse,
   AgentEditScopeConfirmationResponse,
-  AgentIntentConfirmationOption,
   AgentPatchScopeSummary,
   AgentRouteDecision,
 } from './types/agent-edit.types';
@@ -112,6 +114,7 @@ export class AgentRunnerService {
     private readonly intentConfirmationService: AgentIntentConfirmationService,
     private readonly scopeConfirmationService: AgentScopeConfirmationService,
     private readonly traceService: AgentTraceService,
+    @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
   ) {}
 
   async runEdit(
@@ -247,6 +250,7 @@ export class AgentRunnerService {
             instruction: dto.instruction,
             rootId: resolvedSelectedId,
             schema: context.workingSchema,
+            metaRegistry: this.resolveMetaRegistry(context),
           })
         : { status: 'no_match' as const };
 
@@ -536,7 +540,7 @@ export class AgentRunnerService {
     const clarificationCandidates = buildClarificationCandidates(
       candidates.slice(0, CLARIFICATION_CANDIDATE_LIMIT),
       initialResult.schema,
-      this.componentMetaRegistry,
+      this.resolveMetaRegistry(context),
     );
 
     return {
@@ -927,7 +931,8 @@ export class AgentRunnerService {
     const focusNode = focusContextResult.context.focusNode;
     const textUpdate = this.extractSimpleTextUpdate(dto.instruction);
     if (textUpdate) {
-      const textProp = this.componentMetaRegistry.getTextProps(focusNode.type)[0];
+      const metaRegistry = this.resolveMetaRegistry(context);
+      const textProp = metaRegistry.getTextProps(focusNode.type)[0];
       if (textProp) {
         await reporter.emitStatus({
           stage: 'calling_tool',
@@ -1248,5 +1253,13 @@ export class AgentRunnerService {
     }
 
     return Array.from(leftSet).every((value) => rightSet.has(value));
+  }
+
+  resolveMetaRegistry(context: ToolExecutionContext): ComponentMetaRegistry {
+    if (context.runtimeCompatibility) {
+      const registry = this.deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+      return registry.resolveComponentMeta(context.runtimeCompatibility);
+    }
+    return this.componentMetaRegistry;
   }
 }
