@@ -20,9 +20,12 @@ import { AgentToolException } from '../../agent-tools/agent-tool.exception';
 import { PatchApplyService } from '../../agent-tools/patch-apply.service';
 import { PatchAutoFixService } from '../../agent-tools/patch-auto-fix.service';
 import { PatchValidationService } from '../../agent-tools/patch-validation.service';
+import { ToolRegistryService } from '../../agent-tools/tool-registry.service';
 import { createInternalDefinitions } from '../../agent-tools/definitions/internal.tools';
-import type { ContextAssemblerService } from '../../schema-context/context-assembler.service';
-import type { ToolRegistryService } from '../../agent-tools/tool-registry.service';
+import { buildCollectionContainerClarification } from '../../agent/agent-batch.planner';
+import { ContextAssemblerService } from '../../schema-context/context-assembler.service';
+import { SchemaSlicerService } from '../../schema-context/schema-slicer.service';
+import { NodeLocatorService } from '../../schema-context/node-locator.service';
 
 const TEST_SCHEMA: PageSchema = Object.freeze({
   schemaVersion: 0,
@@ -692,6 +695,244 @@ describe('B3 Runtime Profile Integration Matrix (Issue #39)', () => {
           message: expect.stringContaining('BtnA'),
         });
       }
+    });
+  });
+
+  describe('Scenario 15: 批处理容器判断与重验使用页面 Meta', () => {
+    const containerAwareProfiles: SystemRuntimeProfile[] = [
+      {
+        systemId: 'default',
+        componentPresetId: 'preset-a',
+        componentPresetVersion: '1.0.0',
+        rendererVersion: '1.0.0',
+        compilerBindingId: 'bindings-a',
+        status: 'deprecated',
+      },
+      {
+        systemId: 'default',
+        componentPresetId: 'preset-b',
+        componentPresetVersion: '2.0.0',
+        rendererVersion: '1.0.0',
+        compilerBindingId: 'bindings-b',
+        status: 'active',
+      },
+    ];
+
+    // A：Div 是容器；B：Div 不是容器
+    const metaDivContainer = new ComponentMetaRegistry(
+      [
+        {
+          type: 'Page',
+          displayName: '页面',
+          isContainer: true,
+          textProps: ['children'],
+          category: 'layout',
+          properties: [],
+        },
+        {
+          type: 'Div',
+          displayName: '布局 A',
+          isContainer: true,
+          textProps: ['children'],
+          category: 'layout',
+          properties: [],
+        },
+        {
+          type: 'Button',
+          displayName: '按钮 A',
+          isContainer: false,
+          textProps: ['children'],
+          category: 'other',
+          properties: [],
+        },
+      ],
+      new Map(),
+    );
+
+    const metaDivLeaf = new ComponentMetaRegistry(
+      [
+        {
+          type: 'Page',
+          displayName: '页面',
+          isContainer: true,
+          textProps: ['children'],
+          category: 'layout',
+          properties: [],
+        },
+        {
+          type: 'Div',
+          displayName: '叶子 B',
+          isContainer: false,
+          textProps: ['children'],
+          category: 'other',
+          properties: [],
+        },
+        {
+          type: 'Button',
+          displayName: '按钮 B',
+          isContainer: false,
+          textProps: ['children'],
+          category: 'other',
+          properties: [],
+        },
+      ],
+      new Map(),
+    );
+
+    it('buildCollectionContainerClarification uses page-bound Meta for isContainer', () => {
+      const registry = new DeploymentRuntimeProfileRegistry(
+        containerAwareProfiles,
+        { 'bindings-a': bindingsA, 'bindings-b': bindingsB },
+        {
+          'preset-a@1.0.0': metaDivContainer,
+          'preset-b@2.0.0': metaDivLeaf,
+        },
+      );
+
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'div-root',
+        components: {
+          'div-root': { id: 'div-root', type: 'Div', childrenIds: ['btn-1'] },
+          'btn-1': { id: 'btn-1', type: 'Button', props: { children: 'x' } },
+        },
+      } as unknown as PageSchema;
+
+      const host = {
+        resolveMetaRegistry: (ctx: { runtimeCompatibility: RuntimeCompatibility }) =>
+          registry.resolveComponentMeta(ctx.runtimeCompatibility),
+      };
+
+      const dto = { selectedId: 'div-root', instruction: '批量修改按钮' } as never;
+
+      // Profile A：Div 是容器 → 放行
+      const contextA = {
+        workingSchema: schema,
+        accumulatedPatch: [],
+        warnings: [],
+        traceId: 'trace-batch-a',
+        runtimeCompatibility: {
+          componentPresetId: 'preset-a',
+          componentPresetVersion: '1.0.0',
+          rendererVersion: '1.0.0',
+        },
+      };
+      expect(
+        buildCollectionContainerClarification(host, dto, contextA as never, 'trace-batch-a'),
+      ).toBeUndefined();
+
+      // Profile B：Div 不是容器 → 必须澄清，证明读取的是页面 Meta 而非全局默认
+      const contextB = {
+        workingSchema: schema,
+        accumulatedPatch: [],
+        warnings: [],
+        traceId: 'trace-batch-b',
+        runtimeCompatibility: {
+          componentPresetId: 'preset-b',
+          componentPresetVersion: '2.0.0',
+          rendererVersion: '1.0.0',
+        },
+      };
+      const clarification = buildCollectionContainerClarification(
+        host,
+        dto,
+        contextB as never,
+        'trace-batch-b',
+      );
+      expect(clarification).toBeDefined();
+      expect(clarification!.mode).toBe('clarification');
+      expect(clarification!.content).toContain('不是容器');
+    });
+  });
+
+  describe('Scenario 16: Agent 完整工具链 A/B 交错', () => {
+    function createToolChain(customRegistry: DeploymentRuntimeProfileRegistry) {
+      const applyService = new PatchApplyService();
+      const validationService = new PatchValidationService(
+        new ComponentMetaRegistry(),
+        applyService,
+        customRegistry,
+      );
+      const autoFixService = new PatchAutoFixService();
+      const collectionResolver = {
+        resolve: jest.fn(),
+      };
+      const contextAssembler = new ContextAssemblerService(
+        { resolve: jest.fn(), resolveWithCompatibility: jest.fn() } as never,
+        new NodeLocatorService(new ComponentMetaRegistry()),
+        new SchemaSlicerService(),
+        new ComponentMetaRegistry(),
+        customRegistry,
+      );
+      const toolRegistry = new ToolRegistryService(
+        contextAssembler,
+        new ComponentMetaRegistry(),
+        collectionResolver as never,
+        autoFixService,
+        validationService,
+        customRegistry,
+      );
+      return { toolRegistry, validationService, applyService };
+    }
+
+    it('interleaved createExecutionContext + get_component_meta keep A/B Meta isolated', async () => {
+      const repo = createInMemoryRepository();
+      await repo.saveSchema({
+        pageId: 'agent-page-a',
+        schema: TEST_SCHEMA,
+        systemId: 'default',
+        runtimeCompatibility: {
+          componentPresetId: 'preset-a',
+          componentPresetVersion: '1.0.0',
+          rendererVersion: '1.0.0',
+        },
+      });
+      await repo.saveSchema({
+        pageId: 'agent-page-b',
+        schema: TEST_SCHEMA,
+        systemId: 'default',
+        runtimeCompatibility: {
+          componentPresetId: 'preset-b',
+          componentPresetVersion: '2.0.0',
+          rendererVersion: '1.0.0',
+        },
+      });
+
+      const pageService = new PageSchemaService(repo, customMetadataProvider);
+      const { toolRegistry } = createToolChain(customDeploymentRegistry);
+      const toolService = new ToolExecutionService(
+        pageService,
+        {} as unknown as ContextAssemblerService,
+        toolRegistry,
+        customDeploymentRegistry,
+      );
+
+      const [ctxA, ctxB] = await Promise.all([
+        toolService.createExecutionContext({ pageId: 'agent-page-a' }, 'trace-agent-a'),
+        toolService.createExecutionContext({ pageId: 'agent-page-b' }, 'trace-agent-b'),
+      ]);
+
+      expect(ctxA.runtimeCompatibility.componentPresetId).toBe('preset-a');
+      expect(ctxB.runtimeCompatibility.componentPresetId).toBe('preset-b');
+
+      const [metaA, metaB] = await Promise.all([
+        toolService.executeTool('get_component_meta', { type: 'Button' }, ctxA),
+        toolService.executeTool('get_component_meta', { type: 'Button' }, ctxB),
+      ]);
+
+      const displayA = (metaA.data as { component?: { displayName?: string } }).component
+        ?.displayName;
+      const displayB = (metaB.data as { component?: { displayName?: string } }).component
+        ?.displayName;
+      expect(displayA).toBe('按钮 A');
+      expect(displayB).toBe('按钮 B');
+      expect(displayA).not.toBe(displayB);
+
+      // 交错再次读取，确认无全局串用
+      const againA = await toolService.executeTool('get_component_meta', { type: 'Button' }, ctxA);
+      expect((againA.data as { component?: { displayName?: string } }).component?.displayName).toBe(
+        '按钮 A',
+      );
     });
   });
 });

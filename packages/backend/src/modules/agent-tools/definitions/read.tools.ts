@@ -2,18 +2,24 @@ import { AgentToolException } from '../agent-tool.exception';
 import { CollectionTargetResolverService } from '../../schema-context/collection-target-resolver.service';
 import { ComponentMetaRegistry } from '../../schema-context/component-metadata/component-meta.registry';
 import { ContextAssemblerService } from '../../schema-context/context-assembler.service';
-import { ToolDefinition } from '../types/tool.types';
+import { ToolDefinition, ToolExecutionContext } from '../types/tool.types';
 import { asOptionalString, createObjectSchema } from '../tool-input.coerce';
-import { DEPLOYMENT_RUNTIME_PROFILE_REGISTRY } from '../../runtime-profile/deployment-runtime-profile-registry';
 
 export interface ReadToolsDeps {
   contextAssembler: ContextAssemblerService;
   metaRegistry: ComponentMetaRegistry;
   collectionTargetResolver: CollectionTargetResolverService;
+  resolveMetaRegistryForContext?: (context: ToolExecutionContext) => ComponentMetaRegistry;
 }
 
 export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
   const { contextAssembler, metaRegistry, collectionTargetResolver } = deps;
+  const resolveMeta = (context: ToolExecutionContext): ComponentMetaRegistry => {
+    if (deps.resolveMetaRegistryForContext) {
+      return deps.resolveMetaRegistryForContext(context);
+    }
+    return metaRegistry;
+  };
   return [
     {
       name: 'get_page_schema',
@@ -37,6 +43,7 @@ export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
           draftSchema: context.workingSchema as unknown as Record<string, unknown>,
           selectedId: asOptionalString(input.selectedId),
           instruction: asOptionalString(input.instruction),
+          runtimeCompatibility: context.runtimeCompatibility,
         });
         if (result.mode === 'focused') {
           return {
@@ -63,6 +70,7 @@ export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
           draftSchema: context.workingSchema as unknown as Record<string, unknown>,
           selectedId: asOptionalString(input.selectedId),
           instruction: asOptionalString(input.instruction),
+          runtimeCompatibility: context.runtimeCompatibility,
         });
         return {
           data: {
@@ -80,9 +88,7 @@ export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
       visibility: 'agent',
       execute: async (input, context) => {
         const type = asOptionalString(input.type);
-        const registry = context?.runtimeCompatibility
-          ? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveComponentMeta(context.runtimeCompatibility)
-          : metaRegistry;
+        const registry = resolveMeta(context);
         if (type) return { data: { component: registry.resolve(type) } };
         return { data: { components: registry.getAll() } };
       },
@@ -109,9 +115,7 @@ export function createReadDefinitions(deps: ReadToolsDeps): ToolDefinition[] {
             traceId: context.traceId,
           });
         }
-        const registry = context?.runtimeCompatibility
-          ? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveComponentMeta(context.runtimeCompatibility)
-          : metaRegistry;
+        const registry = resolveMeta(context);
         return {
           data: collectionTargetResolver.resolve({
             rootId,

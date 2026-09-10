@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { AIService, AIToolCallingError } from '../ai/ai.service';
 import { AgentToolException } from '../agent-tools/agent-tool.exception';
 import { ToolExecutionService } from '../agent-tools/tool-execution.service';
@@ -11,7 +11,10 @@ import {
   CollectionTargetResolverService,
   ComponentMetaRegistry,
 } from '../schema-context';
-import { DEPLOYMENT_RUNTIME_PROFILE_REGISTRY } from '../runtime-profile/deployment-runtime-profile-registry';
+import {
+  DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  DeploymentRuntimeProfileRegistry,
+} from '../runtime-profile/deployment-runtime-profile-registry';
 import type {
   ComponentNode,
   PageSchema,
@@ -111,6 +114,7 @@ export class AgentRunnerService {
     private readonly intentConfirmationService: AgentIntentConfirmationService,
     private readonly scopeConfirmationService: AgentScopeConfirmationService,
     private readonly traceService: AgentTraceService,
+    @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
   ) {}
 
   async runEdit(
@@ -1250,9 +1254,10 @@ export class AgentRunnerService {
     return Array.from(leftSet).every((value) => rightSet.has(value));
   }
 
-  private resolveMetaRegistry(context: ToolExecutionContext): ComponentMetaRegistry {
+  resolveMetaRegistry(context: ToolExecutionContext): ComponentMetaRegistry {
     if (context.runtimeCompatibility) {
-      return DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveComponentMeta(context.runtimeCompatibility);
+      const registry = this.deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+      return registry.resolveComponentMeta(context.runtimeCompatibility);
     }
     return this.componentMetaRegistry;
   }
