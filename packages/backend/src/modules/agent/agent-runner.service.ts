@@ -250,6 +250,7 @@ export class AgentRunnerService {
             instruction: dto.instruction,
             rootId: resolvedSelectedId,
             schema: context.workingSchema,
+            metaRegistry: this.resolveMetaRegistry(context),
           })
         : { status: 'no_match' as const };
 

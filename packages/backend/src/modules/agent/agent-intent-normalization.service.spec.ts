@@ -87,4 +87,63 @@ describe('AgentIntentNormalizationService', () => {
 
     expect(result).toEqual({ status: 'no_match' });
   });
+
+  it('uses page-bound Meta so Button is recognized only under the matching profile', () => {
+    // 页面 Meta：Button 存在且可批量；默认 Builtin Meta 在本 fixture 下不暴露 Button 批量目标
+    const pageMeta = new ComponentMetaRegistry(
+      [
+        {
+          type: 'Form',
+          displayName: '表单',
+          isContainer: true,
+          textProps: ['children'],
+          category: 'layout',
+          properties: [],
+        },
+        {
+          type: 'Button',
+          displayName: '按钮',
+          isContainer: false,
+          textProps: ['children'],
+          category: 'other',
+          properties: [],
+        },
+      ],
+      new Map(),
+    );
+
+    const schema: PageSchema = {
+      schemaVersion: 0,
+      rootId: 'form',
+      components: {
+        form: { id: 'form', type: 'Form', childrenIds: ['btn-1', 'btn-2'] },
+        'btn-1': { id: 'btn-1', type: 'Button', props: { children: 'A' } },
+        'btn-2': { id: 'btn-2', type: 'Button', props: { children: 'B' } },
+      },
+    };
+
+    const withPageMeta = service.normalize({
+      instruction: '把所有按钮都隐藏',
+      rootId: 'form',
+      schema,
+      metaRegistry: pageMeta,
+    });
+    expect(withPageMeta).toEqual({
+      status: 'normalized',
+      option: expect.objectContaining({
+        targetType: 'Button',
+        label: '按钮',
+      }),
+    });
+
+    // 不传页面 Meta 时，用注入的默认空/不完整 Registry 应 no_match，证明不是全局默认“碰巧匹配”
+    const emptyMeta = new ComponentMetaRegistry([], new Map());
+    const withoutPageMeta = service.normalize({
+      instruction: '把所有按钮都隐藏',
+      rootId: 'form',
+      schema,
+      metaRegistry: emptyMeta,
+    });
+    expect(withoutPageMeta).toEqual({ status: 'no_match' });
+  });
 });
