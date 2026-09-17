@@ -11,6 +11,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { RuntimeCompatibility } from '@lowcode-platform/schema-contract';
 import {
   DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  DeploymentRuntimeProfileRegistry,
   type CompilerBindings,
 } from '../../runtime-profile/deployment-runtime-profile-registry';
 
@@ -26,6 +27,7 @@ function describeRuntimeCompatibility(runtimeCompatibility: RuntimeCompatibility
 
 export function resolveTrustedCompilerBindings(
   runtimeCompatibility: RuntimeCompatibility,
+  deploymentRegistry: DeploymentRuntimeProfileRegistry = DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
 ): CompilerBindings {
   if (
     !runtimeCompatibility ||
@@ -39,7 +41,7 @@ export function resolveTrustedCompilerBindings(
   }
 
   try {
-    return DEPLOYMENT_RUNTIME_PROFILE_REGISTRY.resolveCompilerBindings(runtimeCompatibility);
+    return deploymentRegistry.resolveCompilerBindings(runtimeCompatibility);
   } catch (error) {
     if (!(error instanceof BadRequestException)) {
       throw error;

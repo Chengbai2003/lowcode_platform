@@ -44,7 +44,9 @@ export class CollectionTargetResolverService {
     instruction?: string;
     schema: PageSchema;
     targetType?: string;
+    metaRegistry?: ComponentMetaRegistry;
   }): CollectionTargetResolution {
+    const metaRegistry = input.metaRegistry ?? this.componentMetaRegistry;
     const rootNode = input.schema.components[input.rootId];
     if (!rootNode) {
       return {
@@ -54,7 +56,7 @@ export class CollectionTargetResolverService {
       };
     }
 
-    if (!this.componentMetaRegistry.isContainer(rootNode.type)) {
+    if (!metaRegistry.isContainer(rootNode.type)) {
       return {
         status: 'no_match',
         rootId: input.rootId,
@@ -72,10 +74,15 @@ export class CollectionTargetResolverService {
     }
 
     if (input.targetType?.trim()) {
-      return this.resolveExplicitTargetType(input.rootId, descendants, input.targetType.trim());
+      return this.resolveExplicitTargetType(
+        input.rootId,
+        descendants,
+        input.targetType.trim(),
+        metaRegistry,
+      );
     }
 
-    const matchedTypes = this.findMatchedTypes(descendants, input.instruction ?? '');
+    const matchedTypes = this.findMatchedTypes(descendants, input.instruction ?? '', metaRegistry);
     if (matchedTypes.length === 0) {
       return {
         status: 'no_match',
@@ -130,11 +137,12 @@ export class CollectionTargetResolverService {
     rootId: string,
     descendants: Array<{ id: string; type: string }>,
     targetType: string,
+    metaRegistry: ComponentMetaRegistry,
   ): CollectionTargetResolution {
     const componentIds = descendants
       .filter((node) => node.type === targetType)
       .map((node) => node.id);
-    const displayName = this.componentMetaRegistry.getDisplayName(targetType) ?? targetType;
+    const displayName = metaRegistry.getDisplayName(targetType) ?? targetType;
 
     if (componentIds.length === 0) {
       return {
@@ -203,6 +211,7 @@ export class CollectionTargetResolverService {
   private findMatchedTypes(
     descendants: Array<{ id: string; type: string }>,
     instruction: string,
+    metaRegistry: ComponentMetaRegistry,
   ): Array<{ type: string; displayName: string; componentIds: string[] }> {
     const normalizedInstruction = instruction.trim().toLowerCase();
     const grouped = new Map<string, string[]>();
@@ -215,7 +224,7 @@ export class CollectionTargetResolverService {
 
     return Array.from(grouped.entries())
       .map(([type, componentIds]) => {
-        const displayName = this.componentMetaRegistry.getDisplayName(type) ?? type;
+        const displayName = metaRegistry.getDisplayName(type) ?? type;
         const typeMatched =
           normalizedInstruction.includes(type.toLowerCase()) ||
           normalizedInstruction.includes(displayName.toLowerCase());

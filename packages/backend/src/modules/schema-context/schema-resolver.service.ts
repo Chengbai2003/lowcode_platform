@@ -1,28 +1,73 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Optional } from '@nestjs/common';
 import { PageSchemaService } from '../page-schema/page-schema.service';
-import { PageSchema, ComponentNode } from '@lowcode-platform/schema-contract';
+import {
+  PageSchema,
+  ComponentNode,
+  type RuntimeCompatibility,
+} from '@lowcode-platform/schema-contract';
+import {
+  DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  DeploymentRuntimeProfileRegistry,
+} from '../runtime-profile/deployment-runtime-profile-registry';
+import { toRuntimeCompatibility } from '../page-schema/system-runtime-profile';
+
+export interface ResolvedSchemaContext {
+  schema: PageSchema;
+  runtimeCompatibility: RuntimeCompatibility;
+}
 
 @Injectable()
 export class SchemaResolverService {
-  constructor(private readonly pageSchemaService: PageSchemaService) {}
+  private readonly deploymentRegistry: DeploymentRuntimeProfileRegistry;
+
+  constructor(
+    private readonly pageSchemaService: PageSchemaService,
+    @Optional() deploymentRegistry?: DeploymentRuntimeProfileRegistry,
+  ) {
+    this.deploymentRegistry = deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+  }
 
   async resolve(input: {
     pageId?: string;
     pageVersion?: number;
     draftSchema?: Record<string, unknown>;
   }): Promise<PageSchema> {
-    let raw: Record<string, unknown>;
+    const result = await this.resolveWithCompatibility(input);
+    return result.schema;
+  }
 
-    if (input.draftSchema) {
-      raw = input.draftSchema;
-    } else if (input.pageId) {
+  async resolveWithCompatibility(input: {
+    pageId?: string;
+    pageVersion?: number;
+    draftSchema?: Record<string, unknown>;
+  }): Promise<ResolvedSchemaContext> {
+    let raw: Record<string, unknown>;
+    let runtimeCompatibility: RuntimeCompatibility;
+
+    if (input.pageId) {
+      // 已有 pageId：对应真实服务端快照，查询失败不降级为默认草稿
       const page = await this.pageSchemaService.getSchema(input.pageId, input.pageVersion);
-      raw = page.schema as unknown as Record<string, unknown>;
+      // 消费前校验（disabled / unknown / mismatch 拒绝）
+      this.deploymentRegistry.resolveSnapshot(page.runtimeCompatibility);
+      runtimeCompatibility = page.runtimeCompatibility;
+
+      if (input.draftSchema) {
+        // draftSchema 只替换待编辑内容，不改变页面运行时身份
+        raw = input.draftSchema;
+      } else {
+        raw = page.schema as unknown as Record<string, unknown>;
+      }
+    } else if (input.draftSchema) {
+      // 真正尚未保存的 draft：沿用服务端默认系统 active Profile
+      const profile = this.deploymentRegistry.resolveSystem('default');
+      runtimeCompatibility = toRuntimeCompatibility(profile);
+      raw = input.draftSchema;
     } else {
       throw new BadRequestException('Either draftSchema or pageId must be provided');
     }
 
-    return this.assertAndCast(raw);
+    const schema = this.assertAndCast(raw);
+    return { schema, runtimeCompatibility };
   }
 
   private assertAndCast(raw: Record<string, unknown>): PageSchema {

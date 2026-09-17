@@ -1,11 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import {
   PageSchema,
-  ComponentNode,
   requireSupportedPageSchema,
   SchemaValidationError,
+  type RuntimeCompatibility,
 } from '@lowcode-platform/schema-contract';
+import {
+  DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  DeploymentRuntimeProfileRegistry,
+} from '../runtime-profile/deployment-runtime-profile-registry';
 import { getActionValidationError, hasCustomScriptInValue } from '../page-schema/action-validation';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchApplyService } from './patch-apply.service';
@@ -16,7 +20,12 @@ export class PatchValidationService {
   constructor(
     private readonly metaRegistry: ComponentMetaRegistry,
     private readonly patchApplyService: PatchApplyService,
+    @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
   ) {}
+
+  private get runtimeProfileRegistry(): DeploymentRuntimeProfileRegistry {
+    return this.deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+  }
 
   validatePatchShape(patch: readonly EditorPatchOperation[], traceId: string) {
     for (const operation of patch) {
@@ -85,21 +94,23 @@ export class PatchValidationService {
     patch: readonly EditorPatchOperation[],
     _resultingSchema: PageSchema,
     traceId: string,
+    runtimeCompatibility?: RuntimeCompatibility,
   ) {
-    this.previewValidatedSchema(baseSchema, patch, traceId);
+    this.previewValidatedSchema(baseSchema, patch, traceId, runtimeCompatibility);
   }
 
   previewValidatedSchema(
     baseSchema: PageSchema,
     patch: readonly EditorPatchOperation[],
     traceId: string,
+    runtimeCompatibility?: RuntimeCompatibility,
   ): PageSchema {
     let currentSchema = baseSchema;
 
     for (const operation of patch) {
       switch (operation.op) {
         case 'insertComponent':
-          this.assertInsertValid(currentSchema, operation, traceId);
+          this.assertInsertValid(currentSchema, operation, traceId, runtimeCompatibility);
           break;
         case 'updateProps':
           this.assertComponentExists(currentSchema, operation.componentId, traceId);
@@ -167,6 +178,7 @@ export class PatchValidationService {
     schema: PageSchema,
     operation: Extract<EditorPatchOperation, { op: 'insertComponent' }>,
     traceId: string,
+    runtimeCompatibility?: RuntimeCompatibility,
   ) {
     this.assertComponentExists(schema, operation.parentId, traceId);
 
@@ -197,7 +209,11 @@ export class PatchValidationService {
       });
     }
 
-    if (!this.metaRegistry.resolve(type)) {
+    const metaRegistry = runtimeCompatibility
+      ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
+      : this.metaRegistry;
+
+    if (!metaRegistry.resolve(type)) {
       throw new AgentToolException({
         code: 'PATCH_INVALID',
         message: `Unsupported component type ${type}`,

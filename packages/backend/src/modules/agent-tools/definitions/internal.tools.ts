@@ -27,6 +27,7 @@ export function createInternalDefinitions(deps: InternalToolsDeps): ToolDefiniti
           context.workingSchema,
           patch,
           context.traceId,
+          context.runtimeCompatibility,
         );
         return { data: { valid: true } };
       },
@@ -65,6 +66,7 @@ export function createInternalDefinitions(deps: InternalToolsDeps): ToolDefiniti
           context.workingSchema,
           patch,
           context.traceId,
+          context.runtimeCompatibility,
         );
         const normalizedPatch = canonicalizePatchOperations(patch, nextSchema);
         return { data: { patch: normalizedPatch }, updatedWorkingSchema: nextSchema };

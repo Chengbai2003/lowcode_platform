@@ -1,12 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Optional } from '@nestjs/common';
 import { ContextAssemblerService } from '../schema-context';
 import {
   PageSchema,
   ComponentNode,
   requireSupportedPageSchema,
   SchemaValidationError,
+  type RuntimeCompatibility,
 } from '@lowcode-platform/schema-contract';
 import { PageSchemaService } from '../page-schema/page-schema.service';
+import {
+  DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+  DeploymentRuntimeProfileRegistry,
+} from '../runtime-profile/deployment-runtime-profile-registry';
+import { toRuntimeCompatibility } from '../page-schema/system-runtime-profile';
 import { AgentToolException } from './agent-tool.exception';
 import { PatchPreviewRequestDto } from './dto/patch-preview-request.dto';
 import { PatchPreviewResponseDto } from './dto/patch-preview-response.dto';
@@ -21,6 +27,7 @@ export class ToolExecutionService {
     private readonly pageSchemaService: PageSchemaService,
     private readonly contextAssembler: ContextAssemblerService,
     private readonly toolRegistry: ToolRegistryService,
+    @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
   ) {}
 
   async previewPatch(
@@ -102,11 +109,17 @@ export class ToolExecutionService {
     let pageId = input.pageId;
     let resolvedPageVersion = input.basePageVersion;
     let workingSchema: PageSchema | undefined;
+    let runtimeCompatibility: RuntimeCompatibility;
 
     if (pageId) {
       try {
         const latestPage = await this.pageSchemaService.getSchema(pageId);
         resolvedPageVersion = latestPage.pageVersion;
+
+        const registry = this.deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+        // 校验运行时身份：disabled、unknown 或版本 mismatch 均在执行前拒绝
+        registry.resolveSnapshot(latestPage.runtimeCompatibility);
+        runtimeCompatibility = latestPage.runtimeCompatibility;
 
         if (
           input.basePageVersion !== undefined &&
@@ -139,7 +152,27 @@ export class ToolExecutionService {
             details: { pageId },
           });
         }
+        if (error instanceof BadRequestException) {
+          throw new AgentToolException({
+            code: 'PATCH_INVALID',
+            message: error.message,
+            traceId,
+          });
+        }
         throw error;
+      }
+    } else {
+      // 真正尚未保存的 draft：沿用服务端默认系统 active Profile
+      try {
+        const registry = this.deploymentRegistry ?? DEPLOYMENT_RUNTIME_PROFILE_REGISTRY;
+        const defaultProfile = registry.resolveSystem('default');
+        runtimeCompatibility = toRuntimeCompatibility(defaultProfile);
+      } catch (error) {
+        throw new AgentToolException({
+          code: 'PATCH_INVALID',
+          message: error instanceof Error ? error.message : 'Unsupported runtime system',
+          traceId,
+        });
       }
     }
 
@@ -187,6 +220,7 @@ export class ToolExecutionService {
       accumulatedPatch: [],
       warnings: [],
       traceId,
+      runtimeCompatibility,
     };
   }
 
@@ -195,6 +229,7 @@ export class ToolExecutionService {
       draftSchema: context.workingSchema as unknown as Record<string, unknown>,
       selectedId,
       instruction,
+      runtimeCompatibility: context.runtimeCompatibility,
     });
   }
 

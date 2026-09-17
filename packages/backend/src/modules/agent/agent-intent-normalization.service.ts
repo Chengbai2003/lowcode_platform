@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PageSchema } from '../schema-context';
+import type { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 
 interface IntentAliasDefinition {
@@ -106,6 +107,8 @@ export class AgentIntentNormalizationService {
     instruction: string;
     rootId: string;
     schema: PageSchema;
+    /** 页面运行时身份解析出的 Meta；缺失时回落到注入的默认 Registry */
+    metaRegistry?: ComponentMetaRegistry;
   }): IntentNormalizationResult {
     const normalizedInstruction = input.instruction.trim().toLowerCase();
     const resolvedMatches = collectAliasMatches(normalizedInstruction).filter(
@@ -123,6 +126,7 @@ export class AgentIntentNormalizationService {
           rootId: input.rootId,
           schema: input.schema,
           targetType: definition.targetType,
+          metaRegistry: input.metaRegistry,
         });
         return resolution.status === 'matched' || resolution.status === 'over_limit';
       })

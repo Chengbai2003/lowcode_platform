@@ -2,6 +2,7 @@ import { ConflictException, INestApplication, ValidationPipe } from '@nestjs/com
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
+import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 import { PageSchemaController } from '../src/modules/page-schema/page-schema.controller';
 import { PageSchemaService } from '../src/modules/page-schema/page-schema.service';
 
@@ -27,6 +28,7 @@ describe('PageSchemaController (e2e)', () => {
         pageVersion: 2,
         snapshotId: 'snapshot-2',
         savedAt: '2026-03-18T00:00:00.000Z',
+        runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
         schema: {
           rootId: 'root',
           components: {

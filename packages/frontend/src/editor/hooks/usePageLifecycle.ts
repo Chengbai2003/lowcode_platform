@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { message } from 'antd';
+import type { ComponentPreset } from '@lowcode-platform/renderer';
+import { antdPreset } from '@lowcode-platform/preset-antd';
 import type { PageSchema } from '../../types';
 import { useEditorStore } from '../store/editor-store';
 import { pageSchemaApi } from '../services/pageSchemaApi';
+import { BUILTIN_RENDERER_PRESET_CATALOG } from '../../renderer-preset-catalog';
 
 /**
  * Page lifecycle hook — handles initial load, generation guard and 404 bootstrap.
@@ -17,6 +20,8 @@ interface Params {
   initialSchemaObj: PageSchema;
   setSchema: React.Dispatch<React.SetStateAction<PageSchema>>;
   setPageVersion: (v: number | null) => void;
+  setPreset?: (preset: ComponentPreset) => void;
+  setPageLoadError?: (error: string | null) => void;
   onErrorRef: React.MutableRefObject<((msg: string) => void) | undefined>;
 }
 
@@ -25,6 +30,8 @@ export function usePageLifecycle({
   initialSchemaObj,
   setSchema,
   setPageVersion,
+  setPreset,
+  setPageLoadError,
   onErrorRef,
 }: Params) {
   const initialRef = useRef(initialSchemaObj);
@@ -44,6 +51,9 @@ export function usePageLifecycle({
 
     if (!pageIdParam) {
       setSchema(initial);
+      setPageVersion(null);
+      setPreset?.(antdPreset);
+      setPageLoadError?.(null);
       return () => {
         cancelled = true;
       };
@@ -63,8 +73,11 @@ export function usePageLifecycle({
         ) {
           return;
         }
+        const resolvedPreset = BUILTIN_RENDERER_PRESET_CATALOG.resolve(result.runtimeCompatibility);
         setSchema(result.schema);
         setPageVersion(result.pageVersion);
+        setPreset?.(resolvedPreset);
+        setPageLoadError?.(null);
       })
       .catch(async (error: unknown) => {
         if (cancelled) return;
@@ -83,7 +96,7 @@ export function usePageLifecycle({
           typeof error === 'object' && error ? (error as { status?: number }).status : undefined;
         if (status === 404) {
           try {
-            const bootstrapResult = await pageSchemaApi.savePageSchema(pageIdParam, initial);
+            await pageSchemaApi.savePageSchema(pageIdParam, initial);
             if (cancelled) return;
             const curGen = useEditorStore.getState().generation;
             const curPageId = useEditorStore.getState().currentPageId;
@@ -95,13 +108,44 @@ export function usePageLifecycle({
             ) {
               return;
             }
-            setSchema(initial);
-            setPageVersion(bootstrapResult.pageVersion);
+            // 重新读取服务端已保存页面，使用服务端绑定的 runtimeCompatibility 解析 Preset，
+            // 避免 404 初始化成功后硬编码 antdPreset 导致保存/预览身份不一致。
+            const verified = await pageSchemaApi.getPageSchema(pageIdParam);
+            if (cancelled) return;
+            const verifyGen = useEditorStore.getState().generation;
+            const verifyPageId = useEditorStore.getState().currentPageId;
+            const verifySessionId = useEditorStore.getState().documentSessionId;
+            if (
+              verifyGen !== requestGeneration ||
+              verifyPageId !== requestPageId ||
+              verifySessionId !== requestDocumentSessionId
+            ) {
+              return;
+            }
+            const resolvedPreset = BUILTIN_RENDERER_PRESET_CATALOG.resolve(
+              verified.runtimeCompatibility,
+            );
+            setSchema(verified.schema);
+            setPageVersion(verified.pageVersion);
+            setPreset?.(resolvedPreset);
+            setPageLoadError?.(null);
             message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
           } catch (bootstrapError) {
+            if (cancelled) return;
+            const failGen = useEditorStore.getState().generation;
+            const failPageId = useEditorStore.getState().currentPageId;
+            const failSessionId = useEditorStore.getState().documentSessionId;
+            if (
+              failGen !== requestGeneration ||
+              failPageId !== requestPageId ||
+              failSessionId !== requestDocumentSessionId
+            ) {
+              return;
+            }
             const errorMessage =
               bootstrapError instanceof Error ? bootstrapError.message : '页面初始化失败';
             onErrorRef.current?.(errorMessage);
+            setPageLoadError?.(errorMessage);
             message.error(errorMessage);
           }
           return;
@@ -109,11 +153,12 @@ export function usePageLifecycle({
 
         const errorMessage = error instanceof Error ? error.message : '页面加载失败';
         onErrorRef.current?.(errorMessage);
-        message.error('页面加载失败，已回退到本地初始内容');
+        setPageLoadError?.(errorMessage);
+        message.error(errorMessage);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [pageId, setSchema, setPageVersion, onErrorRef]);
+  }, [pageId, setSchema, setPageVersion, setPreset, setPageLoadError, onErrorRef]);
 }

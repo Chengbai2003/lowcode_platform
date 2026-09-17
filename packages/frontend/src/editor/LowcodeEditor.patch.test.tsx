@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
+import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 import { useEditorStore, useSelectionStore } from './store/editor-store';
 import type { PageSchema } from '../types';
 import type { AgentPatchApplyPayload } from './components/ai-assistant/types/ai-types';
@@ -153,8 +154,11 @@ describe('LowcodeEditor handleAIPatchApply payload guard', () => {
       generation: 0,
       documentSessionId: 'test-doc-session',
     });
-    // mock pageSchemaApi to return version 3
-    pageSchemaApiMock.getPageSchema.mockResolvedValue({ schema: baseSchema, pageVersion: 3 });
+    pageSchemaApiMock.getPageSchema.mockResolvedValue({
+      schema: baseSchema,
+      pageVersion: 3,
+      runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
+    });
     pageSchemaApiMock.savePageSchema.mockResolvedValue({ pageVersion: 3 });
     mockCreatePatchCommand.mockImplementation(
       (_oldSchema: any, _patch: any, onChange: any, desc: string) => ({

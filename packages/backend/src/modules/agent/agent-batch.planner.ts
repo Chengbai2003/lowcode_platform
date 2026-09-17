@@ -50,7 +50,8 @@ export function buildCollectionContainerClarification(
   }
 
   const selectedComponent = context.workingSchema.components[selectedId];
-  if (!selectedComponent || !host.componentMetaRegistry.isContainer(selectedComponent.type)) {
+  const pageMetaRegistry = host.resolveMetaRegistry(context);
+  if (!selectedComponent || !pageMetaRegistry.isContainer(selectedComponent.type)) {
     return createCollectionClarificationResponse(
       host,
       dto,
@@ -466,6 +467,7 @@ export async function runConfirmedBatchPatch(
     rootId: pendingScope.rootId,
     instruction: pendingScope.instruction,
     schema: context.workingSchema,
+    metaRegistry: host.resolveMetaRegistry(context),
   });
 
   if (

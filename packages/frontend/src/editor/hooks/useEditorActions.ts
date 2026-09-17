@@ -13,6 +13,7 @@ interface Params {
   setSchema: (s: React.SetStateAction<PageSchema>) => void;
   setCompiledCode: (c: string | null) => void;
   onError?: (msg: string) => void;
+  pageLoadError?: string | null;
 }
 
 export function useEditorActions({
@@ -23,11 +24,12 @@ export function useEditorActions({
   setSchema,
   setCompiledCode,
   onError,
+  pageLoadError,
 }: Params) {
   const [isPageSaving, setIsPageSaving] = useState(false);
 
   const handleSavePage = useCallback(async () => {
-    if (!pageId || isPageSaving) return;
+    if (!pageId || isPageSaving || Boolean(pageLoadError)) return;
     const requestGeneration = useEditorStore.getState().generation;
     const requestPageId = pageId ?? null;
     setIsPageSaving(true);
@@ -54,9 +56,13 @@ export function useEditorActions({
     } finally {
       setIsPageSaving(false);
     }
-  }, [isPageSaving, pageId, pageVersion, schema, setPageVersion, setSchema]);
+  }, [isPageSaving, pageId, pageLoadError, pageVersion, schema, setPageVersion, setSchema]);
 
   const handleCompile = useCallback(async () => {
+    if (pageLoadError) {
+      message.error('当前页面运行时配置存在错误，禁止编译');
+      return;
+    }
     if (!schema) {
       message.warning('Schema 为空，无法编译');
       setCompiledCode(null);
@@ -85,7 +91,7 @@ export function useEditorActions({
       message.error('编译失败：' + errorMessage);
       setCompiledCode(null);
     }
-  }, [onError, pageId, pageVersion, schema, setCompiledCode]);
+  }, [onError, pageId, pageLoadError, pageVersion, schema, setCompiledCode]);
 
   return { handleSavePage, handleCompile, isPageSaving };
 }

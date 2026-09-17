@@ -2,7 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
 import { PageSchemaRepository } from './repositories/page-schema.repository';
 import { requireValidPageSchema } from './schema-validation';
-import { PageRuntimeMetadataProvider } from './page-runtime-metadata.provider';
+import {
+  PageRuntimeMetadataProvider,
+  type PageRuntimeMetadata,
+} from './page-runtime-metadata.provider';
 
 export interface SavedPageSchemaResult {
   pageId: string;
@@ -34,13 +37,33 @@ export class PageSchemaService {
     // 原始输入对象即使在校验后被变异也不会影响存储内容。
     const canonicalSchema = requireValidPageSchema(params.schema);
 
-    const draftMetadata = this.runtimeMetadataProvider.getDraftPageRuntimeMetadata();
+    const existingPage = this.repository.getPage(params.pageId);
+    let runtimeMetadata: PageRuntimeMetadata;
+
+    if (!existingPage) {
+      // 1. 新页面：服务端选择默认系统（'default'）的 active Profile
+      runtimeMetadata = this.runtimeMetadataProvider.resolveSystemRuntimeMetadata('default');
+    } else {
+      // 2. 已有页面：获取当前快照的三元组与 systemId
+      const latestSnapshot = this.repository.getLatestSnapshot(params.pageId);
+      if (!latestSnapshot) {
+        throw new NotFoundException(
+          `Corrupted page state: page ${params.pageId} has no schema snapshot`,
+        );
+      }
+      // 精确解析并验证（active 允许；deprecated 保持已有绑定允许；disabled / unknown / mismatch 拒绝）
+      runtimeMetadata = this.runtimeMetadataProvider.resolveExistingPageRuntimeMetadata(
+        existingPage.systemId,
+        latestSnapshot.runtimeCompatibility,
+      );
+    }
+
     const { page, snapshot } = await this.repository.saveSchema({
       pageId: params.pageId,
       schema: canonicalSchema,
       basePageVersion: params.basePageVersion,
-      systemId: draftMetadata.systemId,
-      runtimeCompatibility: draftMetadata.runtimeCompatibility,
+      systemId: runtimeMetadata.systemId,
+      runtimeCompatibility: runtimeMetadata.runtimeCompatibility,
     });
 
     return {

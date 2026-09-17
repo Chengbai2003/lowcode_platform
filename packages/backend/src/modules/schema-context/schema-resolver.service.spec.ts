@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 import { SchemaResolverService } from './schema-resolver.service';
 import { PageSchemaService } from '../page-schema/page-schema.service';
 
@@ -23,12 +24,27 @@ describe('SchemaResolverService', () => {
   });
 
   it('prefers draftSchema over pageId', async () => {
+    mockPageSchemaService.getSchema.mockResolvedValue({
+      pageId: 'page1',
+      pageVersion: 1,
+      snapshotId: 'snap1',
+      schema: {
+        rootId: 'root',
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: ['child1'] },
+          child1: { id: 'child1', type: 'Button', props: { children: 'Original' } },
+        },
+      } as any,
+      runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
+      savedAt: new Date().toISOString(),
+    });
     const result = await service.resolve({
       pageId: 'page1',
       draftSchema: validSchema as any,
     });
     expect(result.rootId).toBe('root');
-    expect(mockPageSchemaService.getSchema).not.toHaveBeenCalled();
+    expect(result.components.child1.props?.children).toBe('Click');
+    expect(mockPageSchemaService.getSchema).toHaveBeenCalledWith('page1', undefined);
   });
 
   it('loads from pageId when no draftSchema', async () => {
@@ -37,11 +53,7 @@ describe('SchemaResolverService', () => {
       pageVersion: 1,
       snapshotId: 'snap1',
       schema: validSchema as any,
-      runtimeCompatibility: {
-        componentPresetId: 'builtin-antd',
-        componentPresetVersion: '0.0.0-draft',
-        rendererVersion: '0.0.0-draft',
-      },
+      runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
       savedAt: new Date().toISOString(),
     });
     const result = await service.resolve({ pageId: 'page1' });
