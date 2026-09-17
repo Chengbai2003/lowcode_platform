@@ -7,8 +7,11 @@ import type { BackendComponentMeta } from './component-meta.types';
  *
  * 仅覆盖该包真实公开的 Container/Text/Button；别名集合与 AntD Meta 完全独立
  * （不含 Btn/Box 等历史别名，反向也不共享 Action/Shell/Caption），用于验证
- * 按 presetId@version 精确查找时 Meta/aliases 不串用。与包内 Runtime/Manifest
- * 的一致性由 B4 组合测试锁定（防止漂移）。
+ * 按 presetId@version 精确查找时 Meta/aliases 不串用。
+ *
+ * 每个组件显式声明 `allowedProps`（与包内 Manifest allowedProps 完全一致，
+ * 由组合测试锁定防漂移）：Agent 写入路径据此拒绝该 Preset 不支持的 Props
+ * （例如 AntD 专属的 loading/danger），未声明的内置 AntD Meta 不受影响。
  */
 export const TEST_PRESET_REGISTRY: readonly BackendComponentMeta[] = [
   {
@@ -22,6 +25,17 @@ export const TEST_PRESET_REGISTRY: readonly BackendComponentMeta[] = [
       { key: 'padding', label: '内边距', type: 'string', defaultValue: '12px' },
       { key: 'center', label: '居中', type: 'boolean', defaultValue: true },
     ],
+    allowedProps: [
+      'children',
+      'className',
+      'style',
+      'id',
+      'title',
+      'key',
+      'width',
+      'padding',
+      'center',
+    ],
   },
   {
     type: 'Text',
@@ -34,6 +48,7 @@ export const TEST_PRESET_REGISTRY: readonly BackendComponentMeta[] = [
       { key: 'strong', label: '加粗', type: 'boolean', defaultValue: false },
       { key: 'size', label: '字号', type: 'select', defaultValue: 'md' },
     ],
+    allowedProps: ['children', 'className', 'style', 'id', 'title', 'key', 'strong', 'size'],
   },
   {
     type: 'Button',
@@ -46,6 +61,17 @@ export const TEST_PRESET_REGISTRY: readonly BackendComponentMeta[] = [
       { key: 'variant', label: '变体', type: 'select', defaultValue: 'outline' },
       { key: 'disabled', label: '禁用', type: 'boolean', defaultValue: false },
       { key: 'block', label: '撑满', type: 'boolean', defaultValue: false },
+    ],
+    allowedProps: [
+      'children',
+      'className',
+      'style',
+      'id',
+      'title',
+      'key',
+      'variant',
+      'disabled',
+      'block',
     ],
   },
 ];

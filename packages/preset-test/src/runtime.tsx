@@ -9,6 +9,12 @@
  *
  * 组件不直接调用执行器：交互行为统一由 Renderer 的 events 机制
  * （buildEventHandlers → eventDispatcher）在 Manifest 净化之后注入。
+ *
+ * 安全语义（review P1）：Renderer 渲染路径有 Manifest 白名单净化，但
+ * Compiler 生成代码直接消费本模块、不经过该净化。因此组件对未知 Props
+ * 自身 fail-close：只透传白名单标量 DOM 属性与 `on[A-Z]` 且值为函数的
+ * 事件 handler（events 机制的合法形态），其余（含字符串型 on* 、危险
+ * HTML、任意属性）一律丢弃，保证两条消费路径的 DOM 输出一致。
  */
 
 import type { ComponentRegistry } from '@lowcode-platform/renderer';
@@ -36,6 +42,35 @@ const TEXT_SIZES: Record<string, string> = {
   xl: '28px',
 };
 
+/** 允许透传到 DOM 的标量属性白名单（与 Manifest 公共白名单对标）。 */
+const SAFE_DOM_ATTRIBUTES = new Set(['className', 'id', 'title']);
+
+function isEventPropName(name: string): boolean {
+  return /^on[A-Z]/.test(name);
+}
+
+/**
+ * 只保留安全 DOM 属性与函数型事件 handler：
+ * - `className` / `id` / `title` 仅接受标量值；
+ * - `on[A-Z]` 开头且值为函数的 Props 是 events 机制注入的合法 handler；
+ * - 其余 Props（未知属性、字符串型 on* 、dangerouslySetInnerHTML 等）全部丢弃。
+ */
+function pickSafeDomProps(props: Record<string, unknown>): Record<string, unknown> {
+  const safe: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(props)) {
+    if (SAFE_DOM_ATTRIBUTES.has(name)) {
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        safe[name] = value;
+      }
+      continue;
+    }
+    if (isEventPropName(name) && typeof value === 'function') {
+      safe[name] = value;
+    }
+  }
+  return safe;
+}
+
 function toWidth(width: unknown): string {
   if (typeof width === 'number') return `${width}px`;
   return CONTAINER_WIDTHS[String(width)] ?? String(width);
@@ -50,7 +85,7 @@ export const Container = ({
   ...props
 }: Props) => (
   <div
-    {...props}
+    {...pickSafeDomProps(props)}
     data-preset-test="container"
     style={{
       boxSizing: 'border-box',
@@ -68,7 +103,7 @@ export const Container = ({
 
 export const Text = ({ children, strong = false, size = 'md', style, ...props }: Props) => (
   <span
-    {...props}
+    {...pickSafeDomProps(props)}
     data-preset-test="text"
     data-size={String(size)}
     style={{
@@ -95,7 +130,7 @@ export const Button = ({
   const isDisabled = disabled === true || disabled === 'true';
   return (
     <button
-      {...props}
+      {...pickSafeDomProps(props)}
       type="button"
       disabled={isDisabled}
       data-preset-test="button"
@@ -131,7 +166,7 @@ export const testRuntime: ComponentRegistry = {
 type FeedbackLevel = 'success' | 'error' | 'warning' | 'info';
 type FeedbackFn = (content?: unknown) => void;
 
-function consoleFeedback(level: FeedbackLevel): FeedbackFn {
+function consoleFeedback(level: string): FeedbackFn {
   return (content?: unknown) => {
     // eslint-disable-next-line no-console
     console.info(`[preset-test:${level}]`, content);
@@ -140,12 +175,19 @@ function consoleFeedback(level: FeedbackLevel): FeedbackFn {
 
 /**
  * Compiler 生成的 feedback 动作会从 defaultLibrary（本包 /runtime 子路径）导入
- * `message`。本 Preset 不依赖 UI 库，提供最小 console 实现保证生成代码可直接
- * 运行；四个 level 与 antd message 的方法名保持一致。
+ * `message` / `notification`。本 Preset 不依赖 UI 库，提供最小 console 实现
+ * 保证生成代码可直接运行；四个 level 与 antd 同名 API 保持一致。
  */
 export const message: Readonly<Record<FeedbackLevel, FeedbackFn>> = Object.freeze({
   success: consoleFeedback('success'),
   error: consoleFeedback('error'),
   warning: consoleFeedback('warning'),
   info: consoleFeedback('info'),
+});
+
+export const notification: Readonly<Record<FeedbackLevel, FeedbackFn>> = Object.freeze({
+  success: consoleFeedback('notification:success'),
+  error: consoleFeedback('notification:error'),
+  warning: consoleFeedback('notification:warning'),
+  info: consoleFeedback('notification:info'),
 });

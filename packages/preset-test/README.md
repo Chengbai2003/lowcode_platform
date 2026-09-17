@@ -26,10 +26,18 @@ AntD Preset 渲染（或反之），DOM 标记会立刻暴露错配。
   `createSealedPreset` 组装并深冻结，无任何运行时注册入口。
 - Props 白名单由 Renderer 的 `sanitizePropsByManifest` fail-close 执行：
   白名单外 Props、危险 HTML、函数型 Props 一律移除。
+- **Runtime 自防御（编译消费路径）**：Compiler 生成代码直接 import 本包
+  runtime、不经过 Renderer 净化，因此组件对未知 Props 自身 fail-close——
+  只透传 `className/id/title`（标量）与 `on[A-Z]` 且值为函数的事件 handler
+  （events 机制合法形态）；字符串型 `on*`（如 `onerror="alert(1)"`）、
+  `dangerouslySetInnerHTML`、任意其他属性一律丢弃，两条消费路径 DOM 输出一致。
 - 组件不接收可执行函数、不直接调用执行器；交互统一走 Renderer 的
   `events` 机制（`onClick` 等在 Manifest 净化之后由 ComponentRenderer 注入）。
 - Compiler 绑定指向本包真实子路径导出 `@lowcode-platform/preset-test/runtime`，
   `allowDefaultComponentFallback: false`（未知组件不回退默认库）。
+- `/runtime` 导出最小 `message` 与 `notification`（success/error/warning/info，
+  console 实现）：generator 的 feedback 动作固定从 defaultLibrary（本包 runtime）
+  导入这两个 API，保证生成代码开箱可运行。
 
 ## 版本常量
 
@@ -39,13 +47,13 @@ AntD Preset 渲染（或反之），DOM 标记会立刻暴露错配。
 
 ## 子路径导出
 
-| 入口           | 内容                                                        |
-| -------------- | ----------------------------------------------------------- |
-| `.`            | 全部公开导出（preset 单例/工厂、版本常量、四类资产）        |
-| `./runtime`    | `testRuntime` 组件注册表（`Container` / `Text` / `Button`） |
-| `./manifest`   | `testManifest` Props 白名单                                 |
-| `./validation` | `testValidation`（该组件集无资源类 Props，为空注册表）      |
-| `./compiler`   | `testCompilerBindings` 编译绑定                             |
+| 入口           | 内容                                                                                                             |
+| -------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `.`            | 全部公开导出（preset 单例/工厂、版本常量、四类资产）                                                             |
+| `./runtime`    | `testRuntime` 组件注册表（`Container` / `Text` / `Button`）+ 编译 feedback 依赖的最小 `message` / `notification` |
+| `./manifest`   | `testManifest` Props 白名单                                                                                      |
+| `./validation` | `testValidation`（该组件集无资源类 Props，为空注册表）                                                           |
+| `./compiler`   | `testCompilerBindings` 编译绑定                                                                                  |
 
 ## 开发
 

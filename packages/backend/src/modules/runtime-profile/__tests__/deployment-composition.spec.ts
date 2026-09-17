@@ -13,6 +13,7 @@ import {
   TEST_PRESET_VERSION,
   TEST_RUNTIME_COMPATIBILITY,
   testRuntime,
+  testManifest,
 } from '@lowcode-platform/preset-test';
 import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 import { BUILTIN_TEST_COMPONENT_META_REGISTRY } from '../../schema-context/component-metadata/test-component-manifest';
@@ -91,6 +92,19 @@ describe('Deployment composition（Issue #39 / M1F-2 B4）', () => {
       // 别名与 AntD Meta 不共享
       expect(BUILTIN_TEST_COMPONENT_META_REGISTRY.resolve('Action')?.type).toBe('Button');
       expect(BUILTIN_TEST_COMPONENT_META_REGISTRY.resolve('Btn')).toBeUndefined();
+    });
+
+    it('Meta allowedProps 白名单与包内 Manifest allowedProps 完全一致（防漂移）', () => {
+      for (const type of BUILTIN_TEST_COMPONENT_META_REGISTRY.getAllTypeNames()) {
+        const meta = BUILTIN_TEST_COMPONENT_META_REGISTRY.get(type)!;
+        expect(`${type}: ${[...(meta.allowedProps ?? [])].sort().join(',')}`).toBe(
+          `${type}: ${[...testManifest[type].allowedProps].sort().join(',')}`,
+        );
+      }
+      // AntD 内置 Meta 未声明白名单（opt-in 边界对既有 Preset 零行为变化）
+      const antdButtonMeta =
+        acceptanceComposition.componentMetas['builtin-antd@0.1.0'].get('Button');
+      expect(antdButtonMeta?.allowedProps).toBeUndefined();
     });
   });
 

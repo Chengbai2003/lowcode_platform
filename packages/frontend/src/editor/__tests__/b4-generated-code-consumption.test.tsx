@@ -6,6 +6,11 @@
  * → 生成的 import 指向 @lowcode-platform/preset-test/runtime（真实 dist 模块）
  * → transpile + 受限 require（react + 真实 preset-test runtime，其余一律拒绝）
  * → jsdom 挂载、点击行为断言，并与同一 schema 经真实 Renderer 渲染的结果对照。
+ *
+ * 安全用例：对 Contract 合法但携带危险 Props（字符串型 on*、
+ * dangerouslySetInnerHTML、javascript: href）的页面，编译产物经真实 runtime
+ * 挂载后不得向 DOM 注入任何危险属性或 HTML（runtime 自防御，不依赖 Renderer
+ * 的 Manifest 净化）。
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/react';
@@ -21,8 +26,8 @@ import type { PageSchema } from '../types';
 const repoRoot = path.resolve(__dirname, '../../../../../');
 
 interface BridgeResult {
-  code: string;
-  schema: PageSchema;
+  main: { code: string; schema: PageSchema };
+  dangerous: { code: string; schema: PageSchema };
   runtimeCompatibility: {
     componentPresetId: string;
     componentPresetVersion: string;
@@ -124,19 +129,23 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
 
   it('真实 generator 输出新包导入路径，且绑定与 preset 身份一致', () => {
     expect(bridge.runtimeCompatibility).toEqual(TEST_RUNTIME_COMPATIBILITY);
-    expect(bridge.code).toContain('from "@lowcode-platform/preset-test/runtime"');
-    expect(bridge.code).toMatch(
+    expect(bridge.main.code).toContain('from "@lowcode-platform/preset-test/runtime"');
+    expect(bridge.main.code).toMatch(
       /import \{[^}]*Button[^}]*\} from "@lowcode-platform\/preset-test\/runtime";/,
     );
     // 不允许出现测试桩字符串：生成代码必须绑定真实包，而非虚构库
-    expect(bridge.code).not.toContain('lib-b');
-    expect(bridge.code).not.toContain('from "antd"');
+    expect(bridge.main.code).not.toContain('lib-b');
+    expect(bridge.main.code).not.toContain('from "antd"');
+    // feedback(kind: notification) 从 defaultLibrary（本包 runtime）导入 notification
+    expect(bridge.main.code).toMatch(
+      /import \{[^}]*notification[^}]*\} from "@lowcode-platform\/preset-test\/runtime";/,
+    );
   });
 
-  it('生成模块可解析、可构建并在 jsdom 挂载，点击行为与 Renderer 一致', async () => {
+  it('生成模块可解析、可构建并在 jsdom 挂载，message/notification 与点击行为和 Renderer 一致', async () => {
     const consoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-    const GeneratedPage = transpileGeneratedComponent(bridge.code);
+    const GeneratedPage = transpileGeneratedComponent(bridge.main.code);
     let captured: CompilerCapture | undefined;
     const { container: generatedContainer } = render(
       <GeneratedPage __testCapture={(caps) => (captured = caps)} />,
@@ -154,12 +163,16 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
     expect(generatedButton.getAttribute('style')).toContain('monospace');
     expect(generatedButton.className).not.toMatch(/ant-/);
 
-    // 点击：feedback 走真实 runtime 导出的 message，setValue 更新状态
+    // 点击：message 与 notification 都走真实 runtime 导出的最小实现，setValue 更新状态
     fireEvent.click(generatedButton);
     await waitFor(() => {
       expect(captured?.getState()?.['count']).toBe(5);
     });
     expect(consoleInfo).toHaveBeenCalledWith('[preset-test:success]', 'b4-compiled-click');
+    expect(consoleInfo).toHaveBeenCalledWith('[preset-test:notification:success]', {
+      message: 'b4-compiled-notification',
+      description: 'compiled notification description',
+    });
 
     // 同一 schema 经真实 Renderer 渲染对照：标记与关键文本一致
     const rendererMessage = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
@@ -169,7 +182,7 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
           preset={testPreset}
           pageId="p-b4-parity"
           documentSessionId="doc-b4"
-          schema={bridge.schema as never}
+          schema={bridge.main.schema as never}
           eventContext={{ ui: { message: rendererMessage } }}
         />
       </LowcodeProvider>,
@@ -191,5 +204,28 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
     });
 
     consoleInfo.mockRestore();
+  });
+
+  it('危险 Props 的编译产物挂载后无法向 DOM 注入（runtime 自防御，不依赖 Renderer 净化）', () => {
+    expect(bridge.dangerous.code).toContain('onerror');
+    expect(bridge.dangerous.code).toContain('dangerouslySetInnerHTML');
+
+    const DangerousPage = transpileGeneratedComponent(bridge.dangerous.code);
+    const { container } = render(<DangerousPage />);
+
+    // 编译产物确实携带危险 Props 字面量，但真实 runtime 不透传给 DOM
+    const button = container.querySelector('button[data-preset-test="button"]')!;
+    expect(button.textContent).toBe('危险按钮');
+    expect(button.hasAttribute('onerror')).toBe(false);
+    expect(button.getAttribute('onerror')).toBeNull();
+    expect(button.hasAttribute('href')).toBe(false);
+    expect(container.querySelector('b')).toBeNull();
+
+    const text = container.querySelector('[data-preset-test="text"]')!;
+    expect(text.hasAttribute('data-evil')).toBe(false);
+    expect(container.querySelector('img')).toBeNull();
+
+    const root = container.querySelector('[data-preset-test="container"]')!;
+    expect(root.hasAttribute('onerror')).toBe(false);
   });
 });

@@ -233,9 +233,13 @@ DOM 标记），经 `createSealedPreset` 打包进前端 Catalog，并在后端�
 以 `LOWCODE_DEPLOYMENT_COMPOSITION=b4-acceptance` 启动即得到验收组合（test active、
 antd deprecated），组合在启动时一次确定、无运行时切换入口。六条消费链（保存、加载、
 预览、渲染、Agent Meta/编辑、Compiler 导出）的闭环与跨身份拒绝矩阵由
-`b4-second-preset.integration.spec.ts`、`b4-frontend-second-preset.test.tsx` 与
-`b4-generated-code-consumption.test.tsx` 锁定；生成代码的导入路径
-`@lowcode-platform/preset-test/runtime` 经真实模块解析与 jsdom 挂载验证。B4 状态为
-「已实施、待验收」：在 Issue #39 验收通过前不视为 M1F-2 完成。
+`b4-second-preset.integration.spec.ts`、`b4-frontend-second-preset.test.tsx`、
+`b4-frontend-second-preset-preview.test.tsx` 与 `b4-generated-code-consumption.test.tsx`
+锁定；生成代码的导入路径 `@lowcode-platform/preset-test/runtime` 经真实模块解析与
+jsdom 挂载验证。第二 Preset 的属性边界为三层一致：Agent 写入按部署侧 Meta 的
+opt-in `allowedProps` 白名单拒绝（AntD 既有 Meta 零行为变化）、Renderer 按 Manifest
+净化、编译产物由 runtime 自防御（未知 Props 不透传 DOM，字符串型 `on*` 与危险
+HTML 一律丢弃）。B4 状态为「已实施、待验收」：在 Issue #39 验收通过前不视为
+M1F-2 完成。
 
 M1a-2 F2 ActionFlow Runtime 已落地：在 `packages/renderer` 内部建立声明式 ActionFlow 运行语义与会话调度能力（`RuntimeSession.executeFlow`、`FlowRun`、预算控制、`onError` 恢复、`AbortSignal` 级联与结构化 `FlowExecutionError` 诊断）；生产 Schema `PageSchema.logic.flows` 与组件事件 `runFlow` 继续保持 fail-close，留待 F3 开放。

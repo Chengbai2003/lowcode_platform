@@ -3,7 +3,14 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { LowcodeProvider, Renderer, RENDERER_VERSION } from '@lowcode-platform/renderer';
 import { createTestPreset, testPreset, TEST_RUNTIME_COMPATIBILITY } from '../createTestPreset';
-import { testRuntime, message as testRuntimeMessage } from '../runtime';
+import {
+  testRuntime,
+  message as testRuntimeMessage,
+  notification as testRuntimeNotification,
+  Button as TestButton,
+  Container as TestContainer,
+  Text as TestText,
+} from '../runtime';
 import { testManifest } from '../manifest';
 import { testCompilerBindings } from '../compiler';
 import { testValidation } from '../validation';
@@ -172,6 +179,23 @@ describe('testPreset Props 净化（fail-close，经 Renderer 端到端）', () 
     warn.mockRestore();
   });
 
+  it('AntD 专属 Props（loading/danger）在 Manifest 层被过滤，不进入 DOM', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { container } = render(
+      <Renderer
+        preset={testPreset}
+        pageId="p-antd-props-test"
+        documentSessionId="doc-1"
+        schema={schemaWith({ children: '边界', loading: true, danger: true }) as never}
+      />,
+    );
+    const button = container.querySelector('button')!;
+    expect(button.hasAttribute('loading')).toBe(false);
+    expect(button.hasAttribute('danger')).toBe(false);
+    expect(button.textContent).toBe('边界');
+    warn.mockRestore();
+  });
+
   it('可执行函数 Props 在 Contract 层即被永久拒绝（先于 Manifest 净化）', () => {
     expect(() =>
       render(
@@ -272,5 +296,65 @@ describe('testPreset 交互（events 机制，不直接调用执行器）', () =
     await waitFor(() => {
       expect(message.success).toHaveBeenCalledWith('preset-test 操作成功');
     });
+  });
+});
+
+describe('testPreset 组件自防御（Compiler 生成代码直接消费路径，无 Renderer 净化）', () => {
+  it('字符串型 on* 与危险 HTML Props 不透传 DOM', () => {
+    // Compiler 生成代码会把 Schema Props 原样作为 JSX 属性传入组件；
+    // 这里绕过 Renderer 直接渲染组件，验证组件自身的 fail-close。
+    const { container } = render(
+      <TestButton
+        children={'危险按钮'}
+        onerror={'alert(1)'}
+        onError={'alert(1)'}
+        dangerouslySetInnerHTML={{ __html: '<b>poison</b>' }}
+        href={'javascript:alert(1)'}
+        className={'kept-class'}
+      />,
+    );
+    const button = container.querySelector('button')!;
+    expect(button.textContent).toBe('危险按钮');
+    expect(button.hasAttribute('onerror')).toBe(false);
+    expect(button.getAttribute('onerror')).toBeNull();
+    expect(button.hasAttribute('href')).toBe(false);
+    expect(container.querySelector('b')).toBeNull();
+    expect(button.classList.contains('kept-class')).toBe(true);
+  });
+
+  it('函数型 on[A-Z] handler（events 机制合法形态）正常透传', () => {
+    const onClick = vi.fn();
+    const { container } = render(<TestButton children={'合法事件'} onClick={onClick} />);
+    fireEvent.click(container.querySelector('button')!);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('Container/Text 同样只透传白名单标量属性', () => {
+    const { container } = render(
+      <div>
+        <TestContainer id={'c1'} data-evil={'x'} onerror={'y'} />
+        <TestText title={'t1'} data-evil={'x'} onerror={'y'} />
+      </div>,
+    );
+    const containerEl = container.querySelector('[data-preset-test="container"]')!;
+    expect(containerEl.id).toBe('c1');
+    expect(containerEl.hasAttribute('data-evil')).toBe(false);
+    const textEl = container.querySelector('[data-preset-test="text"]')!;
+    expect(textEl.getAttribute('title')).toBe('t1');
+    expect(textEl.hasAttribute('onerror')).toBe(false);
+  });
+
+  it('runtime 导出 Compiler feedback 动作依赖的 message 与 notification', () => {
+    expect(Object.isFrozen(testRuntimeMessage)).toBe(true);
+    expect(Object.isFrozen(testRuntimeNotification)).toBe(true);
+    for (const impl of [testRuntimeMessage, testRuntimeNotification]) {
+      for (const level of ['success', 'error', 'warning', 'info']) {
+        expect(typeof impl[level as keyof typeof impl]).toBe('function');
+      }
+    }
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    testRuntimeNotification.success({ message: 'done' });
+    expect(info).toHaveBeenCalledWith('[preset-test:notification:success]', { message: 'done' });
+    info.mockRestore();
   });
 });

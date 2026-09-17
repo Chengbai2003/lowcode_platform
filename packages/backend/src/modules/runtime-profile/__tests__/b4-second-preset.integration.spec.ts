@@ -7,6 +7,9 @@
  * ContextAssembler / ToolRegistry / ToolExecution / PatchValidation / CompilerService +
  * 真实 generator），仅仓储为内存实现、模型不参与。
  */
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
 import { TEST_PRESET_ID, TEST_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-test';
@@ -286,9 +289,55 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       ).toBeUndefined();
     });
 
-    it('preview_patch accepts test-supported insert and rejects antd-only types/aliases', async () => {
+    it('legal canonical insert completes the full loop: preview → save → compile', async () => {
       const graph = createServiceGraph(acceptanceRegistry, repo);
       await graph.pageService.saveSchema({ pageId: 'b4-patch', schema: B4_TEST_PAGE_SCHEMA });
+
+      const previewTool = graph.toolRegistry.get('preview_patch')!;
+      const ctx = await graph.toolService.createExecutionContext(
+        { pageId: 'b4-patch' },
+        'trace-patch-b4',
+      );
+
+      // 合法：规范类型 Button + 本 Preset 支持的 Props
+      const accepted = await previewTool.execute(
+        {
+          patch: [
+            {
+              op: 'insertComponent',
+              parentId: 'root',
+              component: {
+                id: 'cta-2',
+                type: 'Button',
+                props: { children: '第二个按钮', variant: 'outline' },
+              },
+            },
+          ],
+        },
+        ctx as never,
+      );
+      const updated = accepted.updatedWorkingSchema as PageSchema;
+      expect(updated.components['cta-2']?.type).toBe('Button');
+
+      // 确认后真实保存（CAS），再对已保存页面执行真实编译——导出闭环
+      const saved = await graph.pageService.saveSchema({
+        pageId: 'b4-patch',
+        schema: updated,
+        basePageVersion: 1,
+      });
+      expect(saved.pageVersion).toBe(2);
+
+      const compiled = await graph.compilerService.compile({
+        schema: updated as unknown as Record<string, unknown>,
+        options: { pageId: 'b4-patch', pageVersion: 2 },
+      });
+      expect(compiled.code).toContain('@lowcode-platform/preset-test/runtime');
+      expect(compiled.code).toContain('第二个按钮');
+    });
+
+    it('rejects antd-only types and aliases (structurally valid nodes, pure profile gate)', async () => {
+      const graph = createServiceGraph(acceptanceRegistry, repo);
+      await graph.pageService.saveSchema({ pageId: 'b4-patch-r', schema: B4_TEST_PAGE_SCHEMA });
       // 对照组：同组合下已存在的 antd 页面
       await repo.saveSchema({
         pageId: 'antd-patch',
@@ -300,20 +349,9 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       const previewTool = graph.toolRegistry.get('preview_patch')!;
 
       const ctx = await graph.toolService.createExecutionContext(
-        { pageId: 'b4-patch' },
-        'trace-patch-b4',
+        { pageId: 'b4-patch-r' },
+        'trace-patch-b4-r',
       );
-
-      // 合法：test 别名 Action（结构合法的节点）
-      const accepted = await previewTool.execute(
-        {
-          patch: [
-            { op: 'insertComponent', parentId: 'root', component: { id: 'cta-2', type: 'Action' } },
-          ],
-        },
-        ctx as never,
-      );
-      expect((accepted.updatedWorkingSchema as PageSchema).components['cta-2']).toBeDefined();
 
       // 拒绝：AntD 别名 Btn 在 test 页面不可解析（结构合法，纯 Profile gate 命中）
       await expect(
@@ -350,12 +388,141 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       const antdAccepted = await previewTool.execute(
         {
           patch: [
-            { op: 'insertComponent', parentId: 'root', component: { id: 'x2', type: 'Input' } },
+            {
+              op: 'insertComponent',
+              parentId: 'root',
+              component: { id: 'x2', type: 'Input' },
+            },
           ],
         },
         antdCtx as never,
       );
       expect((antdAccepted.updatedWorkingSchema as PageSchema).components['x2']).toBeDefined();
+    });
+
+    it('rejects antd-only props on test pages at both insert and updateProps (per-preset boundary)', async () => {
+      const graph = createServiceGraph(acceptanceRegistry, repo);
+      await graph.pageService.saveSchema({ pageId: 'b4-props', schema: B4_TEST_PAGE_SCHEMA });
+      await repo.saveSchema({
+        pageId: 'antd-props',
+        schema: ANT_PAGE_SCHEMA,
+        systemId: 'default',
+        runtimeCompatibility: ANTD_RUNTIME_COMPATIBILITY,
+      });
+
+      const previewTool = graph.toolRegistry.get('preview_patch')!;
+      const ctx = await graph.toolService.createExecutionContext(
+        { pageId: 'b4-props' },
+        'trace-props-b4',
+      );
+
+      // 拒绝：insert 带 AntD 专属 Props（loading/danger 不在 builtin-test 白名单）
+      await expect(
+        previewTool.execute(
+          {
+            patch: [
+              {
+                op: 'insertComponent',
+                parentId: 'root',
+                component: {
+                  id: 'cta-3',
+                  type: 'Button',
+                  props: { children: 'x', loading: true, danger: true },
+                },
+              },
+            ],
+          },
+          ctx as never,
+        ),
+      ).rejects.toThrow(/Unsupported props \[loading, danger\]/);
+
+      // 拒绝：updateProps 注入 AntD 专属 Prop
+      await expect(
+        previewTool.execute(
+          {
+            patch: [{ op: 'updateProps', componentId: 'cta', props: { danger: true } }],
+          },
+          ctx as never,
+        ),
+      ).rejects.toThrow(/Unsupported props \[danger\]/);
+
+      // 边界按 Preset 生效：同一 Props 在未声明白名单的 AntD Meta 下不受限
+      const antdCtx = await graph.toolService.createExecutionContext(
+        { pageId: 'antd-props' },
+        'trace-props-antd',
+      );
+      const antdAccepted = await previewTool.execute(
+        {
+          patch: [
+            {
+              op: 'updateProps',
+              componentId: 'btn-1',
+              props: { loading: true, danger: true },
+            },
+          ],
+        },
+        antdCtx as never,
+      );
+      expect(
+        (antdAccepted.updatedWorkingSchema as PageSchema).components['btn-1']?.props?.loading,
+      ).toBe(true);
+    });
+
+    it('pins current behavior: alias-typed inserts are preview-accepted but not compile-safe', async () => {
+      const graph = createServiceGraph(acceptanceRegistry, repo);
+      await graph.pageService.saveSchema({ pageId: 'b4-alias', schema: B4_TEST_PAGE_SCHEMA });
+      await repo.saveSchema({
+        pageId: 'b4-alias-saved',
+        schema: {
+          ...B4_TEST_PAGE_SCHEMA,
+          components: {
+            ...B4_TEST_PAGE_SCHEMA.components,
+            root: { id: 'root', type: 'Container', childrenIds: ['hint', 'cta', 'alias-1'] },
+            'alias-1': { id: 'alias-1', type: 'Action', props: { children: '别名按钮' } },
+          },
+        },
+        systemId: 'default',
+        runtimeCompatibility: TEST_RUNTIME_COMPATIBILITY,
+      });
+
+      const previewTool = graph.toolRegistry.get('preview_patch')!;
+      const ctx = await graph.toolService.createExecutionContext(
+        { pageId: 'b4-alias' },
+        'trace-alias',
+      );
+      // 别名在 Meta 解析层被接受（现状，与 B3 行为一致）
+      const accepted = await previewTool.execute(
+        {
+          patch: [
+            {
+              op: 'insertComponent',
+              parentId: 'root',
+              component: { id: 'alias-2', type: 'Action' },
+            },
+          ],
+        },
+        ctx as never,
+      );
+      expect((accepted.updatedWorkingSchema as PageSchema).components['alias-2']?.type).toBe(
+        'Action',
+      );
+
+      // 但别名类型不参与 Compiler Binding：编译含别名节点的已保存页面 fail-close
+      // （既有平台缺口：apply 不做别名规范化；修复需评估 B3 证据，见 B4 文档已知限制）
+      const aliasSchema = {
+        ...B4_TEST_PAGE_SCHEMA,
+        components: {
+          ...B4_TEST_PAGE_SCHEMA.components,
+          root: { id: 'root', type: 'Container', childrenIds: ['hint', 'cta', 'alias-1'] },
+          'alias-1': { id: 'alias-1', type: 'Action', props: { children: '别名按钮' } },
+        },
+      };
+      await expect(
+        graph.compilerService.compile({
+          schema: aliasSchema as unknown as Record<string, unknown>,
+          options: { pageId: 'b4-alias-saved', pageVersion: 1 },
+        }),
+      ).rejects.toThrow(/Action/);
     });
   });
 
@@ -642,6 +809,73 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
           basePageVersion: 1,
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+  describe('Scenario 10: 真实生产仓储（文件存储）下的 CAS 与持久化', () => {
+    let tmpDir: string;
+    let storePath: string;
+
+    beforeEach(() => {
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'b4-real-repo-test-'));
+      storePath = path.join(tmpDir, 'store.json');
+      (
+        PageSchemaRepository as unknown as { writeTails: Map<string, Promise<void>> }
+      ).writeTails?.clear?.();
+    });
+
+    afterEach(() => {
+      (
+        PageSchemaRepository as unknown as { writeTails: Map<string, Promise<void>> }
+      ).writeTails?.clear?.();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    function createRealRepo(p = storePath): PageSchemaRepository {
+      const realRepo = new PageSchemaRepository();
+      (realRepo as unknown as { storeFilePath: string }).storeFilePath = p;
+      return realRepo;
+    }
+
+    it('first save binds the test tuple, CAS bumps versions, stale basePageVersion conflicts, and state survives a repository restart', async () => {
+      const realRepo = createRealRepo();
+      await realRepo.onModuleInit();
+      const graph = createServiceGraph(acceptanceRegistry, realRepo);
+
+      const v1 = await graph.pageService.saveSchema({
+        pageId: 'b4-real-cas',
+        schema: B4_TEST_PAGE_SCHEMA,
+      });
+      expect(v1.pageVersion).toBe(1);
+
+      const v2 = await graph.pageService.saveSchema({
+        pageId: 'b4-real-cas',
+        schema: B4_TEST_PAGE_SCHEMA,
+        basePageVersion: 1,
+      });
+      expect(v2.pageVersion).toBe(2);
+
+      await expect(
+        graph.pageService.saveSchema({
+          pageId: 'b4-real-cas',
+          schema: B4_TEST_PAGE_SCHEMA,
+          basePageVersion: 1,
+        }),
+      ).rejects.toThrow(ConflictException);
+
+      // “重启”：用同一存储文件构建新的真实仓储与服务图，快照三元组持久保留
+      const restartedRepo = createRealRepo();
+      await restartedRepo.onModuleInit();
+      const restartedGraph = createServiceGraph(acceptanceRegistry, restartedRepo);
+      const reloaded = await restartedGraph.pageService.getSchema('b4-real-cas');
+      expect(reloaded.pageVersion).toBe(2);
+      expect(reloaded.runtimeCompatibility).toEqual(TEST_RUNTIME_COMPATIBILITY);
+
+      const v3 = await restartedGraph.pageService.saveSchema({
+        pageId: 'b4-real-cas',
+        schema: B4_TEST_PAGE_SCHEMA,
+        basePageVersion: 2,
+      });
+      expect(v3.pageVersion).toBe(3);
     });
   });
 });

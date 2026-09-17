@@ -1,5 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
+import type { BackendComponentMeta } from '../schema-context/component-metadata/component-meta.types';
 import {
   PageSchema,
   requireSupportedPageSchema,
@@ -114,6 +115,7 @@ export class PatchValidationService {
           break;
         case 'updateProps':
           this.assertComponentExists(currentSchema, operation.componentId, traceId);
+          this.assertUpdatePropsValid(currentSchema, operation, traceId, runtimeCompatibility);
           break;
         case 'bindEvent':
           this.assertComponentExists(currentSchema, operation.componentId, traceId);
@@ -213,7 +215,8 @@ export class PatchValidationService {
       ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
       : this.metaRegistry;
 
-    if (!metaRegistry.resolve(type)) {
+    const resolvedMeta = metaRegistry.resolve(type);
+    if (!resolvedMeta) {
       throw new AgentToolException({
         code: 'PATCH_INVALID',
         message: `Unsupported component type ${type}`,
@@ -221,7 +224,58 @@ export class PatchValidationService {
       });
     }
 
+    // Issue #39 / M1F-2 B4：显式声明 allowedProps 的 Preset（如 builtin-test）
+    // 在 Agent 写入路径拒绝该 Preset 不支持的 Props；未声明的 Meta 零行为变化。
+    if (resolvedMeta.allowedProps) {
+      this.assertPropsWithinWhitelist(
+        resolvedMeta,
+        (operation.component as { props?: Record<string, unknown> }).props,
+        'insertComponent',
+        traceId,
+      );
+    }
+
     this.assertComponentActionsValid(operation.component, traceId);
+  }
+
+  private assertUpdatePropsValid(
+    schema: PageSchema,
+    operation: Extract<EditorPatchOperation, { op: 'updateProps' }>,
+    traceId: string,
+    runtimeCompatibility?: RuntimeCompatibility,
+  ) {
+    const node = schema.components[operation.componentId];
+    if (!node) return;
+
+    const metaRegistry = runtimeCompatibility
+      ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
+      : this.metaRegistry;
+    const resolvedMeta = metaRegistry.resolve(node.type);
+    if (resolvedMeta?.allowedProps) {
+      this.assertPropsWithinWhitelist(
+        resolvedMeta,
+        operation.props as Record<string, unknown>,
+        'updateProps',
+        traceId,
+      );
+    }
+  }
+
+  private assertPropsWithinWhitelist(
+    meta: BackendComponentMeta,
+    props: Record<string, unknown> | undefined,
+    operationLabel: string,
+    traceId: string,
+  ): void {
+    if (!props) return;
+    const unknownProps = Object.keys(props).filter((key) => !meta.allowedProps!.includes(key));
+    if (unknownProps.length > 0) {
+      throw new AgentToolException({
+        code: 'PATCH_INVALID',
+        message: `Unsupported props [${unknownProps.join(', ')}] for component type ${meta.type} (${operationLabel})`,
+        traceId,
+      });
+    }
   }
 
   private assertComponentActionsValid(component: Record<string, unknown>, traceId: string): void {
