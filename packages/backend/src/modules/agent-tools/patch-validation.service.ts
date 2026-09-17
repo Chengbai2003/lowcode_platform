@@ -109,9 +109,11 @@ export class PatchValidationService {
     let currentSchema = baseSchema;
 
     for (const operation of patch) {
+      let effectiveOperation = operation;
       switch (operation.op) {
         case 'insertComponent':
           this.assertInsertValid(currentSchema, operation, traceId, runtimeCompatibility);
+          effectiveOperation = this.canonicalizeInsertType(operation, runtimeCompatibility);
           break;
         case 'updateProps':
           this.assertComponentExists(currentSchema, operation.componentId, traceId);
@@ -144,7 +146,7 @@ export class PatchValidationService {
           break;
       }
 
-      currentSchema = this.patchApplyService.applyPatch(currentSchema, [operation]);
+      currentSchema = this.patchApplyService.applyPatch(currentSchema, [effectiveOperation]);
     }
 
     let canonicalSchema: PageSchema;
@@ -259,6 +261,37 @@ export class PatchValidationService {
         traceId,
       );
     }
+  }
+
+  /**
+   * 写入规范化（Issue #39 review round 2）：别名（如 Btn/Action）在 Meta
+   * 解析层合法，但 Schema 必须持久化规范类型——别名类型既不能渲染
+   * （runtime 无该键）也不能编译（Compiler Binding 只认规范类型）。
+   * insert 的组件类型在应用前改写为 Meta 解析出的规范类型；解析不到
+   * Meta 时保持原值（合法性已由 assertInsertValid 保证）。
+   */
+  private canonicalizeInsertType(
+    operation: Extract<EditorPatchOperation, { op: 'insertComponent' }>,
+    runtimeCompatibility?: RuntimeCompatibility,
+  ): Extract<EditorPatchOperation, { op: 'insertComponent' }> {
+    const metaRegistry = runtimeCompatibility
+      ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
+      : this.metaRegistry;
+    const component = operation.component as { type?: unknown };
+    if (typeof component.type !== 'string') {
+      return operation;
+    }
+    const resolvedMeta = metaRegistry.resolve(component.type);
+    if (!resolvedMeta || resolvedMeta.type === component.type) {
+      return operation;
+    }
+    return {
+      ...operation,
+      component: {
+        ...(operation.component as Record<string, unknown>),
+        type: resolvedMeta.type,
+      },
+    };
   }
 
   private assertPropsWithinWhitelist(

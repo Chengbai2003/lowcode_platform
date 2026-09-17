@@ -670,7 +670,11 @@ describe('B3 Runtime Profile Integration Matrix (Issue #39)', () => {
 
       const resultA = await previewTool.execute({ patch }, contextA as never);
       expect(resultA.updatedWorkingSchema).toBeDefined();
-      expect((resultA.updatedWorkingSchema as PageSchema).components['btn-a-1']?.type).toBe('BtnA');
+      // 写入规范化（Issue #39 review round 2）：别名 BtnA 在 Meta 层被接受，
+      // 但持久化/预览 Schema 一律改写为规范类型 Button（别名类型不可渲染、不可编译）
+      expect((resultA.updatedWorkingSchema as PageSchema).components['btn-a-1']?.type).toBe(
+        'Button',
+      );
 
       const contextB = {
         workingSchema: baseSchema,

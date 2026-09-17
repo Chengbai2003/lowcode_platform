@@ -66,6 +66,39 @@ function parseArgs(argv) {
   return args;
 }
 
+/** 后端全局 TransformInterceptor 的响应信封为 { success, data, ... }；兼容无信封形态。 */
+function unwrapResponseBody(body) {
+  if (
+    body &&
+    typeof body === 'object' &&
+    'data' in body &&
+    body.data &&
+    typeof body.data === 'object'
+  ) {
+    return body.data;
+  }
+  return body;
+}
+
+function assertFullTestTriplet(compat) {
+  const missing = ['componentPresetId', 'componentPresetVersion', 'rendererVersion'].filter(
+    (key) => typeof compat?.[key] !== 'string' || compat[key].trim() === '',
+  );
+  if (compat?.componentPresetId !== 'builtin-test' || compat?.componentPresetVersion !== '0.1.0') {
+    console.error(
+      `[b4-bootstrap] expected builtin-test@0.1.0 binding but got ${JSON.stringify(compat)}; ` +
+        'is the backend running with LOWCODE_DEPLOYMENT_COMPOSITION=b4-acceptance?',
+    );
+    process.exit(1);
+  }
+  if (missing.length > 0) {
+    console.error(
+      `[b4-bootstrap] runtimeCompatibility is missing fields ${missing.join(', ')}: ${JSON.stringify(compat)}`,
+    );
+    process.exit(1);
+  }
+}
+
 async function main() {
   const { baseUrl, pageId, token } = parseArgs(process.argv.slice(2));
   if (!pageId) {
@@ -85,38 +118,38 @@ async function main() {
     headers,
     body: JSON.stringify({ schema: B4_INITIAL_SCHEMA }),
   });
-  if (!saveRes.ok) {
+  if (saveRes.status === 409) {
+    // 页面已存在（重复运行）：跳过创建，继续用回读校验既有身份
+    console.log(
+      '[b4-bootstrap] page %s already exists (HTTP 409) — verifying existing binding',
+      pageId,
+    );
+  } else if (!saveRes.ok) {
     throw new Error(`save failed: HTTP ${saveRes.status} ${await saveRes.text()}`);
+  } else {
+    const saved = unwrapResponseBody(await saveRes.json());
+    console.log(
+      '[b4-bootstrap] created pageId=%s pageVersion=%s snapshotId=%s',
+      pageId,
+      saved.pageVersion,
+      saved.snapshotId,
+    );
   }
-  const saved = await saveRes.json();
-  console.log(
-    '[b4-bootstrap] created pageId=%s pageVersion=%s snapshotId=%s',
-    pageId,
-    saved.pageVersion,
-    saved.snapshotId,
-  );
 
-  // 2) 回读服务端生成的三元组（页面身份的唯一可信来源）
+  // 2) 回读服务端生成的三元组（页面身份的唯一可信来源），校验完整三元组
   const loadRes = await fetch(`${baseUrl}/pages/${encodeURIComponent(pageId)}/schema`, {
     headers,
   });
   if (!loadRes.ok) {
     throw new Error(`load failed: HTTP ${loadRes.status} ${await loadRes.text()}`);
   }
-  const loaded = await loadRes.json();
+  const loaded = unwrapResponseBody(await loadRes.json());
   console.log(
     '[b4-bootstrap] server runtimeCompatibility = %s',
     JSON.stringify(loaded.runtimeCompatibility),
   );
 
-  const compat = loaded.runtimeCompatibility ?? {};
-  if (compat.componentPresetId !== 'builtin-test') {
-    console.error(
-      `[b4-bootstrap] expected builtin-test binding but got ${JSON.stringify(compat)}; ` +
-        'is the backend running with LOWCODE_DEPLOYMENT_COMPOSITION=b4-acceptance?',
-    );
-    process.exit(1);
-  }
+  assertFullTestTriplet(loaded.runtimeCompatibility);
   console.log('[b4-bootstrap] OK — open the editor at /b4-acceptance.html?pageId=%s', pageId);
 }
 

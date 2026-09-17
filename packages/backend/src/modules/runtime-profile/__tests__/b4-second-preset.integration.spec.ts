@@ -468,61 +468,47 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       ).toBe(true);
     });
 
-    it('pins current behavior: alias-typed inserts are preview-accepted but not compile-safe', async () => {
+    it('alias inserts are canonicalized at write and stay compile-safe (review round 2)', async () => {
       const graph = createServiceGraph(acceptanceRegistry, repo);
       await graph.pageService.saveSchema({ pageId: 'b4-alias', schema: B4_TEST_PAGE_SCHEMA });
-      await repo.saveSchema({
-        pageId: 'b4-alias-saved',
-        schema: {
-          ...B4_TEST_PAGE_SCHEMA,
-          components: {
-            ...B4_TEST_PAGE_SCHEMA.components,
-            root: { id: 'root', type: 'Container', childrenIds: ['hint', 'cta', 'alias-1'] },
-            'alias-1': { id: 'alias-1', type: 'Action', props: { children: '别名按钮' } },
-          },
-        },
-        systemId: 'default',
-        runtimeCompatibility: TEST_RUNTIME_COMPATIBILITY,
-      });
 
       const previewTool = graph.toolRegistry.get('preview_patch')!;
       const ctx = await graph.toolService.createExecutionContext(
         { pageId: 'b4-alias' },
         'trace-alias',
       );
-      // 别名在 Meta 解析层被接受（现状，与 B3 行为一致）
+      // 别名 Action 在 Meta 解析层被接受，但写入的 Schema 一律规范化为 Button
       const accepted = await previewTool.execute(
         {
           patch: [
             {
               op: 'insertComponent',
               parentId: 'root',
-              component: { id: 'alias-2', type: 'Action' },
+              component: { id: 'alias-cta', type: 'Action', props: { children: '别名按钮' } },
             },
           ],
         },
         ctx as never,
       );
-      expect((accepted.updatedWorkingSchema as PageSchema).components['alias-2']?.type).toBe(
-        'Action',
-      );
+      const updated = accepted.updatedWorkingSchema as PageSchema;
+      expect(updated.components['alias-cta']?.type).toBe('Button');
 
-      // 但别名类型不参与 Compiler Binding：编译含别名节点的已保存页面 fail-close
-      // （既有平台缺口：apply 不做别名规范化；修复需评估 B3 证据，见 B4 文档已知限制）
-      const aliasSchema = {
-        ...B4_TEST_PAGE_SCHEMA,
-        components: {
-          ...B4_TEST_PAGE_SCHEMA.components,
-          root: { id: 'root', type: 'Container', childrenIds: ['hint', 'cta', 'alias-1'] },
-          'alias-1': { id: 'alias-1', type: 'Action', props: { children: '别名按钮' } },
-        },
-      };
-      await expect(
-        graph.compilerService.compile({
-          schema: aliasSchema as unknown as Record<string, unknown>,
-          options: { pageId: 'b4-alias-saved', pageVersion: 1 },
-        }),
-      ).rejects.toThrow(/Action/);
+      // 规范化后的 Schema 可保存、可编译——别名路径不再产生不可导出的页面
+      const saved = await graph.pageService.saveSchema({
+        pageId: 'b4-alias',
+        schema: updated,
+        basePageVersion: 1,
+      });
+      expect(saved.pageVersion).toBe(2);
+
+      const compiled = await graph.compilerService.compile({
+        schema: updated as unknown as Record<string, unknown>,
+        options: { pageId: 'b4-alias', pageVersion: 2 },
+      });
+      expect(compiled.code).toContain('@lowcode-platform/preset-test/runtime');
+      expect(compiled.code).toContain('别名按钮');
+      // 产物中不存在别名 JSX 标签（规范化后只会有 Button）
+      expect(compiled.code).not.toMatch(/<Action[\s/>]/);
     });
   });
 
