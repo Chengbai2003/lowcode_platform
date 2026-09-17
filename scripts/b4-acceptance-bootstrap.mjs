@@ -15,9 +15,34 @@
  *     --page-id b4-acceptance-demo \
  *     --token "$API_SECRET"
  *
+ * 期望三元组取自真实包常量 TEST_RUNTIME_COMPATIBILITY（presetId、版本与
+ * rendererVersion 逐字段精确比对，非空检查不够）。
+ *
  * 退出码：0 成功；1 失败（错误打印到 stderr）。
  */
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function loadExpectedCompatibility() {
+  try {
+    const backendRequire = createRequire(path.join(repoRoot, 'packages/backend/package.json'));
+    const presetTest = backendRequire('@lowcode-platform/preset-test');
+    return presetTest.TEST_RUNTIME_COMPATIBILITY;
+  } catch (error) {
+    console.error(
+      'cannot resolve @lowcode-platform/preset-test TEST_RUNTIME_COMPATIBILITY ' +
+        '(run: pnpm --filter @lowcode-platform/preset-test build): ' +
+        (error?.message ?? error),
+    );
+    process.exit(1);
+  }
+}
+
+const EXPECTED_COMPATIBILITY = loadExpectedCompatibility();
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3001/api/v1';
 
 const B4_INITIAL_SCHEMA = {
@@ -81,19 +106,15 @@ function unwrapResponseBody(body) {
 }
 
 function assertFullTestTriplet(compat) {
-  const missing = ['componentPresetId', 'componentPresetVersion', 'rendererVersion'].filter(
-    (key) => typeof compat?.[key] !== 'string' || compat[key].trim() === '',
+  const mismatches = ['componentPresetId', 'componentPresetVersion', 'rendererVersion'].filter(
+    (key) => compat?.[key] !== EXPECTED_COMPATIBILITY[key],
   );
-  if (compat?.componentPresetId !== 'builtin-test' || compat?.componentPresetVersion !== '0.1.0') {
+  if (mismatches.length > 0) {
     console.error(
-      `[b4-bootstrap] expected builtin-test@0.1.0 binding but got ${JSON.stringify(compat)}; ` +
-        'is the backend running with LOWCODE_DEPLOYMENT_COMPOSITION=b4-acceptance?',
-    );
-    process.exit(1);
-  }
-  if (missing.length > 0) {
-    console.error(
-      `[b4-bootstrap] runtimeCompatibility is missing fields ${missing.join(', ')}: ${JSON.stringify(compat)}`,
+      `[b4-bootstrap] runtimeCompatibility mismatch on [${mismatches.join(', ')}]: ` +
+        `got ${JSON.stringify(compat)}, expected ${JSON.stringify(EXPECTED_COMPATIBILITY)}; ` +
+        'is the backend running with LOWCODE_DEPLOYMENT_COMPOSITION=b4-acceptance ' +
+        'and the same preset-test build?',
     );
     process.exit(1);
   }

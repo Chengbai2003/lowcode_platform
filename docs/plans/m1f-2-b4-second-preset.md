@@ -76,7 +76,8 @@ pnpm dev   # vite，端口 3000
 真实创建；它不是通用 Preset 选择器，页面身份完全由服务端快照决定。
 
 脚本按全局 `TransformInterceptor` 的 `{ success, data }` 信封解包保存与读取响应，
-校验完整三元组（`builtin-test@0.1.0` + 非空 `rendererVersion`），非该组合即非零
+期望三元组取自真实包常量 `TEST_RUNTIME_COMPATIBILITY` 并逐字段精确比对
+（`rendererVersion: "9.9.9"` 会失败退出，已用桩服务复现验证），非该组合即非零
 退出；页面已存在（HTTP 409）时跳过创建、继续回读校验，可幂等重复运行。以上
 已在真实启动的 `b4-acceptance` 后端（临时 `PAGE_SCHEMA_FILE_PATH`）上端到端
 验证：首建 exit 0 且存储三元组为 `builtin-test@0.1.0`，重跑走 409 路径 exit 0。
@@ -116,7 +117,7 @@ pnpm dev   # vite，端口 3000
 | B 回读（加载/预览身份）                                                                                                       | 同上 S2                                                                                             |
 | Agent 读 B Meta/aliases；规范类型 Patch 完整闭环（预览→CAS 保存→编译）                                                        | 同上 S3                                                                                             |
 | A 独有类型/别名被拒绝（结构合法证明）；Props 属性边界（insert/updateProps 拒绝 AntD 专属 Props，同 Props 在 AntD 页不受限）   | 同上 S3                                                                                             |
-| 别名写入规范化：别名插入（Action/Btn）经 Meta 解析后在写入前改写为规范类型，保存与编译闭环成立 | 同上 S3（`alias inserts are canonicalized at write and stay compile-safe`）                        |
+| 别名写入规范化：别名插入（Action/Btn）在写入 Schema 与对外返回/累积的 Patch 中同步改写为规范类型；重放（applyPatch）结果与预览一致，保存与编译闭环成立 | 同上 S3（review round 3 用例）+ `b4-frontend-second-preset.test.tsx` 重放用例（真实 `applyPatchToSchema`） |
 | 确认后经真实 CAS 保存、过期版本冲突                                                                                           | 同上 S4                                                                                             |
 | Compiler B：真实 generator、导入路径实际可解析、message/notification 命名导出                                                 | 同上 S5                                                                                             |
 | A→B 静态升级：旧 A 保存/预览/Agent/编译仍 A，新页面 B                                                                         | 同上 S6                                                                                             |
@@ -135,11 +136,14 @@ pnpm dev   # vite，端口 3000
 
 ## 6. 已知限制
 
-- **别名写入规范化只覆盖 Agent Patch 入口（review round 2 已修复）**：`PatchValidationService`
-  在 insertComponent 应用前把别名（`Action`/`Btn` 等）改写为 Meta 解析出的规范类型，
-  预览/保存/编译闭环成立（B4 S3 与 B3 Scenario 3b 共同锁定）。绕过 Agent 入口
-  手写的别名类型 Schema（直接 `PUT` 原始 JSON）不做规范化，编译时按
-  `Unsupported component type` fail-close——保存入口的类型白名单校验属后续工作。
+- **别名写入规范化覆盖 Agent Patch 的全部出口（review round 3 收口）**：`PatchValidationService`
+  在 insertComponent 应用前把别名改写为规范类型；`canonicalizePatchOperations` 同步把
+  preview_patch 返回与 write 工具 patchDelta（→accumulatedPatch→最终响应 Patch）中的
+  insert 类型按应用后 Schema 反查改写——客户端确认后重放 Patch（前端
+  `applyPatchToSchema`）得到与预览完全一致的 Schema（后端 `toEqual` 与前端真实
+  重放用例共同锁定）。绕过 Agent 入口手写的别名 Schema（直接 `PUT` 原始 JSON）
+  不做规范化，编译时按 `Unsupported component type` fail-close——保存入口的
+  类型白名单校验属后续工作。
 - **Generator 对含双引号的 Prop 值生成非法 JSX（既有局限）**：字符串 Prop 值内部
   含 `"` 时，产物属性形如 `onerror="alert(\"x\")"` 无法编译。与 Preset 无关，
   在 generator 属性引号策略中单独修复；B4 危险 Props 用例因此避免内部双引号。

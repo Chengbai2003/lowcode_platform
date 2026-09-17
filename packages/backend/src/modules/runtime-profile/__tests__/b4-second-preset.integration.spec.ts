@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { PageSchema, RuntimeCompatibility } from '@lowcode-platform/schema-contract';
+import { requireSupportedPageSchema } from '@lowcode-platform/schema-contract';
 import { TEST_PRESET_ID, TEST_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-test';
 import { ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 
@@ -196,6 +197,7 @@ function createServiceGraph(
     toolService,
     validationService,
     compilerService,
+    applyService,
   };
 }
 
@@ -468,7 +470,7 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       ).toBe(true);
     });
 
-    it('alias inserts are canonicalized at write and stay compile-safe (review round 2)', async () => {
+    it('alias inserts are canonicalized at write, in returned patches, and stay compile-safe on replay (review round 3)', async () => {
       const graph = createServiceGraph(acceptanceRegistry, repo);
       await graph.pageService.saveSchema({ pageId: 'b4-alias', schema: B4_TEST_PAGE_SCHEMA });
 
@@ -493,16 +495,29 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       const updated = accepted.updatedWorkingSchema as PageSchema;
       expect(updated.components['alias-cta']?.type).toBe('Button');
 
-      // 规范化后的 Schema 可保存、可编译——别名路径不再产生不可导出的页面
+      // 对外返回的 Patch 必须同步规范化：客户端确认后重放的是这个 Patch，
+      // 若仍是 Action，前端 applyPatchToSchema 会把别名写回 Schema
+      const returnedPatch = (accepted.data as { patch: Array<{ component?: { type?: string } }> })
+        .patch;
+      expect(returnedPatch).toHaveLength(1);
+      expect(returnedPatch[0]!.component?.type).toBe('Button');
+
+      // 重放路径（等价于前端 applyPatchToSchema 的服务端实现）：结果与预览完全一致
+      // （两侧都经 Contract 规范化后再比对，重放结果保存时也会走同一规范化）
+      const replayed = graph.applyService.applyPatch(B4_TEST_PAGE_SCHEMA, returnedPatch as never);
+      expect(replayed.components['alias-cta']?.type).toBe('Button');
+      expect(requireSupportedPageSchema(replayed)).toEqual(updated);
+
+      // 重放结果可保存、可编译——别名路径不再产生不可导出的页面
       const saved = await graph.pageService.saveSchema({
         pageId: 'b4-alias',
-        schema: updated,
+        schema: replayed,
         basePageVersion: 1,
       });
       expect(saved.pageVersion).toBe(2);
 
       const compiled = await graph.compilerService.compile({
-        schema: updated as unknown as Record<string, unknown>,
+        schema: replayed as unknown as Record<string, unknown>,
         options: { pageId: 'b4-alias', pageVersion: 2 },
       });
       expect(compiled.code).toContain('@lowcode-platform/preset-test/runtime');

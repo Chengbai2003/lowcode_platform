@@ -13,6 +13,7 @@ import { antdPreset, ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset
 import { testPreset, TEST_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-test';
 import { Renderer, type ComponentPreset } from '@lowcode-platform/renderer';
 import { BUILTIN_RENDERER_PRESET_CATALOG } from '../../renderer-preset-catalog';
+import { applyPatchToSchema } from '../services/patchAdapter';
 import { useEditorStore, useSelectionStore } from '../store/editor-store';
 import type { PageSchema } from '../../types';
 
@@ -309,5 +310,29 @@ describe('B4 Frontend Second Preset (Issue #39)', () => {
         expect(screen.queryByTestId('mock-floating-island')).toBeNull();
       });
     });
+  });
+});
+
+describe('B4 别名 Patch 重放路径（review round 3）', () => {
+  it('后端规范化后的返回 Patch 经真实 applyPatchToSchema 重放，结果与预览一致', async () => {
+    // 与后端 b4-second-preset.integration.spec.ts（review round 3 用例）锁定的返回
+    // Patch 形态一致：Agent 提交 type=Action，服务端写入与返回均已规范化为 Button。
+    const returnedPatch = [
+      {
+        op: 'insertComponent',
+        parentId: 'root',
+        component: { id: 'alias-cta', type: 'Button', props: { children: '别名按钮' } },
+      },
+    ];
+
+    const replayed = applyPatchToSchema(B4_TEST_SCHEMA, returnedPatch as never);
+    expect(replayed.components['alias-cta']?.type).toBe('Button');
+    expect(replayed.components['alias-cta']?.props?.children).toBe('别名按钮');
+    // 重放后的 root children 包含新节点（与预览 Schema 结构一致）
+    expect(replayed.components['root']?.childrenIds).toContain('alias-cta');
+    // Schema 仍是纯数据：无任何身份/绑定字段
+    const raw = replayed as unknown as Record<string, unknown>;
+    expect(raw.runtimeCompatibility).toBeUndefined();
+    expect(raw.systemId).toBeUndefined();
   });
 });

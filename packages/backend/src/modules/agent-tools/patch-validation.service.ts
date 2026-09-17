@@ -487,6 +487,26 @@ export function canonicalizePatchOperations(
         logic: (schema.logic ?? {}) as Record<string, unknown>,
       };
     }
+    if (operation.op === 'insertComponent') {
+      // 写入规范化（Issue #39 review round 3）：别名在 previewValidatedSchema 内
+      // 已改写为规范类型；对外返回与累积的 Patch 必须同步同一规范类型，否则
+      // 客户端重放 Patch（前端 applyPatchToSchema）会把别名写回 Schema，
+      // 导致页面不可渲染、编译 fail-close。规范类型按组件 id 从应用后的
+      // Schema 反查（同 id 后插入的组件会覆盖，类型本就来自最后一次插入）。
+      const componentId = (operation.component as { id?: unknown }).id;
+      const appliedType =
+        typeof componentId === 'string' ? schema.components[componentId]?.type : undefined;
+      const originalType = (operation.component as { type?: unknown }).type;
+      if (typeof appliedType === 'string' && appliedType !== originalType) {
+        return {
+          ...operation,
+          component: {
+            ...(operation.component as Record<string, unknown>),
+            type: appliedType,
+          },
+        };
+      }
+    }
     return operation;
   });
 }
