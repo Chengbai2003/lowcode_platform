@@ -74,6 +74,21 @@ jobs:
           node -e "const p = require('@lowcode-platform/preset-antd'); const r = require('@lowcode-platform/preset-antd/runtime'); const m = require('@lowcode-platform/preset-antd/manifest'); const c = require('@lowcode-platform/preset-antd/compiler'); if (typeof p.createAntdPreset !== 'function' || !Object.isFrozen(p.antdPreset) || !r.antdRuntime.Page || !m.antdManifest.Div || !c.antdCompilerBindings.componentSources.Text) { throw new Error('CJS consumption via exports map failed'); }"
           node --input-type=module -e "const p = await import('@lowcode-platform/preset-antd'); if (typeof p.createAntdPreset !== 'function' || !Object.isFrozen(p.antdPreset)) { throw new Error('ESM consumption via exports map failed'); }"
 
+      # Issue #39 / M1F-2 B4：第二个可信 Preset 包构建与消费冒烟
+      - name: Build Preset Test Package
+        run: pnpm --filter @lowcode-platform/preset-test build
+
+      - name: Preset Test Package consumption smoke test
+        run: |
+          test -f packages/preset-test/dist/index.js
+          test -f packages/preset-test/dist/runtime.js
+          test -f packages/preset-test/dist/manifest.js
+          test -f packages/preset-test/dist/validation.js
+          test -f packages/preset-test/dist/compiler.js
+          cd packages/preset-test
+          node -e "const p = require('@lowcode-platform/preset-test'); const r = require('@lowcode-platform/preset-test/runtime'); const m = require('@lowcode-platform/preset-test/manifest'); const c = require('@lowcode-platform/preset-test/compiler'); if (typeof p.createTestPreset !== 'function' || !Object.isFrozen(p.testPreset) || !r.testRuntime.Button || !m.testManifest.Container || !c.testCompilerBindings.componentSources.Button) { throw new Error('CJS consumption via exports map failed'); }"
+          node --input-type=module -e "const p = await import('@lowcode-platform/preset-test'); if (typeof p.createTestPreset !== 'function' || !Object.isFrozen(p.testPreset)) { throw new Error('ESM consumption via exports map failed'); }"
+
       # 前端 vite build：守护 workspace 包 dist 的 CJS 命名导出可被 rollup 静态解析
       # （renderer 的 dist 已成为前端运行时依赖，vite build 不在 CI 会漏掉这一类回归）
       - name: Build Packages
@@ -104,6 +119,9 @@ jobs:
 
       - name: Preset Antd Package Tests
         run: pnpm test:preset-antd
+
+      - name: Preset Test Package Tests
+        run: pnpm test:preset-test
 
       - name: Frontend Tests
         run: pnpm test:frontend

@@ -63,6 +63,9 @@ importers:
       '@lowcode-platform/preset-antd':
         specifier: workspace:*
         version: link:../preset-antd
+      '@lowcode-platform/preset-test':
+        specifier: workspace:*
+        version: link:../preset-test
       '@lowcode-platform/schema-contract':
         specifier: workspace:*
         version: link:../schema-contract
@@ -157,6 +160,9 @@ importers:
       '@lowcode-platform/preset-antd':
         specifier: workspace:*
         version: link:../preset-antd
+      '@lowcode-platform/preset-test':
+        specifier: workspace:*
+        version: link:../preset-test
       '@lowcode-platform/renderer':
         specifier: workspace:*
         version: link:../renderer
@@ -251,6 +257,46 @@ importers:
       antd:
         specifier: ^5.0.0
         version: 5.29.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+    devDependencies:
+      '@testing-library/react':
+        specifier: ^14.0.0
+        version: 14.3.1(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@types/react':
+        specifier: ^18.0.0
+        version: 18.3.28
+      '@types/react-dom':
+        specifier: ^18.0.0
+        version: 18.3.7(@types/react@18.3.28)
+      '@vitejs/plugin-react':
+        specifier: ^4.2.1
+        version: 4.7.0(vite@5.4.21(@types/node@20.19.37)(lightningcss@1.31.1)(sass@1.97.3))
+      jsdom:
+        specifier: ^23.0.0
+        version: 23.2.0
+      react:
+        specifier: ^18.0.0
+        version: 18.3.1
+      react-dom:
+        specifier: ^18.0.0
+        version: 18.3.1(react@18.3.1)
+      rimraf:
+        specifier: ^5.0.5
+        version: 5.0.10
+      typescript:
+        specifier: ^5.0.0
+        version: 5.9.3
+      vite:
+        specifier: ^5.0.8
+        version: 5.4.21(@types/node@20.19.37)(lightningcss@1.31.1)(sass@1.97.3)
+      vitest:
+        specifier: ^1.0.0
+        version: 1.6.1(@types/node@20.19.37)(@vitest/ui@1.6.1)(jsdom@23.2.0)(lightningcss@1.31.1)(sass@1.97.3)
+
+  packages/preset-test:
+    dependencies:
+      '@lowcode-platform/renderer':
+        specifier: workspace:*
+        version: link:../renderer
     devDependencies:
       '@testing-library/react':
         specifier: ^14.0.0

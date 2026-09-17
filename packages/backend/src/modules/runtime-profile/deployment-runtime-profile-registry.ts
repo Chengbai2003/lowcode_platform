@@ -1,13 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
-import { antdCompilerBindings } from '@lowcode-platform/preset-antd';
 import type { RuntimeCompatibility } from '@lowcode-platform/schema-contract';
-import { BUILTIN_ANTD_SYSTEM_RUNTIME_PROFILE } from '../page-schema/runtime-profiles';
 import { SystemRuntimeProfileRegistry } from '../page-schema/system-runtime-profile-registry';
 import type { SystemRuntimeProfile } from '../page-schema/system-runtime-profile';
 import {
   ComponentMetaRegistry,
   BUILTIN_ANTD_COMPONENT_META_REGISTRY,
 } from '../schema-context/component-metadata/component-meta.registry';
+import { getDeploymentComposition, resolveDeploymentCompositionId } from './deployment-composition';
 
 export interface CompilerBindings {
   readonly defaultLibrary?: string;
@@ -187,13 +186,16 @@ export class DeploymentRuntimeProfileRegistry {
   }
 }
 
-export const DEPLOYMENT_RUNTIME_PROFILE_REGISTRY = new DeploymentRuntimeProfileRegistry(
-  [BUILTIN_ANTD_SYSTEM_RUNTIME_PROFILE],
-  Object.freeze({
-    'builtin-antd-compiler-bindings-0.1.0': antdCompilerBindings,
-  }),
-  Object.freeze({
-    'builtin-antd': BUILTIN_ANTD_COMPONENT_META_REGISTRY,
-    'builtin-antd@0.1.0': BUILTIN_ANTD_COMPONENT_META_REGISTRY,
-  }),
-);
+/**
+ * 进程级部署单例：组合在模块加载（启动）时经 deployment-composition 静态确定，
+ * 与 B4 前的单一 AntD 注册等价地服务正常部署；`b4-acceptance` 组合仅通过
+ * 启动环境变量选择，无运行时切换入口。
+ */
+export const DEPLOYMENT_RUNTIME_PROFILE_REGISTRY = (() => {
+  const composition = getDeploymentComposition(resolveDeploymentCompositionId());
+  return new DeploymentRuntimeProfileRegistry(
+    composition.profiles,
+    composition.compilerBindings,
+    composition.componentMetas,
+  );
+})();

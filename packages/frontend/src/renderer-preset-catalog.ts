@@ -1,4 +1,5 @@
 import { antdPreset } from '@lowcode-platform/preset-antd';
+import { testPreset } from '@lowcode-platform/preset-test';
 import {
   isSealedComponentPreset,
   RENDERER_VERSION,
@@ -100,4 +101,8 @@ export class RendererPresetCatalog {
 /** Process-lifetime catalog assembled from modules bundled at frontend bootstrap. */
 export const BUILTIN_RENDERER_PRESET_CATALOG = new RendererPresetCatalog([
   { preset: antdPreset, rendererVersion: RENDERER_VERSION, status: 'active' },
+  // Issue #39 / M1F-2 B4：第二个可信 Preset 静态打入前端 bundle。
+  // 页面用哪个 Preset 由服务端快照 runtimeCompatibility 决定；Catalog 只负责
+  // 让已打包的 sealed Preset 可被精确解析，不开放客户端选择。
+  { preset: testPreset, rendererVersion: RENDERER_VERSION, status: 'active' },
 ]);
