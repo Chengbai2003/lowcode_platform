@@ -15,6 +15,8 @@
  *             javascript: href）的页面，用于验证 runtime 自防御使编译产物无法注入 DOM
  */
 
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { createRequire } = require('node:module');
 
@@ -168,7 +170,7 @@ const SPECIAL_STRINGS_SCHEMA = {
   },
 };
 
-function buildTestBackendGraph(backendRequire) {
+function buildTestBackendGraph(backendRequire, repo) {
   const { Logger } = backendRequire('@nestjs/common');
   Logger.overrideLogger(false);
 
@@ -216,54 +218,6 @@ function buildTestBackendGraph(backendRequire) {
     composition.manifests,
   );
 
-  const pages = new Map();
-  const snapshots = new Map();
-  const repo = {
-    getPage: (id) => pages.get(id),
-    getLatestSnapshot: (id) => {
-      const page = pages.get(id);
-      if (!page) return undefined;
-      return (snapshots.get(id) ?? []).find((s) => s.snapshotId === page.latestSnapshotId);
-    },
-    getSnapshotByVersion: (id, ver) =>
-      (snapshots.get(id) ?? []).find((s) => s.pageVersion === ver),
-    saveSchema: async (params) => {
-      const existing = pages.get(params.pageId);
-      const currentVersion = existing?.currentPageVersion ?? 0;
-      if (existing && params.basePageVersion === undefined) {
-        throw new Error('Page version mismatch: existing page requires basePageVersion');
-      }
-      if (params.basePageVersion !== undefined && params.basePageVersion !== currentVersion) {
-        throw new Error(
-          `Page version mismatch: expected ${currentVersion}, got ${params.basePageVersion}`,
-        );
-      }
-      const nextVersion = currentVersion + 1;
-      const snapshotId = `snap-${params.pageId}-v${nextVersion}`;
-      const snapshot = {
-        snapshotId,
-        pageId: params.pageId,
-        pageVersion: nextVersion,
-        schema: params.schema,
-        runtimeCompatibility: params.runtimeCompatibility,
-        createdAt: new Date().toISOString(),
-      };
-      const record = {
-        pageId: params.pageId,
-        systemId: params.systemId,
-        currentPageVersion: nextVersion,
-        latestSnapshotId: snapshotId,
-        createdAt: existing?.createdAt ?? new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      pages.set(params.pageId, record);
-      const list = snapshots.get(params.pageId) ?? [];
-      list.push(snapshot);
-      snapshots.set(params.pageId, list);
-      return { page: record, snapshot };
-    },
-  };
-
   const metadataProvider = new PageRuntimeMetadataProvider(registry);
   const pageService = new PageSchemaService(repo, metadataProvider);
   const schemaResolver = new SchemaResolverService(pageService, registry);
@@ -305,6 +259,16 @@ function buildTestBackendGraph(backendRequire) {
   };
 }
 
+async function createRealRepository(backendRequire, storeFilePath) {
+  const { PageSchemaRepository } = backendRequire(
+    './src/modules/page-schema/repositories/page-schema.repository',
+  );
+  const repo = new PageSchemaRepository();
+  repo.storeFilePath = storeFilePath;
+  await repo.onModuleInit();
+  return repo;
+}
+
 const B4_TEST_PAGE_SCHEMA = {
   schemaVersion: 0,
   rootId: 'root',
@@ -315,92 +279,162 @@ const B4_TEST_PAGE_SCHEMA = {
   },
 };
 
-async function computePatchCases(graph) {
-  const cases = {
-    aliasInsert: [
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'alias-cta', type: 'Action', props: { children: '别名按钮' } },
-      },
-    ],
-    aliasInsertThenRemove: [
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'temp-cta', type: 'Action', props: { children: '临时按钮' } },
-      },
-      {
-        op: 'removeComponent',
-        componentId: 'temp-cta',
-      },
-    ],
-    sameIdRecreate: [
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'slot-1', type: 'Action', props: { children: '先建按钮' } },
-      },
-      {
-        op: 'removeComponent',
-        componentId: 'slot-1',
-      },
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'slot-1', type: 'Caption', props: { children: '后建文本' } },
-      },
-    ],
-  };
+async function computePatchCases(backendRequire) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'b4-patch-cases-'));
+  const storeFilePath = path.join(tmpDir, 'page-schema-store.json');
 
-  const previewTool = graph.toolRegistry.get('preview_patch');
-  const result = {};
+  try {
+    const repo = await createRealRepository(backendRequire, storeFilePath);
+    const graph = buildTestBackendGraph(backendRequire, repo);
 
-  for (const [caseName, inputPatch] of Object.entries(cases)) {
-    const pageId = `bridge-${caseName}`;
-    await graph.pageService.saveSchema({ pageId, schema: B4_TEST_PAGE_SCHEMA });
-    const ctx = await graph.toolService.createExecutionContext({ pageId }, `trace-${caseName}`);
-    const accepted = await previewTool.execute({ patch: inputPatch }, ctx);
-
-    result[caseName] = {
-      baseSchema: B4_TEST_PAGE_SCHEMA,
-      inputPatch,
-      returnedPatch: accepted.data.patch,
-      updatedWorkingSchema: accepted.updatedWorkingSchema,
-      initialPageVersion: 1,
+    const cases = {
+      aliasInsert: [
+        {
+          op: 'insertComponent',
+          parentId: 'root',
+          component: { id: 'alias-cta', type: 'Action', props: { children: '别名按钮' } },
+        },
+      ],
+      aliasInsertThenRemove: [
+        {
+          op: 'insertComponent',
+          parentId: 'root',
+          component: { id: 'temp-cta', type: 'Action', props: { children: '临时按钮' } },
+        },
+        {
+          op: 'removeComponent',
+          componentId: 'temp-cta',
+        },
+      ],
+      sameIdRecreate: [
+        {
+          op: 'insertComponent',
+          parentId: 'root',
+          component: { id: 'slot-1', type: 'Action', props: { children: '先建按钮' } },
+        },
+        {
+          op: 'removeComponent',
+          componentId: 'slot-1',
+        },
+        {
+          op: 'insertComponent',
+          parentId: 'root',
+          component: { id: 'slot-1', type: 'Caption', props: { children: '后建文本' } },
+        },
+      ],
     };
-  }
 
-  return result;
+    const previewTool = graph.toolRegistry.get('preview_patch');
+    const result = {};
+
+    for (const [caseName, inputPatch] of Object.entries(cases)) {
+      const pageId = `bridge-${caseName}`;
+      await graph.pageService.saveSchema({ pageId, schema: B4_TEST_PAGE_SCHEMA });
+      const ctx = await graph.toolService.createExecutionContext({ pageId }, `trace-${caseName}`);
+      const accepted = await previewTool.execute({ patch: inputPatch }, ctx);
+
+      result[caseName] = {
+        baseSchema: B4_TEST_PAGE_SCHEMA,
+        inputPatch,
+        returnedPatch: accepted.data.patch,
+        updatedWorkingSchema: accepted.updatedWorkingSchema,
+        initialPageVersion: 1,
+      };
+    }
+
+    return result;
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
+  }
 }
 
-async function handleSaveAndCompile(graph, payloadJson) {
+async function handleSaveAndCompile(backendRequire, payloadJson) {
   const { pageId, schema, basePageVersion } = JSON.parse(payloadJson);
-  if (basePageVersion === 1) {
-    try {
-      await graph.pageService.saveSchema({ pageId, schema: B4_TEST_PAGE_SCHEMA });
-    } catch {
-      // ignore if already seeded
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'b4-save-cas-'));
+  const storeFilePath = path.join(tmpDir, 'page-schema-store.json');
+
+  try {
+    // 1. 真实仓储实例 1：通过 PageSchemaRepository 执行首建（持久化至独立临时文件，绑定 b4-acceptance 下的 builtin-test 三元组，pageVersion = 1）
+    const repo1 = await createRealRepository(backendRequire, storeFilePath);
+    const graph1 = buildTestBackendGraph(backendRequire, repo1);
+
+    const initial = await graph1.pageService.saveSchema({
+      pageId,
+      schema: B4_TEST_PAGE_SCHEMA,
+    });
+    if (initial.pageVersion !== 1) {
+      throw new Error(`Expected initial pageVersion 1, got ${initial.pageVersion}`);
     }
+
+    // 2. 真实 CAS 保存：使用前端重放后的 schema 和 basePageVersion 提交
+    //    若 basePageVersion 错误，真实 PageSchemaRepository 抛出 ConflictException (409)
+    const saved = await graph1.pageService.saveSchema({
+      pageId,
+      schema,
+      basePageVersion,
+    });
+
+    // 3. 验证独立临时文件已真实落地到磁盘，且包含新快照
+    const rawDisk = fs.readFileSync(storeFilePath, 'utf8');
+    const diskData = JSON.parse(rawDisk);
+    const diskPage = diskData.pages.find((p) => p.pageId === pageId);
+    if (!diskPage || diskPage.currentPageVersion !== saved.pageVersion) {
+      throw new Error(`Store file on disk does not reflect saved pageVersion ${saved.pageVersion}`);
+    }
+
+    // 4. “保存后回读并编译”：以同一存储文件初始化全新的真实仓储实例 2，模拟真实重启/重读
+    const repo2 = await createRealRepository(backendRequire, storeFilePath);
+    const graph2 = buildTestBackendGraph(backendRequire, repo2);
+    const reloaded = await graph2.pageService.getSchema(pageId);
+    if (reloaded.pageVersion !== saved.pageVersion) {
+      throw new Error(
+        `Reloaded page version mismatch: expected ${saved.pageVersion}, got ${reloaded.pageVersion}`,
+      );
+    }
+
+    const compiled = await graph2.compilerService.compile({
+      schema: reloaded.schema,
+      options: { pageId, pageVersion: reloaded.pageVersion },
+    });
+
+    // 5. “再断言旧版本保存被拒绝”：向真实仓储提交过期的 basePageVersion（旧版本 1），验证被真实 CAS 拒绝
+    let staleRejected = false;
+    let staleErrorStatus = null;
+    let staleErrorMessage = null;
+    try {
+      await graph2.pageService.saveSchema({
+        pageId,
+        schema: reloaded.schema,
+        basePageVersion: 1, // 当前最新已是 2，版本 1 必须被拒绝
+      });
+    } catch (error) {
+      staleRejected = true;
+      staleErrorStatus = typeof error.getStatus === 'function' ? error.getStatus() : null;
+      staleErrorMessage = error?.message || String(error);
+    }
+
+    if (!staleRejected) {
+      throw new Error('Expected stale basePageVersion save to be rejected by PageSchemaRepository CAS');
+    }
+
+    process.stdout.write(
+      JSON.stringify({
+        savedPageVersion: saved.pageVersion,
+        reloadedPageVersion: reloaded.pageVersion,
+        staleRejected,
+        staleErrorStatus,
+        staleErrorMessage,
+        storeFileVerified: true,
+        code: compiled.code,
+      }),
+    );
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
   }
-
-  const saved = await graph.pageService.saveSchema({
-    pageId,
-    schema,
-    basePageVersion,
-  });
-
-  const compiled = await graph.compilerService.compile({
-    schema,
-    options: { pageId, pageVersion: saved.pageVersion },
-  });
-
-  process.stdout.write(
-    JSON.stringify({
-      savedPageVersion: saved.pageVersion,
-      code: compiled.code,
-    }),
-  );
 }
 
 async function main() {
@@ -411,11 +445,9 @@ async function main() {
     transpileOnly: true,
   });
 
-  const graph = buildTestBackendGraph(backendRequire);
-
   const args = process.argv.slice(2);
   if (args[0] === '--save-and-compile') {
-    await handleSaveAndCompile(graph, args[1]);
+    await handleSaveAndCompile(backendRequire, args[1]);
     return;
   }
 
@@ -426,7 +458,7 @@ async function main() {
     manifest: presetTest.testManifest,
   };
 
-  const patchCases = await computePatchCases(graph);
+  const patchCases = await computePatchCases(backendRequire);
 
   process.stdout.write(
     JSON.stringify({

@@ -46,11 +46,21 @@ function getBackendBridgeData(): BridgeOutput {
   return JSON.parse(stdout) as BridgeOutput;
 }
 
+interface SaveAndCompileResult {
+  savedPageVersion: number;
+  reloadedPageVersion: number;
+  staleRejected: boolean;
+  staleErrorStatus: number | null;
+  staleErrorMessage: string | null;
+  storeFileVerified: boolean;
+  code: string;
+}
+
 function saveAndCompileViaBackend(
   pageId: string,
   schema: PageSchema,
   basePageVersion: number,
-): { savedPageVersion: number; code: string } {
+): SaveAndCompileResult {
   const stdout = execFileSync(
     process.execPath,
     [
@@ -60,7 +70,7 @@ function saveAndCompileViaBackend(
     ],
     { cwd: repoRoot, encoding: 'utf8', timeout: 60000, maxBuffer: 20 * 1024 * 1024 },
   );
-  return JSON.parse(stdout) as { savedPageVersion: number; code: string };
+  return JSON.parse(stdout) as SaveAndCompileResult;
 }
 
 interface CapturedPreviewPaneProps {
@@ -383,13 +393,17 @@ describe('B4 别名 Patch 重放路径（真实跨包串联：实际返回 Patch
     expect(raw.runtimeCompatibility).toBeUndefined();
     expect(raw.systemId).toBeUndefined();
 
-    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路
+    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路（真实 PageSchemaRepository + 独立临时文件）
     const result = saveAndCompileViaBackend(
       'b4-fe-alias-1',
       replayed,
       patchCase.initialPageVersion,
     );
     expect(result.savedPageVersion).toBe(2);
+    expect(result.reloadedPageVersion).toBe(2);
+    expect(result.storeFileVerified).toBe(true);
+    expect(result.staleRejected).toBe(true);
+    expect(result.staleErrorStatus).toBe(409);
     expect(result.code).toContain('@lowcode-platform/preset-test/runtime');
     expect(result.code).toContain('别名按钮');
     expect(result.code).not.toMatch(/<Action[\s/>]/);
@@ -406,13 +420,17 @@ describe('B4 别名 Patch 重放路径（真实跨包串联：实际返回 Patch
     expect(replayed.components['temp-cta']).toBeUndefined();
     expect(replayed.components['root']?.childrenIds).not.toContain('temp-cta');
 
-    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路
+    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路（真实 PageSchemaRepository + 独立临时文件）
     const result = saveAndCompileViaBackend(
       'b4-fe-alias-del',
       replayed,
       patchCase.initialPageVersion,
     );
     expect(result.savedPageVersion).toBe(2);
+    expect(result.reloadedPageVersion).toBe(2);
+    expect(result.storeFileVerified).toBe(true);
+    expect(result.staleRejected).toBe(true);
+    expect(result.staleErrorStatus).toBe(409);
     expect(result.code).toContain('@lowcode-platform/preset-test/runtime');
     expect(result.code).not.toContain('临时按钮');
     expect(result.code).not.toMatch(/<Action[\s/>]/);
@@ -431,17 +449,31 @@ describe('B4 别名 Patch 重放路径（真实跨包串联：实际返回 Patch
     expect(replayed.components['slot-1']?.props?.children).toBe('后建文本');
     expect(replayed.components['root']?.childrenIds).toContain('slot-1');
 
-    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路
+    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路（真实 PageSchemaRepository + 独立临时文件）
     const result = saveAndCompileViaBackend(
       'b4-fe-alias-recreate',
       replayed,
       patchCase.initialPageVersion,
     );
     expect(result.savedPageVersion).toBe(2);
+    expect(result.reloadedPageVersion).toBe(2);
+    expect(result.storeFileVerified).toBe(true);
+    expect(result.staleRejected).toBe(true);
+    expect(result.staleErrorStatus).toBe(409);
     expect(result.code).toContain('@lowcode-platform/preset-test/runtime');
     expect(result.code).toContain('后建文本');
     expect(result.code).not.toContain('先建按钮');
     expect(result.code).not.toMatch(/<Action[\s/>]/);
     expect(result.code).not.toMatch(/<Caption[\s/>]/);
+  });
+
+  it('真实 CAS 拒绝：前端若以过期 basePageVersion 提交，真实 PageSchemaRepository 拒绝并抛出 409 Conflict (Constraint 4)', () => {
+    const patchCase = bridgeData.patchCases.aliasInsert;
+    const replayed = applyPatchToSchema(patchCase.baseSchema, patchCase.returnedPatch as never);
+
+    // 模拟前端并发冲突：提交过期的 basePageVersion（如 999 而非当前的 1）
+    expect(() => saveAndCompileViaBackend('b4-fe-stale-test', replayed, 999)).toThrow(
+      /Page version mismatch|ConflictException/,
+    );
   });
 });
