@@ -7,8 +7,10 @@
  * Catalog 使用真实 BUILTIN_RENDERER_PRESET_CATALOG（builtin-test 已静态注册），
  * 不重建、不 mock Catalog。
  */
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach, beforeAll } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 import { antdPreset, ANTD_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-antd';
 import { testPreset, TEST_RUNTIME_COMPATIBILITY } from '@lowcode-platform/preset-test';
 import { Renderer, type ComponentPreset } from '@lowcode-platform/renderer';
@@ -16,6 +18,50 @@ import { BUILTIN_RENDERER_PRESET_CATALOG } from '../../renderer-preset-catalog';
 import { applyPatchToSchema } from '../services/patchAdapter';
 import { useEditorStore, useSelectionStore } from '../store/editor-store';
 import type { PageSchema } from '../../types';
+
+const repoRoot = path.resolve(__dirname, '../../../../../');
+
+interface BridgePatchCase {
+  baseSchema: PageSchema;
+  inputPatch: unknown[];
+  returnedPatch: unknown[];
+  updatedWorkingSchema: PageSchema;
+  initialPageVersion: number;
+}
+
+interface BridgeOutput {
+  patchCases: {
+    aliasInsert: BridgePatchCase;
+    aliasInsertThenRemove: BridgePatchCase;
+    sameIdRecreate: BridgePatchCase;
+  };
+}
+
+function getBackendBridgeData(): BridgeOutput {
+  const stdout = execFileSync(
+    process.execPath,
+    [path.join(repoRoot, 'scripts/b4-second-preset-compile.cjs')],
+    { cwd: repoRoot, encoding: 'utf8', timeout: 60000, maxBuffer: 20 * 1024 * 1024 },
+  );
+  return JSON.parse(stdout) as BridgeOutput;
+}
+
+function saveAndCompileViaBackend(
+  pageId: string,
+  schema: PageSchema,
+  basePageVersion: number,
+): { savedPageVersion: number; code: string } {
+  const stdout = execFileSync(
+    process.execPath,
+    [
+      path.join(repoRoot, 'scripts/b4-second-preset-compile.cjs'),
+      '--save-and-compile',
+      JSON.stringify({ pageId, schema, basePageVersion }),
+    ],
+    { cwd: repoRoot, encoding: 'utf8', timeout: 60000, maxBuffer: 20 * 1024 * 1024 },
+  );
+  return JSON.parse(stdout) as { savedPageVersion: number; code: string };
+}
 
 interface CapturedPreviewPaneProps {
   preset: ComponentPreset;
@@ -313,70 +359,89 @@ describe('B4 Frontend Second Preset (Issue #39)', () => {
   });
 });
 
-describe('B4 别名 Patch 重放路径（review round 3）', () => {
-  it('后端规范化后的返回 Patch 经真实 applyPatchToSchema 重放，结果与预览一致', async () => {
-    // 与后端 b4-second-preset.integration.spec.ts（review round 3 用例）锁定的返回
-    // Patch 形态一致：Agent 提交 type=Action，服务端写入与返回均已规范化为 Button。
-    const returnedPatch = [
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'alias-cta', type: 'Button', props: { children: '别名按钮' } },
-      },
-    ];
+describe('B4 别名 Patch 重放路径（真实跨包串联：实际返回 Patch → 前端重放结果 → CAS → Compiler）', () => {
+  let bridgeData: BridgeOutput;
 
-    const replayed = applyPatchToSchema(B4_TEST_SCHEMA, returnedPatch as never);
+  beforeAll(() => {
+    bridgeData = getBackendBridgeData();
+  });
+
+  it('单别名插入：后端真实工具返回的 Patch 经真实 applyPatchToSchema 重放，与服务端预览完整全等，且送入 CAS 保存与 Compiler 编译成功 (Constraint 4)', () => {
+    const patchCase = bridgeData.patchCases.aliasInsert;
+
+    // 1. 真实工具返回的 Patch 交给前端 applyPatchToSchema 重放（绝非手写 Patch）
+    const replayed = applyPatchToSchema(patchCase.baseSchema, patchCase.returnedPatch as never);
+
+    // 2. 完整相等断言：前端重放结果与服务端 preview 结果完整全等
+    expect(replayed).toEqual(patchCase.updatedWorkingSchema);
     expect(replayed.components['alias-cta']?.type).toBe('Button');
     expect(replayed.components['alias-cta']?.props?.children).toBe('别名按钮');
-    // 重放后的 root children 包含新节点（与预览 Schema 结构一致）
     expect(replayed.components['root']?.childrenIds).toContain('alias-cta');
+
     // Schema 仍是纯数据：无任何身份/绑定字段
     const raw = replayed as unknown as Record<string, unknown>;
     expect(raw.runtimeCompatibility).toBeUndefined();
     expect(raw.systemId).toBeUndefined();
+
+    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路
+    const result = saveAndCompileViaBackend(
+      'b4-fe-alias-1',
+      replayed,
+      patchCase.initialPageVersion,
+    );
+    expect(result.savedPageVersion).toBe(2);
+    expect(result.code).toContain('@lowcode-platform/preset-test/runtime');
+    expect(result.code).toContain('别名按钮');
+    expect(result.code).not.toMatch(/<Action[\s/>]/);
   });
 
-  it('复杂 Patch：别名插入后删除，经真实 applyPatchToSchema 重放，结果不含临时节点且与服务端一致 (Constraint 4)', async () => {
-    // 对应后端 b4-second-preset.integration.spec.ts 下发的多步 Patch
-    const returnedPatch = [
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'temp-cta', type: 'Button', props: { children: '临时按钮' } },
-      },
-      {
-        op: 'removeComponent',
-        componentId: 'temp-cta',
-      },
-    ];
+  it('复杂 Patch（别名插入后删除）：实际返回 Patch 经前端重放，与服务端预览完整全等，送入 CAS 保存成功且产物干净 (Constraint 4)', () => {
+    const patchCase = bridgeData.patchCases.aliasInsertThenRemove;
 
-    const replayed = applyPatchToSchema(B4_TEST_SCHEMA, returnedPatch as never);
+    // 1. 真实工具返回的 Patch 交给前端 applyPatchToSchema 重放
+    const replayed = applyPatchToSchema(patchCase.baseSchema, patchCase.returnedPatch as never);
+
+    // 2. 完整相等断言：前端重放结果与服务端 preview 结果完整全等
+    expect(replayed).toEqual(patchCase.updatedWorkingSchema);
     expect(replayed.components['temp-cta']).toBeUndefined();
     expect(replayed.components['root']?.childrenIds).not.toContain('temp-cta');
+
+    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路
+    const result = saveAndCompileViaBackend(
+      'b4-fe-alias-del',
+      replayed,
+      patchCase.initialPageVersion,
+    );
+    expect(result.savedPageVersion).toBe(2);
+    expect(result.code).toContain('@lowcode-platform/preset-test/runtime');
+    expect(result.code).not.toContain('临时按钮');
+    expect(result.code).not.toMatch(/<Action[\s/>]/);
+    expect(result.code).not.toMatch(/<Button[^>]*temp-cta/);
   });
 
-  it('复杂 Patch：同 ID 先插入别名 A 删除后再插入别名 B，经真实 applyPatchToSchema 重放，独立保留最终规范类型 (Constraint 4)', async () => {
-    // 对应后端下发的规范化 Patch：op 0 为 Button，op 2 为 Text
-    const returnedPatch = [
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'slot-1', type: 'Button', props: { children: '先建按钮' } },
-      },
-      {
-        op: 'removeComponent',
-        componentId: 'slot-1',
-      },
-      {
-        op: 'insertComponent',
-        parentId: 'root',
-        component: { id: 'slot-1', type: 'Text', props: { children: '后建文本' } },
-      },
-    ];
+  it('复杂 Patch（同 ID 异构别名重建）：实际返回 Patch 经前端重放，与服务端预览完整全等，送入 CAS 保存成功且产物类型正确 (Constraint 4)', () => {
+    const patchCase = bridgeData.patchCases.sameIdRecreate;
 
-    const replayed = applyPatchToSchema(B4_TEST_SCHEMA, returnedPatch as never);
+    // 1. 真实工具返回的 Patch 交给前端 applyPatchToSchema 重放
+    const replayed = applyPatchToSchema(patchCase.baseSchema, patchCase.returnedPatch as never);
+
+    // 2. 完整相等断言：前端重放结果与服务端 preview 结果完整全等
+    expect(replayed).toEqual(patchCase.updatedWorkingSchema);
     expect(replayed.components['slot-1']?.type).toBe('Text');
     expect(replayed.components['slot-1']?.props?.children).toBe('后建文本');
     expect(replayed.components['root']?.childrenIds).toContain('slot-1');
+
+    // 3. 将前端重放结果送入真实 CAS 保存与 Compiler 编译链路
+    const result = saveAndCompileViaBackend(
+      'b4-fe-alias-recreate',
+      replayed,
+      patchCase.initialPageVersion,
+    );
+    expect(result.savedPageVersion).toBe(2);
+    expect(result.code).toContain('@lowcode-platform/preset-test/runtime');
+    expect(result.code).toContain('后建文本');
+    expect(result.code).not.toContain('先建按钮');
+    expect(result.code).not.toMatch(/<Action[\s/>]/);
+    expect(result.code).not.toMatch(/<Caption[\s/>]/);
   });
 });
