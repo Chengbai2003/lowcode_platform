@@ -1,5 +1,6 @@
 import { Injectable, Optional } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
+import type { BackendComponentMeta } from '../schema-context/component-metadata/component-meta.types';
 import {
   PageSchema,
   requireSupportedPageSchema,
@@ -108,12 +109,15 @@ export class PatchValidationService {
     let currentSchema = baseSchema;
 
     for (const operation of patch) {
+      let effectiveOperation = operation;
       switch (operation.op) {
         case 'insertComponent':
           this.assertInsertValid(currentSchema, operation, traceId, runtimeCompatibility);
+          effectiveOperation = this.canonicalizeInsertType(operation, runtimeCompatibility);
           break;
         case 'updateProps':
           this.assertComponentExists(currentSchema, operation.componentId, traceId);
+          this.assertUpdatePropsValid(currentSchema, operation, traceId, runtimeCompatibility);
           break;
         case 'bindEvent':
           this.assertComponentExists(currentSchema, operation.componentId, traceId);
@@ -142,7 +146,7 @@ export class PatchValidationService {
           break;
       }
 
-      currentSchema = this.patchApplyService.applyPatch(currentSchema, [operation]);
+      currentSchema = this.patchApplyService.applyPatch(currentSchema, [effectiveOperation]);
     }
 
     let canonicalSchema: PageSchema;
@@ -213,7 +217,8 @@ export class PatchValidationService {
       ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
       : this.metaRegistry;
 
-    if (!metaRegistry.resolve(type)) {
+    const resolvedMeta = metaRegistry.resolve(type);
+    if (!resolvedMeta) {
       throw new AgentToolException({
         code: 'PATCH_INVALID',
         message: `Unsupported component type ${type}`,
@@ -221,7 +226,89 @@ export class PatchValidationService {
       });
     }
 
+    // Issue #39 / M1F-2 B4：显式声明 allowedProps 的 Preset（如 builtin-test）
+    // 在 Agent 写入路径拒绝该 Preset 不支持的 Props；未声明的 Meta 零行为变化。
+    if (resolvedMeta.allowedProps) {
+      this.assertPropsWithinWhitelist(
+        resolvedMeta,
+        (operation.component as { props?: Record<string, unknown> }).props,
+        'insertComponent',
+        traceId,
+      );
+    }
+
     this.assertComponentActionsValid(operation.component, traceId);
+  }
+
+  private assertUpdatePropsValid(
+    schema: PageSchema,
+    operation: Extract<EditorPatchOperation, { op: 'updateProps' }>,
+    traceId: string,
+    runtimeCompatibility?: RuntimeCompatibility,
+  ) {
+    const node = schema.components[operation.componentId];
+    if (!node) return;
+
+    const metaRegistry = runtimeCompatibility
+      ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
+      : this.metaRegistry;
+    const resolvedMeta = metaRegistry.resolve(node.type);
+    if (resolvedMeta?.allowedProps) {
+      this.assertPropsWithinWhitelist(
+        resolvedMeta,
+        operation.props as Record<string, unknown>,
+        'updateProps',
+        traceId,
+      );
+    }
+  }
+
+  /**
+   * 写入规范化（Issue #39 review round 2）：别名（如 Btn/Action）在 Meta
+   * 解析层合法，但 Schema 必须持久化规范类型——别名类型既不能渲染
+   * （runtime 无该键）也不能编译（Compiler Binding 只认规范类型）。
+   * insert 的组件类型在应用前改写为 Meta 解析出的规范类型；解析不到
+   * Meta 时保持原值（合法性已由 assertInsertValid 保证）。
+   */
+  private canonicalizeInsertType(
+    operation: Extract<EditorPatchOperation, { op: 'insertComponent' }>,
+    runtimeCompatibility?: RuntimeCompatibility,
+  ): Extract<EditorPatchOperation, { op: 'insertComponent' }> {
+    const metaRegistry = runtimeCompatibility
+      ? this.runtimeProfileRegistry.resolveComponentMeta(runtimeCompatibility)
+      : this.metaRegistry;
+    const component = operation.component as { type?: unknown };
+    if (typeof component.type !== 'string') {
+      return operation;
+    }
+    const resolvedMeta = metaRegistry.resolve(component.type);
+    if (!resolvedMeta || resolvedMeta.type === component.type) {
+      return operation;
+    }
+    return {
+      ...operation,
+      component: {
+        ...(operation.component as Record<string, unknown>),
+        type: resolvedMeta.type,
+      },
+    };
+  }
+
+  private assertPropsWithinWhitelist(
+    meta: BackendComponentMeta,
+    props: Record<string, unknown> | undefined,
+    operationLabel: string,
+    traceId: string,
+  ): void {
+    if (!props) return;
+    const unknownProps = Object.keys(props).filter((key) => !meta.allowedProps!.includes(key));
+    if (unknownProps.length > 0) {
+      throw new AgentToolException({
+        code: 'PATCH_INVALID',
+        message: `Unsupported props [${unknownProps.join(', ')}] for component type ${meta.type} (${operationLabel})`,
+        traceId,
+      });
+    }
   }
 
   private assertComponentActionsValid(component: Record<string, unknown>, traceId: string): void {
@@ -399,6 +486,26 @@ export function canonicalizePatchOperations(
         ...operation,
         logic: (schema.logic ?? {}) as Record<string, unknown>,
       };
+    }
+    if (operation.op === 'insertComponent') {
+      // 写入规范化（Issue #39 review round 3）：别名在 previewValidatedSchema 内
+      // 已改写为规范类型；对外返回与累积的 Patch 必须同步同一规范类型，否则
+      // 客户端重放 Patch（前端 applyPatchToSchema）会把别名写回 Schema，
+      // 导致页面不可渲染、编译 fail-close。规范类型按组件 id 从应用后的
+      // Schema 反查（同 id 后插入的组件会覆盖，类型本就来自最后一次插入）。
+      const componentId = (operation.component as { id?: unknown }).id;
+      const appliedType =
+        typeof componentId === 'string' ? schema.components[componentId]?.type : undefined;
+      const originalType = (operation.component as { type?: unknown }).type;
+      if (typeof appliedType === 'string' && appliedType !== originalType) {
+        return {
+          ...operation,
+          component: {
+            ...(operation.component as Record<string, unknown>),
+            type: appliedType,
+          },
+        };
+      }
     }
     return operation;
   });

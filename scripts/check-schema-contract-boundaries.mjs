@@ -290,12 +290,16 @@ for (const file of allFiles) {
 }
 
 {
-  const presetFile = join(ROOT, 'packages/preset-antd/src/createAntdPreset.ts');
-  const presetContent = readFileSync(presetFile, 'utf-8');
-  if (!/createSealedPreset/.test(presetContent)) {
-    violations.push(
-      'packages/preset-antd/src/createAntdPreset.ts: Preset 必须经 createSealedPreset 构建（Bootstrap 即 seal）',
-    );
+  const presetSealRules = [
+    ['packages/preset-antd/src/createAntdPreset.ts', /createSealedPreset/],
+    // Issue #39 / M1F-2 B4：第二个可信 Preset 必须与 antd 同样经 createSealedPreset 构建
+    ['packages/preset-test/src/createTestPreset.ts', /createSealedPreset/],
+  ];
+  for (const [relPath, pattern] of presetSealRules) {
+    const presetContent = readFileSync(join(ROOT, relPath), 'utf-8');
+    if (!pattern.test(presetContent)) {
+      violations.push(`${relPath}: Preset 必须经 createSealedPreset 构建（Bootstrap 即 seal）`);
+    }
   }
 }
 

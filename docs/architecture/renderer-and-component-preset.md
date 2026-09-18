@@ -220,7 +220,26 @@ M0-4 的内置 Renderer/Preset/RuntimeSession 已完成：Renderer 可被最小 
 
 M1F-2 B2 已建立部署期静态 `SystemRuntimeProfileRegistry` 与 Frontend
 `RendererPresetCatalog`：二者在 Bootstrap 时完成配置校验并冻结，未知、禁用、重复或
-版本不匹配均 fail-close，且不会从数据库或网络动态加载可执行模块。页面、Editor、
-Renderer、Compiler 与 Agent Manifest 统一消费同一 Profile 的接线仍属于 B3。
+版本不匹配均 fail-close，且不会从数据库或网络动态加载可执行模块。B3（PR #61）已把
+页面、Editor、Renderer、Compiler 与 Agent Manifest 统一接到同一可信 Profile：
+保存/加载身份由服务端快照三元组决定，Agent Meta 与 Compiler Binding 按
+`presetId@version` 精确查找、缺失即拒绝。
+
+M1F-2 B4 已交付第二个可信 Preset `@lowcode-platform/preset-test`（`builtin-test@0.1.0`）：
+仅 React + 基础 DOM 的最小验收参考包（Container/Text/Button，带 `data-preset-test`
+DOM 标记），经 `createSealedPreset` 打包进前端 Catalog，并在后端以部署静态组合
+（`deployment-composition.ts`）注册 Profile / Compiler Binding / 版本化 Meta。
+正常部署 default 系统 active 仍为 `builtin-antd`（test 仅 deprecated 承接历史快照）；
+以 `LOWCODE_DEPLOYMENT_COMPOSITION=b4-acceptance` 启动即得到验收组合（test active、
+antd deprecated），组合在启动时一次确定、无运行时切换入口。六条消费链（保存、加载、
+预览、渲染、Agent Meta/编辑、Compiler 导出）的闭环与跨身份拒绝矩阵由
+`b4-second-preset.integration.spec.ts`、`b4-frontend-second-preset.test.tsx`、
+`b4-frontend-second-preset-preview.test.tsx` 与 `b4-generated-code-consumption.test.tsx`
+锁定；生成代码的导入路径 `@lowcode-platform/preset-test/runtime` 经真实模块解析与
+jsdom 挂载验证。第二 Preset 的属性边界为三层一致：Agent 写入按部署侧 Meta 的
+opt-in `allowedProps` 白名单拒绝（AntD 既有 Meta 零行为变化）、Renderer 按 Manifest
+净化、编译产物由 runtime 自防御（未知 Props 不透传 DOM，字符串型 `on*` 与危险
+HTML 一律丢弃）。B4 状态为「已实施、待验收」：在 Issue #39 验收通过前不视为
+M1F-2 完成。
 
 M1a-2 F2 ActionFlow Runtime 已落地：在 `packages/renderer` 内部建立声明式 ActionFlow 运行语义与会话调度能力（`RuntimeSession.executeFlow`、`FlowRun`、预算控制、`onError` 恢复、`AbortSignal` 级联与结构化 `FlowExecutionError` 诊断）；生产 Schema `PageSchema.logic.flows` 与组件事件 `runFlow` 继续保持 fail-close，留待 F3 开放。
