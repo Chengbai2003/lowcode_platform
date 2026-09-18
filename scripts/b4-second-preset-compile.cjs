@@ -95,8 +95,13 @@ const SPECIAL_STRINGS_SCHEMA = {
         't-single',
         't-backslash',
         't-newline',
+        't-tab',
+        't-backspace',
+        't-formfeed',
+        't-control',
         't-amp',
         't-lt',
+        't-gt',
         't-empty',
       ],
     },
@@ -120,6 +125,26 @@ const SPECIAL_STRINGS_SCHEMA = {
       type: 'Text',
       props: { id: 't-newline', title: 'line1\nline2\r\nline3' },
     },
+    't-tab': {
+      id: 't-tab',
+      type: 'Text',
+      props: { id: 't-tab', title: 'a\tb' },
+    },
+    't-backspace': {
+      id: 't-backspace',
+      type: 'Text',
+      props: { id: 't-backspace', title: 'a\bb' },
+    },
+    't-formfeed': {
+      id: 't-formfeed',
+      type: 'Text',
+      props: { id: 't-formfeed', title: 'page1\fpage2' },
+    },
+    't-control': {
+      id: 't-control',
+      type: 'Text',
+      props: { id: 't-control', title: 'null\x00byte and bell\x07' },
+    },
     't-amp': {
       id: 't-amp',
       type: 'Text',
@@ -129,6 +154,11 @@ const SPECIAL_STRINGS_SCHEMA = {
       id: 't-lt',
       type: 'Text',
       props: { id: 't-lt', title: 'a < b and c > d' },
+    },
+    't-gt': {
+      id: 't-gt',
+      type: 'Text',
+      props: { id: 't-gt', title: 'x > y' },
     },
     't-empty': {
       id: 't-empty',

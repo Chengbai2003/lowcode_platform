@@ -3124,20 +3124,21 @@ export function transform(root: RootNode): void {
   });
 }
 
+/**
+ * 匹配所有在 JSON 中需要转义的字符（双引号、反斜杠、U+0000 到 U+001F 控制字符，包括 \t, \b, \f 等）
+ * 以及 JSX 敏感字符（& 实体解码、< 标签定界符、>、DEL 控制字符 \x7f、以及行/段分隔符 \u2028, \u2029）。
+ * 遇到这些字符时，必须由 JSX 表达式容器 {JSON.stringify(val)} 输出，
+ * 以确保 JS 引擎原生保留字符值，不在 JSX 属性字面量中发生转义失真或实体双重解码。
+ */
+const JSX_ATTRIBUTE_EXPRESSION_REQUIRED_PATTERN = /["\\&<>\x00-\x1f\x7f\u2028\u2029]/;
+
 function genAttribute(attribute: JSXAttributeNode): string {
   switch (attribute.mode) {
     case 'boolean':
       return attribute.name;
     case 'string': {
       const val = attribute.value ?? '';
-      if (
-        val.includes('"') ||
-        val.includes('\n') ||
-        val.includes('\r') ||
-        val.includes('\\') ||
-        val.includes('&') ||
-        val.includes('<')
-      ) {
+      if (JSX_ATTRIBUTE_EXPRESSION_REQUIRED_PATTERN.test(val)) {
         return `${attribute.name}={${toQuotedString(val)}}`;
       }
       return `${attribute.name}=${toQuotedString(val)}`;

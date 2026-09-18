@@ -232,7 +232,7 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
     expect(root.hasAttribute('onerror')).toBe(false);
   });
 
-  it('特殊字符字符串属性（", \', \\, \\n, &, <, 空串）生成合法代码、可挂载，且真实 DOM 属性值严格保真（Constraint 3）', () => {
+  it('特殊字符字符串属性（", \', \\, \\n, \\r, \\t, \\b, \\f, 控制字符, &, <, >, 空串）生成合法代码、可挂载，且真实 DOM 属性值严格保真（Constraint 3）', () => {
     const StringsPage = transpileGeneratedComponent(bridge.strings.code);
     const { container } = render(<StringsPage />);
 
@@ -248,8 +248,15 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
     expect(container.querySelector('#t-newline')?.getAttribute('title')).toBe(
       'line1\nline2\r\nline3',
     );
+    expect(container.querySelector('#t-tab')?.getAttribute('title')).toBe('a\tb');
+    expect(container.querySelector('#t-backspace')?.getAttribute('title')).toBe('a\bb');
+    expect(container.querySelector('#t-formfeed')?.getAttribute('title')).toBe('page1\fpage2');
+    expect(container.querySelector('#t-control')?.getAttribute('title')).toBe(
+      'null\x00byte and bell\x07',
+    );
     expect(container.querySelector('#t-amp')?.getAttribute('title')).toBe('foo & bar &amp; baz');
     expect(container.querySelector('#t-lt')?.getAttribute('title')).toBe('a < b and c > d');
+    expect(container.querySelector('#t-gt')?.getAttribute('title')).toBe('x > y');
     expect(container.querySelector('#t-empty')?.getAttribute('title')).toBe('');
   });
 });

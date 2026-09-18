@@ -335,4 +335,48 @@ describe('B4 别名 Patch 重放路径（review round 3）', () => {
     expect(raw.runtimeCompatibility).toBeUndefined();
     expect(raw.systemId).toBeUndefined();
   });
+
+  it('复杂 Patch：别名插入后删除，经真实 applyPatchToSchema 重放，结果不含临时节点且与服务端一致 (Constraint 4)', async () => {
+    // 对应后端 b4-second-preset.integration.spec.ts 下发的多步 Patch
+    const returnedPatch = [
+      {
+        op: 'insertComponent',
+        parentId: 'root',
+        component: { id: 'temp-cta', type: 'Button', props: { children: '临时按钮' } },
+      },
+      {
+        op: 'removeComponent',
+        componentId: 'temp-cta',
+      },
+    ];
+
+    const replayed = applyPatchToSchema(B4_TEST_SCHEMA, returnedPatch as never);
+    expect(replayed.components['temp-cta']).toBeUndefined();
+    expect(replayed.components['root']?.childrenIds).not.toContain('temp-cta');
+  });
+
+  it('复杂 Patch：同 ID 先插入别名 A 删除后再插入别名 B，经真实 applyPatchToSchema 重放，独立保留最终规范类型 (Constraint 4)', async () => {
+    // 对应后端下发的规范化 Patch：op 0 为 Button，op 2 为 Text
+    const returnedPatch = [
+      {
+        op: 'insertComponent',
+        parentId: 'root',
+        component: { id: 'slot-1', type: 'Button', props: { children: '先建按钮' } },
+      },
+      {
+        op: 'removeComponent',
+        componentId: 'slot-1',
+      },
+      {
+        op: 'insertComponent',
+        parentId: 'root',
+        component: { id: 'slot-1', type: 'Text', props: { children: '后建文本' } },
+      },
+    ];
+
+    const replayed = applyPatchToSchema(B4_TEST_SCHEMA, returnedPatch as never);
+    expect(replayed.components['slot-1']?.type).toBe('Text');
+    expect(replayed.components['slot-1']?.props?.children).toBe('后建文本');
+    expect(replayed.components['root']?.childrenIds).toContain('slot-1');
+  });
 });

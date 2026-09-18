@@ -526,6 +526,151 @@ describe('B4 Second Trusted Preset Integration Matrix (Issue #39)', () => {
       // 产物中不存在别名 JSX 标签（规范化后只会有 Button）
       expect(compiled.code).not.toMatch(/<Action[\s/>]/);
     });
+
+    it('complex patch: alias insert then remove in same patch completes the full loop: preview → returned patch → replay → CAS save → compile (Constraint 4)', async () => {
+      const graph = createServiceGraph(acceptanceRegistry, repo);
+      await graph.pageService.saveSchema({ pageId: 'b4-alias-del', schema: B4_TEST_PAGE_SCHEMA });
+
+      const previewTool = graph.toolRegistry.get('preview_patch')!;
+      const ctx = await graph.toolService.createExecutionContext(
+        { pageId: 'b4-alias-del' },
+        'trace-alias-del',
+      );
+
+      // 复杂 Patch：同一 Patch 内先插入别名 Action，后将其删除
+      const accepted = await previewTool.execute(
+        {
+          patch: [
+            {
+              op: 'insertComponent',
+              parentId: 'root',
+              component: { id: 'temp-cta', type: 'Action', props: { children: '临时按钮' } },
+            },
+            {
+              op: 'removeComponent',
+              componentId: 'temp-cta',
+            },
+          ],
+        },
+        ctx as never,
+      );
+      const updated = accepted.updatedWorkingSchema as PageSchema;
+      expect(updated.components['temp-cta']).toBeUndefined();
+
+      // 对外返回的 Patch：每步就地规范化（op 0 必须是规范类型 Button，op 1 是 removeComponent）
+      const returnedPatch = (
+        accepted.data as {
+          patch: Array<{ op: string; component?: { type?: string }; componentId?: string }>;
+        }
+      ).patch;
+      expect(returnedPatch).toHaveLength(2);
+      expect(returnedPatch[0].op).toBe('insertComponent');
+      expect(returnedPatch[0].component?.type).toBe('Button');
+      expect(returnedPatch[1].op).toBe('removeComponent');
+      expect(returnedPatch[1].componentId).toBe('temp-cta');
+
+      // 重放路径：重放返回的 Patch 结果与 preview 完全一致
+      const replayed = graph.applyService.applyPatch(B4_TEST_PAGE_SCHEMA, returnedPatch as never);
+      expect(replayed.components['temp-cta']).toBeUndefined();
+      expect(requireSupportedPageSchema(replayed)).toEqual(updated);
+
+      // CAS 保存
+      const saved = await graph.pageService.saveSchema({
+        pageId: 'b4-alias-del',
+        schema: replayed,
+        basePageVersion: 1,
+      });
+      expect(saved.pageVersion).toBe(2);
+
+      // Compiler 编译
+      const compiled = await graph.compilerService.compile({
+        schema: replayed as unknown as Record<string, unknown>,
+        options: { pageId: 'b4-alias-del', pageVersion: 2 },
+      });
+      expect(compiled.code).toContain('@lowcode-platform/preset-test/runtime');
+      expect(compiled.code).not.toContain('临时按钮');
+      expect(compiled.code).not.toMatch(/<Action[\s/>]/);
+      expect(compiled.code).not.toMatch(/<Button[^>]*temp-cta/);
+    });
+
+    it('complex patch: same ID insert alias A, remove, then insert alias B completes the full loop: preview → returned patch → replay → CAS save → compile (Constraint 4)', async () => {
+      const graph = createServiceGraph(acceptanceRegistry, repo);
+      await graph.pageService.saveSchema({
+        pageId: 'b4-alias-recreate',
+        schema: B4_TEST_PAGE_SCHEMA,
+      });
+
+      const previewTool = graph.toolRegistry.get('preview_patch')!;
+      const ctx = await graph.toolService.createExecutionContext(
+        { pageId: 'b4-alias-recreate' },
+        'trace-alias-recreate',
+      );
+
+      // 复杂 Patch：同一 ID 'slot-1'，先插入别名 Action（Button），删除，再同 ID 插入别名 Caption（Text）
+      const accepted = await previewTool.execute(
+        {
+          patch: [
+            {
+              op: 'insertComponent',
+              parentId: 'root',
+              component: { id: 'slot-1', type: 'Action', props: { children: '先建按钮' } },
+            },
+            {
+              op: 'removeComponent',
+              componentId: 'slot-1',
+            },
+            {
+              op: 'insertComponent',
+              parentId: 'root',
+              component: { id: 'slot-1', type: 'Caption', props: { children: '后建文本' } },
+            },
+          ],
+        },
+        ctx as never,
+      );
+      const updated = accepted.updatedWorkingSchema as PageSchema;
+      expect(updated.components['slot-1']?.type).toBe('Text');
+      expect(updated.components['slot-1']?.props?.children).toBe('后建文本');
+
+      // 对外返回的 Patch：逐操作独立归一化，各步骤类型不被最终 Schema 或后续步骤反推污染
+      const returnedPatch = (
+        accepted.data as {
+          patch: Array<{ op: string; component?: { type?: string }; componentId?: string }>;
+        }
+      ).patch;
+      expect(returnedPatch).toHaveLength(3);
+      expect(returnedPatch[0].op).toBe('insertComponent');
+      expect(returnedPatch[0].component?.type).toBe('Button');
+      expect(returnedPatch[1].op).toBe('removeComponent');
+      expect(returnedPatch[1].componentId).toBe('slot-1');
+      expect(returnedPatch[2].op).toBe('insertComponent');
+      expect(returnedPatch[2].component?.type).toBe('Text');
+
+      // 重放路径：重放返回的 Patch 结果与 preview 完全一致
+      const replayed = graph.applyService.applyPatch(B4_TEST_PAGE_SCHEMA, returnedPatch as never);
+      expect(replayed.components['slot-1']?.type).toBe('Text');
+      expect(replayed.components['slot-1']?.props?.children).toBe('后建文本');
+      expect(requireSupportedPageSchema(replayed)).toEqual(updated);
+
+      // CAS 保存
+      const saved = await graph.pageService.saveSchema({
+        pageId: 'b4-alias-recreate',
+        schema: replayed,
+        basePageVersion: 1,
+      });
+      expect(saved.pageVersion).toBe(2);
+
+      // Compiler 编译
+      const compiled = await graph.compilerService.compile({
+        schema: replayed as unknown as Record<string, unknown>,
+        options: { pageId: 'b4-alias-recreate', pageVersion: 2 },
+      });
+      expect(compiled.code).toContain('@lowcode-platform/preset-test/runtime');
+      expect(compiled.code).toContain('后建文本');
+      expect(compiled.code).not.toContain('先建按钮');
+      expect(compiled.code).not.toMatch(/<Action[\s/>]/);
+      expect(compiled.code).not.toMatch(/<Caption[\s/>]/);
+    });
   });
 
   describe('Scenario 4: Agent 确认后经真实 CAS 保存', () => {
