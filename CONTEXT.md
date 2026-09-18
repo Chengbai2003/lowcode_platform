@@ -39,3 +39,15 @@ _Avoid_: Caller, integration point
 **Capability Gate**:
 一项 Schema 能力可被保存或发布前，所有 Consumer Surface 必须共同通过的兼容性与行为门槛。
 _Avoid_: Feature flag, rollout switch
+
+**Operation**:
+由可信提供方管理、具有明确输入输出与访问条件的业务操作；页面不能自行声明其权限或风险。
+_Avoid_: Arbitrary URL, model-declared permission
+
+**OperationRef**:
+页面对可信 Operation 的公开引用，不包含基础设施地址或凭据；具体版本字段以获批协议为准。
+_Avoid_: Endpoint, credential
+
+**DataSource Declaration**:
+页面对数据查询来源与输入映射的持久化描述，不是查询得到的数据，也不是执行中的请求。
+_Avoid_: Query result, live resource
