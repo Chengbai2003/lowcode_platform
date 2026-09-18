@@ -4,7 +4,6 @@
  */
 
 import type { PageSchema } from '@lowcode-platform/schema-contract';
-import * as prettier from 'prettier';
 import { type CompileOptions, escapeJSX, isExpression, toCamelCase } from './helpers/codeHelpers';
 import { compileSchemaToCode } from './pipeline';
 
@@ -14,11 +13,23 @@ export function compileToCode(schema: Record<string, any>, options?: CompileOpti
   return compileSchemaToCode(schema as PageSchema, options);
 }
 
+let prettierInstance: any = null;
+function getPrettier(): any {
+  if (prettierInstance) return prettierInstance;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports, global-require
+    prettierInstance = require('prettier');
+    return prettierInstance;
+  } catch {
+    return null;
+  }
+}
+
 export async function formatCode(code: string): Promise<string> {
   try {
-    const prettierModule = await import('prettier');
-    if (prettierModule && typeof prettierModule.format === 'function') {
-      return await prettierModule.format(code, {
+    const prettier = getPrettier();
+    if (prettier && typeof prettier.format === 'function') {
+      return await prettier.format(code, {
         parser: 'babel',
         semi: true,
         singleQuote: false,

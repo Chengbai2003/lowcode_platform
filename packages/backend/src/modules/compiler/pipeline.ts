@@ -348,6 +348,7 @@ function createCompileOptions(options?: CompileOptions): Required<CompileOptions
     defaultLibrary: options?.defaultLibrary || 'antd',
     allowDefaultComponentFallback: options?.allowDefaultComponentFallback ?? true,
     flowExecutionLimits: options?.flowExecutionLimits || {},
+    manifest: options?.manifest ?? {},
   };
 }
 
@@ -1534,6 +1535,11 @@ function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode
   const childrenProp = findProp(node, 'children');
   const visibleProp = findProp(node, 'visible');
 
+  const manifest = ctx.root.options.manifest;
+  const hasManifest = manifest && Object.keys(manifest).length > 0;
+  const manifestEntry = hasManifest ? manifest[node.componentType] : undefined;
+  const allowedPropsSet = hasManifest ? new Set(manifestEntry?.allowedProps ?? []) : undefined;
+
   const attributes: JSXAttributeNode[] = [];
 
   for (const prop of node.props) {
@@ -1550,6 +1556,14 @@ function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode
       continue;
     }
     if (!isSafePropName(prop.name)) {
+      continue;
+    }
+    // Manifest 驱动的 Props 净化（对齐 Renderer）
+    if (allowedPropsSet && !allowedPropsSet.has(prop.name)) {
+      continue;
+    }
+    // 防御性拦截：若未提供 Manifest，也禁止任何字符串型 on* 属性混入 Props
+    if (!allowedPropsSet && /^on[A-Za-z]/.test(prop.name)) {
       continue;
     }
 
@@ -3110,12 +3124,25 @@ export function transform(root: RootNode): void {
   });
 }
 
+/**
+ * 匹配所有在 JSON 中需要转义的字符（双引号、反斜杠、U+0000 到 U+001F 控制字符，包括 \t, \b, \f 等）
+ * 以及 JSX 敏感字符（& 实体解码、< 标签定界符、>、DEL 控制字符 \x7f、以及行/段分隔符 \u2028, \u2029）。
+ * 遇到这些字符时，必须由 JSX 表达式容器 {JSON.stringify(val)} 输出，
+ * 以确保 JS 引擎原生保留字符值，不在 JSX 属性字面量中发生转义失真或实体双重解码。
+ */
+const JSX_ATTRIBUTE_EXPRESSION_REQUIRED_PATTERN = /["\\&<>\x00-\x1f\x7f\u2028\u2029]/;
+
 function genAttribute(attribute: JSXAttributeNode): string {
   switch (attribute.mode) {
     case 'boolean':
       return attribute.name;
-    case 'string':
-      return `${attribute.name}=${toQuotedString(attribute.value ?? '')}`;
+    case 'string': {
+      const val = attribute.value ?? '';
+      if (JSX_ATTRIBUTE_EXPRESSION_REQUIRED_PATTERN.test(val)) {
+        return `${attribute.name}={${toQuotedString(val)}}`;
+      }
+      return `${attribute.name}=${toQuotedString(val)}`;
+    }
     case 'expression':
     default:
       return `${attribute.name}={${attribute.value ?? 'undefined'}}`;

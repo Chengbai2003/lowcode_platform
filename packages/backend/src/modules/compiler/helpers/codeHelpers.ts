@@ -1,5 +1,12 @@
 import type { FlowExecutionLimits } from '@lowcode-platform/schema-contract';
 
+export interface CompilerManifestEntry {
+  readonly componentType?: string;
+  readonly allowedProps: readonly string[];
+}
+
+export type CompilerManifestRegistry = Readonly<Record<string, CompilerManifestEntry>>;
+
 export interface CompileOptions {
   componentSources?: Record<string, string>;
   componentBindings?: Record<string, CompilerComponentBinding>;
@@ -7,6 +14,8 @@ export interface CompileOptions {
   allowDefaultComponentFallback?: boolean;
   /** Trusted compiler-host budget override; PageSchema cannot configure this. */
   flowExecutionLimits?: Partial<FlowExecutionLimits>;
+  /** 服务端可信 Preset Manifest（用于 Props 白名单过滤） */
+  manifest?: CompilerManifestRegistry | undefined;
 }
 
 export interface CompilerComponentBinding {

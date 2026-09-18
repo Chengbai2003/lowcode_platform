@@ -535,6 +535,49 @@ describe('PatchValidationService', () => {
     }
   });
 
+  describe('Patch canonicalization per-operation consistency (Constraint 4)', () => {
+    it('canonicalizes alias insert even when component is removed later in the same patch', () => {
+      const baseSchema = createSchema();
+      const patch: EditorPatchOperation[] = [
+        {
+          op: 'insertComponent',
+          parentId: 'form',
+          component: { id: 'temp-btn', type: 'Btn' },
+        },
+        {
+          op: 'removeComponent',
+          componentId: 'temp-btn',
+        },
+      ];
+      const result = service.previewValidatedPatch(baseSchema, patch, 'trace-canon-1');
+      expect((result.canonicalPatch[0] as any).component.type).toBe('Button');
+      expect(result.canonicalPatch[1].op).toBe('removeComponent');
+    });
+
+    it('canonicalizes operations by their own step without contamination by subsequent same-id operations', () => {
+      const baseSchema = createSchema();
+      const patch: EditorPatchOperation[] = [
+        {
+          op: 'insertComponent',
+          parentId: 'form',
+          component: { id: 'slot-1', type: 'Btn' },
+        },
+        {
+          op: 'removeComponent',
+          componentId: 'slot-1',
+        },
+        {
+          op: 'insertComponent',
+          parentId: 'form',
+          component: { id: 'slot-1', type: 'Span' },
+        },
+      ];
+      const result = service.previewValidatedPatch(baseSchema, patch, 'trace-canon-2');
+      expect((result.canonicalPatch[0] as any).component.type).toBe('Button');
+      expect((result.canonicalPatch[2] as any).component.type).toBe('Text');
+    });
+  });
+
   describe('M1a-3 / C2.1 Agent validator conformance against unified fixture', () => {
     it('covers exactly 9 negative cases in the conformance fixture', () => {
       expect(negativeCaseEntries).toHaveLength(9);

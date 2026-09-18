@@ -15,8 +15,9 @@
  * 重启进程，无需迁移任何数据。
  */
 
-import { antdCompilerBindings } from '@lowcode-platform/preset-antd';
-import { testCompilerBindings } from '@lowcode-platform/preset-test';
+import { antdCompilerBindings, antdManifest } from '@lowcode-platform/preset-antd';
+import { testCompilerBindings, testManifest } from '@lowcode-platform/preset-test';
+import type { CompilerManifestRegistry } from '../compiler/helpers/codeHelpers';
 import {
   BUILTIN_ANTD_SYSTEM_RUNTIME_PROFILE,
   BUILTIN_ANTD_SYSTEM_RUNTIME_PROFILE_DEPRECATED,
@@ -68,11 +69,19 @@ const DEPLOYMENT_COMPONENT_METAS: Readonly<Record<string, ComponentMetaRegistry>
   'builtin-test@0.1.0': BUILTIN_TEST_COMPONENT_META_REGISTRY,
 });
 
+export const DEPLOYMENT_MANIFESTS: Readonly<Record<string, CompilerManifestRegistry>> =
+  Object.freeze({
+    'builtin-antd': antdManifest,
+    'builtin-antd@0.1.0': antdManifest,
+    'builtin-test@0.1.0': testManifest,
+  });
+
 export interface DeploymentComposition {
   readonly id: DeploymentCompositionId;
   readonly profiles: readonly SystemRuntimeProfile[];
   readonly compilerBindings: Readonly<Record<string, CompilerBindings>>;
   readonly componentMetas: Readonly<Record<string, ComponentMetaRegistry>>;
+  readonly manifests: Readonly<Record<string, CompilerManifestRegistry>>;
 }
 
 const DEPLOYMENT_COMPOSITIONS: Readonly<Record<DeploymentCompositionId, DeploymentComposition>> =
@@ -85,6 +94,7 @@ const DEPLOYMENT_COMPOSITIONS: Readonly<Record<DeploymentCompositionId, Deployme
       ]),
       compilerBindings: DEPLOYMENT_COMPILER_BINDINGS,
       componentMetas: DEPLOYMENT_COMPONENT_METAS,
+      manifests: DEPLOYMENT_MANIFESTS,
     }),
     'b4-acceptance': Object.freeze({
       id: 'b4-acceptance',
@@ -94,6 +104,7 @@ const DEPLOYMENT_COMPOSITIONS: Readonly<Record<DeploymentCompositionId, Deployme
       ]),
       compilerBindings: DEPLOYMENT_COMPILER_BINDINGS,
       componentMetas: DEPLOYMENT_COMPONENT_METAS,
+      manifests: DEPLOYMENT_MANIFESTS,
     }),
   });
 

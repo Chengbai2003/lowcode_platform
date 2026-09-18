@@ -6,7 +6,12 @@ import {
   ComponentMetaRegistry,
   BUILTIN_ANTD_COMPONENT_META_REGISTRY,
 } from '../schema-context/component-metadata/component-meta.registry';
-import { getDeploymentComposition, resolveDeploymentCompositionId } from './deployment-composition';
+import type { CompilerManifestRegistry } from '../compiler/helpers/codeHelpers';
+import {
+  DEPLOYMENT_MANIFESTS,
+  getDeploymentComposition,
+  resolveDeploymentCompositionId,
+} from './deployment-composition';
 
 export interface CompilerBindings {
   readonly defaultLibrary?: string;
@@ -111,11 +116,13 @@ export class DeploymentRuntimeProfileRegistry {
   private readonly profileRegistry: SystemRuntimeProfileRegistry;
   private readonly compilerBindings: Readonly<Record<string, CompilerBindings>>;
   private readonly componentMetas: Readonly<Record<string, ComponentMetaRegistry>>;
+  private readonly componentManifests: Readonly<Record<string, CompilerManifestRegistry>>;
 
   public constructor(
     profiles: readonly SystemRuntimeProfile[],
     compilerBindings: Readonly<Record<string, CompilerBindings>>,
     componentMetas?: Readonly<Record<string, ComponentMetaRegistry>>,
+    componentManifests?: Readonly<Record<string, CompilerManifestRegistry>>,
   ) {
     const bindingIds = Object.keys(compilerBindings);
     if (bindingIds.length === 0) invalid('at least one compiler binding is required');
@@ -151,6 +158,9 @@ export class DeploymentRuntimeProfileRegistry {
       sealedMetas['builtin-antd'] = BUILTIN_ANTD_COMPONENT_META_REGISTRY;
     }
     this.componentMetas = Object.freeze(sealedMetas);
+    this.componentManifests = Object.freeze(
+      componentManifests ? { ...componentManifests } : { ...DEPLOYMENT_MANIFESTS },
+    );
 
     Object.freeze(this);
   }
@@ -184,6 +194,30 @@ export class DeploymentRuntimeProfileRegistry {
     }
     return meta;
   }
+
+  public resolveManifest(runtimeCompatibility: RuntimeCompatibility): CompilerManifestRegistry {
+    this.resolveSnapshot(runtimeCompatibility);
+    const keyWithVersion = `${runtimeCompatibility?.componentPresetId}@${runtimeCompatibility?.componentPresetVersion}`;
+    const manifest = this.componentManifests[keyWithVersion];
+    if (manifest) {
+      return manifest;
+    }
+    const metaRegistry = this.componentMetas[keyWithVersion];
+    if (metaRegistry) {
+      const derived: Record<string, { componentType: string; allowedProps: readonly string[] }> =
+        Object.create(null);
+      for (const meta of metaRegistry.getAll()) {
+        derived[meta.type] = {
+          componentType: meta.type,
+          allowedProps: meta.allowedProps ?? meta.properties.map((p) => p.key),
+        };
+      }
+      return Object.freeze(derived);
+    }
+    invalid(
+      `unknown componentManifest for preset=${runtimeCompatibility?.componentPresetId}@${runtimeCompatibility?.componentPresetVersion}`,
+    );
+  }
 }
 
 /**
@@ -197,5 +231,6 @@ export const DEPLOYMENT_RUNTIME_PROFILE_REGISTRY = (() => {
     composition.profiles,
     composition.compilerBindings,
     composition.componentMetas,
+    composition.manifests,
   );
 })();

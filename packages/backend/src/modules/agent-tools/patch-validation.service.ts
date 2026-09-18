@@ -100,13 +100,14 @@ export class PatchValidationService {
     this.previewValidatedSchema(baseSchema, patch, traceId, runtimeCompatibility);
   }
 
-  previewValidatedSchema(
+  previewValidatedPatch(
     baseSchema: PageSchema,
     patch: readonly EditorPatchOperation[],
     traceId: string,
     runtimeCompatibility?: RuntimeCompatibility,
-  ): PageSchema {
+  ): { canonicalSchema: PageSchema; canonicalPatch: EditorPatchOperation[] } {
     let currentSchema = baseSchema;
+    const canonicalOperations: EditorPatchOperation[] = [];
 
     for (const operation of patch) {
       let effectiveOperation = operation;
@@ -147,6 +148,7 @@ export class PatchValidationService {
       }
 
       currentSchema = this.patchApplyService.applyPatch(currentSchema, [effectiveOperation]);
+      canonicalOperations.push(effectiveOperation);
     }
 
     let canonicalSchema: PageSchema;
@@ -175,7 +177,31 @@ export class PatchValidationService {
     }
 
     this.assertReachable(canonicalSchema, traceId);
-    return canonicalSchema;
+
+    const finalizedPatch = canonicalOperations.map((operation) => {
+      if (operation.op === 'replacePageLogic') {
+        return {
+          ...operation,
+          logic: (canonicalSchema.logic ?? {}) as Record<string, unknown>,
+        };
+      }
+      return operation;
+    });
+
+    return {
+      canonicalSchema,
+      canonicalPatch: finalizedPatch,
+    };
+  }
+
+  previewValidatedSchema(
+    baseSchema: PageSchema,
+    patch: readonly EditorPatchOperation[],
+    traceId: string,
+    runtimeCompatibility?: RuntimeCompatibility,
+  ): PageSchema {
+    return this.previewValidatedPatch(baseSchema, patch, traceId, runtimeCompatibility)
+      .canonicalSchema;
   }
 
   private assertInsertValid(
@@ -479,6 +505,7 @@ export class PatchValidationService {
 export function canonicalizePatchOperations(
   operations: readonly EditorPatchOperation[],
   schema: PageSchema,
+  metaRegistry?: ComponentMetaRegistry,
 ): EditorPatchOperation[] {
   return operations.map((operation) => {
     if (operation.op === 'replacePageLogic') {
@@ -488,15 +515,22 @@ export function canonicalizePatchOperations(
       };
     }
     if (operation.op === 'insertComponent') {
-      // 写入规范化（Issue #39 review round 3）：别名在 previewValidatedSchema 内
-      // 已改写为规范类型；对外返回与累积的 Patch 必须同步同一规范类型，否则
-      // 客户端重放 Patch（前端 applyPatchToSchema）会把别名写回 Schema，
-      // 导致页面不可渲染、编译 fail-close。规范类型按组件 id 从应用后的
-      // Schema 反查（同 id 后插入的组件会覆盖，类型本就来自最后一次插入）。
+      const originalType = (operation.component as { type?: unknown }).type;
+      if (typeof originalType === 'string' && metaRegistry) {
+        const resolved = metaRegistry.resolve(originalType);
+        if (resolved && resolved.type !== originalType) {
+          return {
+            ...operation,
+            component: {
+              ...(operation.component as Record<string, unknown>),
+              type: resolved.type,
+            },
+          };
+        }
+      }
       const componentId = (operation.component as { id?: unknown }).id;
       const appliedType =
         typeof componentId === 'string' ? schema.components[componentId]?.type : undefined;
-      const originalType = (operation.component as { type?: unknown }).type;
       if (typeof appliedType === 'string' && appliedType !== originalType) {
         return {
           ...operation,

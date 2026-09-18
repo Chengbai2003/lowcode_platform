@@ -9,6 +9,7 @@
 
 import { BadRequestException } from '@nestjs/common';
 import type { RuntimeCompatibility } from '@lowcode-platform/schema-contract';
+import type { CompilerManifestRegistry } from '../helpers/codeHelpers';
 import {
   DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
   DeploymentRuntimeProfileRegistry,
@@ -42,6 +43,33 @@ export function resolveTrustedCompilerBindings(
 
   try {
     return deploymentRegistry.resolveCompilerBindings(runtimeCompatibility);
+  } catch (error) {
+    if (!(error instanceof BadRequestException)) {
+      throw error;
+    }
+    throw new BadRequestException(
+      `Unsupported compiler runtimeCompatibility: ${describeRuntimeCompatibility(runtimeCompatibility)}`,
+    );
+  }
+}
+
+export function resolveTrustedPresetManifest(
+  runtimeCompatibility: RuntimeCompatibility,
+  deploymentRegistry: DeploymentRuntimeProfileRegistry = DEPLOYMENT_RUNTIME_PROFILE_REGISTRY,
+): CompilerManifestRegistry {
+  if (
+    !runtimeCompatibility ||
+    !isNonEmptyString(runtimeCompatibility.componentPresetId) ||
+    !isNonEmptyString(runtimeCompatibility.componentPresetVersion) ||
+    !isNonEmptyString(runtimeCompatibility.rendererVersion)
+  ) {
+    throw new BadRequestException(
+      'Page runtimeCompatibility must include preset and renderer versions',
+    );
+  }
+
+  try {
+    return deploymentRegistry.resolveManifest(runtimeCompatibility);
   } catch (error) {
     if (!(error instanceof BadRequestException)) {
       throw error;

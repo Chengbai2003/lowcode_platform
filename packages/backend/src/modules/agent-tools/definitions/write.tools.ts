@@ -21,14 +21,13 @@ function executeWriteTools(
   operations: import('../types/editor-patch.types').EditorPatchOperation[],
 ): ToolExecutionResult {
   patchValidationService.validatePatchShape(operations, context.traceId);
-  const nextSchema = patchValidationService.previewValidatedSchema(
+  const { canonicalSchema, canonicalPatch } = patchValidationService.previewValidatedPatch(
     context.workingSchema,
     operations,
     context.traceId,
     context.runtimeCompatibility,
   );
-  const normalizedOperations = canonicalizePatchOperations(operations, nextSchema);
-  return { patchDelta: normalizedOperations, updatedWorkingSchema: nextSchema };
+  return { patchDelta: canonicalPatch, updatedWorkingSchema: canonicalSchema };
 }
 
 function executeWriteTool(

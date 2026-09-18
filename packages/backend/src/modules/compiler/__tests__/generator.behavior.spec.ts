@@ -1,6 +1,20 @@
+import { execFileSync } from 'node:child_process';
 import { compileToCode, formatCode } from '../generator';
 import { parseSchema, transform, generate } from '../pipeline';
 import { behaviorSchemas, snapshotSchemas } from './compilerTestSchemas';
+
+function formatWithPrettier(code: string): string {
+  const script = [
+    "const prettier = require('prettier');",
+    "let source = '';",
+    "process.stdin.on('data', (chunk) => { source += chunk; });",
+    "process.stdin.on('end', async () => {",
+    "  process.stdout.write(await prettier.format(source, { parser: 'babel' }));",
+    '});',
+  ].join('\n');
+
+  return execFileSync(process.execPath, ['-e', script], { input: code }).toString();
+}
 
 async function compileFormatted(schema: unknown) {
   return formatCode(compileToCode(schema as Record<string, any>));
@@ -26,6 +40,39 @@ describe('compiler generator behavior', () => {
     expect(code).toContain('{"你好，" + name}');
     expect(code).toContain('{`欢迎 ${name}，再次欢迎 ${name}`}');
     expect(code).toContain('href={`/users/${name}`}');
+  });
+
+  it('safely generates JSX attributes containing quotes, backslashes, newlines, and special characters (Constraint 3)', async () => {
+    const testCases = [
+      { key: 'doubleQuote', val: 'He said "Hello World"' },
+      { key: 'singleQuote', val: "It's fine" },
+      { key: 'backslash', val: 'C:\\Program Files\\App' },
+      { key: 'newline', val: 'Line 1\nLine 2' },
+      { key: 'ampAndLt', val: 'Fish & Chips <br>' },
+      { key: 'empty', val: '' },
+    ];
+
+    for (const tc of testCases) {
+      const schema = {
+        schemaVersion: 0,
+        rootId: 'root',
+        components: {
+          root: { id: 'root', type: 'Page', childrenIds: ['btn'] },
+          btn: {
+            id: 'btn',
+            type: 'Button',
+            props: {
+              title: tc.val,
+              children: 'Test',
+            },
+          },
+        },
+      };
+
+      const rawCode = compileToCode(schema);
+      const parsedByBabel = formatWithPrettier(rawCode);
+      expect(parsedByBabel).toContain('GeneratedPage');
+    }
   });
 
   it('lowers visible props into conditional rendering', async () => {
@@ -504,5 +551,54 @@ describe('compiler generator behavior', () => {
     expect(code).toContain(')(data, ["profile","name"], "Ada")');
     expect(code).toContain(')(data, ["profile","name"], response)');
     expect(code).not.toContain(')(state, ["profile","name"]');
+  });
+
+  it('emits JSX expression container for strings with JSON escape characters or JSX special characters, while simple strings use attribute literals', () => {
+    const schema = {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: {
+        root: {
+          id: 'root',
+          type: 'Page',
+          childrenIds: ['simple-btn', 'tab-btn', 'backspace-btn', 'control-btn', 'quotes-btn'],
+        },
+        'simple-btn': {
+          id: 'simple-btn',
+          type: 'Button',
+          props: { title: 'simple title', type: 'primary' },
+        },
+        'tab-btn': {
+          id: 'tab-btn',
+          type: 'Button',
+          props: { title: 'col1\tcol2' },
+        },
+        'backspace-btn': {
+          id: 'backspace-btn',
+          type: 'Button',
+          props: { title: 'foo\bbar' },
+        },
+        'control-btn': {
+          id: 'control-btn',
+          type: 'Button',
+          props: { title: 'bell\x07' },
+        },
+        'quotes-btn': {
+          id: 'quotes-btn',
+          type: 'Button',
+          props: { title: 'a "double" and \'single\' quote' },
+        },
+      },
+    };
+
+    const code = compileToCode(schema);
+    // Simple strings use standard attribute syntax
+    expect(code).toContain('title="simple title"');
+    expect(code).toContain('type="primary"');
+    // Strings with tab, backspace, control characters, quotes use JSX expression container
+    expect(code).toContain('title={"col1\\tcol2"}');
+    expect(code).toContain('title={"foo\\bbar"}');
+    expect(code).toContain('title={"bell\\u0007"}');
+    expect(code).toContain('title={"a \\"double\\" and \'single\' quote"}');
   });
 });

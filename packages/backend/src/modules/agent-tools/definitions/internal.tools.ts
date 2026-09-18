@@ -62,14 +62,13 @@ export function createInternalDefinitions(deps: InternalToolsDeps): ToolDefiniti
       execute: async (input, context) => {
         const patch = asPatchArray(input.patch);
         patchValidationService.validatePatchShape(patch, context.traceId);
-        const nextSchema = patchValidationService.previewValidatedSchema(
+        const { canonicalSchema, canonicalPatch } = patchValidationService.previewValidatedPatch(
           context.workingSchema,
           patch,
           context.traceId,
           context.runtimeCompatibility,
         );
-        const normalizedPatch = canonicalizePatchOperations(patch, nextSchema);
-        return { data: { patch: normalizedPatch }, updatedWorkingSchema: nextSchema };
+        return { data: { patch: canonicalPatch }, updatedWorkingSchema: canonicalSchema };
       },
     },
   ];

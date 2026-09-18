@@ -154,6 +154,8 @@ const Component = registry.resolve(node.type);
 
 Manifest 是 Agent 生成提示和 Validator 的共同来源，但 Prompt 不是安全边界。Validator 必须独立拒绝未知组件、未知 Props、函数型 Props 和危险 DOM 能力。
 
+在导出编译（Compiler）链路中，属性同样对齐 Renderer 净化策略：Compiler 依据页面快照中的 `runtimeCompatibility` 三元组解析服务端可信 Manifest 白名单，过滤未知属性与危险注入项（如 `dangerouslySetInnerHTML`），同时隔离保留合法由 events 生成的函数型事件 handler；组件 runtime 维持 fail-close 自防御兜底，形成「静态白名单生成 + 运行时组件自防御」双层屏障。
+
 ## ComponentRuntimeBridge
 
 组件包不能反向导入 Renderer 的内部 Executor、EventDispatcher 或表达式解析器。Renderer 通过稳定公共接口向组件注入受控能力：
@@ -238,8 +240,7 @@ antd deprecated），组合在启动时一次确定、无运行时切换入口�
 锁定；生成代码的导入路径 `@lowcode-platform/preset-test/runtime` 经真实模块解析与
 jsdom 挂载验证。第二 Preset 的属性边界为三层一致：Agent 写入按部署侧 Meta 的
 opt-in `allowedProps` 白名单拒绝（AntD 既有 Meta 零行为变化）、Renderer 按 Manifest
-净化、编译产物由 runtime 自防御（未知 Props 不透传 DOM，字符串型 `on*` 与危险
-HTML 一律丢弃）。B4 状态为「已实施、待验收」：在 Issue #39 验收通过前不视为
-M1F-2 完成。
+净化、编译产物依据服务端可信 Manifest 静态过滤未知与危险属性并由 runtime 自防御双层兜底（未知 Props 不透传 DOM，字符串型 `on*` 与危险
+HTML 一律丢弃）。阶段 0 基线收口已完成属性白名单收敛、特殊字符保真与逐操作 Patch 归一化；在 Issue #39 正式验收通过前保持 Open。
 
 M1a-2 F2 ActionFlow Runtime 已落地：在 `packages/renderer` 内部建立声明式 ActionFlow 运行语义与会话调度能力（`RuntimeSession.executeFlow`、`FlowRun`、预算控制、`onError` 恢复、`AbortSignal` 级联与结构化 `FlowExecutionError` 诊断）；生产 Schema `PageSchema.logic.flows` 与组件事件 `runFlow` 继续保持 fail-close，留待 F3 开放。
