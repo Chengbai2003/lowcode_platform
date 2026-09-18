@@ -93,6 +93,7 @@ export const BLOCKED_PROP_NAMES = new Set<string>([
   '__lookupGetter__',
   '__lookupSetter__',
   'toJSON',
+  'dangerouslySetInnerHTML',
 ]);
 
 export const JS_RESERVED_WORDS = new Set<string>([

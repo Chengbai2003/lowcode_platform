@@ -83,6 +83,61 @@ const DANGEROUS_SCHEMA = {
   },
 };
 
+const SPECIAL_STRINGS_SCHEMA = {
+  schemaVersion: 0,
+  rootId: 'root',
+  components: {
+    root: {
+      id: 'root',
+      type: 'Container',
+      childrenIds: [
+        't-double',
+        't-single',
+        't-backslash',
+        't-newline',
+        't-amp',
+        't-lt',
+        't-empty',
+      ],
+    },
+    't-double': {
+      id: 't-double',
+      type: 'Text',
+      props: { id: 't-double', title: 'hello "world" with double quotes' },
+    },
+    't-single': {
+      id: 't-single',
+      type: 'Text',
+      props: { id: 't-single', title: "it's a 'single quoted' string" },
+    },
+    't-backslash': {
+      id: 't-backslash',
+      type: 'Text',
+      props: { id: 't-backslash', title: 'path\\to\\file\\with\\backslashes' },
+    },
+    't-newline': {
+      id: 't-newline',
+      type: 'Text',
+      props: { id: 't-newline', title: 'line1\nline2\r\nline3' },
+    },
+    't-amp': {
+      id: 't-amp',
+      type: 'Text',
+      props: { id: 't-amp', title: 'foo & bar &amp; baz' },
+    },
+    't-lt': {
+      id: 't-lt',
+      type: 'Text',
+      props: { id: 't-lt', title: 'a < b and c > d' },
+    },
+    't-empty': {
+      id: 't-empty',
+      type: 'Text',
+      props: { id: 't-empty', title: '' },
+    },
+  },
+};
+
 function main() {
   const backendRequire = createRequire(backendPackageJson);
   const tsNode = backendRequire('ts-node');
@@ -93,13 +148,24 @@ function main() {
 
   const { compileToCode } = backendRequire('./src/modules/compiler/generator');
   const presetTest = backendRequire('@lowcode-platform/preset-test');
+  const compileOptions = {
+    ...presetTest.testCompilerBindings,
+    manifest: presetTest.testManifest,
+  };
 
   process.stdout.write(
     JSON.stringify({
-      main: { code: compileToCode(MAIN_SCHEMA, presetTest.testCompilerBindings), schema: MAIN_SCHEMA },
+      main: {
+        code: compileToCode(MAIN_SCHEMA, compileOptions),
+        schema: MAIN_SCHEMA,
+      },
       dangerous: {
-        code: compileToCode(DANGEROUS_SCHEMA, presetTest.testCompilerBindings),
+        code: compileToCode(DANGEROUS_SCHEMA, compileOptions),
         schema: DANGEROUS_SCHEMA,
+      },
+      strings: {
+        code: compileToCode(SPECIAL_STRINGS_SCHEMA, compileOptions),
+        schema: SPECIAL_STRINGS_SCHEMA,
       },
       runtimeCompatibility: presetTest.TEST_RUNTIME_COMPATIBILITY,
     }),

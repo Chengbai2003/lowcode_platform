@@ -149,6 +149,7 @@ function createRegistryForComposition(compositionId: 'default' | 'b4-acceptance'
     composition.profiles,
     composition.compilerBindings,
     composition.componentMetas,
+    composition.manifests,
   );
 }
 

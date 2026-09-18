@@ -7,7 +7,10 @@ import { Injectable, Logger, BadRequestException, Optional } from '@nestjs/commo
 import { validatePageSchemaValue } from '@lowcode-platform/schema-contract';
 import { CompileRequestDto } from './dto/compile-request.dto';
 import { compileToCode, formatCode } from './generator';
-import { resolveTrustedCompilerBindings } from './preset/trustedCompilerPresetResolver';
+import {
+  resolveTrustedCompilerBindings,
+  resolveTrustedPresetManifest,
+} from './preset/trustedCompilerPresetResolver';
 import { PageSchemaService } from '../page-schema/page-schema.service';
 import { DeploymentRuntimeProfileRegistry } from '../runtime-profile/deployment-runtime-profile-registry';
 
@@ -52,10 +55,17 @@ export class CompilerService {
       page.runtimeCompatibility,
       this.deploymentRegistry,
     );
+    const trustedManifest = resolveTrustedPresetManifest(
+      page.runtimeCompatibility,
+      this.deploymentRegistry,
+    );
 
     try {
-      // 3. 执行代码生成流水线
-      const code = compileToCode(canonicalSchema, trustedBindings);
+      // 3. 执行代码生成流水线（绑定服务端可信 Manifest 白名单）
+      const code = compileToCode(canonicalSchema, {
+        ...trustedBindings,
+        manifest: trustedManifest,
+      });
 
       // 4. 格式化代码
       const formatted = await formatCode(code);

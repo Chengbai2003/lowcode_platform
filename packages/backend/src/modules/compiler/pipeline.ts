@@ -348,6 +348,7 @@ function createCompileOptions(options?: CompileOptions): Required<CompileOptions
     defaultLibrary: options?.defaultLibrary || 'antd',
     allowDefaultComponentFallback: options?.allowDefaultComponentFallback ?? true,
     flowExecutionLimits: options?.flowExecutionLimits || {},
+    manifest: options?.manifest ?? {},
   };
 }
 
@@ -1534,6 +1535,11 @@ function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode
   const childrenProp = findProp(node, 'children');
   const visibleProp = findProp(node, 'visible');
 
+  const manifest = ctx.root.options.manifest;
+  const hasManifest = manifest && Object.keys(manifest).length > 0;
+  const manifestEntry = hasManifest ? manifest[node.componentType] : undefined;
+  const allowedPropsSet = hasManifest ? new Set(manifestEntry?.allowedProps ?? []) : undefined;
+
   const attributes: JSXAttributeNode[] = [];
 
   for (const prop of node.props) {
@@ -1550,6 +1556,14 @@ function buildComponentNode(node: ParseTreeNode, ctx: TransformContext): JSXNode
       continue;
     }
     if (!isSafePropName(prop.name)) {
+      continue;
+    }
+    // Manifest 驱动的 Props 净化（对齐 Renderer）
+    if (allowedPropsSet && !allowedPropsSet.has(prop.name)) {
+      continue;
+    }
+    // 防御性拦截：若未提供 Manifest，也禁止任何字符串型 on* 属性混入 Props
+    if (!allowedPropsSet && /^on[A-Za-z]/.test(prop.name)) {
       continue;
     }
 
@@ -3114,8 +3128,20 @@ function genAttribute(attribute: JSXAttributeNode): string {
   switch (attribute.mode) {
     case 'boolean':
       return attribute.name;
-    case 'string':
-      return `${attribute.name}=${toQuotedString(attribute.value ?? '')}`;
+    case 'string': {
+      const val = attribute.value ?? '';
+      if (
+        val.includes('"') ||
+        val.includes('\n') ||
+        val.includes('\r') ||
+        val.includes('\\') ||
+        val.includes('&') ||
+        val.includes('<')
+      ) {
+        return `${attribute.name}={${toQuotedString(val)}}`;
+      }
+      return `${attribute.name}=${toQuotedString(val)}`;
+    }
     case 'expression':
     default:
       return `${attribute.name}={${attribute.value ?? 'undefined'}}`;

@@ -1,7 +1,7 @@
 # M1F-2 B4：第二个可信 Preset 执行记录（Issue #39）
 
-> 状态：已实施、待验收（Draft PR）。本文记录 B4 的部署组合、验收证据与已知限制，
-> 不代表 Issue #39 已关闭。
+> 状态：已合入 main (PR #62, commit 1c45285)；阶段 0 基线收口已完成。
+> 本文记录 B4 的部署组合、阶段 0 收口成果、验收证据与已知限制。不代表 Issue #39 已关闭。
 
 ## 1. 新包：@lowcode-platform/preset-test
 
@@ -105,48 +105,48 @@ pnpm dev   # vite，端口 3000
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Agent 写入（insert/updateProps） | builtin-test Meta 显式声明 `allowedProps`（与包内 Manifest 完全一致，组合测试锁漂移）；AntD 专属 Props（如 `loading`/`danger`）被 `PATCH_INVALID` 拒绝。AntD 内置 Meta 未声明白名单，行为零变化。 |
 | Renderer 渲染                    | Manifest 白名单净化（fail-close），危险 Props 移除。                                                                                                                                              |
-| Compiler 产物                    | runtime 自防御丢弃未知 Props，DOM 输出与 Renderer 一致。                                                                                                                                          |
+| Compiler 产物                    | 双层防护：1) 静态生成依据服务端可信 Manifest 解析 Props 白名单，彻底剔除未知与危险属性（保留合法 events 函数 handler）；2) runtime 自防御兜底丢弃未知 Props。DOM 输出与 Renderer 严格一致。       |
 
 ## 5. 验收证据映射（Issue #39 / B4 DoD）
 
-| 链路/场景                                                                                                                     | 证据                                                                                                |
-| ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 新包资产一致性（runtime/manifest/validation/compiler 键一致、seal、版本对齐、净化、点击、直消费自防御、message/notification） | `packages/preset-test/src/__tests__/preset.test.tsx`（17 用例）                                     |
-| 部署组合不变量、启动 fail-close、Meta/Runtime/allowedProps 防漂移                                                             | `packages/backend/src/modules/runtime-profile/__tests__/deployment-composition.spec.ts`（10 用例）  |
-| B active 新建：服务端生成 B tuple、Schema 无身份字段、伪造参数被忽略                                                          | `b4-second-preset.integration.spec.ts` S1                                                           |
-| B 回读（加载/预览身份）                                                                                                       | 同上 S2                                                                                             |
-| Agent 读 B Meta/aliases；规范类型 Patch 完整闭环（预览→CAS 保存→编译）                                                        | 同上 S3                                                                                             |
-| A 独有类型/别名被拒绝（结构合法证明）；Props 属性边界（insert/updateProps 拒绝 AntD 专属 Props，同 Props 在 AntD 页不受限）   | 同上 S3                                                                                             |
+| 链路/场景                                                                                                                                              | 证据                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| 新包资产一致性（runtime/manifest/validation/compiler 键一致、seal、版本对齐、净化、点击、直消费自防御、message/notification）                          | `packages/preset-test/src/__tests__/preset.test.tsx`（17 用例）                                            |
+| 部署组合不变量、启动 fail-close、Meta/Runtime/allowedProps 防漂移                                                                                      | `packages/backend/src/modules/runtime-profile/__tests__/deployment-composition.spec.ts`（10 用例）         |
+| B active 新建：服务端生成 B tuple、Schema 无身份字段、伪造参数被忽略                                                                                   | `b4-second-preset.integration.spec.ts` S1                                                                  |
+| B 回读（加载/预览身份）                                                                                                                                | 同上 S2                                                                                                    |
+| Agent 读 B Meta/aliases；规范类型 Patch 完整闭环（预览→CAS 保存→编译）                                                                                 | 同上 S3                                                                                                    |
+| A 独有类型/别名被拒绝（结构合法证明）；Props 属性边界（insert/updateProps 拒绝 AntD 专属 Props，同 Props 在 AntD 页不受限）                            | 同上 S3                                                                                                    |
 | 别名写入规范化：别名插入（Action/Btn）在写入 Schema 与对外返回/累积的 Patch 中同步改写为规范类型；重放（applyPatch）结果与预览一致，保存与编译闭环成立 | 同上 S3（review round 3 用例）+ `b4-frontend-second-preset.test.tsx` 重放用例（真实 `applyPatchToSchema`） |
-| 确认后经真实 CAS 保存、过期版本冲突                                                                                           | 同上 S4                                                                                             |
-| Compiler B：真实 generator、导入路径实际可解析、message/notification 命名导出                                                 | 同上 S5                                                                                             |
-| A→B 静态升级：旧 A 保存/预览/Agent/编译仍 A，新页面 B                                                                         | 同上 S6                                                                                             |
-| 跨组合延续：B 页面回到正常部署仍可保存（deprecated 允许）                                                                     | 同上 S7                                                                                             |
-| A/B 交错：Meta/别名/编译来源不串用（同名 Button）                                                                             | 同上 S8                                                                                             |
-| disabled/unknown/mismatch 拒绝（保存/编译/Agent 执行）                                                                        | 同上 S9                                                                                             |
-| 真实生产仓储（文件存储）CAS、过期冲突、重启持久化三元组                                                                       | 同上 S10                                                                                            |
-| 前端真实 Catalog 双 Preset 并存、精确解析、版本不匹配 fail-close                                                              | `b4-frontend-second-preset.test.tsx`（7 用例）                                                      |
-| 前端加载链：PreviewPane 接线 + 真实 Renderer DOM 标记（非仅 prop）                                                            | 同上                                                                                                |
-| 前端真实预览链：真实 PreviewPane→SelectableCanvas→Renderer 渲染 B DOM 并点击派发                                              | `b4-frontend-second-preset-preview.test.tsx`（1 用例）                                              |
-| 前端组件白名单只来自当前 Preset runtime                                                                                       | 同上                                                                                                |
-| 前端 A/B 交错切页、404 bootstrap 真实创建入口、mismatch 不挂载                                                                | 同上                                                                                                |
-| 生成代码可解析/可构建/可挂载、message/notification 与点击行为和 Renderer 一致                                                 | `b4-generated-code-consumption.test.tsx`（3 用例）                                                  |
-| 危险 Props 编译产物挂载后无法注入 DOM（runtime 自防御）                                                                       | 同上                                                                                                |
-| 正常 AntD 部署体验不变                                                                                                        | 默认组合 antd active；既有 B1/B2/B3、M1a、PageSchema/Repository、Agent、Compiler、Frontend 全量回归 |
+| 逐操作（per-operation）Patch 别名归一化与预览下发，彻底覆盖别名插入后删除/同 ID 覆盖/同 ID 异构流（Constraint 4）                                      | `packages/backend/src/modules/agent-tools/patch-validation.service.spec.ts`（42 用例）                     |
+| 确认后经真实 CAS 保存、过期版本冲突                                                                                                                    | 同上 S4                                                                                                    |
+| Compiler B：真实 generator、导入路径实际可解析、message/notification 命名导出                                                                          | 同上 S5                                                                                                    |
+| 危险 Props 经 Compiler Manifest 静态白名单与 runtime 自防御双层拦截，无法向 DOM 注入（Constraint 1 & 2）                                               | `compiler-props-filtering.spec.ts`（6 用例） + `b4-generated-code-consumption.test.tsx`                    |
+| 特殊字符字符串属性（", ', \, \n, &, <, 空串）生成合法代码且真实 DOM 严格保真（Constraint 3）                                                           | `b4-generated-code-consumption.test.tsx` + `generator.behavior.spec.ts`                                    |
+| A→B 静态升级：旧 A 保存/预览/Agent/编译仍 A，新页面 B                                                                                                  | 同上 S6                                                                                                    |
+| 跨组合延续：B 页面回到正常部署仍可保存（deprecated 允许）                                                                                              | 同上 S7                                                                                                    |
+| A/B 交错：Meta/别名/编译来源不串用（同名 Button）                                                                                                      | 同上 S8                                                                                                    |
+| disabled/unknown/mismatch 拒绝（保存/编译/Agent 执行）                                                                                                 | 同上 S9                                                                                                    |
+| 真实生产仓储（文件存储）CAS、过期冲突、重启持久化三元组                                                                                                | 同上 S10                                                                                                   |
+| 前端真实 Catalog 双 Preset 并存、精确解析、版本不匹配 fail-close                                                                                       | `b4-frontend-second-preset.test.tsx`（7 用例）                                                             |
+| 前端加载链：PreviewPane 接线 + 真实 Renderer DOM 标记（非仅 prop）                                                                                     | 同上                                                                                                       |
+| 前端真实预览链：真实 PreviewPane→SelectableCanvas→Renderer 渲染 B DOM 并点击派发                                                                       | `b4-frontend-second-preset-preview.test.tsx`（1 用例）                                                     |
+| 前端组件白名单只来自当前 Preset runtime                                                                                                                | 同上                                                                                                       |
+| 前端 A/B 交错切页、404 bootstrap 真实创建入口、mismatch 不挂载                                                                                         | 同上                                                                                                       |
+| 生成代码可解析/可构建/可挂载、message/notification 与点击行为和 Renderer 一致                                                                          | `b4-generated-code-consumption.test.tsx`（4 用例）                                                         |
+| 正常 AntD 部署体验不变                                                                                                                                 | 默认组合 antd active；既有 B1/B2/B3、M1a、PageSchema/Repository、Agent、Compiler、Frontend 全量回归        |
 
-## 6. 已知限制
+## 6. 已知限制与收口记录
 
-- **别名写入规范化覆盖 Agent Patch 的全部出口（review round 3 收口）**：`PatchValidationService`
-  在 insertComponent 应用前把别名改写为规范类型；`canonicalizePatchOperations` 同步把
-  preview_patch 返回与 write 工具 patchDelta（→accumulatedPatch→最终响应 Patch）中的
-  insert 类型按应用后 Schema 反查改写——客户端确认后重放 Patch（前端
-  `applyPatchToSchema`）得到与预览完全一致的 Schema（后端 `toEqual` 与前端真实
-  重放用例共同锁定）。绕过 Agent 入口手写的别名 Schema（直接 `PUT` 原始 JSON）
+- **别名写入规范化覆盖 Agent Patch 的全部出口（阶段 0 收口 / 约束 4）**：`PatchValidationService`
+  在主校验循环中对每一步 insertComponent 操作就地基于当前组件元数据归一化类型，并生成 `previewValidatedPatch` 下发
+  （不再基于最终 Schema 反推），彻底消除别名插入后删除、删除后同 ID 重建与不同类型等复杂操作流导致的污染。
+  重放结果与预览完全一致，保存与编译闭环成立。绕过 Agent 入口手写的别名 Schema（直接 `PUT` 原始 JSON）
   不做规范化，编译时按 `Unsupported component type` fail-close——保存入口的
   类型白名单校验属后续工作。
-- **Generator 对含双引号的 Prop 值生成非法 JSX（既有局限）**：字符串 Prop 值内部
-  含 `"` 时，产物属性形如 `onerror="alert(\"x\")"` 无法编译。与 Preset 无关，
-  在 generator 属性引号策略中单独修复；B4 危险 Props 用例因此避免内部双引号。
+- **字符串特殊字符保真与引号转义（阶段 0 收口 / 约束 3）**：字符串 Prop 值含特殊字符（`"`, `'`, `\`, `\n`, `\r`, `&`, `<`）
+  统一通过 JSX 表达式 `{toQuotedString(val)}` 输出，消除 JSX 实体双重转义误差（如 `&amp;`）与引号转义语法问题，
+  生成合法代码且挂载后真实 DOM 属性值严格保真相等。
 - 编辑器 PropertyPanel/ComponentTree 的属性面板仍消费遗留全局
   `componentRegistry`（AntD Meta），不随页面 Preset 切换；JSON/Logic 保存白名单
   已按当前 Preset runtime 收敛。属性面板的 Preset 化不在 B4 范围。

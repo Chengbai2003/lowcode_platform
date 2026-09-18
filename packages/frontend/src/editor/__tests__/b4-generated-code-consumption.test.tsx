@@ -28,6 +28,7 @@ const repoRoot = path.resolve(__dirname, '../../../../../');
 interface BridgeResult {
   main: { code: string; schema: PageSchema };
   dangerous: { code: string; schema: PageSchema };
+  strings: { code: string; schema: PageSchema };
   runtimeCompatibility: {
     componentPresetId: string;
     componentPresetVersion: string;
@@ -206,14 +207,16 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
     consoleInfo.mockRestore();
   });
 
-  it('危险 Props 的编译产物挂载后无法向 DOM 注入（runtime 自防御，不依赖 Renderer 净化）', () => {
-    expect(bridge.dangerous.code).toContain('onerror');
-    expect(bridge.dangerous.code).toContain('dangerouslySetInnerHTML');
+  it('危险 Props 经 Compiler Manifest 白名单净化与 runtime 自防御双层拦截，无法向 DOM 注入（Constraint 1 & 2）', () => {
+    // 静态代码生成层证据（Static Emission）：Compiler 依据 Manifest 白名单净化，不生成危险属性
+    expect(bridge.dangerous.code).not.toContain('onerror');
+    expect(bridge.dangerous.code).not.toContain('dangerouslySetInnerHTML');
+    expect(bridge.dangerous.code).not.toContain('data-evil');
 
+    // 运行时行为层证据（Runtime Consumption）：真实挂载后 DOM 不含任何危险属性
     const DangerousPage = transpileGeneratedComponent(bridge.dangerous.code);
     const { container } = render(<DangerousPage />);
 
-    // 编译产物确实携带危险 Props 字面量，但真实 runtime 不透传给 DOM
     const button = container.querySelector('button[data-preset-test="button"]')!;
     expect(button.textContent).toBe('危险按钮');
     expect(button.hasAttribute('onerror')).toBe(false);
@@ -227,5 +230,26 @@ describe('B4 第二个 Preset：Compiler 生成代码真实消费（Issue #39）
 
     const root = container.querySelector('[data-preset-test="container"]')!;
     expect(root.hasAttribute('onerror')).toBe(false);
+  });
+
+  it('特殊字符字符串属性（", \', \\, \\n, &, <, 空串）生成合法代码、可挂载，且真实 DOM 属性值严格保真（Constraint 3）', () => {
+    const StringsPage = transpileGeneratedComponent(bridge.strings.code);
+    const { container } = render(<StringsPage />);
+
+    expect(container.querySelector('#t-double')?.getAttribute('title')).toBe(
+      'hello "world" with double quotes',
+    );
+    expect(container.querySelector('#t-single')?.getAttribute('title')).toBe(
+      "it's a 'single quoted' string",
+    );
+    expect(container.querySelector('#t-backslash')?.getAttribute('title')).toBe(
+      'path\\to\\file\\with\\backslashes',
+    );
+    expect(container.querySelector('#t-newline')?.getAttribute('title')).toBe(
+      'line1\nline2\r\nline3',
+    );
+    expect(container.querySelector('#t-amp')?.getAttribute('title')).toBe('foo & bar &amp; baz');
+    expect(container.querySelector('#t-lt')?.getAttribute('title')).toBe('a < b and c > d');
+    expect(container.querySelector('#t-empty')?.getAttribute('title')).toBe('');
   });
 });
