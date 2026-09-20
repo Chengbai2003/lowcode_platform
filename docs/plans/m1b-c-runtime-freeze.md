@@ -3,6 +3,7 @@
 > 状态：已冻结并实施（PR C）；基线 f7423e0（PR A #65、PR B #66、计划 #67 合并后 main）。
 > 依据：`m1b-c-runtime-compiler-plan.md`（#67 审查通过）、`m1b-b-execution-freeze.md`（宿主协议消费面）、`m1b-a-protocol-freeze.md`（resultTo 严格语法）。
 > `data-source` 能力在 C 交付后仍保持六消费面默认 unsupported；预览宿主适配器与编辑器接线属 PR D。
+> 审查修正（review round 3）：⑥ 补齐双 Preset 验收——此前以「Preset 正交」论证替代证据，不符计划 §6 的「两 Preset 均覆盖」承诺。现补：preset-antd 包新增与 renderer R1 同构的真实挂载用例（真实 loopback HTTP + antd Button 点击 + Span 探针重渲染）；compiler 侧补双绑定代码生成用例（builtin-antd 与 preset-test 两个 componentBindings，断言宿主调用不变、组件 import 按绑定解析、不硬编码组件库）。
 > 审查修正（review round 2）：⑤ 编译器内嵌运行时补 `__deepFreezeJson`——参数快照在 JSON 深拷贝后逐层 `Object.freeze`，与 Renderer 的契约 `deepFreeze` 语义一致；编译器测试补不可变性断言（顶层/嵌套对象/数组 `Object.isFrozen` 且宿主变更无效），双路径冻结语义对齐。
 > 审查修正（review round 1）：① 编译器代际守卫改为**写入点活检查**——登记不再于完成时删除（仅被下一次同源请求或卸载替换），`superseded` 为惰性 getter 在实际写 state 处求值，消除「守卫通过→写入」窗口；普通路径与 Flow 路径均有确定性微任务穿插测试（旧结果在写入前被未完成的新代际穿透时丢弃）。② 参数快照统一为**安全 JSON 快照**：Renderer `JSON.parse(JSON.stringify(...))` + 契约 `deepFreeze`（响应式代理可穿、深冻结、隔离后续变异；不可序列化按可恢复失败），编译器内嵌运行时同语义深拷贝；两侧补嵌套对象/数组/不可变性测试。③ Renderer 以**成员调用**执行宿主服务（保留接收者，类实例适配器的 `this` 绑定不丢）。
 
@@ -65,7 +66,7 @@ M1a/M1b 证据工件（A 阶段）字节未动；C 的证据以本文件 §4 与
 - 预览/编辑器宿主适配器（调用 B 端点、pageId/pageVersion 绑定、身份）：PR D。
 - Agent 公开目录暴露、前端编辑入口（`ACTION_TYPE`）：PR D。能力矩阵放行：PR E（六面证据齐后）。
 - 服务端会话/代际不在 C 范围（B 并发准入已覆盖服务端；客户端代际在 Renderer/产物内）。
-- 双 Preset：Renderer 侧以 preset-test 真实挂载覆盖；preset-antd 的数据能力行为与 Preset 无关（宿主服务注入位与 Preset 正交，A/B 已证 Preset 边界），组件库渲染回归由既有 preset-antd 套件保证。
+- 双 Preset（计划 §6 承诺，实测覆盖）：Renderer 挂载链路两侧同构覆盖——renderer 包 preset-test 的 R1（真实 loopback + Button 点击 + Text 探针）与 preset-antd 包的同构用例（真实 loopback + antd Button 点击 + Span 探针）；Compiler 侧双绑定代码生成用例（builtin-antd / preset-test 两个 componentBindings）。数据源运行时与 Preset 解耦由测试证明，不再以论证替代。
 
 ## 6. 兼容与回滚
 

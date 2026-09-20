@@ -4,6 +4,9 @@ import * as contract from '@lowcode-platform/schema-contract';
 import { compileToCode } from '../generator';
 import { parseSchema, transform, generate } from '../pipeline';
 import type { PageSchema } from '@lowcode-platform/schema-contract';
+// 双 Preset 绑定（计划 §6：两 Preset 均覆盖，不硬编码组件库）
+import { antdCompilerBindings } from '@lowcode-platform/preset-antd';
+import { testCompilerBindings } from '@lowcode-platform/preset-test';
 
 const m1bFixture = JSON.parse(
   readFileSync(
@@ -222,6 +225,14 @@ function buildSingleStepFlowSchema(): Record<string, unknown> {
       },
     },
   };
+}
+
+/** preset-test 绑定变体：Container 根 + Text 探针（其运行时无 Page/Span） */
+function buildPresetTestVariantSchema(): Record<string, unknown> {
+  const variant = JSON.parse(JSON.stringify(m1bFixture.schema)) as Record<string, unknown>;
+  const components = variant.components as Record<string, Record<string, unknown>>;
+  components.root.type = 'Container';
+  return variant;
 }
 
 /** 本地对象参数 schema（P2 快照：嵌套对象 + 数组） */
@@ -466,6 +477,36 @@ describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => 
       // 旧值保留
       expect((harness.getState() as { rows: unknown[] }).rows).toEqual([]);
     });
+  });
+
+  describe('双 Preset 编译绑定（计划 §6）', () => {
+    it.each([
+      ['builtin-antd', antdCompilerBindings, m1bFixture.schema],
+      // preset-test 运行时仅 Container/Text/Button：用 Container 根的同构变体
+      ['preset-test', testCompilerBindings, buildPresetTestVariantSchema()],
+    ])(
+      '%s bindings: executeDataSource codegen is preset-independent (host call, no network fallback)',
+      async (_label, bindings, schema) => {
+        const code = await withSupportedDataSourceAsync(() =>
+          compileToCode(schema as unknown as Record<string, unknown>, {
+            componentBindings: bindings.componentBindings as never,
+            componentSources: bindings.componentSources as never,
+            defaultLibrary: bindings.defaultLibrary,
+            allowDefaultComponentFallback: bindings.allowDefaultComponentFallback,
+          }),
+        );
+        // 宿主调用与数据源运行时不依赖组件库；组件 import 按绑定解析
+        expect(code).toContain('__executeDataSource("searchItems", { query: state.query })');
+        expect(code).toContain('const __dataSourceRuns = useRef(new Map());');
+        expect(code).not.toContain('fetch(');
+        // 组件 import 确按对应绑定解析（不硬编码组件库）
+        expect(code).toContain(
+          bindings === testCompilerBindings
+            ? '@lowcode-platform/preset-test/runtime'
+            : '@lowcode-platform/preset-antd/runtime',
+        );
+      },
+    );
   });
 
   describe('审查修正 round 1', () => {
