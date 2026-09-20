@@ -14,6 +14,18 @@ export interface FlowValidationContext {
   readonly onActionDepth?: (depth: number) => void;
 }
 
+/**
+ * executeDataSource 的严格引用校验上下文（M1b-1）。
+ *
+ * 声明集合由调用方显式传入：parse 路径来自 logic.dataSources / logic.states，
+ * 独立 analyzeActionFlowDeclarations 路径经 options 传入。
+ * 缺省（如独立 validateActionList 调用）按空集合处理 —— 引用一律 fail-close。
+ */
+export interface DataSourceValidationContext {
+  readonly declaredDataSourceKeys: ReadonlySet<string>;
+  readonly declaredStateKeys: ReadonlySet<string>;
+}
+
 export interface ActionValidationContext {
   readonly issues: SchemaContractIssue[];
   readonly inspectionContext: InspectionContext;
@@ -24,6 +36,7 @@ export interface ActionValidationContext {
   /** ACTION_BUDGET_EXCEEDED 只报告一次 */
   actionBudgetReported: boolean;
   flowValidation?: FlowValidationContext;
+  dataSourceValidation?: DataSourceValidationContext;
 }
 
 /**
@@ -893,6 +906,68 @@ export function validateActionItem(
 
       if (inputRes.exists) {
         inspectAndSanitizeJsonValue(inputVal, [...path, 'input'], 0, context.inspectionContext);
+      }
+      break;
+    }
+
+    case 'executeDataSource': {
+      checkUnknownActionFields(actionObj, ['type', 'sourceId', 'resultTo'], path, context);
+      const sourceIdRes = safeGet(actionObj, 'sourceId');
+      const resultToRes = safeGet(actionObj, 'resultTo');
+      const sourceIdVal = sourceIdRes.exists ? sourceIdRes.value : undefined;
+      const resultToVal = resultToRes.exists ? resultToRes.value : undefined;
+
+      if (!sourceIdRes.exists || typeof sourceIdVal !== 'string' || !sourceIdVal.trim()) {
+        pushActionIssue(context, {
+          code: 'DATASOURCE_SOURCE_ID_REQUIRED',
+          path: [...path, 'sourceId'],
+          message: 'executeDataSource action requires a non-empty string "sourceId"',
+        });
+      } else if (!isSafeLogicKey(sourceIdVal)) {
+        pushActionIssue(context, {
+          code: 'INVALID_DATASOURCE_SOURCE_ID',
+          path: [...path, 'sourceId'],
+          message: `DataSource reference "${describeValue(sourceIdVal)}" must be a safe Logic Key`,
+        });
+      } else if (!context.dataSourceValidation?.declaredDataSourceKeys.has(sourceIdVal)) {
+        pushActionIssue(context, {
+          code: 'DATASOURCE_REFERENCE_MISSING',
+          path: [...path, 'sourceId'],
+          message: `Referenced DataSource "${sourceIdVal}" does not exist in logic.dataSources`,
+        });
+      }
+
+      if (!resultToRes.exists || typeof resultToVal !== 'string' || !resultToVal.trim()) {
+        pushActionIssue(context, {
+          code: 'DATASOURCE_RESULTTO_REQUIRED',
+          path: [...path, 'resultTo'],
+          message: 'executeDataSource action requires a non-empty string "resultTo" (state.<key>)',
+        });
+      } else if (resultToVal.startsWith('computed.')) {
+        pushActionIssue(context, {
+          code: 'COMPUTED_TARGET_READONLY',
+          path: [...path, 'resultTo'],
+          message: `Computed target "${resultToVal}" is read-only`,
+        });
+      } else {
+        // 严格目标语法：精确 state.<key> 单段、安全 Logic Key 且必须已声明。
+        // 不放宽 legacy 嵌套路径，也不复用 apiCall 的宽松 validateLogicTarget。
+        const stateKey = resultToVal.startsWith('state.')
+          ? resultToVal.slice('state.'.length)
+          : undefined;
+        if (stateKey === undefined || !isSafeLogicKey(stateKey)) {
+          pushActionIssue(context, {
+            code: 'INVALID_STATE_TARGET',
+            path: [...path, 'resultTo'],
+            message: `State target "${resultToVal}" must reference one safe top-level Logic Key`,
+          });
+        } else if (!context.dataSourceValidation?.declaredStateKeys.has(stateKey)) {
+          pushActionIssue(context, {
+            code: 'UNDECLARED_STATE_TARGET',
+            path: [...path, 'resultTo'],
+            message: `State target "${resultToVal}" must reference a state declared in logic.states`,
+          });
+        }
       }
       break;
     }

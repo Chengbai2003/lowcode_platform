@@ -1,12 +1,17 @@
 import type { SchemaContractIssue } from '../validation/issues';
 
 /**
- * M1a 声明式逻辑的三大核心能力标识（固定 revision=1）
+ * 声明式页面能力标识（固定 revision=1）。
+ *
+ * M1a 三大核心能力 + M1b-1 只读数据源能力；新增能力必须同时在
+ * capabilities/manifest.ts 的可信登记表中显式登记支持状态，缺一即
+ * 模块初始化失败（防止"追加能力名即默认放行"）。
  */
 export const SCHEMA_CAPABILITIES = Object.freeze([
   'page-state',
   'named-computed',
   'action-flow',
+  'data-source',
 ] as const);
 
 export type SchemaCapability = (typeof SCHEMA_CAPABILITIES)[number];

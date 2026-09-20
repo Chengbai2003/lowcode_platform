@@ -202,6 +202,12 @@ function findCycleNodes(
 
 export interface ActionFlowAnalysisOptions {
   readonly allowLegacyNestedStateTargets?: boolean;
+  /**
+   * executeDataSource 严格引用校验所需的显式声明集合（M1b-1）。
+   * 缺省按空集合处理：flow 内的 executeDataSource 引用一律 fail-close。
+   */
+  readonly declaredDataSourceKeys?: ReadonlySet<string>;
+  readonly declaredStateKeys?: ReadonlySet<string>;
 }
 
 /**
@@ -343,6 +349,10 @@ export function analyzeActionFlowDeclarations(
     allowLegacyNestedStateTargets: options?.allowLegacyNestedStateTargets ?? true,
     actionCount: 0,
     actionBudgetReported: false,
+    dataSourceValidation: {
+      declaredDataSourceKeys: options?.declaredDataSourceKeys ?? new Set<string>(),
+      declaredStateKeys: options?.declaredStateKeys ?? new Set<string>(),
+    },
     flowValidation: {
       declaredFlowKeys,
       onActionDepth(depth) {

@@ -26,6 +26,14 @@ export interface SchemaValidationLimits {
   readonly maxEventBindings: number;
   /** 最大 ActionFlow 声明数量 (默认 200) */
   readonly maxFlowEntries: number;
+  /** 最大 DataSource 声明数量 (默认 20) */
+  readonly maxDataSourceEntries: number;
+  /** 单条 DataSource 声明 params 的最大键数 (默认 20) */
+  readonly maxDataSourceParamEntries: number;
+  /** OperationRef operationId 最大字符数 (默认 128) */
+  readonly maxOperationIdLength: number;
+  /** OperationRef revision 最大字符数 (默认 32) */
+  readonly maxOperationRevisionLength: number;
   /** 最大 Action 节点总数 (默认 200) */
   readonly maxActionNodes: number;
   /** 最大 Action 嵌套深度 (默认 16) */
@@ -47,6 +55,10 @@ export const DEFAULT_SCHEMA_LIMITS: SchemaValidationLimits = {
   maxJsonNodes: 25_000,
   maxEventBindings: 200,
   maxFlowEntries: 200,
+  maxDataSourceEntries: 20,
+  maxDataSourceParamEntries: 20,
+  maxOperationIdLength: 128,
+  maxOperationRevisionLength: 32,
   maxActionNodes: 200,
   maxActionDepth: 16,
   maxIssues: 500,
@@ -68,6 +80,10 @@ const LIMIT_HARD_CAPS: Record<keyof SchemaValidationLimits, number> = {
   maxJsonNodes: 5_000_000,
   maxEventBindings: 5_000,
   maxFlowEntries: 10_000,
+  maxDataSourceEntries: 100,
+  maxDataSourceParamEntries: 100,
+  maxOperationIdLength: 256,
+  maxOperationRevisionLength: 128,
   maxActionNodes: 100_000,
   maxActionDepth: 64,
   maxIssues: 10_000,

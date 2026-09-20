@@ -10,13 +10,14 @@ import { normalizeValidationLimits } from '../types/limits';
 import type { ParsePageSchemaResult, SchemaContractIssue } from './issues';
 import { validateComponentGraph } from './tree';
 import { validateActionList, type ActionValidationContext } from './actions';
+import { validateLogicDataSources } from './data-sources';
 import type { InspectionContext, IssueSink } from './inspector';
 import { inspectAndSanitizeJsonValue, pushIssue } from './inspector';
 import { describeValue } from './describe';
 
 const ALLOWED_SCHEMA_KEYS = new Set(['schemaVersion', 'rootId', 'components', 'logic']);
 const ALLOWED_COMPONENT_KEYS = new Set(['id', 'type', 'props', 'childrenIds', 'events']);
-const ALLOWED_LOGIC_KEYS = new Set(['states', 'computed', 'flows']);
+const ALLOWED_LOGIC_KEYS = new Set(['states', 'computed', 'flows', 'dataSources']);
 
 const hasOwn = (target: object, key: PropertyKey): boolean =>
   Object.prototype.hasOwnProperty.call(target, key);
@@ -331,6 +332,8 @@ export function validatePageSchemaValue(
   let computedObj: object | undefined;
   let computedAnalysis: ComputedLogicAnalysis | undefined;
   let flowsAnalysis: ActionFlowAnalysis | undefined;
+  let dataSourcesObj: object | undefined;
+  let declaredDataSourceKeys: ReadonlySet<string> | undefined;
 
   if (logicRes.exists && logic !== undefined) {
     if (!logic || typeof logic !== 'object' || Array.isArray(logic)) {
@@ -484,6 +487,23 @@ export function validatePageSchemaValue(
               }
             }
           }
+
+          // dataSources：只读数据源声明（M1b-1）。区域校验独立于 states/computed，
+          // 必须在 flows 分析与动作校验之前完成，供 executeDataSource 的引用校验使用。
+          const dataSourcesRes = safeGetValue(logicObj, 'dataSources');
+          const dataSources = dataSourcesRes.exists ? dataSourcesRes.value : undefined;
+          if (dataSourcesRes.exists && dataSources !== undefined) {
+            const declaredKeys = validateLogicDataSources(
+              dataSources,
+              limits,
+              ['logic', 'dataSources'],
+              inspectionContext,
+            );
+            if (declaredKeys) {
+              dataSourcesObj = dataSources as object;
+              declaredDataSourceKeys = declaredKeys;
+            }
+          }
         }
       }
     }
@@ -521,6 +541,12 @@ export function validatePageSchemaValue(
     if (flowsRes.exists && flows !== undefined) {
       const flowsResult = analyzeActionFlowDeclarations(flows, limits, ['logic', 'flows'], {
         allowLegacyNestedStateTargets: statesObj === undefined,
+        // executeDataSource 的严格引用校验需要显式声明集合，覆盖组件事件与
+        // 全部嵌套 Flow 动作（与 allowLegacyNestedStateTargets 同一传入通道）。
+        declaredDataSourceKeys: declaredDataSourceKeys ?? new Set<string>(),
+        declaredStateKeys: statesObj
+          ? new Set<string>(Object.getOwnPropertyNames(statesObj))
+          : new Set<string>(),
       });
       if (!flowsResult.ok) {
         for (const flowIssue of flowsResult.issues) {
@@ -541,6 +567,12 @@ export function validatePageSchemaValue(
   const declaredFlowKeys = new Set<string>(flowsAnalysis ? Object.keys(flowsAnalysis.flows) : []);
   actionValidationContext.flowValidation = {
     declaredFlowKeys,
+  };
+  actionValidationContext.dataSourceValidation = {
+    declaredDataSourceKeys: declaredDataSourceKeys ?? new Set<string>(),
+    declaredStateKeys: statesObj
+      ? new Set<string>(Object.getOwnPropertyNames(statesObj))
+      : new Set<string>(),
   };
 
   const componentKeys = Object.getOwnPropertyNames(componentsObj);
@@ -952,6 +984,73 @@ export function validatePageSchemaValue(
     if (flowsAnalysis) {
       Object.defineProperty(cleanLogicObject, 'flows', {
         value: flowsAnalysis.flows,
+        enumerable: true,
+        writable: true,
+        configurable: true,
+      });
+    }
+    if (dataSourcesObj && declaredDataSourceKeys) {
+      // canonical 重建：按 Logic Key 排序逐条重建，声明内固定
+      // operationRef（operationId → revision）→ params 的字段顺序
+      const cleanDataSources: Record<string, unknown> = Object.create(null);
+      for (const dsKey of Array.from(declaredDataSourceKeys).sort()) {
+        const declRes = safeGetValue(dataSourcesObj, dsKey);
+        if (!declRes.exists || typeof declRes.value !== 'object') continue;
+        const declObj = declRes.value as object;
+        const refRes = safeGetValue(declObj, 'operationRef');
+        if (!refRes.exists || typeof refRes.value !== 'object') continue;
+        const refObj = refRes.value as object;
+        const operationIdRes = safeGetValue(refObj, 'operationId');
+        const revisionRes = safeGetValue(refObj, 'revision');
+        if (typeof operationIdRes.value !== 'string' || typeof revisionRes.value !== 'string') {
+          continue;
+        }
+        const cleanRef = Object.create(null);
+        Object.defineProperty(cleanRef, 'operationId', {
+          value: operationIdRes.value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+        Object.defineProperty(cleanRef, 'revision', {
+          value: revisionRes.value,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+        const cleanDecl = Object.create(null);
+        Object.defineProperty(cleanDecl, 'operationRef', {
+          value: cleanRef,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+        const paramsRes = safeGetValue(declObj, 'params');
+        if (paramsRes.exists && paramsRes.value !== undefined) {
+          const cleanParams = inspectAndSanitizeJsonValue(
+            paramsRes.value,
+            ['logic', 'dataSources', dsKey, 'params'],
+            0,
+            canonicalInspectionContext,
+          );
+          if (cleanParams !== undefined) {
+            Object.defineProperty(cleanDecl, 'params', {
+              value: cleanParams,
+              enumerable: true,
+              writable: true,
+              configurable: true,
+            });
+          }
+        }
+        Object.defineProperty(cleanDataSources, dsKey, {
+          value: cleanDecl,
+          enumerable: true,
+          writable: true,
+          configurable: true,
+        });
+      }
+      Object.defineProperty(cleanLogicObject, 'dataSources', {
+        value: cleanDataSources,
         enumerable: true,
         writable: true,
         configurable: true,
