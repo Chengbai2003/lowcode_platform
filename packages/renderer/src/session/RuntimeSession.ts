@@ -55,6 +55,8 @@ export class RuntimeSession {
   private readonly controller = new AbortController();
   private readonly timers = new Set<ReturnType<typeof setTimeout>>();
   private readonly cleanups = new Set<() => void>();
+  /** 按 sourceId 的数据源执行代际（M1b-1 PR C）：latest-started-wins */
+  private readonly dataSourceRuns = new Map<string, AbortController>();
   private disposed = false;
   private generationValue = 0;
 
@@ -166,6 +168,33 @@ export class RuntimeSession {
     this.cleanups.add(cleanup);
   }
 
+  /**
+   * 启动新的数据源执行代际（M1b-1 PR C）。
+   *
+   * 同 sourceId 旧代际立即取消（latest-started-wins）；返回的 controller
+   * 是本次执行的代际令牌——只有它仍是该 sourceId 的当前代际且 Session
+   * 存活时，结果才允许提交。
+   */
+  startDataSourceRun(sourceId: string): AbortController {
+    this.throwIfDisposed();
+    this.dataSourceRuns.get(sourceId)?.abort();
+    const controller = new AbortController();
+    this.dataSourceRuns.set(sourceId, controller);
+    return controller;
+  }
+
+  /** 提交守卫：controller 是否仍是该 sourceId 的当前代际且 Session 存活 */
+  isCurrentDataSourceRun(sourceId: string, controller: AbortController): boolean {
+    return !this.disposed && this.dataSourceRuns.get(sourceId) === controller;
+  }
+
+  /** 结束一次执行并释放登记（仅当前代际可释放，迟到的旧代际无操作） */
+  finishDataSourceRun(sourceId: string, controller: AbortController): void {
+    if (this.dataSourceRuns.get(sourceId) === controller) {
+      this.dataSourceRuns.delete(sourceId);
+    }
+  }
+
   /** 替换当前 Session 的 Computed 声明；现有 State 保持不变。 */
   configureComputed(analysis: ComputedLogicAnalysis | undefined): void {
     this.throwIfDisposed();
@@ -244,6 +273,12 @@ export class RuntimeSession {
       run.abort();
     }
     this.activeRootRuns.clear();
+
+    // 数据源执行代际全部取消（in-flight 请求中止；迟到结果由提交守卫丢弃）
+    for (const controller of this.dataSourceRuns.values()) {
+      controller.abort();
+    }
+    this.dataSourceRuns.clear();
 
     for (const timer of this.timers) {
       clearTimeout(timer);

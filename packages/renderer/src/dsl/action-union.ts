@@ -21,6 +21,7 @@ export type {
   RunFlowAction,
   DelayAction,
   LogAction,
+  ExecuteDataSourceAction,
   CoreActionType,
 } from '@lowcode-platform/schema-contract';
 

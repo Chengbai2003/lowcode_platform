@@ -56,6 +56,17 @@ export interface DataSourceExecutionRequest {
   readonly params?: Readonly<Record<string, JsonValue>>;
 }
 
+/**
+ * 宿主服务执行输入（M1b-1 PR C）：Renderer/编译产物只携带 sourceId 与
+ * 已求值冻结的参数快照；`pageId`/`pageVersion` 绑定由宿主适配器构造
+ * `DataSourceExecutionRequest` 时补充（页面身份与发布引用是宿主配置，
+ * 生成模块不携带）。形状是 `DataSourceExecutionRequest` 的严格子集。
+ */
+export interface DataSourceHostExecuteInput {
+  readonly sourceId: string;
+  readonly params?: Readonly<Record<string, JsonValue>>;
+}
+
 export interface DataSourceExecutionSuccess {
   readonly ok: true;
   /** 通过 Operation 输出契约校验后的完整公开 JSON 结果 */

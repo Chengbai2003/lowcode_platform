@@ -100,6 +100,13 @@ export function Renderer({
     return result.value;
   }, [canonicalSchema]);
 
+  // M1b-1 PR C：dataSources 声明经校验的 canonical Schema 进入执行上下文
+  // （executeDataSource 只读声明求值参数；不重新解析、不接受宿主注入）
+  const dataSourceDeclarations = useMemo(() => {
+    const declarations = canonicalSchema?.logic?.dataSources;
+    return declarations ? structuredClone(declarations) : undefined;
+  }, [canonicalSchema?.logic?.dataSources]);
+
   // 稳定 flatComponents 引用：仅在内容实际变化时更新。
   // 注意：这里必须使用 canonicalSchema（而非原始 schema prop），
   // 否则同引用原地变异可绕过 Contract 边界进入渲染树。
@@ -156,6 +163,12 @@ export function Renderer({
   useLayoutEffect(() => {
     session.configureFlows(flowAnalysis);
   }, [flowAnalysis, session]);
+
+  // 声明表只进入执行上下文（hostConfig），不进入响应式数据；
+  // Schema 热更新时同步替换，无声明时清空（防陈旧引用）
+  useLayoutEffect(() => {
+    session.dispatcher.setHostConfig('dataSourceDeclarations', dataSourceDeclarations);
+  }, [dataSourceDeclarations, session]);
 
   // M0-4 Scope E：宿主能力显式授予，默认全 deny；注入后运行时不可变。
   const hostCapabilities = useMemo(

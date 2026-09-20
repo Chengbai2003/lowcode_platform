@@ -2,6 +2,21 @@
  * 值类型：可以是静态值或表达式
  */
 import type { JsonValue } from '@lowcode-platform/schema-contract';
+import type {
+  DataSourceExecutionOutcome,
+  DataSourceHostExecuteInput,
+} from '@lowcode-platform/schema-contract';
+
+/**
+ * 只读数据源宿主服务接口（M1b-1 PR C）：executeDataSource 动作的唯一
+ * 网络出口。绝不 fallback 到 fetch / context.api / apiCall。
+ */
+export interface DataSourceHostService {
+  execute(
+    input: DataSourceHostExecuteInput,
+    signal?: AbortSignal,
+  ): Promise<DataSourceExecutionOutcome>;
+}
 
 export type Value =
   | string
@@ -155,6 +170,16 @@ export interface ExecutionContext {
     delete: <T = unknown>(url: string, signal?: AbortSignal) => Promise<T>;
     request: <T = unknown>(config: ApiRequestConfig) => Promise<T>;
   };
+
+  /**
+   * 只读数据源宿主服务（M1b-1 PR C / ADR-0005）。
+   *
+   * 与 `context.api` 同层的宿主显式注入位：executeDataSource 动作要求
+   * `hostCapabilities.dataResources` 已授予 **且** 本服务存在，二者缺一
+   * fail-close（零宿主调用）。宿主实现负责 pageId/pageVersion 绑定并调用
+   * B 阶段执行端点；Renderer/生成代码只携带 sourceId 与已求值冻结的参数。
+   */
+  dataSources?: DataSourceHostService;
 
   // 导航
   navigate: (path: string, params?: Record<string, unknown>) => void;

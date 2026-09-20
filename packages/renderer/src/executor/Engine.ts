@@ -19,6 +19,7 @@ import uiActions from './actions/uiActions';
 import navActions from './actions/navActions';
 import flowActions from './actions/flowActions';
 import asyncActions from './actions/asyncActions';
+import dataSourceActions from './actions/dataSourceActions';
 import debugActions from './actions/debugActions';
 import { ReactiveRuntime } from '../reactive/runtime';
 import { buildNavigationTarget } from '../utils/sanitizeUrl';
@@ -31,6 +32,7 @@ import { getFlowRunContext, FLOW_RUN_CONTEXT, FlowExecutionError } from '../sess
  * |-----|--------|------|
  * | 数据 | setValue | 设置字段/状态值 |
  * | 网络 | apiCall | API 请求 |
+ * | 数据源 | executeDataSource | 只读数据源（宿主服务唯一出口） |
  * | 路由 | navigate | 页面跳转 |
  * | 交互 | feedback | 消息/通知 |
  * | 弹窗 | dialog | 模态框/确认框 |
@@ -43,6 +45,9 @@ const BUILTIN_HANDLERS: ActionRegistry = {
 
   // 网络
   apiCall: asyncActions.apiCall,
+
+  // 只读数据源（M1b-1 PR C：宿主服务唯一出口，绝不 fallback fetch/apiCall）
+  executeDataSource: dataSourceActions.executeDataSource,
 
   // 路由
   navigate: navActions.navigate,

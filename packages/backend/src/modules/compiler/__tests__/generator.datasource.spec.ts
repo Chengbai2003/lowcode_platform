@@ -1,0 +1,402 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import * as contract from '@lowcode-platform/schema-contract';
+import { compileToCode } from '../generator';
+import { parseSchema, transform, generate } from '../pipeline';
+import type { PageSchema } from '@lowcode-platform/schema-contract';
+
+const m1bFixture = JSON.parse(
+  readFileSync(
+    path.resolve(process.cwd(), '../../test-fixtures/m1b-datasource-conformance.json'),
+    'utf8',
+  ),
+) as { schema: PageSchema; flowSchema: PageSchema; legacyApiCallSchema: PageSchema };
+
+const manifestModulePath = path.resolve(
+  path.dirname(require.resolve('@lowcode-platform/schema-contract')),
+  'capabilities/manifest.js',
+);
+const manifestModule = require(manifestModulePath);
+
+async function withSupportedDataSourceAsync<T>(fn: () => Promise<T> | T): Promise<T> {
+  const original = manifestModule.getTrustedCapabilityManifest;
+  const supportedAll: Record<string, unknown> = {};
+  for (const surface of contract.CONSUMER_SURFACES) {
+    supportedAll[surface] = { status: 'supported', revision: 1 };
+  }
+  manifestModule.getTrustedCapabilityManifest = () => ({
+    manifestVersion: 1,
+    matrix: contract.createTestCapabilityMatrix({ 'data-source': supportedAll }),
+  });
+  try {
+    return await fn();
+  } finally {
+    manifestModule.getTrustedCapabilityManifest = original;
+  }
+}
+
+function compileFixtureAsync(schema: PageSchema): Promise<string> {
+  return withSupportedDataSourceAsync(() =>
+    compileToCode(schema as unknown as Record<string, unknown>),
+  );
+}
+
+/** 提取生成组件主体（兼容 dataSources prop 新签名与旧签名） */
+function extractGeneratedComponentBody(code: string): string {
+  const markers = [
+    'export default function GeneratedPage({ dataSources } = {}) {\n',
+    'export default function GeneratedPage() {\n',
+  ];
+  const end = code.lastIndexOf('\n  return ');
+  for (const marker of markers) {
+    const start = code.indexOf(marker);
+    if (start >= 0 && end > start) {
+      return code
+        .slice(start + marker.length, end)
+        .replace(/^  /gm, '')
+        .trim();
+    }
+  }
+  throw new Error('GeneratedPage body not found');
+}
+
+function extractClickHandlerNames(code: string): string[] {
+  return Array.from(code.matchAll(/const (handle\w+Click) =/g)).map((m) => m[1]);
+}
+
+interface ScriptedDataSourceService {
+  service: {
+    execute: (
+      input: { sourceId: string; params?: unknown },
+      signal?: AbortSignal,
+    ) => Promise<unknown>;
+  };
+  calls: Array<{ sourceId: string; params: unknown }>;
+  aborts: number;
+}
+
+/** 脚本化宿主服务：按序返回 outcome，并观测 abort */
+function createScriptedDataSourceService(
+  outcomes: Array<
+    { ok: true; result: unknown } | { ok: false; code: string; message: string; traceId?: string }
+  >,
+  options?: { delayMs?: number },
+): ScriptedDataSourceService {
+  const state: ScriptedDataSourceService = {
+    calls: [],
+    aborts: 0,
+    service: undefined as never,
+  };
+  let index = 0;
+  state.service = {
+    execute: (input: { sourceId: string; params?: unknown }, signal?: AbortSignal) =>
+      new Promise((resolve, reject) => {
+        state.calls.push({ sourceId: input.sourceId, params: input.params });
+        const onAbort = () => {
+          state.aborts += 1;
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
+        };
+        if (signal?.aborted) {
+          onAbort();
+          return;
+        }
+        signal?.addEventListener('abort', onAbort, { once: true });
+        setTimeout(() => {
+          signal?.removeEventListener('abort', onAbort);
+          const outcome = outcomes[Math.min(index, outcomes.length - 1)];
+          index += 1;
+          resolve(outcome);
+        }, options?.delayMs ?? 0);
+      }),
+  };
+  return state;
+}
+
+function createDataSourceHarness(
+  code: string,
+  dataSources: unknown,
+  returnedCode: string,
+): { value: Record<string, unknown>; getState: () => unknown; unmount: () => void } {
+  let renderedState: unknown;
+  let unmountCleanup: (() => void) | undefined;
+  const useState = (initialState: unknown) => {
+    renderedState = initialState;
+    return [
+      initialState,
+      (update: unknown) => {
+        renderedState =
+          typeof update === 'function'
+            ? (update as (state: unknown) => unknown)(renderedState)
+            : update;
+      },
+    ];
+  };
+  const useMemo = (factory: () => unknown) => factory();
+  const useRef = <T>(value: T) => ({ current: value });
+  const useEffect = (effect: () => void | (() => void) | undefined) => {
+    const cleanup = effect();
+    if (typeof cleanup === 'function') {
+      unmountCleanup = cleanup;
+    }
+  };
+  const noop = () => undefined;
+  const message = { info: noop, success: noop, warning: noop, error: noop };
+  const notification = { info: noop, success: noop, warning: noop, error: noop };
+  const Modal = { confirm: () => ({ destroy: noop }), info: () => ({ destroy: noop }) };
+
+  const factory = new Function(
+    'useState',
+    'useMemo',
+    'useRef',
+    'useEffect',
+    'dataSources',
+    'message',
+    'notification',
+    'Modal',
+    'window',
+    `${extractGeneratedComponentBody(code)}\nreturn ${returnedCode};`,
+  );
+  const value = factory(
+    useState,
+    useMemo,
+    useRef,
+    useEffect,
+    dataSources,
+    message,
+    notification,
+    Modal,
+    { location: { href: '' } },
+  ) as Record<string, unknown>;
+  return {
+    value,
+    getState: () => renderedState,
+    unmount: () => unmountCleanup?.(),
+  };
+}
+
+const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => {
+  describe('C1: 普通事件路径代码生成', () => {
+    it('generates host-service call with evaluated params, result write and no network fallback', async () => {
+      const code = await compileFixtureAsync(m1bFixture.schema);
+
+      // 组件签名带可选宿主 prop；声明参数按现有表达式语义求值（state.query）
+      expect(code).toContain('export default function GeneratedPage({ dataSources } = {}) {');
+      expect(code).toContain('__executeDataSource("searchItems", { query: state.query })');
+      // 结果经 OnResult 处理器整值提交到已声明 state 槽位
+      expect(code).toMatch(/\.then\(handleSearchBtnClickOnResult\)/);
+      expect(code).toContain('rows: dsResult.outcome.result');
+      // 绝不出现网络回退（宿主服务是唯一出口）
+      expect(code).not.toContain('fetch(');
+      // 代际运行时：useRef 注册表 + 卸载中止
+      expect(code).toContain('const __dataSourceRuns = useRef(new Map());');
+      expect(code).toContain('runs.get(sourceId)?.abort()');
+    });
+
+    it('keeps the legacy no-prop signature for pages without data source actions', async () => {
+      const code = await compileFixtureAsync(m1bFixture.legacyApiCallSchema);
+      expect(code).toContain('export default function GeneratedPage() {');
+      expect(code).not.toContain('__executeDataSource');
+    });
+  });
+
+  describe('C2: Flow 路径代码生成（含声明集穿透修复）', () => {
+    it('wraps host calls in executeWithAbortRace with flow signal and fail-close error mapping', async () => {
+      const code = await compileFixtureAsync(m1bFixture.flowSchema);
+      // if.then 与 loop.actions 两处嵌套都生成宿主调用
+      const callMatches = code.match(/__executeDataSource\("searchItems"/g) ?? [];
+      expect(callMatches.length).toBe(2);
+      expect(code).toContain('flowContext.executeWithAbortRace(\n');
+      expect(code).toContain(
+        '__executeDataSource("searchItems", { query: state.query }, flowContext.signal)',
+      );
+      // 取消 → 不可恢复 abort；失败 → FLOW_STEP_FAILED 携带 B 错误码/traceId
+      expect(code).toContain('.superseded) {\n              throw flowContext.createAbortError(');
+      expect(code).toContain("'executeDataSource failed [' + outcome.code + ']'");
+      expect(code).toContain("outcome.traceId ? ' (trace ' + outcome.traceId + ')'");
+      expect(code).not.toContain('fetch(');
+    });
+  });
+
+  describe('C3: 未知动作编译期 fail-close', () => {
+    it('throws when an action type unknown to the compiler reaches the normal path', () =>
+      withSupportedDataSourceAsync(() => {
+        const ast = parseSchema(m1bFixture.schema);
+        // buildComponentTree 会克隆动作；fail-close 必须发生在真正消费的树节点上
+        const findEventNode = (
+          node: (typeof ast.children)[number],
+        ): { events: Array<{ actions: Array<{ type: string }> }> } | undefined => {
+          if (node.kind === 'component' && node.events.length > 0) {
+            return node as unknown as { events: Array<{ actions: Array<{ type: string }> }> };
+          }
+          for (const child of 'children' in node ? node.children : []) {
+            const found = findEventNode(child);
+            if (found) return found;
+          }
+          return undefined;
+        };
+        const buttonNode = ast.children.map(findEventNode).find(Boolean);
+        expect(buttonNode).toBeDefined();
+        (buttonNode!.events[0].actions[0] as { type: string }).type = 'mysteryAction';
+        expect(() => transform(ast)).toThrow('Unsupported action type for compiler: mysteryAction');
+      }));
+
+    it('flow path already fails closed for unknown action types (regression)', () =>
+      withSupportedDataSourceAsync(() => {
+        const ast = parseSchema(m1bFixture.flowSchema);
+        const flow = ast.flows![0];
+        (flow.steps[0] as unknown as { type: string }).type = 'mysteryAction';
+        transform(ast);
+        const code = generate(ast);
+        expect(code).toContain('Unsupported flow action type');
+      }));
+  });
+
+  describe('C4: 生成代码真实执行（new Function harness + 脚本化宿主服务）', () => {
+    it('normal path: success commits the whole result; failure keeps the old value', async () => {
+      const code = await compileFixtureAsync(m1bFixture.schema);
+      const [clickHandler] = extractClickHandlerNames(code);
+      expect(clickHandler).toBe('handleSearchBtnClick');
+      const script = createScriptedDataSourceService([
+        { ok: true, result: { items: [{ id: 'a', title: 'Apple' }] } },
+        { ok: false, code: 'TIMEOUT', message: 'deadline exceeded', traceId: 't-1' },
+      ]);
+
+      const harness = createDataSourceHarness(code, script.service, `{ ${clickHandler} }`);
+      const handler = harness.value[clickHandler] as (event?: unknown) => void;
+
+      handler({});
+      await tick(20);
+      expect(script.calls).toHaveLength(1);
+      expect(script.calls[0]).toEqual({ sourceId: 'searchItems', params: { query: '' } });
+      // 整值写入：rows 即完整公开结果
+      expect((harness.getState() as { rows: unknown }).rows).toEqual({
+        items: [{ id: 'a', title: 'Apple' }],
+      });
+
+      // 失败：保留旧值，不抛出到调用方（console.error 分支）
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        handler({});
+        await tick(20);
+      } finally {
+        errorSpy.mockRestore();
+      }
+      expect(script.calls).toHaveLength(2);
+      expect((harness.getState() as { rows: unknown }).rows).toEqual({
+        items: [{ id: 'a', title: 'Apple' }],
+      });
+    });
+
+    it('latest-started-wins: a second run supersedes the first (old result discarded, aborted)', async () => {
+      const code = await compileFixtureAsync(m1bFixture.schema);
+      const [clickHandler] = extractClickHandlerNames(code);
+      const script = createScriptedDataSourceService(
+        [
+          { ok: true, result: { items: ['slow-first'] } },
+          { ok: true, result: { items: ['fast-second'] } },
+        ],
+        { delayMs: 80 },
+      );
+      const harness = createDataSourceHarness(code, script.service, `{ ${clickHandler} }`);
+      const handler = harness.value[clickHandler] as (event?: unknown) => void;
+
+      handler({});
+      await tick(5);
+      handler({});
+      await tick(150);
+
+      // 旧代际被中止，迟到结果被丢弃；只有第二次结果提交
+      expect(script.aborts).toBe(1);
+      expect(script.calls).toHaveLength(2);
+      expect((harness.getState() as { rows: unknown }).rows).toEqual({ items: ['fast-second'] });
+    });
+
+    it('unmount cleanup aborts in-flight runs', async () => {
+      const code = await compileFixtureAsync(m1bFixture.schema);
+      const [clickHandler] = extractClickHandlerNames(code);
+      const script = createScriptedDataSourceService([{ ok: true, result: { items: [] } }], {
+        delayMs: 200,
+      });
+      const harness = createDataSourceHarness(code, script.service, `{ ${clickHandler} }`);
+      const handler = harness.value[clickHandler] as (event?: unknown) => void;
+
+      handler({});
+      await tick(10);
+      harness.unmount();
+      await tick(10);
+      expect(script.aborts).toBe(1);
+      await tick(220);
+    });
+
+    it('flow path: failure maps to FLOW_STEP_FAILED with code/traceId and onError runs', async () => {
+      const code = await compileFixtureAsync(m1bFixture.flowSchema);
+      const script = createScriptedDataSourceService([
+        { ok: false, code: 'TIMEOUT', message: 'deadline exceeded', traceId: 'trace-9' },
+      ]);
+      const logBuffer: string[] = [];
+      const logSpy = jest.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+        logBuffer.push(String(args[0] ?? ''));
+      });
+      let harness: ReturnType<typeof createDataSourceHarness>;
+      try {
+        harness = createDataSourceHarness(code, script.service, '{ executeFlow }');
+        const executeFlow = harness.value.executeFlow as (flow: string) => Promise<unknown>;
+        // fixture 的 searchFlow 带 onError：失败被恢复，结果为 recovered
+        await expect(executeFlow('searchFlow')).resolves.toMatchObject({
+          status: 'recovered',
+          recovered: true,
+          error: {
+            name: 'FlowExecutionError',
+            code: 'FLOW_STEP_FAILED',
+            message: expect.stringContaining('executeDataSource failed [TIMEOUT] (trace trace-9)'),
+          },
+        });
+        // Flow 级 onError（log 动作）执行过
+        expect(logBuffer.join('\n')).toContain('search failed');
+      } finally {
+        logSpy.mockRestore();
+      }
+      expect(script.calls.length).toBeGreaterThan(0);
+      // 失败保留旧值
+      expect((harness!.getState() as { rows: unknown[] }).rows).toEqual([]);
+    });
+  });
+
+  describe('C5: 生成产物缺宿主服务', () => {
+    it('fails closed at runtime without any network fallback', async () => {
+      const code = await compileFixtureAsync(m1bFixture.schema);
+      const [clickHandler] = extractClickHandlerNames(code);
+      // 不注入 dataSources（undefined）
+      const harness = createDataSourceHarness(code, undefined, `{ ${clickHandler} }`);
+      const handler = harness.value[clickHandler] as (event?: unknown) => void;
+      const logged: unknown[][] = [];
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+        logged.push(args);
+      });
+      try {
+        handler({});
+        await tick(20);
+      } finally {
+        errorSpy.mockRestore();
+      }
+      // mockRestore 会清空调用记录，断言基于 spy 内收集的日志
+      expect(logged.length).toBeGreaterThan(0);
+      expect(logged[0][0]).toBe('executeDataSource failed:');
+      expect((logged[0][1] as Error).message).toContain('dataSources');
+      // 旧值保留
+      expect((harness.getState() as { rows: unknown[] }).rows).toEqual([]);
+    });
+  });
+
+  describe('G1: 能力门禁不退化（生产清单）', () => {
+    it('still rejects data-source schemas at compile under the production manifest', () => {
+      expect(() => compileToCode(m1bFixture.schema as unknown as Record<string, unknown>)).toThrow(
+        /data-source|CAPABILITY/,
+      );
+    });
+  });
+});
