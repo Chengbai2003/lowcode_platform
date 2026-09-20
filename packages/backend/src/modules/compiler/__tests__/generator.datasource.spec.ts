@@ -178,6 +178,82 @@ function createDataSourceHarness(
 
 const tick = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** 手动 resolve 的宿主服务：精确控制穿插时序（P1 复现） */
+function createManualService(): {
+  service: {
+    execute: (
+      input: { sourceId: string; params?: unknown },
+      signal?: AbortSignal,
+    ) => Promise<unknown>;
+  };
+  calls: Array<{ sourceId: string; params?: unknown }>;
+  resolveAt: (index: number, outcome: unknown) => void;
+} {
+  const resolvers: Array<(value: unknown) => void> = [];
+  const calls: Array<{ sourceId: string; params?: unknown }> = [];
+  return {
+    calls,
+    resolveAt: (index, outcome) => resolvers[index](outcome),
+    service: {
+      execute: (input) =>
+        new Promise((resolve) => {
+          calls.push({ sourceId: input.sourceId, params: input.params });
+          resolvers.push(resolve);
+        }),
+    },
+  };
+}
+
+/** 本地单步 Flow schema（P1 Flow 路径穿插复现） */
+function buildSingleStepFlowSchema(): Record<string, unknown> {
+  return {
+    schemaVersion: 0,
+    rootId: 'root',
+    components: { root: { id: 'root', type: 'Page', childrenIds: [] } },
+    logic: {
+      states: { rows: [] },
+      dataSources: {
+        searchItems: { operationRef: { operationId: 'demo.items.search', revision: '1' } },
+      },
+      flows: {
+        singleFlow: {
+          steps: [{ type: 'executeDataSource', sourceId: 'searchItems', resultTo: 'state.rows' }],
+        },
+      },
+    },
+  };
+}
+
+/** 本地对象参数 schema（P2 快照：嵌套对象 + 数组） */
+function buildObjectParamsSchema(): Record<string, unknown> {
+  return {
+    schemaVersion: 0,
+    rootId: 'root',
+    components: {
+      root: { id: 'root', type: 'Page', childrenIds: ['btn'] },
+      btn: {
+        id: 'btn',
+        type: 'Button',
+        props: { children: 'go' },
+        events: {
+          onClick: [{ type: 'executeDataSource', sourceId: 'searchItems', resultTo: 'state.rows' }],
+        },
+      },
+    },
+    logic: {
+      states: { filter: { status: 'active', tags: ['a', 'b'] }, rows: [] },
+      dataSources: {
+        searchItems: {
+          operationRef: { operationId: 'demo.items.search', revision: '1' },
+          params: { filter: '{{ state.filter }}' },
+        },
+      },
+    },
+  };
+}
+void buildSingleStepFlowSchema;
+void buildObjectParamsSchema;
+
 describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => {
   describe('C1: 普通事件路径代码生成', () => {
     it('generates host-service call with evaluated params, result write and no network fallback', async () => {
@@ -389,6 +465,69 @@ describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => 
       expect((logged[0][1] as Error).message).toContain('dataSources');
       // 旧值保留
       expect((harness.getState() as { rows: unknown[] }).rows).toEqual([]);
+    });
+  });
+
+  describe('审查修正 round 1', () => {
+    it('P1 普通路径：守卫覆盖实际写入点——旧结果在写入前被新代际穿透时丢弃', async () => {
+      const code = await compileFixtureAsync(m1bFixture.schema);
+      const [clickHandler] = extractClickHandlerNames(code);
+      const manual = createManualService();
+      const harness = createDataSourceHarness(code, manual.service, `{ ${clickHandler} }`);
+      const handler = harness.value[clickHandler] as (event?: unknown) => void;
+
+      handler({});
+      manual.resolveAt(0, { ok: true, result: { items: ['stale-A'] } });
+      // 恰好一个微任务：helper 内部 wrap 已执行、OnResult 已排队但尚未写
+      await Promise.resolve();
+      // 在写入前启动第二次请求（未完成）：旧代际必须被穿透丢弃
+      handler({});
+      await tick(20);
+      expect(harness.getState()).toMatchObject({ rows: [] });
+
+      manual.resolveAt(1, { ok: true, result: { items: ['B'] } });
+      await tick(20);
+      expect(harness.getState()).toMatchObject({ rows: { items: ['B'] } });
+    });
+
+    it('P1 Flow 路径：同样的穿插下旧代际以不可恢复取消结束且不写入', async () => {
+      const code = await compileFixtureAsync(buildSingleStepFlowSchema() as unknown as PageSchema);
+      const manual = createManualService();
+      const harness = createDataSourceHarness(code, manual.service, '{ executeFlow }');
+      const executeFlow = harness.value.executeFlow as (flow: string) => Promise<unknown>;
+
+      const runA = executeFlow('singleFlow');
+      manual.resolveAt(0, { ok: true, result: { items: ['stale-A'] } });
+      await Promise.resolve();
+      const runB = executeFlow('singleFlow'); // 第二次（未完成）
+      const aError = ((await runA.catch((error: unknown) => error)) as { code?: string }).code;
+
+      expect(aError).toBe('FLOW_ABORTED');
+      expect(harness.getState()).toMatchObject({ rows: [] });
+
+      manual.resolveAt(1, { ok: true, result: { items: ['B'] } });
+      await runB;
+      expect(harness.getState()).toMatchObject({ rows: { items: ['B'] } });
+    });
+
+    it('P2 生成代码：对象参数 JSON 快照（深拷贝隔离，源对象后续变异不影响）', async () => {
+      const code = await compileFixtureAsync(buildObjectParamsSchema() as unknown as PageSchema);
+      const [clickHandler] = extractClickHandlerNames(code);
+      const manual = createManualService();
+      const harness = createDataSourceHarness(code, manual.service, `{ ${clickHandler} }`);
+      const handler = harness.value[clickHandler] as (event?: unknown) => void;
+
+      handler({});
+      await tick(20);
+      const captured = manual.calls[0].params as { filter: { status: string; tags: string[] } };
+      expect(captured).toEqual({ filter: { status: 'active', tags: ['a', 'b'] } });
+
+      // 深拷贝：与源 state 对象非同一引用；源对象原地变异不影响已捕获快照
+      const rendered = harness.getState() as { filter: { status: string; tags: string[] } };
+      expect(captured.filter).not.toBe(rendered.filter);
+      rendered.filter.status = 'mutated';
+      rendered.filter.tags.push('x');
+      expect(captured).toEqual({ filter: { status: 'active', tags: ['a', 'b'] } });
     });
   });
 

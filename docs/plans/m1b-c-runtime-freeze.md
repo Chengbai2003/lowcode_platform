@@ -3,6 +3,7 @@
 > 状态：已冻结并实施（PR C）；基线 f7423e0（PR A #65、PR B #66、计划 #67 合并后 main）。
 > 依据：`m1b-c-runtime-compiler-plan.md`（#67 审查通过）、`m1b-b-execution-freeze.md`（宿主协议消费面）、`m1b-a-protocol-freeze.md`（resultTo 严格语法）。
 > `data-source` 能力在 C 交付后仍保持六消费面默认 unsupported；预览宿主适配器与编辑器接线属 PR D。
+> 审查修正（review round 1）：① 编译器代际守卫改为**写入点活检查**——登记不再于完成时删除（仅被下一次同源请求或卸载替换），`superseded` 为惰性 getter 在实际写 state 处求值，消除「守卫通过→写入」窗口；普通路径与 Flow 路径均有确定性微任务穿插测试（旧结果在写入前被未完成的新代际穿透时丢弃）。② 参数快照统一为**安全 JSON 快照**：Renderer `JSON.parse(JSON.stringify(...))` + 契约 `deepFreeze`（响应式代理可穿、深冻结、隔离后续变异；不可序列化按可恢复失败），编译器内嵌运行时同语义深拷贝；两侧补嵌套对象/数组/不可变性测试。③ Renderer 以**成员调用**执行宿主服务（保留接收者，类实例适配器的 `this` 绑定不丢）。
 
 ## 1. 宿主接口（C 冻结）
 
@@ -32,7 +33,7 @@
 - **组件实例内嵌 `__executeDataSource` 运行时**（`useRef` 代际注册表 + `useEffect` 卸载中止）：缺宿主 prop 时返回拒绝（结构化错误，绝不 fallback fetch/`context.api`/apiCall）；结果统一包装 `{superseded, outcome}`。
 - **普通事件路径**：`__executeDataSource("sourceId", {params})` `.then(OnResult 处理器)`（守卫后经现有 `resolveResultTarget` 写已声明 state 槽位）`.catch(console.error)`。
 - **Flow 路径**：`flowContext.executeWithAbortRace(__executeDataSource(..., flowContext.signal), ...)`；`superseded → createAbortError`（不可恢复）；`!ok → createError('FLOW_STEP_FAILED', …, 'executeDataSource failed [code] (trace …): message', outcome)`；成功后写 resultTo（`throwIfAborted` 前导）。
-- **参数快照**：声明 params 经现有 `getExpressionCode` 求值（与 Renderer 同语义），请求发出即固定。
+- **参数快照**：声明 params 经现有 `getExpressionCode` 求值后，在 `__executeDataSource` 内做安全 JSON 深拷贝（与 Renderer 同语义；审查修正②）。
 - **未知动作 fail-close（修 A 冻结 §4 残余风险）**：普通路径 default 分支由静默注释改为编译期抛错（`Unsupported action type for compiler`）；Flow 路径 default 本就生成运行期 fail-close（回归保留）。契约校验通过的 schema 只含已知类型，该 default 现实触发路径即「契约新增类型而编译器滞后」，fail-close 是正确行为。
 - **声明集穿透修复（main 既有缺口）**：`parseSchema` 独立调用 `analyzeActionFlowDeclarations` 时补传 `declaredDataSourceKeys/declaredStateKeys`（A 冻结：独立调用按空集 fail-close——此前 Flow 摆放在测试矩阵下无法通过编译器分析；A 阶段因生产门禁在分析前拒绝而未暴露）。
 

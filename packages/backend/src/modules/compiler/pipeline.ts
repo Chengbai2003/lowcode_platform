@@ -3735,21 +3735,22 @@ const __executeDataSource = (sourceId, params, extraSignal) => {
   if (typeof dataSources?.execute !== 'function') {
     return Promise.reject(new Error('executeDataSource requires host-injected "dataSources" service (no fetch/apiCall fallback)'));
   }
+  // 参数安全 JSON 快照：调用时刻深拷贝，后续 state 变异不影响已发出的请求
+  if (params !== undefined) {
+    params = JSON.parse(JSON.stringify(params));
+  }
   const runs = __dataSourceRuns.current;
   runs.get(sourceId)?.abort();
   const controller = new AbortController();
   runs.set(sourceId, controller);
   const signal = extraSignal ? AbortSignal.any([controller.signal, extraSignal]) : controller.signal;
-  return dataSources.execute({ sourceId, params }, signal).then((outcome) => {
-    if (runs.get(sourceId) !== controller) {
-      return { superseded: true, outcome };
-    }
-    runs.delete(sourceId);
-    return { superseded: false, outcome };
-  }, (error) => {
-    if (runs.get(sourceId) === controller) runs.delete(sourceId);
+  // superseded 是写入点的活检查（review P1）：登记只被下一次同源请求或卸载替换，
+  // 绝不在完成时删除——守卫与实际写 state 之间不再存在可被新请求穿透的窗口
+  const supersededNow = () => runs.get(sourceId) !== controller || extraSignal?.aborted === true;
+  const wrap = (outcome) => ({ get superseded() { return supersededNow(); }, outcome });
+  return dataSources.execute({ sourceId, params }, signal).then((outcome) => wrap(outcome), (error) => {
     if (controller.signal.aborted || extraSignal?.aborted) {
-      return { superseded: true, outcome: { ok: false, code: 'ABORTED', message: 'aborted' } };
+      return wrap({ ok: false, code: 'ABORTED', message: 'aborted' });
     }
     throw error;
   });

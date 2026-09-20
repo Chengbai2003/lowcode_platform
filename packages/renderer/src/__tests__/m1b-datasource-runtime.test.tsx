@@ -117,6 +117,7 @@ function createDispatcherHarness(options?: {
   service?: ScriptedService['service'] | undefined;
   grantDataResources?: boolean;
   state?: Record<string, unknown>;
+  declarations?: Record<string, unknown>;
 }): DispatcherHarness {
   const session = createRuntimeSession({
     pageId: 'ds-runtime-page',
@@ -132,7 +133,7 @@ function createDispatcherHarness(options?: {
   );
   dispatcher.setHostConfig(
     'dataSourceDeclarations',
-    structuredClone(m1bFixture.schema.logic?.dataSources),
+    structuredClone(options?.declarations ?? m1bFixture.schema.logic?.dataSources),
   );
   if (options?.service !== undefined) {
     dispatcher.setContext('dataSources', options.service);
@@ -549,6 +550,79 @@ describe('Renderer executeDataSource runtime (M1b-1 PR C / Refs #64)', () => {
     expect(harness.session.runtime.getState().rows).toEqual({
       items: [{ id: 'a', title: 'Apple' }],
     });
+  });
+
+  it('P2 review: object params are JSON-snapshotted, deep-frozen and isolated from later mutation', async () => {
+    const captured: Array<{ params?: Record<string, unknown> }> = [];
+    const state = {
+      calls: 0,
+      service: undefined as never,
+    };
+    state.service = {
+      execute: (input: { sourceId: string; params?: Record<string, unknown> }) =>
+        new Promise<DataSourceExecutionOutcome>((resolve) => {
+          captured.push({ params: input.params });
+          state.calls += 1;
+          resolve({ ok: true, result: { items: ['ok'] } });
+        }),
+    };
+    const harness = createDispatcherHarness({
+      service: state.service,
+      state: { filter: { status: 'active', tags: ['a', 'b'] }, rows: [] },
+      declarations: {
+        searchItems: {
+          operationRef: { operationId: 'demo.items.search', revision: '1' },
+          params: { filter: '{{ state.filter }}' },
+        },
+      },
+    });
+
+    await executeAction(harness, {
+      type: 'executeDataSource',
+      sourceId: 'searchItems',
+      resultTo: 'state.rows',
+    });
+
+    // 嵌套对象/数组完整快照
+    expect(captured[0].params).toEqual({ filter: { status: 'active', tags: ['a', 'b'] } });
+    // 深冻结：顶层与嵌套对象/数组均不可变
+    const params = captured[0].params as { filter: { status: string; tags: string[] } };
+    expect(Object.isFrozen(params)).toBe(true);
+    expect(Object.isFrozen(params.filter)).toBe(true);
+    expect(Object.isFrozen(params.filter.tags)).toBe(true);
+    // 隔离：源 state 对象原地变异不影响已捕获快照
+    (harness.session.runtime.getState() as { filter: { status: string } }).filter.status =
+      'mutated';
+    expect(captured[0].params).toEqual({ filter: { status: 'active', tags: ['a', 'b'] } });
+  });
+
+  it('P3 review: host method receiver is preserved (class-based adapters keep this)', async () => {
+    class BoundAdapter {
+      private readonly calls: string[] = [];
+      constructor(private readonly pageBinding: string) {}
+      async execute(input: { sourceId: string }): Promise<DataSourceExecutionOutcome> {
+        // 依赖 this 上的页面绑定配置；若接收者丢失此处即抛错/记录 undefined
+        this.calls.push(`${this.pageBinding}:${input.sourceId}`);
+        return { ok: true, result: { bound: this.pageBinding } };
+      }
+      recorded(): string[] {
+        return this.calls;
+      }
+    }
+    const adapter = new BoundAdapter('page-42@v7');
+    const harness = createDispatcherHarness({
+      service: adapter as unknown as ScriptedService['service'],
+    });
+
+    const batch = (await executeAction(harness, {
+      type: 'executeDataSource',
+      sourceId: 'searchItems',
+      resultTo: 'state.rows',
+    })) as { results: Array<{ value?: { success: boolean } }> };
+
+    expect(adapter.recorded()).toEqual(['page-42@v7:searchItems']);
+    expect(batch.results[0].value?.success).toBe(true);
+    expect(harness.session.runtime.getState().rows).toEqual({ bound: 'page-42@v7' });
   });
 
   it('G1: production manifest still blocks mounting data-source schemas (no patch)', () => {

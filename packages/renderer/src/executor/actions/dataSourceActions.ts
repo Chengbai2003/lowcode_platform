@@ -5,7 +5,8 @@
  * fetch / context.api / apiCall）。执行语义（PR C 冻结）：
  * - 授权 gate：`hostCapabilities.dataResources === true` 且
  *   `context.dataSources.execute` 为函数，缺一 fail-close（零宿主调用）；
- * - 参数：声明 params 在动作开始时经现有 resolveValues 求值一次并深冻结；
+ * - 参数：声明 params 在动作开始时经现有 resolveValues 求值一次，再做
+ *   安全 JSON 快照（深拷贝 + 深冻结；与编译产物内嵌运行时同语义）；
  * - 代际：Session 内按 sourceId latest-started-wins，启动即取消旧请求；
  *   只有仍是当前代际且 Session 存活（Flow 内还需未 abort）的结果才提交；
  * - 取消（代际被取代 / dispose / Flow abort）不可恢复、不经 onError；
@@ -14,13 +15,14 @@
  * - 无自动重试；v1 无动作级 onSuccess/onError 嵌套。
  */
 
+import { deepFreeze } from '@lowcode-platform/schema-contract';
 import type {
   DataSourceDeclarations,
-  DataSourceExecutionOutcome,
   DataSourceHostExecuteInput,
   ExecuteDataSourceAction,
+  JsonValue,
 } from '@lowcode-platform/schema-contract';
-import type { ActionHandler } from '../../dsl';
+import type { ActionHandler, DataSourceHostService } from '../../dsl';
 import type { RuntimeSession } from '../../session/RuntimeSession';
 import { FlowExecutionError, getFlowRunContext, type FlowRunContext } from '../../session/FlowRun';
 import { isCapabilityGranted, type HostCapabilities } from '../../host/HostCapabilities';
@@ -42,6 +44,25 @@ export class DataSourceActionError extends Error {
 
 function getSession(context: Record<string, unknown>): RuntimeSession | undefined {
   return (context as { session?: RuntimeSession }).session;
+}
+
+/**
+ * 参数安全 JSON 快照（review P2）：求值结果经 JSON 深拷贝隔离（响应式代理、
+ * 后续原地变异均不影响已捕获快照）并深冻结；不可序列化（如循环引用）按
+ * 可恢复失败处理。与编译产物 __executeDataSource 内嵌快照同语义。
+ */
+function snapshotParams(params: Record<string, unknown>): Record<string, JsonValue> {
+  let snapshot: unknown;
+  try {
+    snapshot = JSON.parse(JSON.stringify(params));
+  } catch {
+    throw new DataSourceActionError(
+      'INVALID_PARAMS',
+      undefined,
+      'evaluated params must be JSON-serializable',
+    );
+  }
+  return deepFreeze(snapshot as Record<string, JsonValue>);
 }
 
 function getDeclarations(context: Record<string, unknown>): DataSourceDeclarations | undefined {
@@ -77,7 +98,7 @@ export const executeDataSource: ActionHandler = async (action, context) => {
   const { sourceId, resultTo } = dsAction;
   const flowContext = getFlowRunContext(context);
   const session = getSession(context);
-  const hostService = (context as { dataSources?: { execute?: unknown } }).dataSources;
+  const hostService = (context as { dataSources?: DataSourceHostService }).dataSources;
 
   // 1. 授权 gate（配置级 fail-close，同 apiCall gate 位置：在 try 外抛出）
   const hostCaps = context.hostCapabilities as Readonly<HostCapabilities> | undefined;
@@ -89,11 +110,6 @@ export const executeDataSource: ActionHandler = async (action, context) => {
       'Host capability denied: "dataResources" — grant the capability and inject context.dataSources (host service) to execute data sources',
     );
   }
-  const execute = hostService.execute as (
-    input: DataSourceHostExecuteInput,
-    signal?: AbortSignal,
-  ) => Promise<DataSourceExecutionOutcome>;
-
   // 2. 代际守卫依赖 Session：无 Session（旧宿主上下文）时 fail-close
   if (!session) {
     throw new Error('executeDataSource requires a RuntimeSession (generation guard)');
@@ -109,9 +125,9 @@ export const executeDataSource: ActionHandler = async (action, context) => {
     );
   }
 
-  // 4. 参数求值并冻结快照（后续 state 变化不影响已发出的请求）
+  // 4. 参数求值一次 + 安全 JSON 快照（深拷贝/深冻结；后续 state 变化不影响已发出的请求）
   const frozenParams = declaration.params
-    ? (structuredClone(resolveValues(declaration.params, context)) as Record<string, unknown>)
+    ? snapshotParams(resolveValues(declaration.params, context))
     : undefined;
 
   // 5. 代际登记：同 sourceId 旧请求立即取消
@@ -124,7 +140,8 @@ export const executeDataSource: ActionHandler = async (action, context) => {
   const signal = combineSignals(signals);
 
   try {
-    const outcome = await execute(
+    // 成员调用保留接收者（review P3）：类实例适配器依赖 this 上的页面绑定配置
+    const outcome = await hostService.execute(
       { sourceId, params: frozenParams as DataSourceHostExecuteInput['params'] },
       signal,
     );
