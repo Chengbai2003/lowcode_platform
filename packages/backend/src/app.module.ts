@@ -9,6 +9,7 @@ import { AgentModule } from './modules/agent/agent.module';
 import { AiModule } from './modules/ai/ai.module';
 import { CommonModule } from './modules/common/common.module';
 import { CompilerModule } from './modules/compiler/compiler.module';
+import { DataSourceModule } from './modules/data-source/data-source.module';
 import { PageSchemaModule } from './modules/page-schema/page-schema.module';
 import { SchemaContextModule } from './modules/schema-context';
 import appConfig from './config/app.config';
@@ -46,6 +47,9 @@ import databaseConfig from './config/database.config';
     CompilerModule,
     PageSchemaModule,
     SchemaContextModule,
+    // 只读数据源执行内核（M1b-1 PR B）：默认 fail-close，未配置身份/目标与
+    // 能力门禁关闭时对所有请求确定性拒绝
+    DataSourceModule,
   ],
   controllers: [],
   providers: [],

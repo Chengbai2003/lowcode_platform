@@ -5,3 +5,4 @@ export * from './canonicalize';
 export * from './computed';
 export * from './action-flow';
 export * from './capabilities';
+export * from './operations';
