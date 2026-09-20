@@ -70,17 +70,55 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       components: { root: { id: 'root', type: 'Page' } },
       logic: { flows: { testFlow: { steps: [] } } },
     },
+    'data-source': {
+      schemaVersion: 0,
+      rootId: 'root',
+      components: { root: { id: 'root', type: 'Page' } },
+      logic: {
+        dataSources: {
+          search: { operationRef: { operationId: 'demo.items.search', revision: '1' } },
+        },
+      },
+    },
   };
 
   const expectedPaths: Record<SchemaCapability, (string | number)[]> = {
     'page-state': ['logic', 'states'],
     'named-computed': ['logic', 'computed'],
     'action-flow': ['logic', 'flows'],
+    'data-source': ['logic', 'dataSources'],
   };
 
+  /**
+   * 生产矩阵对 data-source 默认 unsupported；针对 data-source 单元格做
+   * "缺失/unsupported/revision 不匹配"矩阵测试时，先把该能力六面翻成
+   * supported 基线，再叠加单元格覆盖，保证结果是唯一的被测 issue。
+   */
+  function buildCellTestMatrix(
+    cap: SchemaCapability,
+    surface: ConsumerSurface,
+    entry: unknown,
+  ): CapabilityMatrix {
+    if (cap !== 'data-source') {
+      return createTestCapabilityMatrix({ [cap]: { [surface]: entry } });
+    }
+    const supportedAll: Record<string, unknown> = {};
+    for (const s of CONSUMER_SURFACES) {
+      supportedAll[s] = { status: 'supported', revision: REQUIRED_CAPABILITY_REVISION };
+    }
+    return createTestCapabilityMatrix({
+      'data-source': { ...supportedAll, [surface]: entry },
+    });
+  }
+
   describe('1. Immutable Trusted Capability Manifest', () => {
-    it('declares all 3 capabilities across all 6 consumer surfaces with status=supported and revision=1', () => {
-      expect(SCHEMA_CAPABILITIES).toEqual(['page-state', 'named-computed', 'action-flow']);
+    it('declares 4 capabilities across all 6 consumer surfaces: M1a three supported, M1b data-source default-unsupported', () => {
+      expect(SCHEMA_CAPABILITIES).toEqual([
+        'page-state',
+        'named-computed',
+        'action-flow',
+        'data-source',
+      ]);
       expect(CONSUMER_SURFACES).toEqual([
         'contract',
         'validator',
@@ -94,6 +132,14 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       expect(manifest).toBe(TRUSTED_CAPABILITY_MANIFEST);
       expect(manifest.manifestVersion).toBe(1);
 
+      const expectedStatuses: Record<SchemaCapability, 'supported' | 'unsupported'> = {
+        'page-state': 'supported',
+        'named-computed': 'supported',
+        'action-flow': 'supported',
+        // M1b-1 PR A：只读数据源在六消费面执行语义交付并验收（B/C/D/E）前默认拒绝
+        'data-source': 'unsupported',
+      };
+
       for (const cap of SCHEMA_CAPABILITIES) {
         expect(Object.prototype.hasOwnProperty.call(manifest.matrix, cap)).toBe(true);
         const surfaceRecord = manifest.matrix[cap]!;
@@ -101,7 +147,7 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
           expect(Object.prototype.hasOwnProperty.call(surfaceRecord, surface)).toBe(true);
           const entry = surfaceRecord[surface]!;
           expect(entry).toEqual({
-            status: 'supported',
+            status: expectedStatuses[cap],
             revision: REQUIRED_CAPABILITY_REVISION,
           });
         }
@@ -163,7 +209,7 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
       }).toThrow(TypeError);
 
       // Array lengths and contents remain unchanged
-      expect(SCHEMA_CAPABILITIES.length).toBe(3);
+      expect(SCHEMA_CAPABILITIES.length).toBe(4);
       expect(CONSUMER_SURFACES.length).toBe(6);
     });
   });
@@ -407,11 +453,7 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
     describe.each(SCHEMA_CAPABILITIES)('capability: %s', (cap) => {
       describe.each(CONSUMER_SURFACES)('surface: %s', (surface) => {
         it(`rejects when ${cap}.${surface} is missing from matrix`, () => {
-          const matrix = createTestCapabilityMatrix({
-            [cap]: {
-              [surface]: undefined,
-            },
-          });
+          const matrix = buildCellTestMatrix(cap, surface, undefined);
 
           const schema = singleCapSchemas[cap];
           const result = evaluatePageSchemaCapabilities(schema, matrix);
@@ -471,23 +513,9 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
     describe.each(SCHEMA_CAPABILITIES)('capability: %s', (cap) => {
       describe.each(CONSUMER_SURFACES)('surface: %s', (surface) => {
         it(`rejects when ${cap}.${surface} has status='unsupported'`, () => {
-          const matrix = createTestCapabilityMatrix({
-            [cap]: {
-              [surface]: { status: 'unsupported', revision: 1 },
-            },
-          });
+          const matrix = buildCellTestMatrix(cap, surface, { status: 'unsupported', revision: 1 });
 
-          const schema: PageSchema = {
-            schemaVersion: 0,
-            rootId: 'root',
-            components: { root: { id: 'root', type: 'Page' } },
-            logic: {
-              ...(cap === 'page-state' ? { states: { count: 0 } } : {}),
-              ...(cap === 'named-computed' ? { computed: { c: '1' } } : {}),
-              ...(cap === 'action-flow' ? { flows: { f: { steps: [] } } } : {}),
-            },
-          };
-
+          const schema = singleCapSchemas[cap];
           const result = evaluatePageSchemaCapabilities(schema, matrix);
           expect(result.ok).toBe(false);
           expect(result.issues).toHaveLength(1);
@@ -498,6 +526,28 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
         });
       });
     });
+
+    it('production trusted manifest rejects data-source on all 6 surfaces (default-deny, M1b-1 PR A)', () => {
+      const schema = singleCapSchemas['data-source'];
+      // 结构合法（createCanonicalPageSchema 仅结构规范化，不做能力评估）
+      const canonical = createCanonicalPageSchema(schema);
+      expect(canonical).toBeDefined();
+      expect(canonical.logic?.dataSources).toBeDefined();
+
+      // 生产可信清单评估：六面全部 CAPABILITY_UNSUPPORTED
+      const result = evaluatePageSchemaCapabilities(schema);
+      expect(result.ok).toBe(false);
+      expect(result.issues).toHaveLength(CONSUMER_SURFACES.length);
+      for (const issue of result.issues) {
+        expect(issue.code).toBe(CAPABILITY_ISSUE_CODES.UNSUPPORTED);
+        expect(issue.path).toEqual(['logic', 'dataSources']);
+        expect(issue.message).toContain('data-source');
+      }
+
+      expect(() => requireSupportedPageSchema(schema)).toThrow(
+        /CAPABILITY_UNSUPPORTED|data-source/,
+      );
+    });
   });
 
   describe('6. Revision Mismatch Rejection (CAPABILITY_REVISION_MISMATCH)', () => {
@@ -506,10 +556,9 @@ describe('C3a Capability Gate & Support Matrix (Issue #47)', () => {
         it.each([2, 99])(
           `rejects when ${cap}.${surface} has revision mismatch (%i vs 1)`,
           (badRevision) => {
-            const matrix = createTestCapabilityMatrix({
-              [cap]: {
-                [surface]: { status: 'supported', revision: badRevision },
-              },
+            const matrix = buildCellTestMatrix(cap, surface, {
+              status: 'supported',
+              revision: badRevision,
             });
 
             const schema = singleCapSchemas[cap];

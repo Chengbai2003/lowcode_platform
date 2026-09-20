@@ -1,0 +1,582 @@
+{
+  "corpusVersion": "1.0.0",
+  "description": "M1b-1 PR A 只读数据源声明与 executeDataSource 的合法/非法语料。独立于 M1a 定型语料（m1a-page-logic-conformance.json），不修改后者。结构合法不等于生产允许：本语料全部 schema 在生产可信清单下均以 CAPABILITY_UNSUPPORTED 拒绝（data-source 默认 unsupported）。",
+  "schema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "childrenIds": ["searchBtn"]
+      },
+      "searchBtn": {
+        "id": "searchBtn",
+        "type": "Button",
+        "props": { "children": "查询" },
+        "events": {
+          "onClick": [
+            {
+              "type": "executeDataSource",
+              "sourceId": "searchItems",
+              "resultTo": "state.rows"
+            }
+          ]
+        }
+      }
+    },
+    "logic": {
+      "states": { "query": "", "rows": [] },
+      "dataSources": {
+        "searchItems": {
+          "operationRef": { "operationId": "demo.items.search", "revision": "1" },
+          "params": { "query": "{{ state.query }}" }
+        }
+      }
+    }
+  },
+  "flowSchema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "childrenIds": ["searchBtn"]
+      },
+      "searchBtn": {
+        "id": "searchBtn",
+        "type": "Button",
+        "props": { "children": "查询" },
+        "events": {
+          "onClick": [{ "type": "runFlow", "flow": "searchFlow" }]
+        }
+      }
+    },
+    "logic": {
+      "states": { "query": "", "rows": [] },
+      "dataSources": {
+        "searchItems": {
+          "operationRef": { "operationId": "demo.items.search", "revision": "1" },
+          "params": { "query": "{{ state.query }}" }
+        }
+      },
+      "flows": {
+        "searchFlow": {
+          "steps": [
+            {
+              "type": "if",
+              "condition": true,
+              "then": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "searchItems",
+                  "resultTo": "state.rows"
+                }
+              ]
+            },
+            {
+              "type": "loop",
+              "over": [1, 2],
+              "itemVar": "item",
+              "actions": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "searchItems",
+                  "resultTo": "state.rows"
+                }
+              ]
+            }
+          ],
+          "onError": [{ "type": "log", "value": "search failed" }]
+        }
+      }
+    }
+  },
+  "legacyApiCallSchema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "events": {
+          "onClick": [
+            {
+              "type": "apiCall",
+              "url": "/api/items",
+              "method": "GET",
+              "resultTo": "data.items"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "negativeCases": [
+    {
+      "name": "floatingRevisionLatest",
+      "mutation": "logic.dataSources.searchItems.operationRef.revision = 'latest'",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "latest" }
+            }
+          }
+        }
+      },
+      "expectedCode": "OPERATION_REVISION_FLOATING",
+      "expectedPath": ["logic", "dataSources", "searchItems", "operationRef", "revision"]
+    },
+    {
+      "name": "floatingRevisionWildcard",
+      "mutation": "revision = '*'",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "*" }
+            }
+          }
+        }
+      },
+      "expectedCode": "OPERATION_REVISION_FLOATING",
+      "expectedPath": ["logic", "dataSources", "searchItems", "operationRef", "revision"]
+    },
+    {
+      "name": "revisionRangeMarker",
+      "mutation": "revision = '~1'（范围记号不匹配精确修订模式）",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "~1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_OPERATION_REVISION",
+      "expectedPath": ["logic", "dataSources", "searchItems", "operationRef", "revision"]
+    },
+    {
+      "name": "missingOperationRef",
+      "mutation": "声明缺少 operationRef",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": { "params": { "query": "x" } }
+          }
+        }
+      },
+      "expectedCode": "OPERATION_REF_REQUIRED",
+      "expectedPath": ["logic", "dataSources", "searchItems", "operationRef"]
+    },
+    {
+      "name": "forbiddenUrlField",
+      "mutation": "声明携带 url 越界字段",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" },
+              "url": "https://internal.example.com/api"
+            }
+          }
+        }
+      },
+      "expectedCode": "UNKNOWN_DATASOURCE_FIELD",
+      "expectedPath": ["logic", "dataSources", "searchItems", "url"]
+    },
+    {
+      "name": "forbiddenHeadersField",
+      "mutation": "声明携带 headers 越界字段",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" },
+              "headers": { "Authorization": "Bearer x" }
+            }
+          }
+        }
+      },
+      "expectedCode": "UNKNOWN_DATASOURCE_FIELD",
+      "expectedPath": ["logic", "dataSources", "searchItems", "headers"]
+    },
+    {
+      "name": "forbiddenOperationRefField",
+      "mutation": "operationRef 携带 token 越界字段",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": {
+                "operationId": "demo.items.search",
+                "revision": "1",
+                "token": "secret"
+              }
+            }
+          }
+        }
+      },
+      "expectedCode": "UNKNOWN_OPERATION_REF_FIELD",
+      "expectedPath": ["logic", "dataSources", "searchItems", "operationRef", "token"]
+    },
+    {
+      "name": "operationIdIsUrl",
+      "mutation": "operationId 写成 URL / 带协议与斜杠",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": {
+                "operationId": "https://internal.example.com/search",
+                "revision": "1"
+              }
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_OPERATION_ID",
+      "expectedPath": ["logic", "dataSources", "searchItems", "operationRef", "operationId"]
+    },
+    {
+      "name": "unsafeDataSourceKey",
+      "mutation": "声明键为 __proto__",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "__proto__": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_DATASOURCE_KEY",
+      "expectedPath": ["logic", "dataSources", "__proto__"]
+    },
+    {
+      "name": "paramsNotObject",
+      "mutation": "params 为数组",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" },
+              "params": ["query"]
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_DATASOURCE_PARAMS",
+      "expectedPath": ["logic", "dataSources", "searchItems", "params"]
+    },
+    {
+      "name": "unsafeParamKey",
+      "mutation": "params 键为 constructor",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" },
+              "params": { "constructor": "x" }
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_DATASOURCE_PARAM_KEY",
+      "expectedPath": ["logic", "dataSources", "searchItems", "params", "constructor"]
+    },
+    {
+      "name": "dataSourceReferenceMissing",
+      "mutation": "executeDataSource.sourceId 引用未声明数据源",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "ghostSource",
+                  "resultTo": "state.rows"
+                }
+              ]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "DATASOURCE_REFERENCE_MISSING",
+      "expectedPath": ["components", "root", "events", "onClick", 0, "sourceId"]
+    },
+    {
+      "name": "undeclaredStateTarget",
+      "mutation": "resultTo 指向未在 logic.states 声明的键",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "searchItems",
+                  "resultTo": "state.undeclared"
+                }
+              ]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "UNDECLARED_STATE_TARGET",
+      "expectedPath": ["components", "root", "events", "onClick", 0, "resultTo"]
+    },
+    {
+      "name": "nestedStateTargetRejected",
+      "mutation": "resultTo 为深层路径（不放宽 legacy 嵌套）",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "searchItems",
+                  "resultTo": "state.rows.items"
+                }
+              ]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "INVALID_STATE_TARGET",
+      "expectedPath": ["components", "root", "events", "onClick", 0, "resultTo"]
+    },
+    {
+      "name": "computedStateTargetRejected",
+      "mutation": "resultTo 指向 computed（只读）",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "searchItems",
+                  "resultTo": "computed.count"
+                }
+              ]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "computed": { "count": "1" },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "COMPUTED_TARGET_READONLY",
+      "expectedPath": ["components", "root", "events", "onClick", 0, "resultTo"]
+    },
+    {
+      "name": "missingResultTo",
+      "mutation": "executeDataSource 缺少 resultTo",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [{ "type": "executeDataSource", "sourceId": "searchItems" }]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "DATASOURCE_RESULTTO_REQUIRED",
+      "expectedPath": ["components", "root", "events", "onClick", 0, "resultTo"]
+    },
+    {
+      "name": "unknownActionFieldOnExecuteDataSource",
+      "mutation": "executeDataSource 携带 onSuccess 嵌套字段（v1 不支持）",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "searchItems",
+                  "resultTo": "state.rows",
+                  "onSuccess": [{ "type": "log", "value": "done" }]
+                }
+              ]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "UNKNOWN_ACTION_FIELD",
+      "expectedPath": ["components", "root", "events", "onClick", 0, "onSuccess"]
+    },
+    {
+      "name": "dataSourceKeyConflictsWithState",
+      "mutation": "dataSources 键与 states 声明重名（设计 §3.1：dataSources key 参与声明冲突校验）",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "searchItems": "" },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "DATASOURCE_KEY_CONFLICT",
+      "expectedPath": ["logic", "dataSources", "searchItems"]
+    },
+    {
+      "name": "flowStepReferenceMissing",
+      "mutation": "Flow steps 内的 executeDataSource 引用未声明数据源",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": {
+          "root": {
+            "id": "root",
+            "type": "Page",
+            "events": {
+              "onClick": [{ "type": "runFlow", "flow": "searchFlow" }]
+            }
+          }
+        },
+        "logic": {
+          "states": { "rows": [] },
+          "flows": {
+            "searchFlow": {
+              "steps": [
+                {
+                  "type": "executeDataSource",
+                  "sourceId": "ghostSource",
+                  "resultTo": "state.rows"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "expectedCode": "DATASOURCE_REFERENCE_MISSING",
+      "expectedPath": ["logic", "flows", "searchFlow", "steps", 0, "sourceId"]
+    }
+  ]
+}

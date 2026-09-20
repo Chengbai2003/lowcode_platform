@@ -4,6 +4,7 @@ import type { NavigateAction } from './navigation';
 import type { ApiCallAction, DelayAction } from './async';
 import type { FeedbackAction, DialogAction } from './ui';
 import type { LogAction } from './debug';
+import type { ExecuteDataSourceAction } from './dataSource';
 
 /**
  * 纯数据 Action 联合类型
@@ -19,7 +20,8 @@ export type Action =
   | LoopAction
   | DelayAction
   | LogAction
-  | RunFlowAction;
+  | RunFlowAction
+  | ExecuteDataSourceAction;
 
 export type ActionList = readonly Action[];
 

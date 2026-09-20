@@ -1,0 +1,193 @@
+{
+  "evidenceFormatVersion": 1,
+  "milestone": "M1b-1 PR A",
+  "capability": "data-source",
+  "capabilityStatus": "unsupported (default-deny; B/C/D/E 交付并验收后再评估启用)",
+  "fixture": {
+    "path": "test-fixtures/m1b-datasource-conformance.json",
+    "corpusVersion": "1.0.0",
+    "sha256": "0bf2222eaaafd883c5daf995049996d87327194cefc334889e71c5872000233e"
+  },
+  "matrix": {
+    "data-source": {
+      "contract": "ev-m1b-contract-default-deny",
+      "validator": "ev-m1b-validator-structural",
+      "editor-agent": "ev-m1b-ingress-agent-draft",
+      "renderer": "ev-m1b-ingress-renderer",
+      "compiler": "ev-m1b-ingress-compiler-service",
+      "storage": "ev-m1b-ingress-repo"
+    }
+  },
+  "keyGroups": {
+    "trustedManifestRegistry": [
+      "ev-m1b-trusted-manifest-registry"
+    ],
+    "ingressRejections": {
+      "pageSchemaServiceSave": "ev-m1b-ingress-save",
+      "repositoryDirectSave": "ev-m1b-ingress-repo",
+      "repositoryDiskReload": "ev-m1b-ingress-reload",
+      "agentDraft": "ev-m1b-ingress-agent-draft",
+      "agentPatchResult": "ev-m1b-ingress-agent-patch",
+      "editorJsonSave": "ev-m1b-ingress-editor-json",
+      "rendererMount": "ev-m1b-ingress-renderer",
+      "compilerServiceCompile": "ev-m1b-ingress-compiler-service",
+      "compilerDirectCompile": "ev-m1b-ingress-compiler-direct"
+    },
+    "agentEarlyRejections": [
+      "ev-m1b-ingress-agent-bindevent"
+    ],
+    "regressions": [
+      "ev-m1b-reg-apicall-save",
+      "ev-m1b-reg-bindevent-apicall",
+      "ev-m1b-reg-compile-m1a",
+      "ev-m1b-reg-render-m1a",
+      "ev-m1b-reg-editor-m1a"
+    ]
+  },
+  "evidences": [
+    {
+      "id": "ev-m1b-contract-default-deny",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/data-source-contract.spec.ts",
+      "fullName": " M1b-1 PR A: DataSource Declarations & executeDataSource Contract (Refs #64 design) 5. 能力检测与评估：结构合法但生产默认拒绝 production trusted manifest rejects structurally-legal datasource schemas on all 6 surfaces",
+      "description": "Contract 层：结构合法的 data-source 页面在生产可信清单下于全部 6 个消费面被 CAPABILITY_UNSUPPORTED 拒绝"
+    },
+    {
+      "id": "ev-m1b-validator-structural",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/data-source-contract.spec.ts",
+      "fullName": " M1b-1 PR A: DataSource Declarations & executeDataSource Contract (Refs #64 design) 2. 结构非法：声明与动作的 fail-close 用例（独立语料） rejects negative case: 'floatingRevisionLatest'",
+      "description": "Validator 层：浮动 revision（latest）等结构非法声明在验证核心 fail-close"
+    },
+    {
+      "id": "ev-m1b-trusted-manifest-registry",
+      "package": "packages/schema-contract",
+      "runner": "vitest",
+      "testFile": "packages/schema-contract/src/__tests__/capabilities.spec.ts",
+      "fullName": " C3a Capability Gate & Support Matrix (Issue #47) 5. Unsupported Status Rejection (CAPABILITY_UNSUPPORTED) production trusted manifest rejects data-source on all 6 surfaces (default-deny, M1b-1 PR A)",
+      "description": "生产能力矩阵显式登记：data-source 六面默认 unsupported（既有 3 能力状态不变）"
+    },
+    {
+      "id": "ev-m1b-ingress-save",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Page Schema Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 1: PageSchemaService.saveSchema（生产清单，无任何屏蔽） rejects structurally-legal data-source schema with 400 CAPABILITY_UNSUPPORTED on all 6 surfaces and never touches repository",
+      "description": "入口1 服务保存：结构合法 data-source Schema 以 400 CAPABILITY_UNSUPPORTED 拒绝且不触达仓储"
+    },
+    {
+      "id": "ev-m1b-ingress-repo",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Page Schema Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 2: PageSchemaRepository 直接 saveSchema（生产清单） rejects data-source schema; disk bytes, version pointer and snapshots unchanged",
+      "description": "入口2 仓储直接保存：拒绝且磁盘字节/版本指针/快照不变"
+    },
+    {
+      "id": "ev-m1b-ingress-reload",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Page Schema Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 3: PageSchemaRepository 新实例磁盘加载（生产清单） fails closed loading a stored data-source snapshot; disk unchanged; structurally reloadable once capability is granted",
+      "description": "入口3 磁盘重载：新实例加载含声明快照 fail-close；测试矩阵放行后可恢复（证明拒绝来自能力门禁）"
+    },
+    {
+      "id": "ev-m1b-ingress-agent-draft",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4a: ToolExecutionService.previewPatch draft 输入（生产清单） rejects data-source draft with CAPABILITY_UNSUPPORTED; draft unmodified; no save",
+      "description": "入口4 Agent 草稿：draft 含 dataSources 即拒绝，draft 不被修改、不保存"
+    },
+    {
+      "id": "ev-m1b-ingress-agent-patch",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4b: Patch 结果（replacePageLogic 引入 dataSources，生产清单） rejects patch result with CAPABILITY_UNSUPPORTED; legacy draft unchanged; no save",
+      "description": "入口5 Agent Patch 结果：replacePageLogic 引入 dataSources 被能力拒绝"
+    },
+    {
+      "id": "ev-m1b-ingress-agent-bindevent",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4c: bindEvent / insertComponent 携带 executeDataSource（动作白名单提前拒绝） bindEvent rejects executeDataSource actions at the agent action whitelist before any patch is applied",
+      "description": "Agent 动作白名单：bindEvent 携带 executeDataSource 在写入前提前拒绝（等效 fail-close）"
+    },
+    {
+      "id": "ev-m1b-ingress-editor-json",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/m1b-datasource-ingress.test.ts",
+      "fullName": " Editor JSON/Logic Save Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 6: 编辑器整页 JSON 保存 / Logic 面板保存（生产清单） parseAndValidateFullSchema rejects structurally-legal data-source schema with CAPABILITY_UNSUPPORTED",
+      "description": "入口6 编辑器 JSON/Logic 保存：parseAndValidateFullSchema/parseAndValidatePageLogic 均拒绝"
+    },
+    {
+      "id": "ev-m1b-ingress-renderer",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/m1b-datasource-ingress.test.tsx",
+      "fullName": " Renderer Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 7: Renderer 挂载（生产清单，无任何屏蔽） rejects data-source schema before session creation or any host network call",
+      "description": "入口7 Renderer 挂载：拒绝于会话创建与任何网络调用之前"
+    },
+    {
+      "id": "ev-m1b-ingress-compiler-service",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Compiler Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 8a: CompilerService.compile（生产清单） rejects data-source schema with 400 CAPABILITY_UNSUPPORTED before any code generation",
+      "description": "入口8 编译服务：代码生成前以 400 拒绝"
+    },
+    {
+      "id": "ev-m1b-ingress-compiler-direct",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Compiler Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 8b: compileToCode 直接编译（生产清单） rejects data-source schema with SchemaValidationError CAPABILITY_UNSUPPORTED (both event & flow placements)",
+      "description": "入口9 直接编译：compileToCode 对事件位/Flow 位两种摆放均拒绝"
+    },
+    {
+      "id": "ev-m1b-reg-apicall-save",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/page-schema/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Page Schema Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 1: PageSchemaService.saveSchema（生产清单，无任何屏蔽） legacy apiCall schema (no logic capabilities) still saves under the production manifest（旧动作不退化）",
+      "description": "回归：legacy apiCall Schema 在生产清单下照常保存（旧动作不退化）"
+    },
+    {
+      "id": "ev-m1b-reg-bindevent-apicall",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/agent-tools/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4c: bindEvent / insertComponent 携带 executeDataSource（动作白名单提前拒绝） regression: bindEvent with core actions (apiCall/setValue) still passes",
+      "description": "回归：Agent bindEvent 核心动作（apiCall/setValue）照常通过"
+    },
+    {
+      "id": "ev-m1b-reg-compile-m1a",
+      "package": "packages/backend",
+      "runner": "jest",
+      "testFile": "packages/backend/src/modules/compiler/__tests__/m1b-datasource-ingress.spec.ts",
+      "fullName": "Compiler Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 8a: CompilerService.compile（生产清单） regression: M1a conformance schema still compiles under the production manifest",
+      "description": "回归：M1a 定型语料在生产清单下照常编译"
+    },
+    {
+      "id": "ev-m1b-reg-render-m1a",
+      "package": "packages/renderer",
+      "runner": "vitest",
+      "testFile": "packages/renderer/src/__tests__/m1b-datasource-ingress.test.tsx",
+      "fullName": " Renderer Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 7: Renderer 挂载（生产清单，无任何屏蔽） regression: M1a conformance schema still mounts under the production manifest",
+      "description": "回归：M1a 定型语料在生产清单下照常挂载"
+    },
+    {
+      "id": "ev-m1b-reg-editor-m1a",
+      "package": "packages/frontend",
+      "runner": "vitest",
+      "testFile": "packages/frontend/src/editor/services/__tests__/m1b-datasource-ingress.test.ts",
+      "fullName": " Editor JSON/Logic Save Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 6: 编辑器整页 JSON 保存 / Logic 面板保存（生产清单） regression: M1a conformance schema and plain logic still validate under the production manifest",
+      "description": "回归：M1a 定型语料与纯 states logic 在生产清单下照常通过编辑器校验"
+    }
+  ]
+}

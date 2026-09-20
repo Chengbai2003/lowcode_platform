@@ -104,6 +104,8 @@ jobs:
         run: |
           pnpm check:m1a-capabilities
           pnpm test:m1a-capabilities-validator
+          pnpm check:m1b-capabilities
+          pnpm test:m1b-capabilities-validator
 
       - name: Lint
         run: pnpm lint --max-warnings 500

@@ -5,20 +5,50 @@ import {
   REQUIRED_CAPABILITY_REVISION,
   type CapabilityManifest,
   type CapabilityMatrix,
+  type CapabilitySupportStatus,
   type SchemaCapability,
   type ConsumerSurface,
 } from './types';
 
 /**
- * 构造随构建交付的生产可信全支持矩阵
+ * 生产可信能力显式登记表（M1b-1 起新增能力默认 unsupported）。
+ *
+ * 新增 SchemaCapability 必须在此登记，否则模块初始化即失败 —— 能力集合
+ * 与支持状态不允许"追加名字即全量放行"的隐式默认。既有 M1a 三项能力的
+ * 支持状态与 revision 保持不变（回归红线）。
+ */
+const TRUSTED_CAPABILITY_STATUSES: Readonly<Record<SchemaCapability, CapabilitySupportStatus>> =
+  deepFreeze({
+    'page-state': 'supported',
+    'named-computed': 'supported',
+    'action-flow': 'supported',
+    // M1b-1 只读数据源：B/C/D/E 六消费面执行语义未交付、验收未通过前，
+    // 任何消费面不得保存/执行/编译含 dataSources/executeDataSource 的页面
+    'data-source': 'unsupported',
+  });
+
+for (const capability of SCHEMA_CAPABILITIES) {
+  if (!Object.prototype.hasOwnProperty.call(TRUSTED_CAPABILITY_STATUSES, capability)) {
+    throw new Error(
+      `Trusted capability registry is missing an explicit status for "${capability}"; ` +
+        'every SchemaCapability must be registered in TRUSTED_CAPABILITY_STATUSES',
+    );
+  }
+}
+
+/**
+ * 构造随构建交付的生产可信能力矩阵（显式登记，新增能力默认拒绝）
  */
 function buildTrustedCapabilityMatrix(): CapabilityMatrix {
-  const matrix: Record<string, Record<string, { status: 'supported'; revision: number }>> = {};
+  const matrix: Record<
+    string,
+    Record<string, { status: CapabilitySupportStatus; revision: number }>
+  > = {};
   for (const cap of SCHEMA_CAPABILITIES) {
-    const surfaceRecord: Record<string, { status: 'supported'; revision: number }> = {};
+    const surfaceRecord: Record<string, { status: CapabilitySupportStatus; revision: number }> = {};
     for (const surface of CONSUMER_SURFACES) {
       surfaceRecord[surface] = {
-        status: 'supported',
+        status: TRUSTED_CAPABILITY_STATUSES[cap],
         revision: REQUIRED_CAPABILITY_REVISION,
       };
     }
