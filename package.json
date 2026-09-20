@@ -24,6 +24,8 @@
     "check:architecture": "node scripts/check-schema-contract-boundaries.mjs",
     "check:m1a-capabilities": "node scripts/check-m1a-capabilities.mjs",
     "test:m1a-capabilities-validator": "node --test scripts/__tests__/check-m1a-capabilities.test.mjs",
+    "check:m1b-capabilities": "node scripts/check-m1b-capabilities.mjs",
+    "test:m1b-capabilities-validator": "node --test scripts/__tests__/check-m1b-capabilities.test.mjs",
     "eval:deterministic": "pnpm --filter @lowcode-platform/schema-contract build && pnpm --filter @lowcode-platform/backend eval:deterministic",
     "eval:live": "pnpm --filter @lowcode-platform/backend eval:live"
   },
