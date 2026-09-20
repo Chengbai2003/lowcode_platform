@@ -6,7 +6,7 @@
   "fixture": {
     "path": "test-fixtures/m1b-datasource-conformance.json",
     "corpusVersion": "1.0.0",
-    "sha256": "cc4f625c8816830a1fa179fc8cef6b8700f75dae4d74eb259c8c6a89450cc3c0"
+    "sha256": "0bf2222eaaafd883c5daf995049996d87327194cefc334889e71c5872000233e"
   },
   "matrix": {
     "data-source": {

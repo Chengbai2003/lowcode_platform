@@ -1,8 +1,9 @@
 # M1b-1 PR A 协议冻结记录：只读数据源声明与 executeDataSource
 
-> 状态：已冻结并实施（PR A）；基线 ef640cf（#64 合并后 main）。
+> 状态：已冻结并实施（PR A，含审查修正）；基线 ef640cf（#64 合并后 main）。
 > 依据：`m1b-0-readonly-data-source-design.md` §3 草案、ADR-0005、ADR-0009、`m1b-execution-plan.md` §2「实施前待定细节」。
 > 本记录锁定 PR A 交付的协议细节；B/C/D/E 未交付前 `data-source` 能力保持六消费面默认 unsupported。
+> 审查修正：① dataSources 键参与声明冲突校验（§1.1，review P2）；② M1b 证据检查脚本 testFile 改为 resolve 后仓库内包含性检查（挡中间 `..` 逸出）。
 
 ## 1. 冻结的协议
 
@@ -10,7 +11,7 @@
 
 | 位置 | 字段 | 必选性 | 说明 |
 | --- | --- | --- | --- |
-| `logic.dataSources` | 区域整体 | 可选 | `Record<LogicKey, DataSourceDeclaration>`；键规则与其他 Logic 区域一致（`isSafeLogicKey`，拒绝 `__proto__`/`constructor` 等） |
+| `logic.dataSources` | 区域整体 | 可选 | `Record<LogicKey, DataSourceDeclaration>`；键规则与其他 Logic 区域一致（`isSafeLogicKey`，拒绝 `__proto__`/`constructor` 等）；**键参与声明冲突校验**——与 states/computed/flows 任一区域重名即 `DATASOURCE_KEY_CONFLICT` fail-close。该规则仅约束新区域：states/computed/flows 之间的既有可重名行为（表达式经 `state.`/`computed.` 前缀区分命名空间）不变，不收紧旧页面 |
 | 声明 | `operationRef` | **必填** | 精确二元组 `{ operationId, revision }`，二者均必填非空字符串 |
 | 声明 | `params` | 可选 | 普通对象（非数组、plain prototype）；键必须安全；值任意 JsonValue |
 | 声明 | 其他一切字段 | 拒绝 | `UNKNOWN_DATASOURCE_FIELD`——url/headers/凭据/token/风险/超时等越界字段天然落入此拒绝 |
@@ -34,7 +35,7 @@
 
 ### 1.3 错误代码
 
-新增（沿用 SCREAMING_SNAKE 惯例）：`INVALID_DATASOURCES_OBJECT`、`INVALID_DATASOURCE_KEY`、`DATASOURCE_ENTRIES_BUDGET_EXCEEDED`、`INVALID_DATASOURCE_DECLARATION`、`UNKNOWN_DATASOURCE_FIELD`、`OPERATION_REF_REQUIRED`、`UNKNOWN_OPERATION_REF_FIELD`、`INVALID_OPERATION_ID`、`INVALID_OPERATION_REVISION`、`OPERATION_REVISION_FLOATING`、`INVALID_DATASOURCE_PARAMS`、`INVALID_DATASOURCE_PARAM_KEY`、`DATASOURCE_PARAMS_BUDGET_EXCEEDED`、`DATASOURCE_SOURCE_ID_REQUIRED`、`INVALID_DATASOURCE_SOURCE_ID`、`DATASOURCE_REFERENCE_MISSING`、`DATASOURCE_RESULTTO_REQUIRED`、`UNDECLARED_STATE_TARGET`。
+新增（沿用 SCREAMING_SNAKE 惯例）：`INVALID_DATASOURCES_OBJECT`、`INVALID_DATASOURCE_KEY`、`DATASOURCE_KEY_CONFLICT`、`DATASOURCE_ENTRIES_BUDGET_EXCEEDED`、`INVALID_DATASOURCE_DECLARATION`、`UNKNOWN_DATASOURCE_FIELD`、`OPERATION_REF_REQUIRED`、`UNKNOWN_OPERATION_REF_FIELD`、`INVALID_OPERATION_ID`、`INVALID_OPERATION_REVISION`、`OPERATION_REVISION_FLOATING`、`INVALID_DATASOURCE_PARAMS`、`INVALID_DATASOURCE_PARAM_KEY`、`DATASOURCE_PARAMS_BUDGET_EXCEEDED`、`DATASOURCE_SOURCE_ID_REQUIRED`、`INVALID_DATASOURCE_SOURCE_ID`、`DATASOURCE_REFERENCE_MISSING`、`DATASOURCE_RESULTTO_REQUIRED`、`UNDECLARED_STATE_TARGET`。
 
 复用既有：`INVALID_OBJECT_PROTOTYPE`、`SYMBOL_PROPERTY_FORBIDDEN`、`ACCESSOR_PROPERTY_FORBIDDEN`、`COMPUTED_TARGET_READONLY`、`INVALID_STATE_TARGET`、`UNKNOWN_ACTION_FIELD`、`CAPABILITY_UNSUPPORTED`。
 

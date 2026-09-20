@@ -527,6 +527,25 @@
       "expectedPath": ["components", "root", "events", "onClick", 0, "onSuccess"]
     },
     {
+      "name": "dataSourceKeyConflictsWithState",
+      "mutation": "dataSources 键与 states 声明重名（设计 §3.1：dataSources key 参与声明冲突校验）",
+      "schema": {
+        "schemaVersion": 0,
+        "rootId": "root",
+        "components": { "root": { "id": "root", "type": "Page" } },
+        "logic": {
+          "states": { "searchItems": "" },
+          "dataSources": {
+            "searchItems": {
+              "operationRef": { "operationId": "demo.items.search", "revision": "1" }
+            }
+          }
+        }
+      },
+      "expectedCode": "DATASOURCE_KEY_CONFLICT",
+      "expectedPath": ["logic", "dataSources", "searchItems"]
+    },
+    {
       "name": "flowStepReferenceMissing",
       "mutation": "Flow steps 内的 executeDataSource 引用未声明数据源",
       "schema": {

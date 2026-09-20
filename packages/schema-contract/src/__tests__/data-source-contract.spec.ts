@@ -280,6 +280,85 @@ describe('M1b-1 PR A: DataSource Declarations & executeDataSource Contract (Refs
     });
   });
 
+  describe('4b. 声明冲突校验（m1b-0 设计 §3.1：dataSources key 参与声明冲突校验）', () => {
+    const declaration = {
+      operationRef: { operationId: 'demo.items.search', revision: '1' },
+    };
+
+    const expectConflict = (logic: Record<string, unknown>, regionInMessage: string) => {
+      let caught: unknown;
+      try {
+        createCanonicalPageSchema({
+          schemaVersion: 0,
+          rootId: 'root',
+          components: { root: { id: 'root', type: 'Page' } },
+          logic: logic as never,
+        });
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(SchemaValidationError);
+      const issues = (caught as SchemaValidationError).issues;
+      const matching = issues.find((i) => i.code === 'DATASOURCE_KEY_CONFLICT');
+      expect(matching).toBeDefined();
+      expect(matching?.path).toEqual(['logic', 'dataSources', 'searchItems']);
+      expect(matching?.message).toContain(regionInMessage);
+    };
+
+    it('rejects a dataSource key that duplicates a states declaration', () => {
+      expectConflict(
+        { states: { searchItems: '' }, dataSources: { searchItems: declaration } },
+        'states',
+      );
+    });
+
+    it('rejects a dataSource key that duplicates a computed declaration', () => {
+      expectConflict(
+        { computed: { searchItems: '1' }, dataSources: { searchItems: declaration } },
+        'computed',
+      );
+    });
+
+    it('rejects a dataSource key that duplicates a flows declaration', () => {
+      expectConflict(
+        {
+          flows: { searchItems: { steps: [{ type: 'log', value: 'x' }] } },
+          dataSources: { searchItems: declaration },
+        },
+        'flows',
+      );
+    });
+
+    it('legacy cross-region overlap between states/computed/flows remains legal（不收紧旧能力）', () => {
+      expect(() =>
+        createCanonicalPageSchema({
+          schemaVersion: 0,
+          rootId: 'root',
+          components: { root: { id: 'root', type: 'Page' } },
+          logic: {
+            states: { shared: 1 },
+            computed: { shared: '1 + 1' },
+            flows: { shared: { steps: [{ type: 'log', value: 'ok' }] } },
+          },
+        }),
+      ).not.toThrow();
+    });
+
+    it('distinct dataSource keys do not conflict with other declarations', () => {
+      expect(() =>
+        createCanonicalPageSchema({
+          schemaVersion: 0,
+          rootId: 'root',
+          components: { root: { id: 'root', type: 'Page' } },
+          logic: {
+            states: { rows: [] },
+            dataSources: { searchItems: declaration },
+          },
+        }),
+      ).not.toThrow();
+    });
+  });
+
   describe('5. 能力检测与评估：结构合法但生产默认拒绝', () => {
     it('detects data-source from declarations, direct event actions, and nested flow actions', () => {
       const fromDeclaration = detectPageSchemaCapabilities(

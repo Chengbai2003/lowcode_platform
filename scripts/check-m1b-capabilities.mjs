@@ -15,7 +15,7 @@
  */
 
 import { readFileSync, existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import {
   verifyFixture,
   parseTestReport,
@@ -62,9 +62,14 @@ export function validateM1bEvidenceManifest(manifest, repoRoot) {
     throw new Error(`Unsupported evidenceFormatVersion: ${manifest.evidenceFormatVersion}`);
   }
   if (manifest.capability !== M1B_CAPABILITY) {
-    throw new Error(`Manifest capability must be "${M1B_CAPABILITY}", got "${manifest.capability}"`);
+    throw new Error(
+      `Manifest capability must be "${M1B_CAPABILITY}", got "${manifest.capability}"`,
+    );
   }
-  if (typeof manifest.capabilityStatus !== 'string' || !manifest.capabilityStatus.includes('unsupported')) {
+  if (
+    typeof manifest.capabilityStatus !== 'string' ||
+    !manifest.capabilityStatus.includes('unsupported')
+  ) {
     throw new Error('M1b manifest must record data-source as unsupported (default-deny)');
   }
 
@@ -101,11 +106,16 @@ export function validateM1bEvidenceManifest(manifest, repoRoot) {
   const ingressObj = manifest.keyGroups.ingressRejections;
   for (const ingressKey of M1B_INGRESS_REJECTIONS) {
     if (!ingressObj[ingressKey] || typeof ingressObj[ingressKey] !== 'string') {
-      throw new Error(`keyGroups.ingressRejections missing required ingress point: "${ingressKey}"`);
+      throw new Error(
+        `keyGroups.ingressRejections missing required ingress point: "${ingressKey}"`,
+      );
     }
   }
   for (const arrayGroup of ['trustedManifestRegistry', 'agentEarlyRejections', 'regressions']) {
-    if (!Array.isArray(manifest.keyGroups[arrayGroup]) || manifest.keyGroups[arrayGroup].length === 0) {
+    if (
+      !Array.isArray(manifest.keyGroups[arrayGroup]) ||
+      manifest.keyGroups[arrayGroup].length === 0
+    ) {
       throw new Error(`keyGroups.${arrayGroup} must be a non-empty array of evidence IDs`);
     }
   }
@@ -126,15 +136,21 @@ export function validateM1bEvidenceManifest(manifest, repoRoot) {
     if (runner !== 'vitest' && runner !== 'jest') {
       throw new Error(`Evidence "${id}" runner must be "vitest" or "jest", got "${runner}"`);
     }
-    if (!testFile || typeof testFile !== 'string') throw new Error(`Evidence "${id}" missing "testFile"`);
-    if (testFile.startsWith('/') || testFile.startsWith('..')) {
-      throw new Error(`Evidence "${id}" testFile must be repo-relative, got "${testFile}"`);
-    }
+    if (!testFile || typeof testFile !== 'string')
+      throw new Error(`Evidence "${id}" missing "testFile"`);
+    // 路径逃逸校验：先 resolve 再做仓库内包含性检查（仅看开头挡不住
+    // "packages/../../outside" 这类中间 .. 的绕过），仓库根本身也不算合法证据文件
     const resolvedPath = resolve(repoRoot, testFile);
+    if (!resolvedPath.startsWith(repoRoot + sep)) {
+      throw new Error(
+        `Evidence "${id}" testFile escapes repository: "${testFile}" (resolved to "${resolvedPath}")`,
+      );
+    }
     if (!existsSync(resolvedPath)) {
       throw new Error(`Evidence "${id}" testFile does not exist: "${testFile}"`);
     }
-    if (!fullName || typeof fullName !== 'string') throw new Error(`Evidence "${id}" missing "fullName"`);
+    if (!fullName || typeof fullName !== 'string')
+      throw new Error(`Evidence "${id}" missing "fullName"`);
     if (!description || typeof description !== 'string') {
       throw new Error(`Evidence "${id}" missing "description"`);
     }
@@ -148,7 +164,10 @@ export function validateM1bEvidenceManifest(manifest, repoRoot) {
     }
   };
   for (const surface of M1B_SURFACES) {
-    resolveRef(manifest.matrix[M1B_CAPABILITY][surface], `Matrix cell [${M1B_CAPABILITY}][${surface}]`);
+    resolveRef(
+      manifest.matrix[M1B_CAPABILITY][surface],
+      `Matrix cell [${M1B_CAPABILITY}][${surface}]`,
+    );
   }
   for (const [k, refId] of Object.entries(ingressObj)) {
     resolveRef(refId, `keyGroups.ingressRejections.${k}`);
@@ -163,7 +182,9 @@ export function validateM1bEvidenceManifest(manifest, repoRoot) {
 }
 
 export async function main(repoRoot = process.cwd()) {
-  console.log('🔍 [check:m1b-capabilities] Starting data-source default-deny evidence verification...');
+  console.log(
+    '🔍 [check:m1b-capabilities] Starting data-source default-deny evidence verification...',
+  );
 
   const manifestPath = resolve(repoRoot, 'test-fixtures/m1b-capability-evidence.json');
   if (!existsSync(manifestPath)) {
@@ -175,7 +196,9 @@ export async function main(repoRoot = process.cwd()) {
   const fixtureRes = verifyFixture(manifest, repoRoot);
   console.log(`     ✓ SHA-256: ${fixtureRes.actualSha256} (v${fixtureRes.corpusVersion})`);
 
-  console.log('  2. Validating M1b evidence manifest (1 capability × 6 surfaces + 9 ingress points + regressions)...');
+  console.log(
+    '  2. Validating M1b evidence manifest (1 capability × 6 surfaces + 9 ingress points + regressions)...',
+  );
   const manifestRes = validateM1bEvidenceManifest(manifest, repoRoot);
   console.log(
     `     ✓ Verified ${manifestRes.evidenceCount} evidence citations across matrix, ingress and regression groups`,
@@ -187,9 +210,7 @@ export async function main(repoRoot = process.cwd()) {
 
   console.log('  4. Matching cited evidence against test report assertions...');
   const verifyRes = verifyTestResults(manifest, testResults, repoRoot);
-  console.log(
-    `     ✓ All ${verifyRes.verifiedCount} cited evidences matched with status="passed"`,
-  );
+  console.log(`     ✓ All ${verifyRes.verifiedCount} cited evidences matched with status="passed"`);
 
   console.log(
     '\n✅ [check:m1b-capabilities] data-source capability remains default-unsupported with per-entrance rejection evidence.\n',

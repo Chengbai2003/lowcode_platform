@@ -575,6 +575,41 @@ export function validatePageSchemaValue(
       : new Set<string>(),
   };
 
+  // 声明冲突校验（m1b-0 设计 §3.1：dataSources key 参与声明冲突校验）。
+  // 仅约束新区域：dataSources 与 states/computed/flows 重名即 fail-close；
+  // states/computed/flows 之间的既有可重名行为（表达式经 state./computed. 前缀
+  // 区分命名空间）保持不变，不因新能力收紧旧页面。
+  if (declaredDataSourceKeys) {
+    for (const dsKey of declaredDataSourceKeys) {
+      if (inspectionContext.aborted) break;
+      const conflictPath: readonly (string | number)[] = ['logic', 'dataSources', dsKey];
+      if (statesObj && hasOwn(statesObj, dsKey)) {
+        pushIssue(inspectionContext, {
+          code: 'DATASOURCE_KEY_CONFLICT',
+          path: conflictPath,
+          message: `DataSource key "${dsKey}" conflicts with an existing states declaration`,
+        });
+      }
+      if (computedObj && hasOwn(computedObj, dsKey)) {
+        pushIssue(inspectionContext, {
+          code: 'DATASOURCE_KEY_CONFLICT',
+          path: conflictPath,
+          message: `DataSource key "${dsKey}" conflicts with an existing computed declaration`,
+        });
+      }
+      if (declaredFlowKeys.has(dsKey)) {
+        pushIssue(inspectionContext, {
+          code: 'DATASOURCE_KEY_CONFLICT',
+          path: conflictPath,
+          message: `DataSource key "${dsKey}" conflicts with an existing flows declaration`,
+        });
+      }
+    }
+    if (issues.length > 0 || inspectionContext.aborted) {
+      return { ok: false, issues };
+    }
+  }
+
   const componentKeys = Object.getOwnPropertyNames(componentsObj);
 
   if (componentKeys.length > limits.maxComponents) {

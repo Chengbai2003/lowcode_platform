@@ -46,7 +46,10 @@ test('rejects a matrix with a missing surface cell', () => {
 test('rejects a matrix cell that is not an evidence ID string', () => {
   const manifest = cloneManifest();
   manifest.matrix[M1B_CAPABILITY].renderer = 42;
-  assert.throws(() => validateM1bEvidenceManifest(manifest, repoRoot), /must be an evidence ID string/);
+  assert.throws(
+    () => validateM1bEvidenceManifest(manifest, repoRoot),
+    /must be an evidence ID string/,
+  );
 });
 
 test('rejects a missing ingress rejection point', () => {
@@ -76,7 +79,24 @@ test('rejects references to nonexistent evidence ids', () => {
 test('rejects evidence entries with absolute or escaping testFile paths', () => {
   const manifest = cloneManifest();
   manifest.evidences[0].testFile = '/etc/passwd';
-  assert.throws(() => validateM1bEvidenceManifest(manifest, repoRoot), /must be repo-relative/);
+  assert.throws(() => validateM1bEvidenceManifest(manifest, repoRoot), /escapes repository/);
+});
+
+test('rejects testFile paths that escape via interior ".." segments (review finding)', () => {
+  const manifest = cloneManifest();
+  // 开头不是 ".."，但规范化后已在仓库之外
+  manifest.evidences[0].testFile = 'packages/../../package.json';
+  assert.throws(() => validateM1bEvidenceManifest(manifest, repoRoot), /escapes repository/);
+
+  const manifest2 = cloneManifest();
+  manifest2.evidences[0].testFile = 'packages/schema-contract/../../../outside-report.json';
+  assert.throws(() => validateM1bEvidenceManifest(manifest2, repoRoot), /escapes repository/);
+});
+
+test('rejects testFile that resolves to the repository root itself', () => {
+  const manifest = cloneManifest();
+  manifest.evidences[0].testFile = '.';
+  assert.throws(() => validateM1bEvidenceManifest(manifest, repoRoot), /escapes repository/);
 });
 
 test('rejects duplicate evidence ids', () => {
