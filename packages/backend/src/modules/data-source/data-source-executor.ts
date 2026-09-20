@@ -93,6 +93,14 @@ async function readBodyWithLimits(
   const chunks: string[] = [];
   let received = 0;
 
+  // 任何限额违规都必须取消读取并中止整个连接（销毁 socket），
+  // 否则上游可继续写入已判定违规的响应；两种违规走同一清理路径。
+  const violate = async (violation: ResponseLimitViolation): Promise<never> => {
+    await reader.cancel().catch(() => undefined);
+    abort.abort();
+    throw violation;
+  };
+
   while (true) {
     const { done, value } = await reader.read();
     if (done) {
@@ -100,15 +108,22 @@ async function readBodyWithLimits(
     }
     received += value.byteLength;
     if (received > limits.maxResponseBytes) {
-      await reader.cancel().catch(() => undefined);
-      abort.abort();
-      throw new ResponseLimitViolation(
-        'bytes',
-        `response size exceeded limit of ${limits.maxResponseBytes} bytes`,
+      await violate(
+        new ResponseLimitViolation(
+          'bytes',
+          `response size exceeded limit of ${limits.maxResponseBytes} bytes`,
+        ),
       );
     }
     const text = decoder.decode(value, { stream: true });
-    scanner.feed(text);
+    try {
+      scanner.feed(text);
+    } catch (error) {
+      if (error instanceof ResponseLimitViolation) {
+        await violate(error);
+      }
+      throw error;
+    }
     chunks.push(text);
   }
   chunks.push(decoder.decode());
@@ -178,6 +193,9 @@ export class DataSourceExecutor {
           reason: `execution exceeded server-side deadline of ${request.limits.deadlineMs}ms`,
         };
       }
+      // 兜底中止：任何未经过限额清理路径的传输异常也确保销毁连接，
+      // 不给上游留下继续写入已放弃响应的机会（重复 abort 无害）
+      abort.abort();
       // 传输层失败细节只进服务端日志；客户端只收到脱敏原因
       this.logger.warn(
         `Data source upstream transport failure: ${error instanceof Error ? error.message : String(error)}`,

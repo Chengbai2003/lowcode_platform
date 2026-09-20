@@ -20,6 +20,7 @@ import {
   jsonBehavior,
   oversizedBehavior,
   depthBombBehavior,
+  persistentStreamBehavior,
   slowBehavior,
   redirectBehavior,
   type UpstreamSearchItem,
@@ -639,6 +640,72 @@ describe('DataSource trusted execution kernel (M1b-1 PR B / Refs #64)', () => {
       );
       expect(error.code).toBe('INVALID_RESULT');
       expect(error.message).toContain('nesting depth');
+      expect(harness.upstream.countFor('/demo/items/search')).toBe(1);
+    });
+
+    it('destroys the upstream connection after a depth violation on a never-ending stream (review P1)', async () => {
+      // 上游持续写入、永不结束：错误返回后连接必须被中止，
+      // 而不是留着上游继续写入已判定违规的响应
+      const harness = track(
+        await createHarness({
+          handler: route({
+            '/demo/items/search': persistentStreamBehavior('['.repeat(512)),
+          }),
+        }),
+      );
+      const version = await seedPage(harness, 'kernel-depth-live', m1bFixture.schema);
+
+      const startedAt = Date.now();
+      const error = await withSupportedDataSourceAsync(() =>
+        captureError(() =>
+          harness.service.execute({
+            pageId: 'kernel-depth-live',
+            pageVersion: version,
+            sourceId: 'searchItems',
+          }),
+        ),
+      );
+      expect(error.code).toBe('INVALID_RESULT');
+      expect(error.message).toContain('nesting depth');
+      expect(Date.now() - startedAt).toBeLessThan(1_000);
+      expect(harness.upstream.countFor('/demo/items/search')).toBe(1);
+
+      // 服务端观测：响应未写完即被客户端中止（连接确实关闭）
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      expect(harness.upstream.prematureClosesFor('/demo/items/search')).toBe(1);
+    });
+
+    it('never leaks upstream-controlled field names in the output-contract message (review P2)', async () => {
+      // 上游返回带敏感命名未知字段的结果：客户端只收固定安全消息
+      const sensitiveField = 'internalCallbackUrlWithToken';
+      const sensitiveValue = 'http://10.9.8.7/secret?token=xyz';
+      const harness = track(
+        await createHarness({
+          handler: route({
+            '/demo/items/search': jsonBehavior(200, {
+              items: [],
+              [sensitiveField]: sensitiveValue,
+            }),
+          }),
+        }),
+      );
+      const version = await seedPage(harness, 'kernel-leak', m1bFixture.schema);
+
+      const error = await withSupportedDataSourceAsync(() =>
+        captureError(() =>
+          harness.service.execute({
+            pageId: 'kernel-leak',
+            pageVersion: version,
+            sourceId: 'searchItems',
+          }),
+        ),
+      );
+      expect(error.code).toBe('INVALID_RESULT');
+      expect(error.message).toBe('Upstream result does not match the operation output contract');
+      expect(error.message).not.toContain(sensitiveField);
+      expect(error.message).not.toContain(sensitiveValue);
+      expect(error.message).not.toContain('10.9.8.7');
+      expect(error.message).not.toContain('token');
       expect(harness.upstream.countFor('/demo/items/search')).toBe(1);
     });
 

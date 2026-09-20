@@ -170,6 +170,31 @@ export function depthBombBehavior(
   };
 }
 
+/**
+ * 持续流：永不结束的响应，每 intervalMs 写一个 chunk，直到连接被客户端
+ * 销毁——用于证明限额违规后连接确实被中止（服务端观测到未写完即 close），
+ * 而非响应自然结束。写失败（连接已关）静默退出。
+ */
+export function persistentStreamBehavior(
+  chunk: string,
+  intervalMs = 5,
+): (req: http.IncomingMessage, res: http.ServerResponse) => Promise<void> {
+  return async (_req, res) => {
+    res.on('error', () => undefined);
+    res.writeHead(200, { 'content-type': 'application/json' });
+    while (!res.writableEnded && !res.destroyed) {
+      const backpressured = !res.write(chunk);
+      if (backpressured) {
+        await new Promise((resolve) => res.once('drain', () => resolve(undefined)));
+        if (res.destroyed) {
+          return;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+  };
+}
+
 /** 延迟响应（用于超时与并发占用） */
 export function slowBehavior(
   delayMs: number,

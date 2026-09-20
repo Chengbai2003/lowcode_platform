@@ -1,8 +1,9 @@
 # M1b-1 PR B 执行协议冻结记录：可信只读执行内核
 
-> 状态：已冻结并实施（PR B）；基线 aedbcc2（PR A/#65 合并后 main）。
+> 状态：已冻结并实施（PR B，含审查修正）；基线 aedbcc2（PR A/#65 合并后 main）。
 > 依据：`m1b-0-readonly-data-source-design.md` §4–§5、`m1b-execution-plan.md` §4 PR B、ADR-0005、`m1b-a-protocol-freeze.md`。
 > 本记录锁定宿主执行协议与服务端执行边界；`data-source` 能力在 B 交付后仍保持六消费面默认 unsupported（生产清单字节不变），Renderer/Compiler 接线属 PR C。
+> 审查修正（review round 1）：① 深度超限与字节超限共用同一清理路径——违规即 `reader.cancel()` + abort 销毁连接（持续流测试证明错误返回后连接确实关闭）；传输层异常兜底 abort。② 输出契约违规详情（含上游控制的字段名）只进服务端日志，客户端收固定安全消息。③ 端点请求体以未类型化形式透传契约校验器，生产 ValidationPipe（whitelist/forbidNonWhitelisted/transform+隐式转换）不做转换/剥离/提前拒绝，端点测试装上同款管道验证一致性。
 
 ## 1. 冻结的宿主执行协议（schema-contract `operations/`）
 
@@ -69,10 +70,11 @@
 ### 2.5 唯一 Executor（`data-source-executor.ts`）
 
 - 只执行「可信注册 + 可信绑定」解析出的 GET 请求；查询串来自已通过输入契约的参数。
-- 限额三项（默认 10s / 1 MiB / 深度 32）在**流式读取过程中**强制：超字节或超深度立即 `reader.cancel()` + abort 连接（服务端可观测到响应未写完即中止），绝不完整读取后才检测。深度扫描是 `JSON.parse` 之前的防线，深度炸弹不进入解析。
+- 限额三项（默认 10s / 1 MiB / 深度 32）在**流式读取过程中**强制：字节与深度违规共用同一清理路径——`reader.cancel()` + abort 销毁连接后才返回失败（服务端可观测到响应未写完即中止；持续流测试证明错误返回后连接确实关闭），绝不完整读取后才检测。深度扫描是 `JSON.parse` 之前的防线，深度炸弹不进入解析。
 - 服务端独立截止时间：超时中止请求并返回 TIMEOUT；不依赖任何调用方 signal。
 - `redirect: 'error'`：不跟随重定向，防止绕过目标约束；非 2xx 不读响应体直接 UPSTREAM_FAILURE。
-- 传输层失败细节只进服务端日志；客户端只收脱敏 reason。
+- 传输层失败兜底 abort：任何未经限额清理路径的异常也确保连接销毁（重复 abort 无害）。失败细节只进服务端日志；客户端只收脱敏 reason。
+- 输出契约违规同理：违规详情（字段名/路径来自不可信上游内容）只进服务端日志（含 traceId），客户端只收固定消息「Upstream result does not match the operation output contract」。
 
 ### 2.6 并发准入与限额覆盖
 
@@ -83,24 +85,29 @@
 
 `POST /api/v1/pages/:pageId/data-sources/:sourceId/execute`（AuthGuard 同其他控制器；路径参数权威，请求体只携带 `{ pageVersion, params? }`，未知体字段 fail-close）。模块接入 `AppModule`：默认部署（无适配器、无目标绑定、data-source unsupported）对所有请求确定性拒绝。
 
+请求体以**未类型化**形式透传（controller 不做 DTO 转换）：全局 ValidationPipe 对 metatype 为 `Object` 的参数不做 whitelist 剥离、不做隐式类型转换、不做提前裸 400，生产入口与契约校验器完全一致——`pageVersion: true`/`"1"`/缺失/未知字段都得到带 traceId 的 `INVALID_PARAMS`，而非被管道静默转换成合法值或收到无错误码的 400。端点测试装配与 `main.ts` 相同选项的生产管道验证该一致性。
+
 ## 4. 证据（全部真实链路，loopback 受控上游）
 
-| 断言                                                                            | 测试（backend jest）                                                                                                                                           |
-| ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 真实成功链：参数→上游→校验→结果                                                 | `data-source-kernel.spec.ts`「executes the declared operation…」「omitting params…」；`data-source-endpoint.spec.ts`「responds 200…」（真实 HTTP + supertest） |
-| 未知 operation/revision → 404，计数 0                                           | kernel「rejects unknown operationId/revision…」                                                                                                                |
-| 生产清单 CAPABILITY_DENIED，计数 0                                              | kernel「rejects with CAPABILITY_DENIED under the real production manifest」；endpoint 同名用例                                                                 |
-| 缺适配器确定性拒绝，计数 0                                                      | kernel「rejects deterministically without an identity adapter」；endpoint「FORBIDDEN under default providers」                                                 |
-| 未授权身份 / 未配置目标 / 公网目标误配，计数 0                                  | kernel「identity without the required permission」「no upstream target」「non-loopback target binding」                                                        |
-| 请求形状 / sourceId 未声明 / 输入契约（含租户键走私），计数 0                   | kernel「request-shape violations」「params that violate the operation input contract」；endpoint「body shape violations」                                      |
-| 并发准入（EXECUTION_BUSY 计数不增、跨页放行、失败释放）                         | kernel describe「并发准入」                                                                                                                                    |
-| 超大响应流中终止（服务端观测未写完即中止）                                      | kernel「terminates an oversized response during streaming」                                                                                                    |
-| 深度炸弹解析前终止                                                              | kernel「terminates a depth bomb during streaming (pre-parse guard)」                                                                                           |
-| 非 JSON / 输出契约各分支（请求后拒绝，计数 1）                                  | kernel「rejects invalid JSON」「rejects output contract violations」it.each×6                                                                                  |
-| 5xx / 重定向不跟随（重定向目标计数 0）/ 连接拒绝 / 超时（504 且服务端观测中止） | kernel 对应用例                                                                                                                                                |
-| 消息脱敏（不含 host/端口/URL）                                                  | `expectSanitizedMessage` 应用于全部失败用例                                                                                                                    |
-| loopback 解析矩阵 / 注册表精确匹配                                              | `trusted-operation-registry.spec.ts`                                                                                                                           |
-| 契约请求校验（27 用例）                                                         | schema-contract `operations-contract.spec.ts`                                                                                                                  |
+| 断言                                                                                        | 测试（backend jest）                                                                                                                                           |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 真实成功链：参数→上游→校验→结果                                                             | `data-source-kernel.spec.ts`「executes the declared operation…」「omitting params…」；`data-source-endpoint.spec.ts`「responds 200…」（真实 HTTP + supertest） |
+| 未知 operation/revision → 404，计数 0                                                       | kernel「rejects unknown operationId/revision…」                                                                                                                |
+| 生产清单 CAPABILITY_DENIED，计数 0                                                          | kernel「rejects with CAPABILITY_DENIED under the real production manifest」；endpoint 同名用例                                                                 |
+| 缺适配器确定性拒绝，计数 0                                                                  | kernel「rejects deterministically without an identity adapter」；endpoint「FORBIDDEN under default providers」                                                 |
+| 未授权身份 / 未配置目标 / 公网目标误配，计数 0                                              | kernel「identity without the required permission」「no upstream target」「non-loopback target binding」                                                        |
+| 请求形状 / sourceId 未声明 / 输入契约（含租户键走私），计数 0                               | kernel「request-shape violations」「params that violate the operation input contract」；endpoint「body shape violations」                                      |
+| 并发准入（EXECUTION_BUSY 计数不增、跨页放行、失败释放）                                     | kernel describe「并发准入」                                                                                                                                    |
+| 超大响应流中终止（服务端观测未写完即中止）                                                  | kernel「terminates an oversized response during streaming」                                                                                                    |
+| 深度炸弹解析前终止                                                                          | kernel「terminates a depth bomb during streaming (pre-parse guard)」                                                                                           |
+| 深度违规后连接确实销毁（永不结束的持续流，错误返回后服务端观测中止）                        | kernel「destroys the upstream connection after a depth violation on a never-ending stream (review P1)」                                                        |
+| 输出契约违规不泄露上游字段名（客户端固定安全消息）                                          | kernel「never leaks upstream-controlled field names in the output-contract message (review P2)」                                                               |
+| 非 JSON / 输出契约各分支（请求后拒绝，计数 1）                                              | kernel「rejects invalid JSON」「rejects output contract violations」it.each×6                                                                                  |
+| 生产 ValidationPipe 下契约语义一致（true/"1"/缺失 pageVersion 均 INVALID_PARAMS + traceId） | endpoint「keeps contract semantics under the production ValidationPipe (review P2)」                                                                           |
+| 5xx / 重定向不跟随（重定向目标计数 0）/ 连接拒绝 / 超时（504 且服务端观测中止）             | kernel 对应用例                                                                                                                                                |
+| 消息脱敏（不含 host/端口/URL）                                                              | `expectSanitizedMessage` 应用于全部失败用例                                                                                                                    |
+| loopback 解析矩阵 / 注册表精确匹配                                                          | `trusted-operation-registry.spec.ts`                                                                                                                           |
+| 契约请求校验（27 用例）                                                                     | schema-contract `operations-contract.spec.ts`                                                                                                                  |
 
 ## 5. 未完成项与后续边界
 

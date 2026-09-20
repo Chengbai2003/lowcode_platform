@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable, OnModuleInit } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import {
   DATA_SOURCE_EXECUTION_ERROR_CODES,
   evaluatePageSchemaCapabilities,
@@ -68,6 +68,7 @@ function positiveIntegerOrThrow(field: string, value: unknown): void {
  */
 @Injectable()
 export class DataSourceExecutionService implements OnModuleInit {
+  private readonly logger = new Logger(DataSourceExecutionService.name);
   private readonly inFlightByPage = new Map<string, number>();
   private readonly limitOverrides: DataSourceLimitOverrides;
 
@@ -243,15 +244,18 @@ export class DataSourceExecutionService implements OnModuleInit {
         this.fail(outcome.code, outcome.reason, traceId);
       }
 
-      // 12. 输出契约：上游已响应（不可宣称零调用），不合法即拒绝且不提交
+      // 12. 输出契约：上游已响应（不可宣称零调用），不合法即拒绝且不提交。
+      // 违规详情（字段名/路径来自不可信上游内容）只进服务端日志，
+      // 客户端只收固定安全消息，避免泄露上游内部字段名
       const outputResult = operation.validateOutput(outcome.json);
       if (outputResult.issues.length > 0) {
         const detail = outputResult.issues
           .map((issue) => `[${issue.path.join('.')}] ${issue.message}`)
           .join('; ');
+        this.logger.warn(`Output contract violation [trace ${traceId}]: ${detail}`);
         this.fail(
           DATA_SOURCE_EXECUTION_ERROR_CODES.INVALID_RESULT,
-          `Upstream result does not match operation output contract: ${detail}`,
+          'Upstream result does not match the operation output contract',
           traceId,
         );
       }

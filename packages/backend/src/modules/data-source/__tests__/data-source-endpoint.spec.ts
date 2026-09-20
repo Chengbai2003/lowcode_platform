@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { Test } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import request from 'supertest';
 import * as contract from '@lowcode-platform/schema-contract';
@@ -59,6 +59,22 @@ class EndpointIdentityAdapter extends DataSourceIdentityAdapter {
   }
 }
 
+/**
+ * 与 main.ts 完全一致的生产全局 ValidationPipe（whitelist/forbidNonWhitelisted/
+ * transform/enableImplicitConversion）——端点测试必须装上同款管道，证明生产
+ * 入口与契约校验一致：body 未类型化透传使管道不做转换/剥离/提前拒绝。
+ */
+function applyProductionPipes(app: INestApplication): void {
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+    }),
+  );
+}
+
 const UPSTREAM_ITEMS: UpstreamSearchItem[] = [
   { id: 'item-1', title: 'Apple Pie', price: 12 },
   { id: 'item-2', title: 'Apple Juice', price: 8 },
@@ -87,6 +103,7 @@ describe('DataSource execution endpoint (M1b-1 PR B / Refs #64)', () => {
       imports: [ConfigModule.forRoot({ isGlobal: true }), DataSourceModule],
     }).compile();
     defaultApp = defaultModuleRef.createNestApplication();
+    applyProductionPipes(defaultApp);
     defaultApp.useGlobalFilters(new HttpExceptionFilter());
     defaultApp.useGlobalInterceptors(new TransformInterceptor());
     await defaultApp.init();
@@ -108,6 +125,7 @@ describe('DataSource execution endpoint (M1b-1 PR B / Refs #64)', () => {
       .useValue({ 'demo.items.search@1': upstream.url('/demo/items/search') })
       .compile();
     trustedApp = trustedModuleRef.createNestApplication();
+    applyProductionPipes(trustedApp);
     trustedApp.useGlobalFilters(new HttpExceptionFilter());
     trustedApp.useGlobalInterceptors(new TransformInterceptor());
     // trusted app 的仓储初始化要重读含 data-source 快照的 store，与构造阶段
@@ -192,6 +210,7 @@ describe('DataSource execution endpoint (M1b-1 PR B / Refs #64)', () => {
     );
     expect(extraFieldResponse.status).toBe(400);
     expect(extraFieldResponse.body.code).toBe('INVALID_PARAMS');
+    expect(typeof extraFieldResponse.body.traceId).toBe('string');
 
     const badParamsResponse = await withSupportedDataSourceAsync(() =>
       request(trustedApp.getHttpServer())
@@ -202,6 +221,44 @@ describe('DataSource execution endpoint (M1b-1 PR B / Refs #64)', () => {
     expect(badParamsResponse.status).toBe(400);
     expect(badParamsResponse.body.code).toBe('INVALID_PARAMS');
 
+    expect(upstream.countFor('/demo/items/search')).toBe(1);
+  });
+
+  it('keeps contract semantics under the production ValidationPipe (review P2)', async () => {
+    // 生产管道（whitelist/forbidNonWhitelisted/transform+隐式转换）已装上：
+    // body 未类型化透传 → 管道不转换、不剥离、不提前裸 400，
+    // 非法 pageVersion 与未知字段都由契约校验器给出 INVALID_PARAMS + traceId
+    const booleanVersion = await withSupportedDataSourceAsync(() =>
+      request(trustedApp.getHttpServer())
+        .post(executeUrl())
+        .set('Authorization', 'Bearer test-secret')
+        .send({ pageVersion: true, params: { query: 'apple' } }),
+    );
+    expect(booleanVersion.status).toBe(400);
+    expect(booleanVersion.body.code).toBe('INVALID_PARAMS');
+    expect(typeof booleanVersion.body.traceId).toBe('string');
+
+    const stringVersion = await withSupportedDataSourceAsync(() =>
+      request(trustedApp.getHttpServer())
+        .post(executeUrl())
+        .set('Authorization', 'Bearer test-secret')
+        .send({ pageVersion: '1', params: { query: 'apple' } }),
+    );
+    expect(stringVersion.status).toBe(400);
+    expect(stringVersion.body.code).toBe('INVALID_PARAMS');
+    expect(typeof stringVersion.body.traceId).toBe('string');
+
+    const missingVersion = await withSupportedDataSourceAsync(() =>
+      request(trustedApp.getHttpServer())
+        .post(executeUrl())
+        .set('Authorization', 'Bearer test-secret')
+        .send({ params: { query: 'apple' } }),
+    );
+    expect(missingVersion.status).toBe(400);
+    expect(missingVersion.body.code).toBe('INVALID_PARAMS');
+    expect(typeof missingVersion.body.traceId).toBe('string');
+
+    // 全部拒绝均未到达上游
     expect(upstream.countFor('/demo/items/search')).toBe(1);
   });
 
