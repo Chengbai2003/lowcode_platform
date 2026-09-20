@@ -58,6 +58,7 @@ interface ActionNode {
   type: string;
   field?: string;
   method?: string;
+  sourceId?: string;
   kind?: string;
   level?: string;
   resultTo?: string;
@@ -152,10 +153,13 @@ interface RootNode {
   usesLegacyData?: boolean;
   usesComputed: boolean;
   usesFlows: boolean;
+  /** 页面任意事件/Flow 中存在 executeDataSource 动作（M1b-1 PR C） */
+  usesDataSources?: boolean;
   computedAnalysis?: ComputedLogicAnalysis;
   flowAnalysis?: ActionFlowAnalysis;
   flows?: FlowDeclarationNode[];
   flowRuntimeCode?: string;
+  dataSourceRuntimeCode?: string;
   flowExecutionLimits?: FlowExecutionLimits;
 }
 
@@ -374,6 +378,7 @@ function parseAction(action: unknown): ActionNode {
   return {
     type: typeof record.type === 'string' ? record.type : 'unknown',
     field: typeof record.field === 'string' ? record.field : undefined,
+    sourceId: typeof record.sourceId === 'string' ? record.sourceId : undefined,
     method: typeof record.method === 'string' ? record.method : undefined,
     kind: typeof record.kind === 'string' ? record.kind : undefined,
     level: typeof record.level === 'string' ? record.level : undefined,
@@ -415,6 +420,26 @@ function parseAction(action: unknown): ActionNode {
     flow: typeof record.flow === 'string' ? record.flow : undefined,
     input: record.input !== undefined ? normalizeValue(record.input) : undefined,
   };
+}
+
+function actionTreeUsesDataSource(actions?: readonly ActionNode[]): boolean {
+  if (!actions) return false;
+  const containers = [
+    (action: ActionNode) => action.actions,
+    (action: ActionNode) => action.then,
+    (action: ActionNode) => action.else,
+    (action: ActionNode) => action.onSuccess,
+    (action: ActionNode) => action.onError,
+    (action: ActionNode) => action.onOk,
+    (action: ActionNode) => action.onCancel,
+  ] as const;
+  for (const action of actions) {
+    if (action.type === 'executeDataSource') return true;
+    for (const container of containers) {
+      if (actionTreeUsesDataSource(container(action))) return true;
+    }
+  }
+  return false;
 }
 
 function parseEvents(events: ComponentNode['events']): EventBindingNode[] {
@@ -660,11 +685,21 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
   let flowExecutionLimits: FlowExecutionLimits | undefined;
   if (usesFlows) {
     flowExecutionLimits = normalizeFlowExecutionLimits(options?.flowExecutionLimits);
+    // 声明集显式传入（A 冻结：独立调用按空集 fail-close——这里必须与
+    // validatePageSchemaValue 相同来源地传入 dataSources/states 声明键）
     const result = analyzeActionFlowDeclarations(
       schema.logic!.flows,
       undefined,
       ['logic', 'flows'],
-      { allowLegacyNestedStateTargets: schema.logic?.states === undefined },
+      {
+        allowLegacyNestedStateTargets: schema.logic?.states === undefined,
+        declaredDataSourceKeys: schema.logic?.dataSources
+          ? new Set(Object.keys(schema.logic.dataSources))
+          : undefined,
+        declaredStateKeys: schema.logic?.states
+          ? new Set(Object.keys(schema.logic.states))
+          : undefined,
+      },
     );
     if (!result.ok) throw new SchemaValidationError(result.issues);
     flowAnalysis = result.value;
@@ -674,6 +709,15 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
       onError: flow.onError ? flow.onError.map((item) => parseAction(item)) : undefined,
     }));
   }
+
+  const usesDataSources =
+    flatComponents.some((component) =>
+      component.events.some((event) => actionTreeUsesDataSource(event.actions)),
+    ) ||
+    (flowDeclarations?.some(
+      (flow) => actionTreeUsesDataSource(flow.steps) || actionTreeUsesDataSource(flow.onError),
+    ) ??
+      false);
 
   return {
     type: 'root',
@@ -687,6 +731,7 @@ export function parseSchema(schema: PageSchema, options?: CompileOptions): RootN
     helpers: new Set(),
     usesComputed,
     usesFlows,
+    usesDataSources,
     ...(computedAnalysis ? { computedAnalysis } : {}),
     ...(flowAnalysis ? { flowAnalysis } : {}),
     ...(flowDeclarations ? { flows: flowDeclarations } : {}),
@@ -888,6 +933,10 @@ function collectImports(ctx: TransformContext) {
     addImport(ctx, 'react', 'useRef');
     addImport(ctx, 'react', 'useEffect');
   }
+  if (ctx.root.usesDataSources) {
+    addImport(ctx, 'react', 'useRef');
+    addImport(ctx, 'react', 'useEffect');
+  }
   if (ctx.root.usesLegacyData) {
     addImport(ctx, 'react', 'useRef');
   }
@@ -988,6 +1037,12 @@ function createTransformContext(root: RootNode): TransformContext {
     registry.reserveExact('flowRegistry', 'flow:registry');
     registry.reserveExact('executeChildFlow', 'flow:child-flow-executor');
     registry.reserveExact('executeFlow', 'flow:root-flow-executor');
+  }
+  if (root.usesDataSources) {
+    registry.reserveExact('__dataSourceRuns', 'data-source:runs-ref');
+    registry.reserveExact('__executeDataSource', 'data-source:executor');
+    registry.reserveExact('__deepFreezeJson', 'data-source:deep-freeze');
+    registry.reserveExact('dataSources', 'data-source:host-prop');
   }
   const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
   for (const name of reservedHandlerNames) {
@@ -2166,8 +2221,69 @@ function buildActionStatement(
         async: true,
       };
     }
+    case 'executeDataSource': {
+      const declaration = ctx.root.schema.logic?.dataSources?.[action.sourceId ?? ''] ?? undefined;
+      if (!action.sourceId || !declaration) {
+        throw new Error(
+          `executeDataSource: sourceId "${action.sourceId ?? ''}" is not declared in logic.dataSources (fail-close)`,
+        );
+      }
+      const paramsCode = declaration.params
+        ? getExpressionCode(
+            {
+              kind: 'object',
+              properties: Object.entries(declaration.params).map(([key, value]) => ({
+                key,
+                value: normalizeValue(value),
+              })),
+            },
+            'undefined',
+            ctxFields,
+            localScope,
+          )
+        : 'undefined';
+
+      const resultGeneratedBindings = new Set<string>();
+      if (action.resultTo) {
+        const fieldInfo = getFieldInfo(ctx, action.resultTo);
+        if (fieldInfo) resultGeneratedBindings.add(fieldInfo.setterName);
+      }
+      const capturedLocals = getCapturedLocals(
+        [],
+        localScope,
+        ctx,
+        ['dsResult'],
+        resultGeneratedBindings,
+      );
+      const resultHandler = registerNestedCodeHandler(
+        ownerHandlerName,
+        'OnResult',
+        ctx,
+        ['dsResult', ...capturedLocals],
+        () => {
+          // 取消/被取代/失败：不写 state、保留旧值（结构化结果仅 console 可见）
+          const resultLines: string[] = [
+            'if (dsResult.superseded || !dsResult.outcome?.ok) {',
+            "  if (!dsResult.superseded) console.error('executeDataSource failed:', dsResult.outcome);",
+            '  return;',
+            '}',
+          ];
+          if (action.resultTo) {
+            resultLines.push(resolveResultTarget(action.resultTo, ctx, 'dsResult.outcome.result'));
+          }
+          return { code: resultLines.join('\n'), async: false };
+        },
+        localScope,
+      );
+      return {
+        code: `__executeDataSource(${toQuotedString(action.sourceId)}, ${paramsCode})\n  .then(${buildCallbackReference(resultHandler.name, ['dsResult'], capturedLocals)})\n  .catch((error) => { console.error('executeDataSource failed:', error); });`,
+        async: false,
+      };
+    }
     default:
-      return { code: `/* Unknown action: ${escapeComment(String(action.type))} */`, async: false };
+      throw new Error(
+        `Unsupported action type for compiler: ${String(action.type)} (fail-close; unknown action types must never compile to silent no-ops)`,
+      );
   }
 }
 
@@ -2648,6 +2764,72 @@ ${indentBlock(onErrorSteps)}`
 }`;
     }
 
+    case 'executeDataSource': {
+      const declaration = ctx.root.schema.logic?.dataSources?.[action.sourceId ?? ''] ?? undefined;
+      if (!action.sourceId || !declaration) {
+        throw new Error(
+          `executeDataSource: sourceId "${action.sourceId ?? ''}" is not declared in logic.dataSources (fail-close)`,
+        );
+      }
+      const paramsCode = declaration.params
+        ? getExpressionCode(
+            {
+              kind: 'object',
+              properties: Object.entries(declaration.params).map(([key, value]) => ({
+                key,
+                value: normalizeValue(value),
+              })),
+            },
+            'undefined',
+            ctxFields,
+            localScope,
+          )
+        : 'undefined';
+
+      const varSuffix = sanitizeVarName(stepPath);
+      const resultValueCode = `dsResult_${varSuffix}.outcome.result`;
+      let resultToWrite = '';
+      if (action.resultTo && action.resultTo.startsWith('state.')) {
+        const statePath = sanitizeStatePath(
+          action.resultTo.slice('state.'.length),
+          !hasDeclaredPageState(ctx),
+        );
+        if (statePath) {
+          const nextStateCode =
+            statePath.length === 1
+              ? `({ ...state, ${toObjectKeyCode(statePath[0])}: ${resultValueCode} })`
+              : getNestedStateUpdateCode(statePath, resultValueCode);
+          resultToWrite = `flowContext.throwIfAborted(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+state = stateRef.current;
+state = ${nextStateCode};
+stateRef.current = state;
+${ctx.root.usesComputed ? 'computed = computePageLogic(state);\ncomputedRef.current = computed;' : ''}
+setState(state);`;
+        }
+      }
+      return `${preamble}
+const dsResult_${varSuffix} = await flowContext.executeWithAbortRace(
+  __executeDataSource(${toQuotedString(action.sourceId)}, ${paramsCode}, flowContext.signal),
+  ${flowKeyStr},
+  ${topStepIndexCode},
+  ${stepPathCode},
+);
+if (dsResult_${varSuffix}.superseded) {
+  throw flowContext.createAbortError(${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode});
+}
+if (!dsResult_${varSuffix}.outcome.ok) {
+  const outcome = dsResult_${varSuffix}.outcome;
+  throw flowContext.createError(
+    'FLOW_STEP_FAILED',
+    ${flowKeyStr},
+    ${topStepIndexCode},
+    ${stepPathCode},
+    'executeDataSource failed [' + outcome.code + ']' + (outcome.traceId ? ' (trace ' + outcome.traceId + ')' : '') + ': ' + outcome.message,
+    outcome,
+  );
+}
+${resultToWrite}`;
+    }
     default:
       return `${preamble}
 throw flowContext.createError('FLOW_STEP_FAILED', ${flowKeyStr}, ${topStepIndexCode}, ${stepPathCode}, 'Unsupported flow action type: ' + ${toQuotedString(action.type)});`;
@@ -3113,6 +3295,9 @@ export function transform(root: RootNode): void {
   if (root.usesFlows) {
     root.flowRuntimeCode = genFlowRuntime(root, ctx);
   }
+  if (root.usesDataSources) {
+    root.dataSourceRuntimeCode = genDataSourceRuntime();
+  }
   root.children = root.children.map((child) => {
     if (child.kind !== 'component') {
       return child;
@@ -3532,10 +3717,62 @@ function genHandlers(handlers: HandlerDeclaration[]): string {
   return handlers.map((handler) => handler.code).join('\n\n');
 }
 
+/**
+ * 数据源执行运行时（M1b-1 PR C）：宿主服务是唯一网络出口。
+ *
+ * - 组件实例内按 sourceId 代际（latest-started-wins）：启动新请求立即取消
+ *   旧请求；卸载时中止全部在途请求；
+ * - 缺宿主注入的 dataSources.execute 时确定性拒绝（无 fetch/apiCall 回退）；
+ * - 结果统一包装为 { superseded, outcome }：superseded 表示取消/被取代，
+ *   调用点据此丢弃结果且不进入错误路径。
+ */
+function genDataSourceRuntime(): string {
+  return `const __dataSourceRuns = useRef(new Map());
+useEffect(() => () => {
+  for (const controller of __dataSourceRuns.current.values()) controller.abort();
+  __dataSourceRuns.current.clear();
+}, []);
+const __deepFreezeJson = (value) => {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    for (const item of value) __deepFreezeJson(item);
+  } else {
+    for (const key of Object.keys(value)) __deepFreezeJson(value[key]);
+  }
+  return Object.freeze(value);
+};
+const __executeDataSource = (sourceId, params, extraSignal) => {
+  if (typeof dataSources?.execute !== 'function') {
+    return Promise.reject(new Error('executeDataSource requires host-injected "dataSources" service (no fetch/apiCall fallback)'));
+  }
+  // 参数安全 JSON 快照（review round 2：与 Renderer 一致——深拷贝 + 深冻结）：
+  // 调用时刻隔离后续 state 变异，且宿主拿到的快照逐层不可变
+  if (params !== undefined) {
+    params = __deepFreezeJson(JSON.parse(JSON.stringify(params)));
+  }
+  const runs = __dataSourceRuns.current;
+  runs.get(sourceId)?.abort();
+  const controller = new AbortController();
+  runs.set(sourceId, controller);
+  const signal = extraSignal ? AbortSignal.any([controller.signal, extraSignal]) : controller.signal;
+  // superseded 是写入点的活检查（review P1）：登记只被下一次同源请求或卸载替换，
+  // 绝不在完成时删除——守卫与实际写 state 之间不再存在可被新请求穿透的窗口
+  const supersededNow = () => runs.get(sourceId) !== controller || extraSignal?.aborted === true;
+  const wrap = (outcome) => ({ get superseded() { return supersededNow(); }, outcome });
+  return dataSources.execute({ sourceId, params }, signal).then((outcome) => wrap(outcome), (error) => {
+    if (controller.signal.aborted || extraSignal?.aborted) {
+      return wrap({ ok: false, code: 'ABORTED', message: 'aborted' });
+    }
+    throw error;
+  });
+};`;
+}
+
 export function generate(root: RootNode): string {
   const importsCode = genImports(root.imports);
   const stateHooksCode = genStateHooks(root);
   const flowRuntimeCode = root.flowRuntimeCode ?? '';
+  const dataSourceRuntimeCode = root.dataSourceRuntimeCode ?? '';
   const handlersCode = genHandlers(root.handlers);
   const rootNode = root.children[0];
   const jsxCode =
@@ -3543,10 +3780,19 @@ export function generate(root: RootNode): string {
       ? genJsx(rootNode.codegenNode)
       : '<></>';
 
-  const bodySections = [stateHooksCode, flowRuntimeCode, handlersCode, `return ${jsxCode};`].filter(
-    Boolean,
-  );
-  const lines = [importsCode, 'export default function GeneratedPage() {'];
+  const bodySections = [
+    stateHooksCode,
+    flowRuntimeCode,
+    dataSourceRuntimeCode,
+    handlersCode,
+    `return ${jsxCode};`,
+  ].filter(Boolean);
+  // 仅含 executeDataSource 的页面追加可选宿主 prop（缺省 fail-close），
+  // 其余页面签名保持字节不变
+  const componentSignature = root.usesDataSources
+    ? 'export default function GeneratedPage({ dataSources } = {}) {'
+    : 'export default function GeneratedPage() {';
+  const lines = [importsCode, componentSignature];
   if (bodySections.length > 0) {
     lines.push(indentBlock(bodySections.join('\n\n')));
   }
