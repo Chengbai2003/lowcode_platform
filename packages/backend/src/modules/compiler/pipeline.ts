@@ -1041,6 +1041,7 @@ function createTransformContext(root: RootNode): TransformContext {
   if (root.usesDataSources) {
     registry.reserveExact('__dataSourceRuns', 'data-source:runs-ref');
     registry.reserveExact('__executeDataSource', 'data-source:executor');
+    registry.reserveExact('__deepFreezeJson', 'data-source:deep-freeze');
     registry.reserveExact('dataSources', 'data-source:host-prop');
   }
   const reservedHandlerNames = new Set(root.handlers.map((handler) => handler.name));
@@ -3731,13 +3732,23 @@ useEffect(() => () => {
   for (const controller of __dataSourceRuns.current.values()) controller.abort();
   __dataSourceRuns.current.clear();
 }, []);
+const __deepFreezeJson = (value) => {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    for (const item of value) __deepFreezeJson(item);
+  } else {
+    for (const key of Object.keys(value)) __deepFreezeJson(value[key]);
+  }
+  return Object.freeze(value);
+};
 const __executeDataSource = (sourceId, params, extraSignal) => {
   if (typeof dataSources?.execute !== 'function') {
     return Promise.reject(new Error('executeDataSource requires host-injected "dataSources" service (no fetch/apiCall fallback)'));
   }
-  // 参数安全 JSON 快照：调用时刻深拷贝，后续 state 变异不影响已发出的请求
+  // 参数安全 JSON 快照（review round 2：与 Renderer 一致——深拷贝 + 深冻结）：
+  // 调用时刻隔离后续 state 变异，且宿主拿到的快照逐层不可变
   if (params !== undefined) {
-    params = JSON.parse(JSON.stringify(params));
+    params = __deepFreezeJson(JSON.parse(JSON.stringify(params)));
   }
   const runs = __dataSourceRuns.current;
   runs.get(sourceId)?.abort();

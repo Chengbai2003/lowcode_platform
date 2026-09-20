@@ -510,7 +510,7 @@ describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => 
       expect(harness.getState()).toMatchObject({ rows: { items: ['B'] } });
     });
 
-    it('P2 生成代码：对象参数 JSON 快照（深拷贝隔离，源对象后续变异不影响）', async () => {
+    it('P2 生成代码：对象参数 JSON 快照（深拷贝 + 深冻结，源对象与宿主均不可变更）', async () => {
       const code = await compileFixtureAsync(buildObjectParamsSchema() as unknown as PageSchema);
       const [clickHandler] = extractClickHandlerNames(code);
       const manual = createManualService();
@@ -527,6 +527,18 @@ describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => 
       expect(captured.filter).not.toBe(rendered.filter);
       rendered.filter.status = 'mutated';
       rendered.filter.tags.push('x');
+      expect(captured).toEqual({ filter: { status: 'active', tags: ['a', 'b'] } });
+
+      // 深冻结（review round 2）：与 Renderer 一致，宿主拿到的快照逐层不可变
+      expect(Object.isFrozen(captured)).toBe(true);
+      expect(Object.isFrozen(captured.filter)).toBe(true);
+      expect(Object.isFrozen(captured.filter.tags)).toBe(true);
+      try {
+        captured.filter.status = 'host-mutation';
+        captured.filter.tags.push('host-mutation');
+      } catch {
+        // strict 模式抛错同样证明不可变
+      }
       expect(captured).toEqual({ filter: { status: 'active', tags: ['a', 'b'] } });
     });
   });
