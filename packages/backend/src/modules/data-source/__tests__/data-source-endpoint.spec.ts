@@ -262,6 +262,46 @@ describe('DataSource execution endpoint (M1b-1 PR B / Refs #64)', () => {
     expect(upstream.countFor('/demo/items/search')).toBe(1);
   });
 
+  it('rejects body-carried pageId/sourceId overriding the path (review round 2, 异值)', async () => {
+    // URL 指向 endpoint-page/searchItems，body 携带另一页面/数据源：
+    // 覆盖通道必须在合并前拒绝，执行目标不得变成 body 指定的值
+    const response = await withSupportedDataSourceAsync(() =>
+      request(trustedApp.getHttpServer())
+        .post(executeUrl('endpoint-page', 'searchItems'))
+        .set('Authorization', 'Bearer test-secret')
+        .send({
+          pageVersion: 1,
+          pageId: 'body-page',
+          sourceId: 'bodySource',
+          params: { query: 'apple' },
+        }),
+    );
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_PARAMS');
+    expect(typeof response.body.traceId).toBe('string');
+    expect(response.body.message).toContain('path parameter');
+    // 零上游调用：计数保持前置用例的 1
+    expect(upstream.countFor('/demo/items/search')).toBe(1);
+  });
+
+  it('rejects body-carried pageId/sourceId even when identical to the path (review round 2, 同值)', async () => {
+    const response = await withSupportedDataSourceAsync(() =>
+      request(trustedApp.getHttpServer())
+        .post(executeUrl('endpoint-page', 'searchItems'))
+        .set('Authorization', 'Bearer test-secret')
+        .send({
+          pageVersion: 1,
+          pageId: 'endpoint-page',
+          sourceId: 'searchItems',
+        }),
+    );
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe('INVALID_PARAMS');
+    expect(typeof response.body.traceId).toBe('string');
+    expect(response.body.message).toContain('path parameter');
+    expect(upstream.countFor('/demo/items/search')).toBe(1);
+  });
+
   it('returns 404 for unknown pages', async () => {
     const response = await withSupportedDataSourceAsync(() =>
       request(trustedApp.getHttpServer())

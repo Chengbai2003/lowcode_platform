@@ -119,6 +119,34 @@ export class DataSourceExecutionService implements OnModuleInit {
     throw new DataSourceExecutionError(code, message, traceId);
   }
 
+  /**
+   * HTTP 端点入口：路径参数权威。
+   *
+   * 请求体携带 `pageId`/`sourceId`（无论与路径同值还是异值）一律
+   * `INVALID_PARAMS`——这两个字段在底层契约上是合法必填字段，若从 body
+   * 转发进请求对象将静默覆盖路径值（已审查确认的覆盖通道），因此必须在
+   * 合并前于本入口明确拒绝；其余未知字段仍原样透传给契约校验器 fail-close。
+   */
+  async executeFromRoute(
+    pageId: string,
+    sourceId: string,
+    body: unknown,
+  ): Promise<DataSourceExecutionSuccess> {
+    if (body && typeof body === 'object' && !Array.isArray(body)) {
+      const record = body as Record<string, unknown>;
+      for (const field of ['pageId', 'sourceId'] as const) {
+        if (Object.prototype.hasOwnProperty.call(record, field)) {
+          this.fail(
+            DATA_SOURCE_EXECUTION_ERROR_CODES.INVALID_PARAMS,
+            `Request body must not carry "${field}"; it is a path parameter (fail-close)`,
+            crypto.randomUUID(),
+          );
+        }
+      }
+    }
+    return this.execute(buildRouteRequest(pageId, sourceId, body));
+  }
+
   async execute(rawRequest: unknown): Promise<DataSourceExecutionSuccess> {
     const traceId = crypto.randomUUID();
 
@@ -276,6 +304,38 @@ export class DataSourceExecutionService implements OnModuleInit {
       }
     }
   }
+}
+
+/** 端点请求体允许字段；pageId/sourceId 由路径提供，出现在 body 即拒绝 */
+const ALLOWED_BODY_FIELDS = new Set(['pageVersion', 'params']);
+
+/**
+ * 合并路径参数与请求体为执行请求：pageId/sourceId 只取路径值；
+ * 未知字段（url/token 等）原样带上，由契约校验器 fail-close 并点名。
+ * 非对象请求体原样返回（契约校验器给出 INVALID_PARAMS + traceId）。
+ */
+function buildRouteRequest(pageId: string, sourceId: string, body: unknown): unknown {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return body ?? null;
+  }
+  const record = body as Record<string, unknown>;
+  const request: Record<string, unknown> = {
+    pageId,
+    pageVersion: record.pageVersion,
+    sourceId,
+  };
+  if (Object.prototype.hasOwnProperty.call(record, 'params')) {
+    request.params = record.params;
+  }
+  for (const field of Object.keys(record)) {
+    if (field === 'pageId' || field === 'sourceId') {
+      continue;
+    }
+    if (!ALLOWED_BODY_FIELDS.has(field)) {
+      request[field] = record[field];
+    }
+  }
+  return request;
 }
 
 /** GET 查询串序列化：仅标量；契约之外的形态已在输入契约处拒绝 */

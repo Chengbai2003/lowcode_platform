@@ -4,6 +4,7 @@
 > 依据：`m1b-0-readonly-data-source-design.md` §4–§5、`m1b-execution-plan.md` §4 PR B、ADR-0005、`m1b-a-protocol-freeze.md`。
 > 本记录锁定宿主执行协议与服务端执行边界；`data-source` 能力在 B 交付后仍保持六消费面默认 unsupported（生产清单字节不变），Renderer/Compiler 接线属 PR C。
 > 审查修正（review round 1）：① 深度超限与字节超限共用同一清理路径——违规即 `reader.cancel()` + abort 销毁连接（持续流测试证明错误返回后连接确实关闭）；传输层异常兜底 abort。② 输出契约违规详情（含上游控制的字段名）只进服务端日志，客户端收固定安全消息。③ 端点请求体以未类型化形式透传契约校验器，生产 ValidationPipe（whitelist/forbidNonWhitelisted/transform+隐式转换）不做转换/剥离/提前拒绝，端点测试装上同款管道验证一致性。
+> 审查修正（review round 2）：④ 端点请求体携带 `pageId`/`sourceId` 一律 `INVALID_PARAMS`（无论与路径同值或异值）——二者是底层契约的合法必填字段，从 body 转发即构成对路径参数的静默覆盖通道；拒绝发生在合并之前（`executeFromRoute` 入口），同值/异值均有测试并断言零上游调用。
 
 ## 1. 冻结的宿主执行协议（schema-contract `operations/`）
 
@@ -85,7 +86,9 @@
 
 `POST /api/v1/pages/:pageId/data-sources/:sourceId/execute`（AuthGuard 同其他控制器；路径参数权威，请求体只携带 `{ pageVersion, params? }`，未知体字段 fail-close）。模块接入 `AppModule`：默认部署（无适配器、无目标绑定、data-source unsupported）对所有请求确定性拒绝。
 
-请求体以**未类型化**形式透传（controller 不做 DTO 转换）：全局 ValidationPipe 对 metatype 为 `Object` 的参数不做 whitelist 剥离、不做隐式类型转换、不做提前裸 400，生产入口与契约校验器完全一致——`pageVersion: true`/`"1"`/缺失/未知字段都得到带 traceId 的 `INVALID_PARAMS`，而非被管道静默转换成合法值或收到无错误码的 400。端点测试装配与 `main.ts` 相同选项的生产管道验证该一致性。
+请求体以**未类型化**形式交给服务层端点入口 `executeFromRoute`（controller 不做 DTO 转换）：全局 ValidationPipe 对 metatype 为 `Object` 的参数不做 whitelist 剥离、不做隐式类型转换、不做提前裸 400，生产入口与契约校验器完全一致——`pageVersion: true`/`"1"`/缺失/未知字段都得到带 traceId 的 `INVALID_PARAMS`，而非被管道静默转换成合法值或收到无错误码的 400。端点测试装配与 `main.ts` 相同选项的生产管道验证该一致性。
+
+**路径参数权威**：`pageId`/`sourceId` 只来自 URL 路径；请求体携带二者（无论同值或异值）在合并前即被拒绝（`INVALID_PARAMS` + traceId、零上游调用）——它们是底层契约的合法必填字段，从 body 转发即构成对路径值的静默覆盖通道。合并时 body 的未知字段（url/token 等）仍原样透传给契约校验器 fail-close 并点名。
 
 ## 4. 证据（全部真实链路，loopback 受控上游）
 
@@ -104,6 +107,7 @@
 | 输出契约违规不泄露上游字段名（客户端固定安全消息）                                          | kernel「never leaks upstream-controlled field names in the output-contract message (review P2)」                                                               |
 | 非 JSON / 输出契约各分支（请求后拒绝，计数 1）                                              | kernel「rejects invalid JSON」「rejects output contract violations」it.each×6                                                                                  |
 | 生产 ValidationPipe 下契约语义一致（true/"1"/缺失 pageVersion 均 INVALID_PARAMS + traceId） | endpoint「keeps contract semantics under the production ValidationPipe (review P2)」                                                                           |
+| body 携带 pageId/sourceId 覆盖路径（同值/异值均 INVALID_PARAMS + traceId，零上游）          | endpoint「rejects body-carried pageId/sourceId overriding the path (review round 2, 异值)」「…even when identical to the path (…, 同值)」                      |
 | 5xx / 重定向不跟随（重定向目标计数 0）/ 连接拒绝 / 超时（504 且服务端观测中止）             | kernel 对应用例                                                                                                                                                |
 | 消息脱敏（不含 host/端口/URL）                                                              | `expectSanitizedMessage` 应用于全部失败用例                                                                                                                    |
 | loopback 解析矩阵 / 注册表精确匹配                                                          | `trusted-operation-registry.spec.ts`                                                                                                                           |
