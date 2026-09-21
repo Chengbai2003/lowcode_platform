@@ -11,6 +11,24 @@ export interface TrustedParamIssues {
   readonly issues: readonly { readonly path: readonly string[]; readonly message: string }[];
 }
 
+/**
+ * 结构化参数契约（PR D）：Agent 目录与编辑器配置面的单一事实源。
+ * `validateParams` 由该契约派生（createParamsValidator），
+ * 不允许形成两份独立规则。
+ */
+export interface TrustedParamFieldContract {
+  readonly type: 'string' | 'integer';
+  readonly required: boolean;
+  /** string 类型：最大长度（含） */
+  readonly maxLength?: number;
+  /** integer 类型：最小值（含） */
+  readonly min?: number;
+  /** integer 类型：最大值（含） */
+  readonly max?: number;
+}
+
+export type TrustedParamsContract = Readonly<Record<string, TrustedParamFieldContract>>;
+
 export interface TrustedOperationDefinition {
   /** 精确引用的 operationId（点分标识） */
   readonly operationId: string;
@@ -23,19 +41,79 @@ export interface TrustedOperationDefinition {
   readonly kind: 'readonly-query';
   /** 执行所需权限；身份来自服务端可信适配器，params 无法授予 */
   readonly requiredPermission: string;
+  /** 输入契约的结构化描述（目录/配置面公开；validateParams 的唯一来源） */
+  readonly paramsContract: TrustedParamsContract;
   /** 宿主限额默认值：可信宿主只可下调，不可放宽 */
   readonly limits: DataSourceExecutionLimits;
   /** 上游目标约束：demo 操作只允许 loopback，任何部署不得指向公网 */
   readonly targetConstraint: 'loopback-only';
   /** 传输形态：GET + 查询串（参数已按输入契约校验后序列化） */
   readonly transport: { readonly method: 'GET' };
-  /** 输入契约：只接受白名单键，逐键类型/边界校验 */
+  /** 输入契约：只接受白名单键，逐键类型/边界校验（由 paramsContract 派生） */
   validateParams(value: Readonly<Record<string, JsonValue>>): TrustedParamIssues;
   /** 输出契约：结构、字段白名单、记录数与节点预算 */
   validateOutput(value: unknown): TrustedParamIssues;
 }
 
 export type ValidateParamsResult = TrustedParamIssues;
+
+/**
+ * 由结构化契约派生输入校验器（PR D 单一事实源）。
+ * 诊断消息与既有内联实现保持逐字一致（行为回归红线）。
+ */
+export function createParamsValidator(
+  operationId: string,
+  contract: TrustedParamsContract,
+): (value: Readonly<Record<string, JsonValue>>) => TrustedParamIssues {
+  return (value: Readonly<Record<string, JsonValue>>): TrustedParamIssues => {
+    const issues: { path: readonly string[]; message: string }[] = [];
+    for (const key of Object.keys(value)) {
+      if (!Object.prototype.hasOwnProperty.call(contract, key)) {
+        issues.push(paramIssue(['params', key], `Unknown param "${key}" for ${operationId}`));
+      }
+    }
+    for (const key of Object.keys(contract)) {
+      const field = contract[key];
+      const raw = Object.getOwnPropertyDescriptor(value, key);
+      const fieldValue = raw ? raw.value : undefined;
+      if (fieldValue === undefined) {
+        if (field.required) {
+          issues.push(paramIssue(['params', key], `Param "${key}" is required`));
+        }
+        continue;
+      }
+      if (field.type === 'string') {
+        if (typeof fieldValue !== 'string') {
+          issues.push(paramIssue(['params', key], `Param "${key}" must be a string`));
+        } else if (field.maxLength !== undefined && fieldValue.length > field.maxLength) {
+          issues.push(
+            paramIssue(
+              ['params', key],
+              `Param "${key}" length (${fieldValue.length}) exceeded limit of ${field.maxLength}`,
+            ),
+          );
+        }
+        continue;
+      }
+      const min = field.min === undefined ? Number.NEGATIVE_INFINITY : field.min;
+      const max = field.max === undefined ? Number.POSITIVE_INFINITY : field.max;
+      if (
+        typeof fieldValue !== 'number' ||
+        !Number.isSafeInteger(fieldValue) ||
+        fieldValue < min ||
+        fieldValue > max
+      ) {
+        issues.push(
+          paramIssue(
+            ['params', key],
+            `Param "${key}" must be an integer between ${min} and ${max}`,
+          ),
+        );
+      }
+    }
+    return { issues };
+  };
+}
 
 const MAX_QUERY_LENGTH = 128;
 const MAX_ITEM_ID_LENGTH = 64;
@@ -56,6 +134,11 @@ function paramIssue(
  * 该操作是隔离演示/测试操作：目标只能由可信宿主配置解析到 loopback，
  * 生产默认配置不提供目标（未配置即 FORBIDDEN，绝不落到公网默认例外）。
  */
+const DEMO_ITEMS_SEARCH_PARAMS_CONTRACT: TrustedParamsContract = Object.freeze({
+  query: Object.freeze({ type: 'string', required: false, maxLength: MAX_QUERY_LENGTH }),
+  limit: Object.freeze({ type: 'integer', required: false, min: 1, max: 50 }),
+});
+
 const DEMO_ITEMS_SEARCH: TrustedOperationDefinition = Object.freeze({
   operationId: 'demo.items.search',
   revision: '1',
@@ -63,6 +146,7 @@ const DEMO_ITEMS_SEARCH: TrustedOperationDefinition = Object.freeze({
   description: 'Read-only demo item search backed by an isolated loopback service.',
   kind: 'readonly-query',
   requiredPermission: 'data-source:demo.items.search:execute',
+  paramsContract: DEMO_ITEMS_SEARCH_PARAMS_CONTRACT,
   limits: Object.freeze({
     deadlineMs: 10_000,
     maxResponseBytes: 1024 * 1024,
@@ -71,36 +155,7 @@ const DEMO_ITEMS_SEARCH: TrustedOperationDefinition = Object.freeze({
   targetConstraint: 'loopback-only',
   transport: Object.freeze({ method: 'GET' }),
 
-  validateParams(value: Readonly<Record<string, JsonValue>>): TrustedParamIssues {
-    const issues: { path: readonly string[]; message: string }[] = [];
-    for (const key of Object.keys(value)) {
-      if (key !== 'query' && key !== 'limit') {
-        issues.push(paramIssue(['params', key], `Unknown param "${key}" for demo.items.search`));
-      }
-    }
-    const query = value.query;
-    if (query !== undefined) {
-      if (typeof query !== 'string') {
-        issues.push(paramIssue(['params', 'query'], 'Param "query" must be a string'));
-      } else if (query.length > MAX_QUERY_LENGTH) {
-        issues.push(
-          paramIssue(
-            ['params', 'query'],
-            `Param "query" length (${query.length}) exceeded limit of ${MAX_QUERY_LENGTH}`,
-          ),
-        );
-      }
-    }
-    const limit = value.limit;
-    if (limit !== undefined) {
-      if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > 50) {
-        issues.push(
-          paramIssue(['params', 'limit'], 'Param "limit" must be an integer between 1 and 50'),
-        );
-      }
-    }
-    return { issues };
-  },
+  validateParams: createParamsValidator('demo.items.search', DEMO_ITEMS_SEARCH_PARAMS_CONTRACT),
 
   validateOutput(value: unknown): TrustedParamIssues {
     const issues: { path: readonly string[]; message: string }[] = [];
@@ -213,6 +268,7 @@ export function listTrustedOperationSummaries(): readonly {
   readonly title: string;
   readonly description: string;
   readonly kind: TrustedOperationDefinition['kind'];
+  readonly paramsContract: TrustedParamsContract;
 }[] {
   return TRUSTED_OPERATIONS.map((entry) => ({
     operationId: entry.operationId,
@@ -220,5 +276,11 @@ export function listTrustedOperationSummaries(): readonly {
     title: entry.title,
     description: entry.description,
     kind: entry.kind,
+    paramsContract: entry.paramsContract,
   }));
+}
+
+/** 目录过滤用的内部全量定义访问（含 requiredPermission，不对外暴露） */
+export function listTrustedOperationDefinitions(): readonly TrustedOperationDefinition[] {
+  return TRUSTED_OPERATIONS;
 }

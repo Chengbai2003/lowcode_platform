@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { PageSchemaModule } from '../page-schema/page-schema.module';
 import { PageSchemaService } from '../page-schema/page-schema.service';
+import { DataSourceCatalogController } from './data-source-catalog.controller';
+import { DataSourceCatalogService } from './data-source-catalog.service';
 import { DataSourceController } from './data-source.controller';
 import { DataSourceExecutor } from './data-source-executor';
 import { DataSourceExecutionService } from './data-source-execution.service';
@@ -11,18 +13,19 @@ import {
 import { DATA_SOURCE_UPSTREAM_TARGETS, EMPTY_UPSTREAM_TARGETS } from './upstream-targets.provider';
 
 /**
- * 只读数据源执行模块（M1b-1 PR B）。
+ * 只读数据源执行模块（M1b-1 PR B；PR D 增目录）。
  *
- * 默认部署即 fail-close：身份适配器未配置（所有请求 FORBIDDEN）、
+ * 默认部署即 fail-close：身份适配器未配置（所有请求 FORBIDDEN、目录为空）、
  * 上游目标绑定为空（FORBIDDEN）、data-source 能力六面 unsupported
  * （CAPABILITY_DENIED）——端点存在但不开放匿名生产路由。可信测试配置
  * 通过 overrideProvider 注入测试身份与 loopback 目标绑定，不修改生产默认。
  */
 @Module({
   imports: [PageSchemaModule],
-  controllers: [DataSourceController],
+  controllers: [DataSourceController, DataSourceCatalogController],
   providers: [
     DataSourceExecutor,
+    DataSourceCatalogService,
     { provide: DataSourceIdentityAdapter, useClass: UnconfiguredDataSourceIdentityAdapter },
     { provide: DATA_SOURCE_UPSTREAM_TARGETS, useValue: EMPTY_UPSTREAM_TARGETS },
     {
@@ -47,6 +50,6 @@ import { DATA_SOURCE_UPSTREAM_TARGETS, EMPTY_UPSTREAM_TARGETS } from './upstream
       ],
     },
   ],
-  exports: [DataSourceExecutionService],
+  exports: [DataSourceExecutionService, DataSourceCatalogService, DataSourceIdentityAdapter],
 })
 export class DataSourceModule {}

@@ -6,6 +6,7 @@ import type { FC, SVGProps } from 'react';
 import {
   Variable,
   Database,
+  Search,
   MessageSquare,
   ArrowRight,
   LayoutTemplate,
@@ -29,6 +30,7 @@ export const ACTION_TYPE = {
   delay: 'delay',
   log: 'log',
   runFlow: 'runFlow',
+  executeDataSource: 'executeDataSource',
 } as const;
 
 /** 保留历史读取：customScript 已永久禁用，仅用于识别历史数据 */
@@ -48,6 +50,10 @@ export type LogActionItem = Extract<Action, { type: typeof ACTION_TYPE.log }>;
 export type IfActionItem = Extract<Action, { type: typeof ACTION_TYPE.if }>;
 export type LoopActionItem = Extract<Action, { type: typeof ACTION_TYPE.loop }>;
 export type RunFlowActionItem = Extract<Action, { type: typeof ACTION_TYPE.runFlow }>;
+export type ExecuteDataSourceActionItem = Extract<
+  Action,
+  { type: typeof ACTION_TYPE.executeDataSource }
+>;
 /** 历史 customScript 类型，仅用于展示禁用态 */
 /** 历史customScript动作形状：Schema联合已移除该类型，仅用于只读提示 */
 export type HistoricCustomScriptActionItem = { type: 'customScript'; code?: string };
@@ -132,6 +138,13 @@ export const ACTION_TYPE_CONFIG: Record<
     bg: 'bg-violet-100',
     title: '运行流程',
     desc: '调用页面中已声明的 ActionFlow',
+  },
+  [ACTION_TYPE.executeDataSource]: {
+    icon: Search,
+    color: 'text-teal-600',
+    bg: 'bg-teal-100',
+    title: '数据源查询',
+    desc: '经宿主服务执行声明的只读操作',
   },
 };
 

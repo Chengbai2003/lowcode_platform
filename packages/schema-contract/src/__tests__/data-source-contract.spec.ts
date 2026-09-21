@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { PageSchema } from '../types/schema';
@@ -10,6 +10,17 @@ import {
   SCHEMA_CAPABILITIES,
 } from '../capabilities/types';
 import { createTestCapabilityMatrix } from '../capabilities/manifest';
+
+// PR D：可信矩阵放行 data-source 需同时处于 operation-only 策略（legacy 拒绝新能力）。
+// 仅在该用例内切换，其余用例保持生产默认（legacy）。
+const policyState = vi.hoisted(() => ({ policy: 'legacy' as 'legacy' | 'operation-only' }));
+vi.mock('../capabilities/policy', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../capabilities/policy')>();
+  return {
+    ...actual,
+    getTrustedExecutionPolicy: () => policyState.policy,
+  };
+});
 import { detectPageSchemaCapabilities } from '../capabilities/detect';
 import { evaluatePageSchemaCapabilities } from '../capabilities/evaluate';
 import { analyzeActionFlowDeclarations } from '../action-flow';
@@ -437,16 +448,21 @@ describe('M1b-1 PR A: DataSource Declarations & executeDataSource Contract (Refs
       }
     });
 
-    it('trusted-test matrix with data-source supported accepts the same schema（证明拒绝来自能力门禁而非结构）', () => {
+    it('trusted-test matrix with data-source supported accepts the same schema under operation-only（证明拒绝来自能力门禁而非结构；PR D 起 legacy 策略额外拒绝新能力）', () => {
       const supportedAll: Record<string, unknown> = {};
       for (const surface of CONSUMER_SURFACES) {
         supportedAll[surface] = { status: 'supported', revision: 1 };
       }
       const matrix = createTestCapabilityMatrix({ 'data-source': supportedAll });
-      const result = evaluatePageSchemaCapabilities(fixture.schema, matrix);
-      expect(result.ok).toBe(true);
-      expect(result.issues).toEqual([]);
-      expect(SCHEMA_CAPABILITIES).toContain('data-source');
+      policyState.policy = 'operation-only';
+      try {
+        const result = evaluatePageSchemaCapabilities(fixture.schema, matrix);
+        expect(result.ok).toBe(true);
+        expect(result.issues).toEqual([]);
+        expect(SCHEMA_CAPABILITIES).toContain('data-source');
+      } finally {
+        policyState.policy = 'legacy';
+      }
     });
   });
 

@@ -1,0 +1,169 @@
+{
+  "baseSchema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "childrenIds": ["searchBtn"]
+      },
+      "searchBtn": {
+        "id": "searchBtn",
+        "type": "Button",
+        "props": {
+          "children": "查询"
+        },
+        "events": {
+          "onClick": [
+            {
+              "type": "log",
+              "value": {
+                "type": "literal",
+                "value": "before"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "patch": [
+    {
+      "op": "replacePageLogic",
+      "logic": {
+        "states": {
+          "query": "",
+          "rows": []
+        },
+        "dataSources": {
+          "searchItems": {
+            "operationRef": {
+              "operationId": "demo.items.search",
+              "revision": "1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "bindEvent",
+      "componentId": "searchBtn",
+      "event": "onClick",
+      "actions": [
+        {
+          "type": "executeDataSource",
+          "sourceId": "searchItems",
+          "resultTo": "state.rows"
+        }
+      ]
+    }
+  ],
+  "expectedSchema": {
+    "schemaVersion": 0,
+    "rootId": "root",
+    "components": {
+      "root": {
+        "id": "root",
+        "type": "Page",
+        "childrenIds": ["searchBtn"]
+      },
+      "searchBtn": {
+        "id": "searchBtn",
+        "type": "Button",
+        "props": {
+          "children": "查询"
+        },
+        "events": {
+          "onClick": [
+            {
+              "type": "executeDataSource",
+              "sourceId": "searchItems",
+              "resultTo": "state.rows"
+            }
+          ]
+        }
+      }
+    },
+    "logic": {
+      "states": {
+        "query": "",
+        "rows": []
+      },
+      "dataSources": {
+        "searchItems": {
+          "operationRef": {
+            "operationId": "demo.items.search",
+            "revision": "1"
+          }
+        }
+      }
+    }
+  },
+  "compiledCode": "import React, { useEffect, useRef, useState } from \"react\";\nimport { message } from \"antd\";\nimport { Button, Page } from \"@lowcode-platform/preset-antd/runtime\";\nexport default function GeneratedPage({ dataSources } = {}) {\n  const [state, setState] = useState({ query: \"\", rows: [] });\n\n  const __dataSourceRuns = useRef(new Map());\n  useEffect(() => () => {\n    for (const controller of __dataSourceRuns.current.values()) controller.abort();\n    __dataSourceRuns.current.clear();\n  }, []);\n  const __deepFreezeJson = (value) => {\n    if (value === null || typeof value !== 'object') return value;\n    if (Array.isArray(value)) {\n      for (const item of value) __deepFreezeJson(item);\n    } else {\n      for (const key of Object.keys(value)) __deepFreezeJson(value[key]);\n    }\n    return Object.freeze(value);\n  };\n  const __executeDataSource = (sourceId, params, extraSignal) => {\n    if (typeof dataSources?.execute !== 'function') {\n      return Promise.reject(new Error('executeDataSource requires host-injected \"dataSources\" service (no fetch/apiCall fallback)'));\n    }\n    // 参数安全 JSON 快照（review round 2：与 Renderer 一致——深拷贝 + 深冻结）：\n    // 调用时刻隔离后续 state 变异，且宿主拿到的快照逐层不可变\n    if (params !== undefined) {\n      params = __deepFreezeJson(JSON.parse(JSON.stringify(params)));\n    }\n    const runs = __dataSourceRuns.current;\n    runs.get(sourceId)?.abort();\n    const controller = new AbortController();\n    runs.set(sourceId, controller);\n    const signal = extraSignal ? AbortSignal.any([controller.signal, extraSignal]) : controller.signal;\n    // superseded 是写入点的活检查（review P1）：登记只被下一次同源请求或卸载替换，\n    // 绝不在完成时删除——守卫与实际写 state 之间不再存在可被新请求穿透的窗口\n    const supersededNow = () => runs.get(sourceId) !== controller || extraSignal?.aborted === true;\n    const wrap = (outcome) => ({ get superseded() { return supersededNow(); }, outcome });\n    return dataSources.execute({ sourceId, params }, signal).then((outcome) => wrap(outcome), (error) => {\n      if (controller.signal.aborted || extraSignal?.aborted) {\n        return wrap({ ok: false, code: 'ABORTED', message: 'aborted' });\n      }\n      throw error;\n    });\n  };\n\n  const handleSearchBtnClick = () => {\n    __executeDataSource(\"searchItems\", undefined)\n      .then(handleSearchBtnClickOnResult)\n      .catch((error) => { console.error('executeDataSource failed:', error); });\n  };\n\n  const handleSearchBtnClickOnResult = (dsResult) => {\n    if (dsResult.superseded || !dsResult.outcome?.ok) {\n      if (!dsResult.superseded) console.error('executeDataSource failed:', dsResult.outcome);\n      return;\n    }\n    setState((state) => ({ ...state, rows: dsResult.outcome.result }));\n  };\n\n  return <Page><Button onClick={handleSearchBtnClick}>查询</Button></Page>;\n}",
+  "endpointSamples": {
+    "saveSuccess": {
+      "success": true,
+      "data": {
+        "pageId": "m1b-d-closure-page",
+        "pageVersion": 2,
+        "snapshotId": "<uuid>",
+        "savedAt": "<timestamp>"
+      },
+      "message": "Success",
+      "timestamp": "<timestamp>",
+      "path": "<path>"
+    },
+    "executeSuccess": {
+      "success": true,
+      "data": {
+        "ok": true,
+        "result": {
+          "items": [
+            {
+              "id": "item-1",
+              "title": "Apple Pie",
+              "price": 12
+            },
+            {
+              "id": "item-2",
+              "title": "Apple Juice",
+              "price": 8
+            }
+          ]
+        },
+        "operationId": "demo.items.search",
+        "revision": "1",
+        "traceId": "<uuid>"
+      },
+      "message": "Success",
+      "timestamp": "<timestamp>",
+      "path": "<path>"
+    },
+    "executeInvalidParams": {
+      "statusCode": 400,
+      "code": "INVALID_PARAMS",
+      "message": "Params do not match operation input contract: [params.limit] Param \"limit\" must be an integer between 1 and 50",
+      "error": "Bad Request",
+      "timestamp": "<timestamp>",
+      "path": "<path>",
+      "traceId": "<uuid>"
+    },
+    "executeForbidden": {
+      "statusCode": 403,
+      "code": "FORBIDDEN",
+      "message": "No trusted identity is available for data source execution",
+      "error": "Forbidden",
+      "timestamp": "<timestamp>",
+      "path": "<path>",
+      "traceId": "<uuid>"
+    },
+    "executeUnauthorized": {
+      "statusCode": 401,
+      "message": "Authentication token is missing. Format: Authorization: Bearer <token>",
+      "error": "Unauthorized",
+      "timestamp": "<timestamp>",
+      "path": "<path>"
+    }
+  }
+}

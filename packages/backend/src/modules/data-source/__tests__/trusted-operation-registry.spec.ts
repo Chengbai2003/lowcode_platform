@@ -16,10 +16,12 @@ describe('Trusted operation registry (M1b-1 PR B)', () => {
     expect(summaries[0].revision).toBe('1');
     expect(summaries[0].kind).toBe('readonly-query');
     // 公开目录不携带目标地址或权限细节
+    // 公开目录不携带目标地址或权限细节（PR D 起增结构化 paramsContract）
     expect(Object.keys(summaries[0]).sort()).toEqual([
       'description',
       'kind',
       'operationId',
+      'paramsContract',
       'revision',
       'title',
     ]);

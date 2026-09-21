@@ -5,6 +5,7 @@ import { antdPreset } from '@lowcode-platform/preset-antd';
 import type { PageSchema } from '../../types';
 import { useEditorStore } from '../store/editor-store';
 import { pageSchemaApi } from '../services/pageSchemaApi';
+import type { DataSourcePreviewBinding } from '../services/dataSourceHostApi';
 import { BUILTIN_RENDERER_PRESET_CATALOG } from '../../renderer-preset-catalog';
 
 /**
@@ -23,6 +24,8 @@ interface Params {
   setPreset?: (preset: ComponentPreset) => void;
   setPageLoadError?: (error: string | null) => void;
   onErrorRef: React.MutableRefObject<((msg: string) => void) | undefined>;
+  /** PR D 数据源预览绑定：加载成功时铸造 {pageId,pageVersion,schemaRevision,generation} */
+  onSnapshotBound?: (snapshot: DataSourcePreviewBinding) => void;
 }
 
 export function usePageLifecycle({
@@ -33,6 +36,7 @@ export function usePageLifecycle({
   setPreset,
   setPageLoadError,
   onErrorRef,
+  onSnapshotBound,
 }: Params) {
   const initialRef = useRef(initialSchemaObj);
   useEffect(() => {
@@ -78,6 +82,12 @@ export function usePageLifecycle({
         setPageVersion(result.pageVersion);
         setPreset?.(resolvedPreset);
         setPageLoadError?.(null);
+        onSnapshotBound?.({
+          pageId: pageIdParam,
+          pageVersion: result.pageVersion,
+          schemaRevision: useEditorStore.getState().schemaRevision,
+          generation: requestGeneration,
+        });
       })
       .catch(async (error: unknown) => {
         if (cancelled) return;
@@ -129,6 +139,12 @@ export function usePageLifecycle({
             setPageVersion(verified.pageVersion);
             setPreset?.(resolvedPreset);
             setPageLoadError?.(null);
+            onSnapshotBound?.({
+              pageId: pageIdParam,
+              pageVersion: verified.pageVersion,
+              schemaRevision: useEditorStore.getState().schemaRevision,
+              generation: requestGeneration,
+            });
             message.info(`已为页面 ${pageIdParam} 初始化默认 Schema`);
           } catch (bootstrapError) {
             if (cancelled) return;
@@ -160,5 +176,5 @@ export function usePageLifecycle({
     return () => {
       cancelled = true;
     };
-  }, [pageId, setSchema, setPageVersion, setPreset, setPageLoadError, onErrorRef]);
+  }, [pageId, setSchema, setPageVersion, setPreset, setPageLoadError, onErrorRef, onSnapshotBound]);
 }
