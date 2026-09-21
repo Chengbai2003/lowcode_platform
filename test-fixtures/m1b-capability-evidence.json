@@ -19,9 +19,7 @@
     }
   },
   "keyGroups": {
-    "trustedManifestRegistry": [
-      "ev-m1b-trusted-manifest-registry"
-    ],
+    "trustedManifestRegistry": ["ev-m1b-trusted-manifest-registry"],
     "ingressRejections": {
       "pageSchemaServiceSave": "ev-m1b-ingress-save",
       "repositoryDirectSave": "ev-m1b-ingress-repo",
@@ -33,9 +31,7 @@
       "compilerServiceCompile": "ev-m1b-ingress-compiler-service",
       "compilerDirectCompile": "ev-m1b-ingress-compiler-direct"
     },
-    "agentEarlyRejections": [
-      "ev-m1b-ingress-agent-bindevent"
-    ],
+    "agentEarlyRejections": ["ev-m1b-ingress-agent-bindevent"],
     "regressions": [
       "ev-m1b-reg-apicall-save",
       "ev-m1b-reg-bindevent-apicall",
@@ -114,7 +110,7 @@
       "package": "packages/backend",
       "runner": "jest",
       "testFile": "packages/backend/src/modules/agent-tools/__tests__/m1b-datasource-ingress.spec.ts",
-      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4c: bindEvent / insertComponent 携带 executeDataSource（动作白名单提前拒绝） bindEvent rejects executeDataSource actions at the agent action whitelist before any patch is applied",
+      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4c: bindEvent / insertComponent 携带 executeDataSource（PR D 白名单放行后由能力校验拒绝） bindEvent allows the action type at the whitelist but rejects the resulting schema with CAPABILITY_UNSUPPORTED",
       "description": "Agent 动作白名单：bindEvent 携带 executeDataSource 在写入前提前拒绝（等效 fail-close）"
     },
     {
@@ -162,7 +158,7 @@
       "package": "packages/backend",
       "runner": "jest",
       "testFile": "packages/backend/src/modules/agent-tools/__tests__/m1b-datasource-ingress.spec.ts",
-      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4c: bindEvent / insertComponent 携带 executeDataSource（动作白名单提前拒绝） regression: bindEvent with core actions (apiCall/setValue) still passes",
+      "fullName": "Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64) entrance 4c: bindEvent / insertComponent 携带 executeDataSource（PR D 白名单放行后由能力校验拒绝） regression: bindEvent with core actions (apiCall/setValue) still passes",
       "description": "回归：Agent bindEvent 核心动作（apiCall/setValue）照常通过"
     },
     {

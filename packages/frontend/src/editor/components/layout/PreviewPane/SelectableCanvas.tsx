@@ -16,6 +16,8 @@ interface SelectableCanvasProps {
   pageId: string;
   documentSessionId: string;
   eventContext: Record<string, unknown>;
+  /** PR D：透传给 Renderer 的宿主能力（如 dataResources） */
+  hostCapabilities?: Record<string, unknown>;
   isPreviewMode?: boolean;
 }
 
@@ -24,7 +26,15 @@ interface SelectableCanvasProps {
  * 为渲染的组件添加选中、悬停交互功能
  */
 export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
-  ({ schema, preset, pageId, documentSessionId, eventContext, isPreviewMode = false }) => {
+  ({
+    schema,
+    preset,
+    pageId,
+    documentSessionId,
+    eventContext,
+    hostCapabilities,
+    isPreviewMode = false,
+  }) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Selection store
@@ -166,6 +176,7 @@ export const SelectableCanvas: React.FC<SelectableCanvasProps> = memo(
                 pageId={pageId}
                 documentSessionId={documentSessionId}
                 eventContext={eventContext}
+                hostCapabilities={hostCapabilities}
                 onComponentClick={isPreviewMode ? undefined : handleComponentClick}
               />
             </LowcodeProvider>

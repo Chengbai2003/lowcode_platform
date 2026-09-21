@@ -2,9 +2,11 @@ import { Injectable, Optional } from '@nestjs/common';
 import { ComponentMetaRegistry } from '../schema-context/component-metadata/component-meta.registry';
 import { CollectionTargetResolverService } from '../schema-context/collection-target-resolver.service';
 import { ContextAssemblerService } from '../schema-context/context-assembler.service';
+import { DataSourceCatalogService } from '../data-source/data-source-catalog.service';
 import { PatchAutoFixService } from './patch-auto-fix.service';
 import { PatchValidationService } from './patch-validation.service';
 import { ToolDefinition, ToolExecutionContext, ToolVisibility } from './types/tool.types';
+import { createCatalogDefinitions } from './definitions/catalog.tools';
 import { createInternalDefinitions } from './definitions/internal.tools';
 import { createReadDefinitions } from './definitions/read.tools';
 import { createWriteDefinitions } from './definitions/write.tools';
@@ -33,6 +35,7 @@ export class ToolRegistryService {
     private readonly patchAutoFixService: PatchAutoFixService,
     private readonly patchValidationService: PatchValidationService,
     @Optional() private readonly deploymentRegistry?: DeploymentRuntimeProfileRegistry,
+    @Optional() private readonly dataSourceCatalogService?: DataSourceCatalogService,
   ) {
     this.registerTools();
   }
@@ -73,6 +76,9 @@ export class ToolRegistryService {
       ...createInternalDefinitions({
         patchAutoFixService: this.patchAutoFixService,
         patchValidationService: this.patchValidationService,
+      }),
+      ...createCatalogDefinitions({
+        dataSourceCatalogService: this.dataSourceCatalogService,
       }),
     ];
 

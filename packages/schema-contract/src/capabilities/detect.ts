@@ -194,3 +194,24 @@ export function detectPageSchemaCapabilities(
 
   return detected;
 }
+
+/**
+ * 递归收集 canonical PageSchema 中全部 apiCall 出现位置（PR D 执行策略用）。
+ *
+ * 覆盖与 executeDataSource 检测完全相同的合法位置：组件事件绑定与
+ * ActionFlow 的 steps / onError，含 then/else/actions/onSuccess/onError/
+ * onOk/onCancel 全部嵌套 ActionList 容器。纯 apiCall 页面（未触发任何
+ * 语义能力）也会被完整扫描。
+ */
+export function detectPageSchemaApiCallUsage(
+  schema: PageSchema,
+): readonly (readonly (string | number)[])[] {
+  const apiCallPaths: (readonly (string | number)[])[] = [];
+  if (!schema || typeof schema !== 'object') {
+    return apiCallPaths;
+  }
+  forEachActionListContainer(schema, (actions, basePath) => {
+    scanActionListForType(actions, basePath, 'apiCall', apiCallPaths);
+  });
+  return apiCallPaths;
+}

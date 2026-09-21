@@ -2,6 +2,7 @@ import React from 'react';
 import {
   X,
   Database,
+  Search,
   Variable,
   MessageSquare,
   ArrowRight,
@@ -52,6 +53,14 @@ const ACTION_TYPES: {
     bg: 'bg-purple-100',
     title: 'API 请求',
     desc: '发送 HTTP 请求',
+  },
+  {
+    type: 'executeDataSource',
+    icon: Search,
+    color: 'text-teal-600',
+    bg: 'bg-teal-100',
+    title: '数据源查询',
+    desc: '经宿主服务执行声明的只读操作（先保存再查询）',
   },
   {
     type: 'navigate',

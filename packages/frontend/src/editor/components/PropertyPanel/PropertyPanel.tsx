@@ -14,6 +14,7 @@ import { ExpressionEditor } from './editors/ExpressionEditor';
 import { SlotEditor } from './editors/SlotEditor';
 import { NoSelectionEmptyState } from '../EmptyState';
 import { EventConfigPanel } from './EventConfigPanel';
+import type { DataSourceEditorContext } from './actionEditors';
 import {
   DEFAULT_TABLE_COLUMN,
   sanitizeExpressionValue,
@@ -29,6 +30,8 @@ interface PropertyPanelProps {
   schema: PageSchema | null;
   selectedId: string | null;
   onSchemaChange: (schema: PageSchema) => void;
+  /** PR D：数据源动作编辑上下文（目录 + 脏页提示） */
+  dataSourceEditor?: DataSourceEditorContext;
 }
 
 const EXPRESSION_HINT_KEYS = new Set([
@@ -107,6 +110,7 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
   schema,
   selectedId,
   onSchemaChange,
+  dataSourceEditor,
 }) => {
   const [activeTab, setActiveTab] = useState<'props' | 'events'>('props');
   // 获取选中组件的配置
@@ -348,7 +352,12 @@ export const PropertyPanel: React.FC<PropertyPanelProps> = ({
           </div>
         </>
       ) : (
-        <EventConfigPanel schema={schema} selectedId={selectedId} onSchemaChange={onSchemaChange} />
+        <EventConfigPanel
+          schema={schema}
+          selectedId={selectedId}
+          onSchemaChange={onSchemaChange}
+          dataSourceEditor={dataSourceEditor}
+        />
       )}
     </div>
   );

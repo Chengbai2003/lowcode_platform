@@ -50,7 +50,10 @@ function patchManifestForTestMatrix(): () => void {
     'manifest.js',
   );
   const manifestModule = require(manifestPath);
+  const policyPath = path.join(path.dirname(manifestPath), 'policy.js');
+  const policyModule = require(policyPath);
   const original = manifestModule.getTrustedCapabilityManifest;
+  const originalPolicy = policyModule.getTrustedExecutionPolicy;
   const supportedAll: Record<string, unknown> = {};
   for (const surface of CONSUMER_SURFACES) {
     supportedAll[surface] = { status: 'supported', revision: 1 };
@@ -59,8 +62,10 @@ function patchManifestForTestMatrix(): () => void {
     manifestVersion: 1,
     matrix: createTestCapabilityMatrix({ 'data-source': supportedAll }),
   });
+  policyModule.getTrustedExecutionPolicy = () => 'operation-only';
   return () => {
     manifestModule.getTrustedCapabilityManifest = original;
+    policyModule.getTrustedExecutionPolicy = originalPolicy;
   };
 }
 
