@@ -20,6 +20,8 @@ interface PreviewPaneProps {
   documentSessionId: string;
   allComponents?: ComponentRegistry;
   eventContext: Record<string, unknown>;
+  /** PR D：透传给 Renderer 的宿主能力（预览授权 dataResources） */
+  hostCapabilities?: Record<string, unknown>;
   previewTheme: 'light' | 'dark';
   selectedId?: string | null;
   isPreviewMode?: boolean;
@@ -37,6 +39,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
   documentSessionId,
   allComponents = {},
   eventContext,
+  hostCapabilities,
   previewTheme,
   selectedId,
   isPreviewMode,
@@ -449,6 +452,7 @@ export const PreviewPane: React.FC<PreviewPaneProps> = ({
             pageId={pageId}
             documentSessionId={documentSessionId}
             eventContext={eventContext}
+            hostCapabilities={hostCapabilities}
             isPreviewMode={isPreviewMode}
           />
         )}

@@ -20,6 +20,8 @@ const manifestModulePath = path.resolve(
   'capabilities/manifest.js',
 );
 const manifestModule = require(manifestModulePath);
+const policyModulePath = path.resolve(path.dirname(manifestModulePath), 'policy.js');
+const policyModule = require(policyModulePath);
 
 async function withSupportedDataSourceAsync<T>(fn: () => Promise<T> | T): Promise<T> {
   const original = manifestModule.getTrustedCapabilityManifest;
@@ -27,6 +29,8 @@ async function withSupportedDataSourceAsync<T>(fn: () => Promise<T> | T): Promis
   for (const surface of contract.CONSUMER_SURFACES) {
     supportedAll[surface] = { status: 'supported', revision: 1 };
   }
+  const originalPolicy = policyModule.getTrustedExecutionPolicy;
+  policyModule.getTrustedExecutionPolicy = () => 'operation-only';
   manifestModule.getTrustedCapabilityManifest = () => ({
     manifestVersion: 1,
     matrix: contract.createTestCapabilityMatrix({ 'data-source': supportedAll }),
@@ -35,6 +39,7 @@ async function withSupportedDataSourceAsync<T>(fn: () => Promise<T> | T): Promis
     return await fn();
   } finally {
     manifestModule.getTrustedCapabilityManifest = original;
+    policyModule.getTrustedExecutionPolicy = originalPolicy;
   }
 }
 
@@ -284,7 +289,11 @@ describe('compiler executeDataSource generation (M1b-1 PR C / Refs #64)', () => 
     });
 
     it('keeps the legacy no-prop signature for pages without data source actions', async () => {
-      const code = await compileFixtureAsync(m1bFixture.legacyApiCallSchema);
+      // legacy apiCall 页在生产默认（legacy 策略 + 生产清单）下合法；
+      // 不进入测试矩阵 + operation-only 窗口（该窗口下纯 apiCall 页会被策略拒绝）
+      const code = await compileToCode(
+        m1bFixture.legacyApiCallSchema as unknown as Record<string, unknown>,
+      );
       expect(code).toContain('export default function GeneratedPage() {');
       expect(code).not.toContain('__executeDataSource');
     });

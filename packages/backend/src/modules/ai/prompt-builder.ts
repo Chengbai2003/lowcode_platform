@@ -26,6 +26,8 @@ export const CORE_ACTION_TYPES = [
   'delay',
   'log',
   'runFlow',
+  // 数据源查询（M1b-1 PR D：经宿主服务的只读查询，operationRef 声明在 logic.dataSources）
+  'executeDataSource',
 ] as const;
 
 /**

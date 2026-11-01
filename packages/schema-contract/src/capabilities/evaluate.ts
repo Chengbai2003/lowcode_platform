@@ -8,9 +8,19 @@ import {
   CAPABILITY_ISSUE_CODES,
   type CapabilityEvaluationResult,
   type CapabilityEvaluationOptions,
+  type SchemaCapability,
 } from './types';
 import { getTrustedCapabilityManifest } from './manifest';
-import { detectPageSchemaCapabilities } from './detect';
+import {
+  EXECUTION_POLICY_ISSUE_CODES,
+  getTrustedExecutionPolicy,
+  type ExecutionPolicy,
+} from './policy';
+import {
+  detectPageSchemaApiCallUsage,
+  detectPageSchemaCapabilities,
+  type DetectedCapabilityInfo,
+} from './detect';
 
 const DEFAULT_MAX_CAPABILITY_ISSUES = 50;
 
@@ -87,8 +97,9 @@ export function evaluatePageSchemaCapabilities(
   // 检测当前 canonical schema 使用的所有语义能力
   const detected = detectPageSchemaCapabilities(schema);
   if (detected.size === 0) {
-    // 纯 Legacy 或未使用任何高级能力的合法 Schema 直接通过
-    return { ok: true, issues: [] };
+    // 纯 Legacy 或未使用任何高级能力的合法 Schema：仅受执行策略约束
+    // （operation-only 下纯 apiCall 页面也必须被拒绝）
+    return evaluateExecutionPolicy(schema, detected);
   }
 
   let hasFailure = false;
@@ -199,8 +210,81 @@ export function evaluatePageSchemaCapabilities(
     }
   }
 
-  return {
-    ok: !hasFailure,
-    issues,
-  };
+  if (hasFailure) {
+    // capability 先行：已被能力矩阵拒绝的 schema 不叠加策略 issue，
+    // 保持既有六面 ingress 断言与错误信息字节稳定
+    return { ok: false, issues };
+  }
+
+  // 能力矩阵全部放行后，才应用可信部署执行策略（legacy / operation-only）
+  return evaluateExecutionPolicy(schema, detected);
+}
+
+/**
+ * 可信部署执行策略求值（PR D / 设计 §6）。
+ *
+ * 仅在能力矩阵放行后或未触发任何能力时执行：
+ * 1. operation-only：任意 apiCall（递归，含纯 apiCall 页面）→ 拒绝；
+ * 2. legacy：使用 data-source（声明或动作）→ 拒绝（启用 data-source 的
+ *    部署必须处于 operation-only，结构上排除隐性 legacy 正向路径）；
+ * 3. 模式无关：data-source 与 apiCall 混用 → 拒绝（legacy 分支下先于
+ *    规则 2 报告，指向冲突对；operation-only 下由规则 1 覆盖）。
+ */
+function evaluateExecutionPolicy(
+  schema: PageSchema,
+  detected: Map<SchemaCapability, DetectedCapabilityInfo>,
+): CapabilityEvaluationResult {
+  const policy: ExecutionPolicy = getTrustedExecutionPolicy();
+
+  if (policy === 'operation-only') {
+    const apiCallPaths = detectPageSchemaApiCallUsage(schema);
+    if (apiCallPaths.length > 0) {
+      return {
+        ok: false,
+        issues: [
+          {
+            code: EXECUTION_POLICY_ISSUE_CODES.APICALL_FORBIDDEN,
+            path: apiCallPaths[0],
+            message:
+              'apiCall actions are forbidden under the "operation-only" execution policy; ' +
+              'data queries must use executeDataSource via the host data source service',
+          },
+        ],
+      };
+    }
+    return { ok: true, issues: [] };
+  }
+
+  const dataSourceInfo = detected.get('data-source');
+  if (dataSourceInfo) {
+    const apiCallPaths = detectPageSchemaApiCallUsage(schema);
+    if (apiCallPaths.length > 0) {
+      return {
+        ok: false,
+        issues: [
+          {
+            code: EXECUTION_POLICY_ISSUE_CODES.MIXED_NETWORK_ACTIONS,
+            path: apiCallPaths[0],
+            message:
+              'A page must not mix apiCall and executeDataSource network actions; ' +
+              'split them or migrate apiCall to a declared data source operation',
+          },
+        ],
+      };
+    }
+    return {
+      ok: false,
+      issues: [
+        {
+          code: EXECUTION_POLICY_ISSUE_CODES.DATASOURCE_REQUIRES_OPERATION_ONLY,
+          path: dataSourceInfo.primaryPath,
+          message:
+            'The "data-source" capability requires the "operation-only" execution policy; ' +
+            'the current trusted deployment policy is "legacy" (fail-close)',
+        },
+      ],
+    };
+  }
+
+  return { ok: true, issues: [] };
 }

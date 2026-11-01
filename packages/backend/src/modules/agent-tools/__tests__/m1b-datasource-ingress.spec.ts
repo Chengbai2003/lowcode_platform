@@ -153,8 +153,8 @@ describe('Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64)'
     });
   });
 
-  describe('entrance 4c: bindEvent / insertComponent 携带 executeDataSource（动作白名单提前拒绝）', () => {
-    it('bindEvent rejects executeDataSource actions at the agent action whitelist before any patch is applied', async () => {
+  describe('entrance 4c: bindEvent / insertComponent 携带 executeDataSource（PR D 白名单放行后由能力校验拒绝）', () => {
+    it('bindEvent allows the action type at the whitelist but rejects the resulting schema with CAPABILITY_UNSUPPORTED', async () => {
       const legacyDraft = JSON.parse(JSON.stringify(m1aFixture.legacySchema));
 
       let caughtError: unknown;
@@ -183,17 +183,31 @@ describe('Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64)'
         caughtError = error;
       }
 
-      // Agent 编辑面尚未开放 executeDataSource（PR D 才接线）：
-      // 在动作白名单处以 "Unsupported action type" 提前拒绝 —— 与
-      // CAPABILITY_UNSUPPORTED 同等计为有效 fail-close，且发生在任何写入之前。
+      // PR D 起 Agent 动作白名单放行 executeDataSource（配置面接线）；
+      // 生产清单下拒绝点后移到 schema 能力校验 —— CAPABILITY_UNSUPPORTED
+      // 仍发生在任何写入之前，fail-close 语义不变（ingress 断言随 D 反转）。
       expect(caughtError).toBeInstanceOf(AgentToolException);
       const toolException = caughtError as AgentToolException;
-      const response = toolException.getResponse() as { code: string; message: string };
-      expect(response.message).toContain('executeDataSource');
+      const response = toolException.getResponse() as {
+        code: string;
+        message: string;
+        details?: { issues?: Array<{ code: string; path: string[]; message: string }> };
+      };
+      expect(response.code).toBe('SCHEMA_INVALID');
+      const issues = response.details?.issues ?? [];
+      expect(issues.length).toBeGreaterThan(0);
+      // 白名单放行后拒绝点后移：本用例的 sourceId 未在草稿声明，故为
+      // 引用校验拒绝；已声明来源的整页拒绝由 4a/4b 的 CAPABILITY_UNSUPPORTED
+      // 覆盖。两者均为写入前 fail-close。
+      expect(
+        issues.some(
+          (i) => i.code === 'DATASOURCE_REFERENCE_MISSING' || i.code === 'CAPABILITY_UNSUPPORTED',
+        ),
+      ).toBe(true);
       expect(pageSchemaServiceMock.saveSchema).not.toHaveBeenCalled();
     });
 
-    it('insertComponent with events containing executeDataSource is rejected the same way', async () => {
+    it('insertComponent with events containing executeDataSource is rejected the same way (capability gate)', async () => {
       const legacyDraft = JSON.parse(JSON.stringify(m1aFixture.legacySchema));
 
       let caughtError: unknown;
@@ -232,8 +246,19 @@ describe('Agent Tools Ingress: data-source default-deny (M1b-1 PR A / Refs #64)'
       const response = (caughtError as AgentToolException).getResponse() as {
         code: string;
         message: string;
+        details?: { issues?: Array<{ code: string; path: string[]; message: string }> };
       };
-      expect(response.message).toContain('executeDataSource');
+      expect(response.code).toBe('SCHEMA_INVALID');
+      const issues = response.details?.issues ?? [];
+      expect(issues.length).toBeGreaterThan(0);
+      // 白名单放行后拒绝点后移：本用例的 sourceId 未在草稿声明，故为
+      // 引用校验拒绝；已声明来源的整页拒绝由 4a/4b 的 CAPABILITY_UNSUPPORTED
+      // 覆盖。两者均为写入前 fail-close。
+      expect(
+        issues.some(
+          (i) => i.code === 'DATASOURCE_REFERENCE_MISSING' || i.code === 'CAPABILITY_UNSUPPORTED',
+        ),
+      ).toBe(true);
       expect(pageSchemaServiceMock.saveSchema).not.toHaveBeenCalled();
     });
 

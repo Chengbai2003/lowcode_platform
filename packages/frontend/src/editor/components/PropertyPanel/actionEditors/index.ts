@@ -12,3 +12,8 @@ export {
 } from './flowActionEditors';
 export { LogActionEditor, CustomScriptActionEditor } from './debugActionEditors';
 export { UnsupportedActionEditor } from './UnsupportedActionEditor';
+export {
+  ExecuteDataSourceActionEditor,
+  type DataSourceEditorContext,
+  type DataSourceDeclarationDraft,
+} from './ExecuteDataSourceActionEditor';

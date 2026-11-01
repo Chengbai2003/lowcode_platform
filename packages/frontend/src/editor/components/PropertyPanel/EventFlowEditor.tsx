@@ -13,7 +13,9 @@ import {
   IfActionEditor,
   LoopActionEditor,
   RunFlowActionEditor,
+  ExecuteDataSourceActionEditor,
   UnsupportedActionEditor,
+  type DataSourceEditorContext,
 } from './actionEditors';
 import styles from './PropertyPanel.module.scss';
 
@@ -29,6 +31,17 @@ interface EventTriggerEditorProps {
   onDeleteAction: (trigger: string, actionIndex: number) => void;
   onUpdateAction: (trigger: string, actionIndex: number, nextAction: Action) => void;
   flowKeys: readonly string[];
+  /** PR D：数据源动作编辑上下文（声明/状态键 + 目录 + 脏页提示） */
+  dataSourceKeys?: readonly string[];
+  stateKeys?: readonly string[];
+  dataSourceEditor?: DataSourceEditorContext;
+  onCreateDataSourceDeclaration?: (draft: {
+    sourceId: string;
+    operationId: string;
+    revision: string;
+    params?: Record<string, import('@lowcode-platform/schema-contract').JsonValue>;
+  }) => void;
+  onCreateState?: (key: string) => void;
 }
 
 export const EventFlowEditor = ({
@@ -38,6 +51,11 @@ export const EventFlowEditor = ({
   onDeleteAction,
   onUpdateAction,
   flowKeys,
+  dataSourceKeys = [],
+  stateKeys = [],
+  dataSourceEditor,
+  onCreateDataSourceDeclaration,
+  onCreateState,
 }: EventTriggerEditorProps) => {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -75,6 +93,8 @@ export const EventFlowEditor = ({
         return `${action.level || 'info'}: ${String(action.value)}`;
       case ACTION_TYPE.runFlow:
         return `运行流程 ${action.flow}`;
+      case ACTION_TYPE.executeDataSource:
+        return `查询 ${action.sourceId || '未选择'} → ${action.resultTo || '未选择'}`;
       default:
         return '请配置详细参数...';
     }
@@ -107,6 +127,18 @@ export const EventFlowEditor = ({
       case ACTION_TYPE.runFlow:
         return (
           <RunFlowActionEditor action={action} flowKeys={flowKeys} updateAction={updateAction} />
+        );
+      case ACTION_TYPE.executeDataSource:
+        return (
+          <ExecuteDataSourceActionEditor
+            action={action}
+            updateAction={updateAction}
+            dataSourceKeys={dataSourceKeys}
+            stateKeys={stateKeys}
+            dataSourceEditor={dataSourceEditor}
+            onCreateDataSourceDeclaration={onCreateDataSourceDeclaration}
+            onCreateState={onCreateState}
+          />
         );
       default:
         return <UnsupportedActionEditor />;

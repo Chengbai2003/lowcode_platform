@@ -16,6 +16,8 @@ const manifestModulePath = path.resolve(
   'capabilities/manifest.js',
 );
 const manifestModule = require(manifestModulePath);
+const policyModulePath = path.resolve(path.dirname(manifestModulePath), 'policy.js');
+const policyModule = require(policyModulePath);
 
 /**
  * M1b 与 M1a ingress 不同：data-source 在生产可信清单中真实为 unsupported，
@@ -25,10 +27,12 @@ const manifestModule = require(manifestModulePath);
  */
 async function withSupportedDataSourceAsync<T>(fn: () => Promise<T>): Promise<T> {
   const original = manifestModule.getTrustedCapabilityManifest;
+  const originalPolicy = policyModule.getTrustedExecutionPolicy;
   const supportedAll: Record<string, unknown> = {};
   for (const surface of contract.CONSUMER_SURFACES) {
     supportedAll[surface] = { status: 'supported', revision: 1 };
   }
+  policyModule.getTrustedExecutionPolicy = () => 'operation-only';
   manifestModule.getTrustedCapabilityManifest = () => ({
     manifestVersion: 1,
     matrix: contract.createTestCapabilityMatrix({ 'data-source': supportedAll }),
@@ -37,6 +41,7 @@ async function withSupportedDataSourceAsync<T>(fn: () => Promise<T>): Promise<T>
     return await fn();
   } finally {
     manifestModule.getTrustedCapabilityManifest = original;
+    policyModule.getTrustedExecutionPolicy = originalPolicy;
   }
 }
 

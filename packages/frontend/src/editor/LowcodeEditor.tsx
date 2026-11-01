@@ -29,6 +29,14 @@ import { useSelectionStore, useEditorStore } from './store/editor-store';
 import { createDefaultReactiveSchema } from './templates/reactiveSchema';
 import styles from './LowcodeEditor.module.scss';
 import { usePageLifecycle } from './hooks/usePageLifecycle';
+import {
+  createPreviewDataSourceHostService,
+  type DataSourcePreviewBinding,
+} from './services/dataSourceHostApi';
+import { listDataSourceOperations } from './services/dataSourceCatalogApi';
+/** 预览宿主能力（模块级常量：稳定引用，避免逐渲染新对象触发下游 effect 环） */
+const PREVIEW_HOST_CAPABILITIES = { dataResources: true } as const;
+import type { DataSourceEditorContext } from './components/PropertyPanel/actionEditors';
 import { useAIPatch } from './hooks/useAIPatch';
 import { useEditorActions } from './hooks/useEditorActions';
 import {
@@ -75,6 +83,55 @@ function LowcodeEditorInner({
   useEffect(() => {
     pageVersionRef.current = pageVersion;
   }, [pageVersion]);
+
+  // PR D 数据源预览绑定：仅在「加载成功/保存成功」铸造 {pageId,pageVersion,schemaRevision,generation}；
+  // 脏页（修订号超前）/切页（generation 变化）/未保存 → 适配器 fail-close 零 HTTP
+  const [dataSourceBinding, setDataSourceBinding] = useState<DataSourcePreviewBinding | null>(null);
+  const dataSourceBindingRef = useRef<DataSourcePreviewBinding | null>(null);
+  useEffect(() => {
+    dataSourceBindingRef.current = dataSourceBinding;
+  }, [dataSourceBinding]);
+  const previewDataSources = useMemo(
+    () =>
+      createPreviewDataSourceHostService({
+        getBinding: () => dataSourceBindingRef.current,
+        getCurrentSchemaRevision: () => useEditorStore.getState().schemaRevision,
+        getCurrentGeneration: () => useEditorStore.getState().generation,
+      }),
+    [],
+  );
+  const handleDataSourceSnapshotBound = useCallback(
+    (snapshot: DataSourcePreviewBinding) => setDataSourceBinding(snapshot),
+    [],
+  );
+
+  // PR D：数据源动作编辑上下文（目录 + 脏页提示）。
+  // 脏页判定与适配器一致：绑定四元组任一不匹配（含未绑定/切页/修订超前）即 blocked。
+  const schemaRevisionNow = useEditorStore((state) => state.schemaRevision);
+  const generationNow = useEditorStore((state) => state.generation);
+  const dataSourceQueryBlocked =
+    !pageId ||
+    pageVersion == null ||
+    !dataSourceBinding ||
+    dataSourceBinding.pageId !== pageId ||
+    dataSourceBinding.pageVersion !== pageVersion ||
+    dataSourceBinding.schemaRevision !== schemaRevisionNow ||
+    dataSourceBinding.generation !== generationNow;
+  const dataSourceEditorContext = useMemo<DataSourceEditorContext>(
+    () => ({
+      pageId,
+      pageVersion,
+      queryBlocked: dataSourceQueryBlocked,
+      queryBlockedReason: pageVersion == null || !pageId ? 'unsaved' : 'dirty',
+      listOperations: () => {
+        if (pageId == null || pageVersion == null) {
+          return Promise.resolve([]);
+        }
+        return listDataSourceOperations(pageId, pageVersion);
+      },
+    }),
+    [pageId, pageVersion, dataSourceQueryBlocked],
+  );
 
   // P0-5 TOCTOU atomic: mounted guard for unmount race + schema ref to avoid closure stale
   const mountedRef = useRef(true);
@@ -159,6 +216,9 @@ function LowcodeEditorInner({
     const providedUi: EventUIContext = eventContext?.ui ?? {};
     return {
       ...eventContext,
+      // PR D：预览宿主注入数据源服务（Renderer 会把 eventContext 键写入执行上下文；
+      // 生产默认清单下 data-source 页面挂载先被拒，此接线仅为测试注入与 E 演示就位）
+      dataSources: previewDataSources,
       ui: {
         message: providedUi.message ?? uiContext.message,
         notification: providedUi.notification ?? uiContext.notification,
@@ -166,7 +226,7 @@ function LowcodeEditorInner({
         openTab: providedUi.openTab,
       },
     };
-  }, [eventContext, uiContext]);
+  }, [eventContext, uiContext, previewDataSources]);
 
   // Use ref to store mode for event listener (avoid rebinding on mode change)
   const modeRef = useRef(mode);
@@ -250,6 +310,7 @@ function LowcodeEditorInner({
     setPreset: setCurrentPreset,
     setPageLoadError,
     onErrorRef,
+    onSnapshotBound: handleDataSourceSnapshotBound,
   });
 
   const { handleSavePage, handleCompile, isPageSaving } = useEditorActions({
@@ -258,6 +319,7 @@ function LowcodeEditorInner({
     pageVersion,
     setPageVersion,
     setSchema,
+    onPageSaved: handleDataSourceSnapshotBound,
     setCompiledCode,
     onError,
     pageLoadError,
@@ -386,6 +448,7 @@ function LowcodeEditorInner({
                 documentSessionId={documentSessionId}
                 allComponents={allComponents}
                 eventContext={mergedEventContext}
+                hostCapabilities={PREVIEW_HOST_CAPABILITIES}
                 previewTheme={previewTheme}
                 selectedId={selectedId}
                 isPreviewMode={isPreviewMode}
@@ -410,6 +473,7 @@ function LowcodeEditorInner({
                   schema={schema}
                   selectedId={selectedId}
                   onSchemaChange={handleSchemaChange}
+                  dataSourceEditor={dataSourceEditorContext}
                 />
               </motion.aside>
             )}
